@@ -4,7 +4,7 @@
 
 如果你想直接复制一版可发帖教程，见：
 
-- [docs/2026-04-22-responses-api-image-generation-tutorial.md](C:\Users\AEboli\Documents\CODEX\chat-workspaces\2026-04-22-v1-images-generations-post-responses-https\responses-image-generation-demo-2026-04-22\docs\2026-04-22-responses-api-image-generation-tutorial.md)
+- [docs/2026-04-22-responses-api-image-generation-tutorial.md](docs/2026-04-22-responses-api-image-generation-tutorial.md)
 
 如果你想直接使用本地 HTML 工作台，执行：
 

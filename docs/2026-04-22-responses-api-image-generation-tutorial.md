@@ -77,7 +77,7 @@ POST https://api.asxs.top/v1/responses
 
 本地可直接运行的最小版在：
 
-- [examples/minimal-fetch.mjs](C:\Users\AEboli\Documents\CODEX\chat-workspaces\2026-04-22-v1-images-generations-post-responses-https\responses-image-generation-demo-2026-04-22\examples\minimal-fetch.mjs)
+- [examples/minimal-fetch.mjs](../examples/minimal-fetch.mjs)
 
 使用方法：
 
@@ -149,7 +149,7 @@ curl.exe -N `
 
 我把可复用的解析器单独拆到了：
 
-- [examples/shared-sse-parser.mjs](C:\Users\AEboli\Documents\CODEX\chat-workspaces\2026-04-22-v1-images-generations-post-responses-https\responses-image-generation-demo-2026-04-22\examples\shared-sse-parser.mjs)
+- [examples/shared-sse-parser.mjs](../examples/shared-sse-parser.mjs)
 
 设计思路很简单：
 
@@ -224,13 +224,13 @@ payload.item.result
 ## 项目内对应文件
 
 - 主示例脚本：
-  [generate-image.mjs](C:\Users\AEboli\Documents\CODEX\chat-workspaces\2026-04-22-v1-images-generations-post-responses-https\responses-image-generation-demo-2026-04-22\generate-image.mjs)
+  [generate-image.mjs](../generate-image.mjs)
 - 最小 `fetch` 示例：
-  [examples/minimal-fetch.mjs](C:\Users\AEboli\Documents\CODEX\chat-workspaces\2026-04-22-v1-images-generations-post-responses-https\responses-image-generation-demo-2026-04-22\examples\minimal-fetch.mjs)
+  [examples/minimal-fetch.mjs](../examples/minimal-fetch.mjs)
 - 通用 SSE 解析器：
-  [examples/shared-sse-parser.mjs](C:\Users\AEboli\Documents\CODEX\chat-workspaces\2026-04-22-v1-images-generations-post-responses-https\responses-image-generation-demo-2026-04-22\examples\shared-sse-parser.mjs)
+  [examples/shared-sse-parser.mjs](../examples/shared-sse-parser.mjs)
 - `curl` 请求体：
-  [examples/request-body.json](C:\Users\AEboli\Documents\CODEX\chat-workspaces\2026-04-22-v1-images-generations-post-responses-https\responses-image-generation-demo-2026-04-22\examples\request-body.json)
+  [examples/request-body.json](../examples/request-body.json)
 
 ## 参考
 
