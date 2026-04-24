@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-cluster">
+          <div class="brand-mark" aria-hidden="true">
+            <span class="brand-mark-core"></span>
+          </div>
+          <div class="brand-copy">
+            <div class="brand-title-row">
+              <h1>Image Studio</h1>
+              <span class="brand-ai-badge">AI</span>
+            </div>
+            <p>AI 图像生成工作流</p>
+          </div>
+        </div>
+
+        <div class="view-tabs" role="tablist" aria-label="视图切换">
+          <button class="view-tab active" data-view-tab="studio" type="button">Studio</button>
+          <button class="view-tab" data-view-tab="gallery" type="button">瀑布画廊</button>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="header-pill status-ready" id="connectionStatus" data-state="idle">
+            <span class="status-dot"></span>
+            <span id="connectionLabel">正在读取配置</span>
+          </div>
+          <div class="header-pill" id="configStatus">配置未保存</div>
+          <button class="header-button" id="openOutputButton" type="button">打开输出目录</button>
+          <button class="header-button strong" id="openConfigButton" type="button">配置</button>
+        </div>
+      </header>
+
+      <main class="view-root">
+        <section class="view-panel studio-view" data-view-panel="studio">
+          <div class="studio-grid">
+            <section class="studio-panel settings-panel">
+              <div class="panel-title">
+                <div>
+                  <h2>生成设置</h2>
+                  <p>Settings</p>
+                </div>
+              </div>
+
+              <form id="generateForm" class="settings-form">
+                <div class="field-group">
+                  <div class="field-heading with-action">
+                    <div>
+                      <span>提示词</span>
+                      <small>Prompt</small>
+                    </div>
+                    <button class="icon-button" id="surprisePromptButton" type="button" title="填入示例提示词">
+                      ✦
+                    </button>
+                  </div>
+                  <label class="prompt-field">
+                    <textarea
+                      id="promptInput"
+                      name="prompt"
+                      rows="5"
+                      placeholder="写下你要生成的画面，也可以先上传参考图说明修改方向。"
+                    ></textarea>
+                    <span class="field-counter"><span id="promptCounter">0</span> / 1000</span>
+                  </label>
+                </div>
+
+                <div class="field-group">
+                  <div class="field-heading">
+                    <div>
+                      <span>比例</span>
+                      <small>Ratio</small>
+                    </div>
+                  </div>
+                  <div class="ratio-grid" id="ratioGrid"></div>
+                  <input id="ratioInput" name="ratio" type="hidden" value="4:5" />
+                </div>
+
+                <div class="field-group">
+                  <div class="field-heading">
+                    <div>
+                      <span>参考图</span>
+                      <small>Reference（可选，最多 6 张）</small>
+                    </div>
+                    <small id="referenceCount">0 / 6</small>
+                  </div>
+
+                  <label class="reference-dropzone" id="referenceDropzone">
+                    <input id="referenceInput" name="referenceImages" type="file" accept="image/*" multiple />
+                    <div class="reference-icon" aria-hidden="true"></div>
+                    <strong>拖入图片或点击上传</strong>
+                    <span>支持 JPG / PNG，建议尺寸至少 1024px</span>
+                    <em>上传参考图</em>
+                  </label>
+
+                  <div class="reference-grid hidden" id="referenceGrid"></div>
+                </div>
+
+                <details class="advanced-box">
+                  <summary>高级选项 <span>Advanced（可选）</span></summary>
+                  <div class="advanced-content">
+                    <div class="advanced-controls">
+                      <label class="compact-field">
+                        <span>推理强度</span>
+                        <select id="reasoningEffortInput" name="reasoningEffort"></select>
+                      </label>
+
+                      <label class="compact-field">
+                        <span>分辨率</span>
+                        <select id="sizeInput" name="size"></select>
+                      </label>
+                    </div>
+                    <p>外层模型：<strong id="advancedResponsesModel">gpt-5.4</strong></p>
+                    <p>工具模型：<strong>gpt-image-2</strong></p>
+                    <p>输出：<strong>JPEG / High</strong></p>
+                    <p>中转地址：<strong id="advancedBaseUrl">https://api.asxs.top/v1</strong></p>
+                  </div>
+                </details>
+
+                <button class="generate-button" id="generateButton" type="submit">开始生成</button>
+                <p class="generate-note">支持最多 5 个并发任务，结果会自动写入本地 output/。</p>
+              </form>
+
+              <div class="settings-tip">
+                <strong>提示：</strong>
+                <p>使用清晰、具体的描述词，更容易获得理想效果。尝试加入风格、光线、构图和主体关系。</p>
+              </div>
+            </section>
+
+            <section class="studio-panel preview-panel">
+              <div class="panel-title">
+                <div>
+                  <h2>生成结果</h2>
+                  <p>Output Preview</p>
+                </div>
+              </div>
+
+              <div class="preview-stage">
+                <div class="preview-meta">
+                  <span class="model-badge" id="previewModel">GPT Image 2.0</span>
+                  <span id="previewTime">等待生成</span>
+                  <span id="previewId">ID: --</span>
+                  <span id="previewSize">--</span>
+                </div>
+
+                <div class="preview-canvas" id="previewCanvas">
+                  <div class="preview-placeholder" id="previewPlaceholder">
+                    <p>Output Preview</p>
+                    <h3>生成结果会在这里实时更新。</h3>
+                    <span>右侧保留实时动态和最近输出，底部胶片条可快速切换查看。</span>
+                  </div>
+                  <img id="previewImage" alt="当前预览" />
+                </div>
+
+                <div class="preview-toolbar">
+                  <div class="zoom-controls">
+                    <button class="toolbar-button" id="zoomOutButton" type="button">-</button>
+                    <span class="zoom-label" id="zoomLabel">100%</span>
+                    <button class="toolbar-button" id="zoomInButton" type="button">+</button>
+                    <button class="toolbar-button" id="zoomResetButton" type="button">适配</button>
+                  </div>
+
+                  <div class="preview-actions">
+                    <a class="toolbar-button" id="previewDownloadButton" href="#" download>下载</a>
+                    <button class="toolbar-button" id="previewLightboxButton" type="button">查看</button>
+                    <button class="toolbar-button danger" id="previewDeleteButton" type="button">删除</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="filmstrip-row">
+                <div class="filmstrip" id="filmstrip"></div>
+              </div>
+            </section>
+
+            <aside class="side-column">
+              <section class="studio-panel live-panel">
+                <div class="panel-title between">
+                  <div>
+                    <h2>实时动态</h2>
+                    <p>Live Feed</p>
+                  </div>
+                  <span class="count-pill small" id="liveCount">0 / 5</span>
+                </div>
+
+                <div class="error-banner hidden" id="errorBanner"></div>
+                <ol class="timeline-list" id="timelineList"></ol>
+              </section>
+
+              <section class="studio-panel recent-panel">
+                <div class="panel-title between">
+                  <div>
+                    <h2>最近输出</h2>
+                    <p>Recent Outputs</p>
+                  </div>
+                  <button class="ghost-link" id="focusGalleryButton" type="button">查看全部</button>
+                </div>
+
+                <div class="recent-empty" id="recentEmpty">还没有本地输出，先生成一张图。</div>
+                <div class="recent-list" id="recentList"></div>
+
+                <button class="clear-history-button" id="clearHistoryButton" type="button">清空历史记录</button>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view-panel gallery-view hidden" data-view-panel="gallery">
+          <section class="studio-panel gallery-panel">
+            <div class="panel-title between">
+              <div>
+                <h2>瀑布画廊</h2>
+                <p>Waterfall Gallery</p>
+              </div>
+              <div class="gallery-top-actions">
+                <span class="count-pill" id="galleryCount">0 张</span>
+                <button class="header-button" id="refreshGalleryButton" type="button">刷新画廊</button>
+              </div>
+            </div>
+
+            <div class="gallery-scroll-shell">
+              <div class="gallery-scroll-region" id="galleryScrollRegion">
+                <div class="gallery-empty" id="galleryEmpty">还没有本地输出，先回到 Studio 生成一张图。</div>
+                <div class="gallery-masonry" id="galleryMasonry"></div>
+              </div>
+
+              <div class="gallery-scrollbar" id="galleryScrollbar" data-disabled="true" aria-hidden="true">
+                <button class="gallery-scroll-arrow" id="galleryScrollUp" type="button" aria-label="向上滚动">↑</button>
+                <div class="gallery-scroll-track" id="galleryScrollTrack">
+                  <button
+                    class="gallery-scroll-thumb"
+                    id="galleryScrollThumb"
+                    type="button"
+                    aria-label="拖动查看瀑布画廊"
+                  ></button>
+                </div>
+                <button class="gallery-scroll-arrow" id="galleryScrollDown" type="button" aria-label="向下滚动">↓</button>
+              </div>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <aside class="lightbox hidden" id="lightbox" aria-hidden="true">
+      <div class="lightbox-backdrop" id="lightboxBackdrop"></div>
+      <div class="lightbox-dialog" role="dialog" aria-modal="true" aria-label="图片详情">
+        <div class="lightbox-top">
+          <div class="lightbox-meta">
+            <span class="model-badge" id="lightboxModel">GPT Image 2.0</span>
+            <span id="lightboxTime"></span>
+            <span id="lightboxId"></span>
+          </div>
+
+          <div class="lightbox-actions">
+            <a class="toolbar-button" id="lightboxDownload" href="#" download>下载</a>
+            <button class="toolbar-button danger" id="lightboxDelete" type="button">删除</button>
+            <button class="toolbar-button" id="lightboxClose" type="button">关闭</button>
+          </div>
+        </div>
+
+        <div class="lightbox-media-stage">
+          <div class="lightbox-ambient" id="lightboxAmbient" aria-hidden="true"></div>
+          <div class="lightbox-image-shell">
+            <img id="lightboxImage" alt="放大预览" />
+          </div>
+        </div>
+
+        <div class="lightbox-fields">
+          <label class="detail-field">
+            <span>提示词</span>
+            <textarea id="lightboxPrompt" rows="4" readonly></textarea>
+          </label>
+
+          <label class="detail-field">
+            <span>参数</span>
+            <textarea id="lightboxParams" rows="6" readonly></textarea>
+          </label>
+        </div>
+      </div>
+    </aside>
+
+    <aside class="config-drawer" id="configDrawer" aria-hidden="true">
+      <div class="drawer-backdrop" id="closeConfigBackdrop"></div>
+      <div class="drawer-panel">
+        <div class="drawer-head">
+          <div>
+            <p class="drawer-eyebrow">Config</p>
+            <h2>本地连接配置</h2>
+          </div>
+          <button class="header-button" id="closeConfigButton" type="button">关闭</button>
+        </div>
+
+        <form class="config-form" id="configForm">
+          <label class="field">
+            <span>中转 URL</span>
+            <input id="baseUrlInput" name="baseUrl" type="url" placeholder="https://api.asxs.top/v1" required />
+          </label>
+
+          <label class="field">
+            <div class="field-heading inline">
+              <span>API Key</span>
+              <small id="savedKeyMask">未保存</small>
+            </div>
+            <input id="apiKeyInput" name="apiKey" type="password" placeholder="留空则保持当前已保存的 key" />
+          </label>
+
+          <label class="field">
+            <span>Responses 模型</span>
+            <input id="responsesModelInput" name="responsesModel" type="text" placeholder="gpt-5.4" />
+          </label>
+
+          <button class="generate-button" type="submit">保存配置</button>
+          <p class="config-note" id="configFeedback">API Key 仅保存在本机 .local/config.json，不会回填到页面。</p>
+        </form>
+      </div>
+    </aside>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

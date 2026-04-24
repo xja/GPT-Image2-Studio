@@ -1,0 +1,17 @@
+{
+  "name": "responses-image-generation-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "使用 Responses API 的 image_generation 工具生成图片的 Node.js 示例",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs",
+    "generate": "node generate-image.mjs",
+    "help": "node generate-image.mjs --help",
+    "test": "node --test ./test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
