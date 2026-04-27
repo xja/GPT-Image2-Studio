@@ -28,6 +28,8 @@ const DEFAULT_LIMITS = {
   maxReferenceImages: 6,
 };
 
+const GALLERY_COLUMN_PRESETS = [6, 9, 12];
+const DEFAULT_GALLERY_COLUMN_PRESET = 12;
 const DEFAULT_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
 const DESKTOP_STUDIO_MEDIA = "(max-width: 1260px)";
 
@@ -49,6 +51,7 @@ const state = {
   clientSessionId: "",
   config: null,
   gallery: [],
+  galleryColumnPreset: DEFAULT_GALLERY_COLUMN_PRESET,
   jobs: [],
   lightboxItem: null,
   limits: { ...DEFAULT_LIMITS },
@@ -76,6 +79,7 @@ const refs = {
   filmstrip: document.querySelector("#filmstrip"),
   focusGalleryButton: document.querySelector("#focusGalleryButton"),
   galleryCount: document.querySelector("#galleryCount"),
+  galleryColumnButtons: [...document.querySelectorAll("[data-gallery-column-preset]")],
   galleryEmpty: document.querySelector("#galleryEmpty"),
   galleryMasonry: document.querySelector("#galleryMasonry"),
   galleryScrollbar: document.querySelector("#galleryScrollbar"),
@@ -1324,10 +1328,25 @@ function createGalleryTile(item) {
   return button;
 }
 
+function normalizeGalleryColumnPreset(value) {
+  const preset = Number(value);
+  return GALLERY_COLUMN_PRESETS.includes(preset) ? preset : DEFAULT_GALLERY_COLUMN_PRESET;
+}
+
+function renderGalleryColumnPresetButtons() {
+  refs.galleryColumnButtons.forEach((button) => {
+    const isActive = normalizeGalleryColumnPreset(button.dataset.galleryColumnPreset) === state.galleryColumnPreset;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
 function renderGalleryView() {
   refs.galleryMasonry.innerHTML = "";
+  refs.galleryMasonry.style.setProperty("--gallery-columns", String(state.galleryColumnPreset));
   refs.galleryCount.textContent = `${state.gallery.length} 张`;
   refs.galleryEmpty.classList.toggle("hidden", state.gallery.length > 0);
+  renderGalleryColumnPresetButtons();
 
   sortByCreatedAtDescending(state.gallery).forEach((item) => {
     refs.galleryMasonry.appendChild(createGalleryTile(item));
@@ -1759,6 +1778,17 @@ function bindEvents() {
   });
   refs.refreshGalleryButton.addEventListener("click", () => {
     loadGallery().catch((error) => showError(error.message));
+  });
+  refs.galleryColumnButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const preset = normalizeGalleryColumnPreset(button.dataset.galleryColumnPreset);
+      if (preset === state.galleryColumnPreset) {
+        return;
+      }
+
+      state.galleryColumnPreset = preset;
+      renderGalleryView();
+    });
   });
   refs.focusGalleryButton.addEventListener("click", () => {
     setActiveView("gallery");
