@@ -1,0 +1,244 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - heading "Image Studio" [level=1] [ref=e9]
+          - generic [ref=e10]: AI
+        - paragraph [ref=e11]: AI 图像生成工作流
+      - tablist "视图切换" [ref=e12]:
+        - button "Studio" [ref=e13] [cursor=pointer]
+        - button "瀑布画廊" [ref=e14] [cursor=pointer]
+      - generic [ref=e15]:
+        - generic [ref=e18]: 本地已就绪
+        - generic [ref=e19]: 配置已保存
+        - button "打开输出目录" [ref=e20] [cursor=pointer]
+        - button "配置" [ref=e21] [cursor=pointer]
+    - main [ref=e22]:
+      - generic [ref=e24]:
+        - generic [ref=e25]:
+          - generic [ref=e26]:
+            - generic [ref=e27]:
+              - generic [ref=e28]:
+                - generic [ref=e29]:
+                  - generic [ref=e30]: 提示词
+                  - text: Prompt
+                - button "✦" [ref=e31] [cursor=pointer]
+              - generic [ref=e32]:
+                - textbox "0 / 1000" [ref=e33]:
+                  - /placeholder: 写下你要生成的画面，也可以先上传参考图说明修改方向。
+                - generic [ref=e34]: 0 / 1000
+            - generic [ref=e35]:
+              - generic [ref=e37]:
+                - generic [ref=e38]: 比例
+                - text: Ratio
+              - generic [ref=e39]:
+                - button "4:5 标准" [ref=e40] [cursor=pointer]:
+                  - strong [ref=e41]: 4:5
+                  - generic [ref=e42]: 标准
+                - button "1:1 方形" [ref=e43] [cursor=pointer]:
+                  - strong [ref=e44]: 1:1
+                  - generic [ref=e45]: 方形
+                - button "3:4 竖版" [ref=e46] [cursor=pointer]:
+                  - strong [ref=e47]: 3:4
+                  - generic [ref=e48]: 竖版
+                - button "16:9 宽屏" [ref=e49] [cursor=pointer]:
+                  - strong [ref=e50]: 16:9
+                  - generic [ref=e51]: 宽屏
+                - button "9:16 故事" [ref=e52] [cursor=pointer]:
+                  - strong [ref=e53]: 9:16
+                  - generic [ref=e54]: 故事
+            - generic [ref=e55]:
+              - generic [ref=e56]:
+                - generic [ref=e57]:
+                  - generic [ref=e58]: 参考图
+                  - text: Reference（可选，最多 6 张）
+                - generic [ref=e59]: 0 / 6
+              - generic [ref=e60]:
+                - button "拖入图片或点击上传 支持 JPG / PNG，建议尺寸至少 1024px 上传参考图" [ref=e61] [cursor=pointer]
+                - strong [ref=e63]: 拖入图片或点击上传
+                - generic [ref=e64]: 支持 JPG / PNG，建议尺寸至少 1024px
+                - emphasis [ref=e65]: 上传参考图
+            - group [ref=e66]:
+              - generic "高级选项 Advanced（可选）" [ref=e67] [cursor=pointer]:
+                - text: 高级选项
+                - generic [ref=e68]: Advanced（可选）
+              - generic [ref=e69]:
+                - generic [ref=e70]:
+                  - generic [ref=e71]:
+                    - generic [ref=e72]: 推理强度
+                    - combobox "推理强度" [ref=e73]:
+                      - option "低"
+                      - option "中"
+                      - option "高"
+                      - option "超高" [selected]
+                  - generic [ref=e74]:
+                    - generic [ref=e75]: 分辨率
+                    - combobox "分辨率" [ref=e76]:
+                      - option "自动适配" [selected]
+                      - option "1024 × 1280"
+                      - option "1280 × 1600"
+                      - option "1600 × 2000"
+                - paragraph [ref=e77]:
+                  - text: 外层模型：
+                  - strong [ref=e78]: gpt-5.5
+                - paragraph [ref=e79]:
+                  - text: 工具模型：
+                  - strong [ref=e80]: gpt-image-2
+                - paragraph [ref=e81]:
+                  - text: 输出：
+                  - strong [ref=e82]: JPEG / High
+                - paragraph [ref=e83]:
+                  - text: 中转地址：
+                  - strong [ref=e84]: https://api.asxs.top/v1
+            - button "开始生成" [ref=e85] [cursor=pointer]
+            - paragraph [ref=e86]: 支持最多 5 个并发任务，结果会自动写入本地 output/。
+          - generic [ref=e87]:
+            - strong [ref=e88]: 提示：
+            - paragraph [ref=e89]: 使用清晰、具体的描述词，更容易获得理想效果。尝试加入风格、光线、构图和主体关系。
+        - generic [ref=e90]:
+          - generic [ref=e91]:
+            - generic [ref=e92]:
+              - generic [ref=e93]: GPT Image 2.0
+              - generic [ref=e94]: 2026-04-26 07:09:36
+              - generic [ref=e95]: "ID: generated-2026-04-25T23-..."
+              - generic [ref=e96]: 864 × 1536
+            - img "直播间护肤礼盒主视觉" [ref=e151]
+            - generic [ref=e102]:
+              - generic [ref=e103]:
+                - button "-" [ref=e104] [cursor=pointer]
+                - generic [ref=e105]: 100%
+                - button "+" [ref=e106] [cursor=pointer]
+                - button "适配" [ref=e107] [cursor=pointer]
+              - generic [ref=e108]:
+                - link "下载" [ref=e152] [cursor=pointer]:
+                  - /url: /output/2026-04-26/generated-2026-04-25T23-09-36-665Z-bb265bb7.jpeg?v=2026-04-25T23%3A09%3A36.667Z
+                - button "查看" [ref=e153] [cursor=pointer]
+                - button "删除" [ref=e154] [cursor=pointer]
+          - generic [ref=e110]:
+            - button "本地输出 07:30:41 07:30:41" [ref=e155] [cursor=pointer]:
+              - img "本地输出 07:30:41" [ref=e156]
+              - generic [ref=e157]: 07:30:41
+            - button "本地输出 07:30:12 07:30:12" [ref=e158] [cursor=pointer]:
+              - img "本地输出 07:30:12" [ref=e159]
+              - generic [ref=e160]: 07:30:12
+            - button "直播间护肤礼盒主视觉 07:09:36" [ref=e161] [cursor=pointer]:
+              - img "直播间护肤礼盒主视觉" [ref=e162]
+              - generic [ref=e163]: 07:09:36
+            - button "本地输出 07:09:28 07:09:28" [ref=e164] [cursor=pointer]:
+              - img "本地输出 07:09:28" [ref=e165]
+              - generic [ref=e166]: 07:09:28
+            - button "本地输出 07:03:36 07:03:36" [ref=e167] [cursor=pointer]:
+              - img "本地输出 07:03:36" [ref=e168]
+              - generic [ref=e169]: 07:03:36
+            - button "本地输出 06:42:06 06:42:06" [ref=e170] [cursor=pointer]:
+              - img "本地输出 06:42:06" [ref=e171]
+              - generic [ref=e172]: 06:42:06
+            - button "本地输出 01:07:48 01:07:48" [ref=e173] [cursor=pointer]:
+              - img "本地输出 01:07:48" [ref=e174]
+              - generic [ref=e175]: 01:07:48
+            - button "本地输出 00:41:39 00:41:39" [ref=e176] [cursor=pointer]:
+              - img "本地输出 00:41:39" [ref=e177]
+              - generic [ref=e178]: 00:41:39
+        - complementary [ref=e111]:
+          - generic [ref=e112]:
+            - generic [ref=e113]:
+              - generic [ref=e114]:
+                - heading "实时动态" [level=2] [ref=e115]
+                - paragraph [ref=e116]: Live Feed
+              - generic [ref=e117]: 0 / 5
+            - list [ref=e118]:
+              - listitem [ref=e179]:
+                - generic [ref=e181]:
+                  - strong [ref=e182]: 生成完成
+                  - generic [ref=e183]: 图像已成功生成
+                - time [ref=e184]: 07:09:36
+              - listitem [ref=e185]:
+                - generic [ref=e187]:
+                  - strong [ref=e188]: 模型处理中
+                  - generic [ref=e189]: 最终图片已返回
+                - time [ref=e190]: 07:09:36
+              - listitem [ref=e191]:
+                - generic [ref=e193]:
+                  - strong [ref=e194]: 图像生成中
+                  - generic [ref=e195]: 图像渲染完成
+                - time [ref=e196]: 07:09:36
+              - listitem [ref=e197]:
+                - generic [ref=e199]:
+                  - strong [ref=e200]: 排队中
+                  - generic [ref=e201]: 等待资源分配
+                - time [ref=e202]: 07:09:36
+          - generic [ref=e143]:
+            - generic [ref=e144]:
+              - generic [ref=e145]:
+                - heading "最近输出" [level=2] [ref=e146]
+                - paragraph [ref=e147]: Recent Outputs
+              - button "查看全部" [ref=e148] [cursor=pointer]
+            - generic [ref=e203]:
+              - button "本地输出 07:30:41 本地输出 07:30:41 1152x2048 | GPT Image 2.0 07:30:41 ↓ ⋯" [ref=e204] [cursor=pointer]:
+                - img "本地输出 07:30:41" [ref=e205]
+                - generic [ref=e206]:
+                  - strong [ref=e207]: 本地输出 07:30:41
+                  - generic [ref=e208]: 1152x2048 | GPT Image 2.0
+                  - time [ref=e209]: 07:30:41
+                - generic [ref=e210]:
+                  - link "↓" [ref=e211]:
+                    - /url: /output/2026-04-26/generated-2026-04-25T23-30-41-222Z-ec2a7ec9.jpeg?v=2026-04-25T23%3A30%3A41.226Z
+                  - button "⋯" [ref=e212]
+              - button "本地输出 07:30:12 本地输出 07:30:12 1152x2048 | GPT Image 2.0 07:30:12 ↓ ⋯" [ref=e213] [cursor=pointer]:
+                - img "本地输出 07:30:12" [ref=e214]
+                - generic [ref=e215]:
+                  - strong [ref=e216]: 本地输出 07:30:12
+                  - generic [ref=e217]: 1152x2048 | GPT Image 2.0
+                  - time [ref=e218]: 07:30:12
+                - generic [ref=e219]:
+                  - link "↓" [ref=e220]:
+                    - /url: /output/2026-04-26/generated-2026-04-25T23-30-12-008Z-0164ac28.jpeg?v=2026-04-25T23%3A30%3A12.012Z
+                  - button "⋯" [ref=e221]
+              - button "直播间护肤礼盒主视觉 直播间护肤礼盒主视觉 864x1536 | GPT Image 2.0 07:09:36 ↓ ⋯" [ref=e222] [cursor=pointer]:
+                - img "直播间护肤礼盒主视觉" [ref=e223]
+                - generic [ref=e224]:
+                  - strong [ref=e225]: 直播间护肤礼盒主视觉
+                  - generic [ref=e226]: 864x1536 | GPT Image 2.0
+                  - time [ref=e227]: 07:09:36
+                - generic [ref=e228]:
+                  - link "↓" [ref=e229]:
+                    - /url: /output/2026-04-26/generated-2026-04-25T23-09-36-665Z-bb265bb7.jpeg?v=2026-04-25T23%3A09%3A36.667Z
+                  - button "⋯" [ref=e230]
+              - button "本地输出 07:09:28 本地输出 07:09:28 864x1536 | GPT Image 2.0 07:09:28 ↓ ⋯" [ref=e231] [cursor=pointer]:
+                - img "本地输出 07:09:28" [ref=e232]
+                - generic [ref=e233]:
+                  - strong [ref=e234]: 本地输出 07:09:28
+                  - generic [ref=e235]: 864x1536 | GPT Image 2.0
+                  - time [ref=e236]: 07:09:28
+                - generic [ref=e237]:
+                  - link "↓" [ref=e238]:
+                    - /url: /output/2026-04-26/generated-2026-04-25T23-09-28-974Z-f688f890.jpeg?v=2026-04-25T23%3A09%3A28.977Z
+                  - button "⋯" [ref=e239]
+            - button "清空历史记录" [ref=e150] [cursor=pointer]
+  - complementary:
+    - generic:
+      - generic:
+        - generic:
+          - paragraph: Config
+          - heading [level=2]: 本地连接配置
+        - button: 关闭
+      - generic:
+        - generic:
+          - generic: 中转 URL
+          - textbox:
+            - /placeholder: https://api.asxs.top/v1
+            - text: https://api.asxs.top/v1
+        - generic:
+          - generic:
+            - generic: API Key
+            - generic: 已保存 sk-2***1b1f
+          - textbox:
+            - /placeholder: 留空则保持当前已保存的 key
+        - generic:
+          - generic: Responses 模型
+          - textbox:
+            - /placeholder: gpt-5.4
+            - text: gpt-5.5
+        - button: 保存配置
+        - paragraph: API Key 仅保存在本机 .local/config.json，不会回填到页面。

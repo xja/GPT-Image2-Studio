@@ -1,0 +1,1751 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - heading "Image Studio" [level=1] [ref=e9]
+          - generic [ref=e10]: AI
+        - paragraph [ref=e11]: AI 图像生成工作流
+      - tablist "视图切换" [ref=e12]:
+        - button "Studio" [ref=e13] [cursor=pointer]
+        - button "瀑布画廊" [active] [ref=e14] [cursor=pointer]
+      - generic [ref=e15]:
+        - generic [ref=e18]: 本地已就绪
+        - generic [ref=e19]: 配置已保存
+        - button "打开输出目录" [ref=e20] [cursor=pointer]
+        - button "配置" [ref=e21] [cursor=pointer]
+    - main [ref=e22]:
+      - generic [ref=e241]:
+        - generic [ref=e242]:
+          - generic [ref=e243]:
+            - heading "瀑布画廊" [level=2] [ref=e244]
+            - paragraph [ref=e245]: Waterfall Gallery
+          - generic [ref=e246]:
+            - generic [ref=e247]: 698 张
+            - button "刷新画廊" [ref=e248] [cursor=pointer]
+        - generic [ref=e249]:
+          - generic [ref=e250]:
+            - generic [ref=e251]:
+              - generic [ref=e252]: 关键词
+              - searchbox "关键词" [ref=e253]
+            - generic [ref=e254]:
+              - generic [ref=e255]: 日期
+              - textbox "日期" [ref=e256]
+            - generic [ref=e257]:
+              - generic [ref=e258]: 尺寸
+              - combobox "尺寸" [ref=e259]:
+                - option "全部尺寸 · 698" [selected]
+                - option "4096 × 4096 · 353"
+                - option "1000 × 1000 · 64"
+                - option "928 × 1152 · 52"
+                - option "1024 × 1024 · 32"
+                - option "3584 × 4800 · 31"
+                - option "4016 × 6016 · 26"
+                - option "3072 × 5504 · 19"
+                - option "6336 × 2688 · 18"
+                - option "4608 × 3712 · 15"
+                - option "6016 × 4016 · 12"
+                - option "864 × 1536 · 11"
+                - option "1706 × 1279 · 7"
+                - option "5056 × 3392 · 6"
+                - option "1792 × 1792 · 6"
+                - option "1200 × 2248 · 5"
+                - option "445 × 445 · 5"
+                - option "1 × 1 · 5"
+                - option "1920 × 1920 · 4"
+                - option "2048 × 1152 · 4"
+                - option "800 × 800 · 4"
+                - option "3712 × 4608 · 3"
+                - option "1152 × 2048 · 3"
+                - option "1279 × 1706 · 3"
+                - option "5504 × 3072 · 2"
+                - option "1536 × 1536 · 2"
+                - option "1536 × 864 · 2"
+                - option "4800 × 3584 · 1"
+                - option "1600 × 2000 · 1"
+                - option "1024 × 1536 · 1"
+                - option "159 × 135 · 1"
+            - generic [ref=e260]:
+              - generic [ref=e261]: 参考图
+              - combobox "参考图" [ref=e262]:
+                - option "全部来源 · 698" [selected]
+                - option "带参考图 · 1"
+                - option "无参考图 · 697"
+            - button "清空筛选" [disabled] [ref=e263]
+          - generic [ref=e264]:
+            - button "全部 · 698" [ref=e265] [cursor=pointer]
+            - button "今天 · 16" [ref=e266] [cursor=pointer]
+            - button "近 7 天 · 24" [ref=e267] [cursor=pointer]
+            - button "更早 · 674" [ref=e268] [cursor=pointer]
+          - paragraph [ref=e269]: 按日期分组显示，当前共 23 组，显示 698 / 698 张。
+        - generic [ref=e270]:
+          - generic [ref=e272]:
+            - generic [ref=e273]:
+              - generic [ref=e274]:
+                - generic [ref=e275]:
+                  - strong [ref=e276]: 今天
+                  - generic [ref=e277]: 2026-04-26
+                - generic [ref=e278]: 16 张
+              - generic [ref=e279]:
+                - generic [ref=e280]:
+                  - button [ref=e281] [cursor=pointer]:
+                    - img [ref=e282]
+                  - 'button "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e283] [cursor=pointer]':
+                    - 'img "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e284]'
+                  - button "本地输出 07:30:41" [ref=e285] [cursor=pointer]:
+                    - img "本地输出 07:30:41" [ref=e286]
+                  - button "本地输出 07:03:36" [ref=e287] [cursor=pointer]:
+                    - img "本地输出 07:03:36" [ref=e288]
+                - generic [ref=e289]:
+                  - 'button "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e290] [cursor=pointer]':
+                    - 'img "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e291]'
+                  - 'button "{ \"prompt\": \"一位长相酷似 {argument name=\"character\" default=\"Billie Eilish\"} 的白皙年轻女性跪在卧室蓬松的白色地毯上，正随意地扎着头发。她穿着一件略显宽松的 {argument name=\"top\" default=\"青柠色罗纹背心\"} 和黑色运动短裤。她表情平静且自信，正看向镜头。房间里有一张未整理的床、散落的物品、一张《海贼王》海报，墙上挂着发光的“Love”霓虹灯。自然光洒满房间，带来柔和的对比感。照片级真实感，休闲生活氛围，8k\", \"parameters\": { \"aspect_ratio\": \"{argument name=\"aspect ratio\" default=\"4:5\"}\" } }" [ref=e292] [cursor=pointer]':
+                    - 'img "{ \"prompt\": \"一位长相酷似 {argument name=\"character\" default=\"Billie Eilish\"} 的白皙年轻女性跪在卧室蓬松的白色地毯上，正随意地扎着头发。她穿着一件略显宽松的 {argument name=\"top\" default=\"青柠色罗纹背心\"} 和黑色运动短裤。她表情平静且自信，正看向镜头。房间里有一张未整理的床、散落的物品、一张《海贼王》海报，墙上挂着发光的“Love”霓虹灯。自然光洒满房间，带来柔和的对比感。照片级真实感，休闲生活氛围，8k\", \"parameters\": { \"aspect_ratio\": \"{argument name=\"aspect ratio\" default=\"4:5\"}\" } }" [ref=e293]'
+                  - button "本地输出 07:30:12" [ref=e294] [cursor=pointer]:
+                    - img "本地输出 07:30:12" [ref=e295]
+                  - button "本地输出 06:42:06" [ref=e296] [cursor=pointer]:
+                    - img "本地输出 06:42:06" [ref=e297]
+                - generic [ref=e298]:
+                  - 'button "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e299] [cursor=pointer]':
+                    - 'img "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e300]'
+                  - button [ref=e301] [cursor=pointer]:
+                    - img [ref=e302]
+                  - button "直播间护肤礼盒主视觉" [ref=e303] [cursor=pointer]:
+                    - img "直播间护肤礼盒主视觉" [ref=e304]
+                  - button "本地输出 01:07:48":
+                    - img "本地输出 01:07:48"
+                - generic [ref=e305]:
+                  - 'button "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e306] [cursor=pointer]':
+                    - 'img "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e307]'
+                  - 'button "{ \"image_generation_prompt\": { \"subject\": { \"description\": \"{argument name=\\\"subject\\\" default=\\\"年轻女性，湿润的背头红发，带有淡淡的雀斑，浸没在水中直至上胸部\\\"}\", \"expression\": \"眼神深邃迷人，直视镜头。\", \"styling\": \"深色且略微晕染的眼线，呈现出原始、真实的生活质感。自然、苍白的肤色。\" }, \"environment\": { \"setting\": \"{argument name=\\\"environment\\\" default=\\\"深色石池或按摩浴缸\\\"}\", \"atmosphere\": \"亲密、情绪化且具有电影感。\" }, \"lighting\": { \"style\": \"戏剧性的明暗对比法 (Chiaroscuro)。\", \"details\": \"温暖的金色定向光照亮了她脸部的右侧、肩膀以及水面，与左侧深邃浓郁的阴影形成强烈对比。\" }, \"technical_specifications\": { \"camera\": \"{argument name=\\\"lens\\\" default=\\\"使用 85mm 镜头拍摄\\\"}\", \"style_keywords\": [ \"纪实写实风格\", \"原始生活摄影\", \"高级时尚编辑风格\", \"黑色电影时尚\", \"超细节\", \"照片级真实感\" ], \"aspect_ratio\": \"3:4\" } } }" [ref=e308] [cursor=pointer]':
+                    - 'img "{ \"image_generation_prompt\": { \"subject\": { \"description\": \"{argument name=\\\"subject\\\" default=\\\"年轻女性，湿润的背头红发，带有淡淡的雀斑，浸没在水中直至上胸部\\\"}\", \"expression\": \"眼神深邃迷人，直视镜头。\", \"styling\": \"深色且略微晕染的眼线，呈现出原始、真实的生活质感。自然、苍白的肤色。\" }, \"environment\": { \"setting\": \"{argument name=\\\"environment\\\" default=\\\"深色石池或按摩浴缸\\\"}\", \"atmosphere\": \"亲密、情绪化且具有电影感。\" }, \"lighting\": { \"style\": \"戏剧性的明暗对比法 (Chiaroscuro)。\", \"details\": \"温暖的金色定向光照亮了她脸部的右侧、肩膀以及水面，与左侧深邃浓郁的阴影形成强烈对比。\" }, \"technical_specifications\": { \"camera\": \"{argument name=\\\"lens\\\" default=\\\"使用 85mm 镜头拍摄\\\"}\", \"style_keywords\": [ \"纪实写实风格\", \"原始生活摄影\", \"高级时尚编辑风格\", \"黑色电影时尚\", \"超细节\", \"照片级真实感\" ], \"aspect_ratio\": \"3:4\" } } }" [ref=e309]'
+                  - button "本地输出 07:09:28" [ref=e310] [cursor=pointer]:
+                    - img "本地输出 07:09:28" [ref=e311]
+                  - button "本地输出 00:41:39" [ref=e312] [cursor=pointer]:
+                    - img "本地输出 00:41:39" [ref=e313]
+            - generic [ref=e314]:
+              - generic [ref=e315]:
+                - generic [ref=e316]:
+                  - strong [ref=e317]: 昨天
+                  - generic [ref=e318]: 2026-04-25
+                - generic [ref=e319]: 8 张
+              - generic [ref=e320]:
+                - generic [ref=e321]:
+                  - button "本地输出 19:02:00":
+                    - img "本地输出 19:02:00"
+                  - button "本地输出 00:15:49":
+                    - img "本地输出 00:15:49"
+                - generic [ref=e322]:
+                  - button "本地输出 18:57:28":
+                    - img "本地输出 18:57:28"
+                  - button "本地输出 00:14:46":
+                    - img "本地输出 00:14:46"
+                - generic [ref=e323]:
+                  - button "本地输出 18:44:49":
+                    - img "本地输出 18:44:49"
+                  - button "本地输出 00:14:19":
+                    - img "本地输出 00:14:19"
+                - generic [ref=e324]:
+                  - button "本地输出 01:05:15":
+                    - img "本地输出 01:05:15"
+                  - button "本地输出 00:09:23":
+                    - img "本地输出 00:09:23"
+            - generic [ref=e325]:
+              - generic [ref=e326]:
+                - generic [ref=e327]:
+                  - strong [ref=e328]: 2026-04-16
+                  - generic [ref=e329]: 2026-04-16
+                - generic [ref=e330]: 2 张
+              - generic:
+                - generic:
+                  - button "本地输出 23:05:35":
+                    - img "本地输出 23:05:35"
+                - generic:
+                  - button "本地输出 23:04:32":
+                    - img "本地输出 23:04:32"
+            - generic [ref=e331]:
+              - generic [ref=e332]:
+                - generic [ref=e333]:
+                  - strong [ref=e334]: 2026-04-06
+                  - generic [ref=e335]: 2026-04-06
+                - generic [ref=e336]: 7 张
+              - generic [ref=e337]:
+                - generic [ref=e338]:
+                  - button "本地输出 17:58:22":
+                    - img "本地输出 17:58:22"
+                  - button "本地输出 17:54:06":
+                    - img "本地输出 17:54:06"
+                - generic [ref=e339]:
+                  - button "本地输出 17:57:21":
+                    - img "本地输出 17:57:21"
+                  - button "本地输出 17:52:56":
+                    - img "本地输出 17:52:56"
+                - generic [ref=e340]:
+                  - button "本地输出 17:56:13":
+                    - img "本地输出 17:56:13"
+                  - button "本地输出 17:51:57":
+                    - img "本地输出 17:51:57"
+                - generic:
+                  - button "本地输出 17:55:04":
+                    - img "本地输出 17:55:04"
+            - generic [ref=e341]:
+              - generic [ref=e342]:
+                - generic [ref=e343]:
+                  - strong [ref=e344]: 2026-04-03
+                  - generic [ref=e345]: 2026-04-03
+                - generic [ref=e346]: 18 张
+              - generic [ref=e347]:
+                - generic [ref=e348]:
+                  - button "本地输出 18:05:02":
+                    - img "本地输出 18:05:02"
+                  - button "本地输出 01:59:30":
+                    - img "本地输出 01:59:30"
+                  - button "本地输出 01:53:03":
+                    - img "本地输出 01:53:03"
+                  - button "本地输出 01:49:34":
+                    - img "本地输出 01:49:34"
+                  - button "本地输出 01:43:18":
+                    - img "本地输出 01:43:18"
+                - generic [ref=e349]:
+                  - button "本地输出 18:02:58":
+                    - img "本地输出 18:02:58"
+                  - button "本地输出 01:58:24":
+                    - img "本地输出 01:58:24"
+                  - button "本地输出 01:52:42":
+                    - img "本地输出 01:52:42"
+                  - button "本地输出 01:47:21":
+                    - img "本地输出 01:47:21"
+                  - button "本地输出 00:00:26":
+                    - img "本地输出 00:00:26"
+                - generic [ref=e350]:
+                  - button "本地输出 02:02:00":
+                    - img "本地输出 02:02:00"
+                  - button "本地输出 01:57:18":
+                    - img "本地输出 01:57:18"
+                  - button "本地输出 01:51:11":
+                    - img "本地输出 01:51:11"
+                  - button "本地输出 01:46:11":
+                    - img "本地输出 01:46:11"
+                - generic [ref=e351]:
+                  - button "本地输出 02:00:47":
+                    - img "本地输出 02:00:47"
+                  - button "本地输出 01:55:55":
+                    - img "本地输出 01:55:55"
+                  - button "本地输出 01:49:50":
+                    - img "本地输出 01:49:50"
+                  - button "本地输出 01:44:38":
+                    - img "本地输出 01:44:38"
+            - generic [ref=e352]:
+              - generic [ref=e353]:
+                - generic [ref=e354]:
+                  - strong [ref=e355]: 2026-04-02
+                  - generic [ref=e356]: 2026-04-02
+                - generic [ref=e357]: 48 张
+              - generic [ref=e358]:
+                - generic [ref=e359]:
+                  - button "本地输出 21:16:37":
+                    - img "本地输出 21:16:37"
+                  - button "本地输出 21:13:01":
+                    - img "本地输出 21:13:01"
+                  - button "本地输出 21:09:22":
+                    - img "本地输出 21:09:22"
+                  - button "本地输出 21:05:30":
+                    - img "本地输出 21:05:30"
+                  - button "本地输出 13:54:41":
+                    - img "本地输出 13:54:41"
+                  - button "本地输出 13:42:47":
+                    - img "本地输出 13:42:47"
+                  - button "本地输出 13:16:55":
+                    - img "本地输出 13:16:55"
+                  - button "本地输出 00:13:02":
+                    - img "本地输出 00:13:02"
+                  - button "本地输出 00:11:22":
+                    - img "本地输出 00:11:22"
+                  - button "本地输出 00:06:52":
+                    - img "本地输出 00:06:52"
+                  - button "本地输出 00:03:42":
+                    - img "本地输出 00:03:42"
+                  - button "本地输出 00:01:56":
+                    - img "本地输出 00:01:56"
+                - generic [ref=e360]:
+                  - button "本地输出 21:15:31":
+                    - img "本地输出 21:15:31"
+                  - button "本地输出 21:12:03":
+                    - img "本地输出 21:12:03"
+                  - button "本地输出 21:08:25":
+                    - img "本地输出 21:08:25"
+                  - button "本地输出 20:59:24":
+                    - img "本地输出 20:59:24"
+                  - button "本地输出 13:51:07":
+                    - img "本地输出 13:51:07"
+                  - button "本地输出 13:41:54":
+                    - img "本地输出 13:41:54"
+                  - button "本地输出 13:15:56":
+                    - img "本地输出 13:15:56"
+                  - button "本地输出 00:12:56":
+                    - img "本地输出 00:12:56"
+                  - button "本地输出 00:11:17":
+                    - img "本地输出 00:11:17"
+                  - button "本地输出 00:06:50":
+                    - img "本地输出 00:06:50"
+                  - button "本地输出 00:03:37":
+                    - img "本地输出 00:03:37"
+                  - button "本地输出 00:01:13":
+                    - img "本地输出 00:01:13"
+                - generic [ref=e361]:
+                  - button "本地输出 21:14:29":
+                    - img "本地输出 21:14:29"
+                  - button "本地输出 21:12:00":
+                    - img "本地输出 21:12:00"
+                  - button "本地输出 21:07:29":
+                    - img "本地输出 21:07:29"
+                  - button "本地输出 20:58:17":
+                    - img "本地输出 20:58:17"
+                  - button "本地输出 13:50:23":
+                    - img "本地输出 13:50:23"
+                  - button "本地输出 13:19:13":
+                    - img "本地输出 13:19:13"
+                  - button "本地输出 00:14:58":
+                    - img "本地输出 00:14:58"
+                  - button "本地输出 00:12:14":
+                    - img "本地输出 00:12:14"
+                  - button "本地输出 00:09:20":
+                    - img "本地输出 00:09:20"
+                  - button "本地输出 00:05:48":
+                    - img "本地输出 00:05:48"
+                  - button "本地输出 00:02:45":
+                    - img "本地输出 00:02:45"
+                  - button "本地输出 00:00:55":
+                    - img "本地输出 00:00:55"
+                - generic [ref=e362]:
+                  - button "本地输出 21:13:11":
+                    - img "本地输出 21:13:11"
+                  - button "本地输出 21:10:34":
+                    - img "本地输出 21:10:34"
+                  - button "本地输出 21:06:33":
+                    - img "本地输出 21:06:33"
+                  - button "本地输出 13:55:37":
+                    - img "本地输出 13:55:37"
+                  - button "本地输出 13:47:30":
+                    - img "本地输出 13:47:30"
+                  - button "本地输出 13:17:58":
+                    - img "本地输出 13:17:58"
+                  - button "本地输出 00:13:54":
+                    - img "本地输出 00:13:54"
+                  - button "本地输出 00:12:05":
+                    - img "本地输出 00:12:05"
+                  - button "本地输出 00:08:15":
+                    - img "本地输出 00:08:15"
+                  - button "本地输出 00:05:42":
+                    - img "本地输出 00:05:42"
+                  - button "本地输出 00:02:34":
+                    - img "本地输出 00:02:34"
+                  - button "本地输出 00:00:18":
+                    - img "本地输出 00:00:18"
+            - generic [ref=e363]:
+              - generic [ref=e364]:
+                - generic [ref=e365]:
+                  - strong [ref=e366]: 2026-04-01
+                  - generic [ref=e367]: 2026-04-01
+                - generic [ref=e368]: 3 张
+              - generic:
+                - generic:
+                  - button "本地输出 23:58:54":
+                    - img "本地输出 23:58:54"
+                - generic:
+                  - button "本地输出 00:22:43":
+                    - img "本地输出 00:22:43"
+                - generic:
+                  - button "本地输出 00:21:51":
+                    - img "本地输出 00:21:51"
+            - generic [ref=e369]:
+              - generic [ref=e370]:
+                - generic [ref=e371]:
+                  - strong [ref=e372]: 2026-03-29
+                  - generic [ref=e373]: 2026-03-29
+                - generic [ref=e374]: 1 张
+              - generic:
+                - generic:
+                  - button "本地输出 12:08:01":
+                    - img "本地输出 12:08:01"
+            - generic [ref=e375]:
+              - generic [ref=e376]:
+                - generic [ref=e377]:
+                  - strong [ref=e378]: 2026-03-28
+                  - generic [ref=e379]: 2026-03-28
+                - generic [ref=e380]: 68 张
+              - generic [ref=e381]:
+                - generic [ref=e382]:
+                  - button "本地输出 14:53:03":
+                    - img "本地输出 14:53:03"
+                  - button "本地输出 14:47:28":
+                    - img "本地输出 14:47:28"
+                  - button "本地输出 14:34:23":
+                    - img "本地输出 14:34:23"
+                  - button "本地输出 14:30:10":
+                    - img "本地输出 14:30:10"
+                  - button "本地输出 14:28:12":
+                    - img "本地输出 14:28:12"
+                  - button "本地输出 14:25:11":
+                    - img "本地输出 14:25:11"
+                  - button "本地输出 14:23:06":
+                    - img "本地输出 14:23:06"
+                  - button "本地输出 14:19:59":
+                    - img "本地输出 14:19:59"
+                  - button "本地输出 14:01:14":
+                    - img "本地输出 14:01:14"
+                  - button "本地输出 13:58:38":
+                    - img "本地输出 13:58:38"
+                  - button "本地输出 13:56:32":
+                    - img "本地输出 13:56:32"
+                  - button "本地输出 13:54:42":
+                    - img "本地输出 13:54:42"
+                  - button "本地输出 13:52:44":
+                    - img "本地输出 13:52:44"
+                  - button "本地输出 13:50:36":
+                    - img "本地输出 13:50:36"
+                  - button "本地输出 12:48:12":
+                    - img "本地输出 12:48:12"
+                  - button "本地输出 12:43:36":
+                    - img "本地输出 12:43:36"
+                  - button "本地输出 12:13:26":
+                    - img "本地输出 12:13:26"
+                - generic [ref=e383]:
+                  - button "本地输出 14:50:18":
+                    - img "本地输出 14:50:18"
+                  - button "本地输出 14:44:42":
+                    - img "本地输出 14:44:42"
+                  - button "本地输出 14:33:34":
+                    - img "本地输出 14:33:34"
+                  - button "本地输出 14:29:18":
+                    - img "本地输出 14:29:18"
+                  - button "本地输出 14:27:23":
+                    - img "本地输出 14:27:23"
+                  - button "本地输出 14:24:20":
+                    - img "本地输出 14:24:20"
+                  - button "本地输出 14:21:44":
+                    - img "本地输出 14:21:44"
+                  - button "本地输出 14:19:46":
+                    - img "本地输出 14:19:46"
+                  - button "本地输出 14:00:29":
+                    - img "本地输出 14:00:29"
+                  - button "本地输出 13:58:25":
+                    - img "本地输出 13:58:25"
+                  - button "本地输出 13:56:20":
+                    - img "本地输出 13:56:20"
+                  - button "本地输出 13:54:16":
+                    - img "本地输出 13:54:16"
+                  - button "本地输出 13:52:22":
+                    - img "本地输出 13:52:22"
+                  - button "本地输出 13:50:13":
+                    - img "本地输出 13:50:13"
+                  - button "本地输出 12:46:56":
+                    - img "本地输出 12:46:56"
+                  - button "本地输出 12:42:24":
+                    - img "本地输出 12:42:24"
+                  - button "本地输出 12:12:29":
+                    - img "本地输出 12:12:29"
+                - generic [ref=e384]:
+                  - button "本地输出 14:49:18":
+                    - img "本地输出 14:49:18"
+                  - button "本地输出 14:44:07":
+                    - img "本地输出 14:44:07"
+                  - button "本地输出 14:33:23":
+                    - img "本地输出 14:33:23"
+                  - button "本地输出 14:29:00":
+                    - img "本地输出 14:29:00"
+                  - button "本地输出 14:27:12":
+                    - img "本地输出 14:27:12"
+                  - button "本地输出 14:24:04":
+                    - img "本地输出 14:24:04"
+                  - button "本地输出 14:20:56":
+                    - img "本地输出 14:20:56"
+                  - button "本地输出 14:18:57":
+                    - img "本地输出 14:18:57"
+                  - button "本地输出 13:59:36":
+                    - img "本地输出 13:59:36"
+                  - button "本地输出 13:57:31":
+                    - img "本地输出 13:57:31"
+                  - button "本地输出 13:55:36":
+                    - img "本地输出 13:55:36"
+                  - button "本地输出 13:53:48":
+                    - img "本地输出 13:53:48"
+                  - button "本地输出 13:51:40":
+                    - img "本地输出 13:51:40"
+                  - button "本地输出 13:49:02":
+                    - img "本地输出 13:49:02"
+                  - button "本地输出 12:45:55":
+                    - img "本地输出 12:45:55"
+                  - button "本地输出 12:41:06":
+                    - img "本地输出 12:41:06"
+                  - button "本地输出 12:11:16":
+                    - img "本地输出 12:11:16"
+                - generic [ref=e385]:
+                  - button "本地输出 14:48:12":
+                    - img "本地输出 14:48:12"
+                  - button "本地输出 14:43:20":
+                    - img "本地输出 14:43:20"
+                  - button "本地输出 14:32:12":
+                    - img "本地输出 14:32:12"
+                  - button "本地输出 14:28:16":
+                    - img "本地输出 14:28:16"
+                  - button "本地输出 14:26:11":
+                    - img "本地输出 14:26:11"
+                  - button "本地输出 14:23:20":
+                    - img "本地输出 14:23:20"
+                  - button "本地输出 14:20:54":
+                    - img "本地输出 14:20:54"
+                  - button "本地输出 14:01:19":
+                    - img "本地输出 14:01:19"
+                  - button "本地输出 13:59:22":
+                    - img "本地输出 13:59:22"
+                  - button "本地输出 13:57:25":
+                    - img "本地输出 13:57:25"
+                  - button "本地输出 13:55:10":
+                    - img "本地输出 13:55:10"
+                  - button "本地输出 13:53:22":
+                    - img "本地输出 13:53:22"
+                  - button "本地输出 13:51:18":
+                    - img "本地输出 13:51:18"
+                  - button "本地输出 13:47:57":
+                    - img "本地输出 13:47:57"
+                  - button "本地输出 12:44:51":
+                    - img "本地输出 12:44:51"
+                  - button "本地输出 12:15:28":
+                    - img "本地输出 12:15:28"
+                  - button "本地输出 12:10:11":
+                    - img "本地输出 12:10:11"
+            - generic [ref=e386]:
+              - generic [ref=e387]:
+                - generic [ref=e388]:
+                  - strong [ref=e389]: 2026-03-27
+                  - generic [ref=e390]: 2026-03-27
+                - generic [ref=e391]: 30 张
+              - generic [ref=e392]:
+                - generic [ref=e393]:
+                  - button "本地输出 22:06:25":
+                    - img "本地输出 22:06:25"
+                  - button "本地输出 21:24:22":
+                    - img "本地输出 21:24:22"
+                  - button "本地输出 16:54:33":
+                    - img "本地输出 16:54:33"
+                  - button "本地输出 12:41:37":
+                    - img "本地输出 12:41:37"
+                  - button "本地输出 12:39:58":
+                    - img "本地输出 12:39:58"
+                  - button "本地输出 01:42:48":
+                    - img "本地输出 01:42:48"
+                  - button "本地输出 01:41:02":
+                    - img "本地输出 01:41:02"
+                  - button "本地输出 00:02:14":
+                    - img "本地输出 00:02:14"
+                - generic [ref=e394]:
+                  - button "本地输出 22:05:47":
+                    - img "本地输出 22:05:47"
+                  - button "本地输出 21:23:47":
+                    - img "本地输出 21:23:47"
+                  - button "本地输出 16:54:11":
+                    - img "本地输出 16:54:11"
+                  - button "本地输出 12:41:14":
+                    - img "本地输出 12:41:14"
+                  - button "本地输出 12:39:24":
+                    - img "本地输出 12:39:24"
+                  - button "本地输出 01:42:25":
+                    - img "本地输出 01:42:25"
+                  - button "本地输出 00:03:34":
+                    - img "本地输出 00:03:34"
+                  - button "本地输出 00:01:37":
+                    - img "本地输出 00:01:37"
+                - generic [ref=e395]:
+                  - button "本地输出 21:52:09":
+                    - img "本地输出 21:52:09"
+                  - button "本地输出 21:03:11":
+                    - img "本地输出 21:03:11"
+                  - button "本地输出 16:42:04":
+                    - img "本地输出 16:42:04"
+                  - button "本地输出 12:40:50":
+                    - img "本地输出 12:40:50"
+                  - button "本地输出 01:43:40":
+                    - img "本地输出 01:43:40"
+                  - button "本地输出 01:42:02":
+                    - img "本地输出 01:42:02"
+                  - button "本地输出 00:03:10":
+                    - img "本地输出 00:03:10"
+                - generic [ref=e396]:
+                  - button "本地输出 21:51:33":
+                    - img "本地输出 21:51:33"
+                  - button "本地输出 20:53:50":
+                    - img "本地输出 20:53:50"
+                  - button "本地输出 12:42:03":
+                    - img "本地输出 12:42:03"
+                  - button "本地输出 12:40:24":
+                    - img "本地输出 12:40:24"
+                  - button "本地输出 01:43:15":
+                    - img "本地输出 01:43:15"
+                  - button "本地输出 01:41:38":
+                    - img "本地输出 01:41:38"
+                  - button "本地输出 00:02:39":
+                    - img "本地输出 00:02:39"
+            - generic [ref=e397]:
+              - generic [ref=e398]:
+                - generic [ref=e399]:
+                  - strong [ref=e400]: 2026-03-26
+                  - generic [ref=e401]: 2026-03-26
+                - generic [ref=e402]: 24 张
+              - generic [ref=e403]:
+                - generic [ref=e404]:
+                  - button "本地输出 23:58:22":
+                    - img "本地输出 23:58:22"
+                  - button "本地输出 23:55:05":
+                    - img "本地输出 23:55:05"
+                  - button "本地输出 22:58:03":
+                    - img "本地输出 22:58:03"
+                  - button "本地输出 17:57:12":
+                    - img "本地输出 17:57:12"
+                  - button "本地输出 17:53:07":
+                    - img "本地输出 17:53:07"
+                  - button "本地输出 16:50:11":
+                    - img "本地输出 16:50:11"
+                - generic [ref=e405]:
+                  - button "本地输出 23:56:40":
+                    - img "本地输出 23:56:40"
+                  - button "本地输出 23:54:35":
+                    - img "本地输出 23:54:35"
+                  - button "本地输出 22:57:29":
+                    - img "本地输出 22:57:29"
+                  - button "本地输出 17:56:20":
+                    - img "本地输出 17:56:20"
+                  - button "本地输出 17:52:13":
+                    - img "本地输出 17:52:13"
+                  - button "本地输出 16:49:16":
+                    - img "本地输出 16:49:16"
+                - generic [ref=e406]:
+                  - button "本地输出 23:56:07":
+                    - img "本地输出 23:56:07"
+                  - button "本地输出 23:49:14":
+                    - img "本地输出 23:49:14"
+                  - button "本地输出 22:55:27":
+                    - img "本地输出 22:55:27"
+                  - button "本地输出 17:54:59":
+                    - img "本地输出 17:54:59"
+                  - button "本地输出 16:53:23":
+                    - img "本地输出 16:53:23"
+                  - button "本地输出 16:47:55":
+                    - img "本地输出 16:47:55"
+                - generic [ref=e407]:
+                  - button "本地输出 23:56:03":
+                    - img "本地输出 23:56:03"
+                  - button "本地输出 23:48:44":
+                    - img "本地输出 23:48:44"
+                  - button "本地输出 22:54:43":
+                    - img "本地输出 22:54:43"
+                  - button "本地输出 17:54:03":
+                    - img "本地输出 17:54:03"
+                  - button "本地输出 16:52:16":
+                    - img "本地输出 16:52:16"
+                  - button "本地输出 16:46:56":
+                    - img "本地输出 16:46:56"
+            - generic [ref=e408]:
+              - generic [ref=e409]:
+                - generic [ref=e410]:
+                  - strong [ref=e411]: 2026-03-25
+                  - generic [ref=e412]: 2026-03-25
+                - generic [ref=e413]: 2 张
+              - generic:
+                - generic:
+                  - button "本地输出 19:57:37":
+                    - img "本地输出 19:57:37"
+                - generic:
+                  - button "本地输出 19:50:40":
+                    - img "本地输出 19:50:40"
+            - generic [ref=e414]:
+              - generic [ref=e415]:
+                - generic [ref=e416]:
+                  - strong [ref=e417]: 2026-03-24
+                  - generic [ref=e418]: 2026-03-24
+                - generic [ref=e419]: 62 张
+              - generic [ref=e420]:
+                - generic [ref=e421]:
+                  - button "本地输出 22:56:42":
+                    - img "本地输出 22:56:42"
+                  - button "本地输出 16:31:08":
+                    - img "本地输出 16:31:08"
+                  - button "本地输出 16:28:23":
+                    - img "本地输出 16:28:23"
+                  - button "本地输出 16:26:07":
+                    - img "本地输出 16:26:07"
+                  - button "本地输出 16:24:03":
+                    - img "本地输出 16:24:03"
+                  - button "本地输出 04:05:44":
+                    - img "本地输出 04:05:44"
+                  - button "本地输出 04:03:45":
+                    - img "本地输出 04:03:45"
+                  - button "本地输出 04:00:15":
+                    - img "本地输出 04:00:15"
+                  - button "本地输出 03:25:29":
+                    - img "本地输出 03:25:29"
+                  - button "本地输出 03:23:08":
+                    - img "本地输出 03:23:08"
+                  - button "本地输出 03:20:42":
+                    - img "本地输出 03:20:42"
+                  - button "本地输出 03:17:22":
+                    - img "本地输出 03:17:22"
+                  - button "本地输出 03:04:00":
+                    - img "本地输出 03:04:00"
+                  - button "本地输出 02:26:33":
+                    - img "本地输出 02:26:33"
+                  - button "本地输出 02:24:09":
+                    - img "本地输出 02:24:09"
+                  - button "本地输出 00:14:18":
+                    - img "本地输出 00:14:18"
+                - generic [ref=e422]:
+                  - button "本地输出 22:55:43":
+                    - img "本地输出 22:55:43"
+                  - button "本地输出 16:30:38":
+                    - img "本地输出 16:30:38"
+                  - button "本地输出 16:27:55":
+                    - img "本地输出 16:27:55"
+                  - button "本地输出 16:25:37":
+                    - img "本地输出 16:25:37"
+                  - button "本地输出 04:07:05":
+                    - img "本地输出 04:07:05"
+                  - button "本地输出 04:05:15":
+                    - img "本地输出 04:05:15"
+                  - button "本地输出 04:03:19":
+                    - img "本地输出 04:03:19"
+                  - button "本地输出 03:59:47":
+                    - img "本地输出 03:59:47"
+                  - button "本地输出 03:24:49":
+                    - img "本地输出 03:24:49"
+                  - button "本地输出 03:22:35":
+                    - img "本地输出 03:22:35"
+                  - button "本地输出 03:20:11":
+                    - img "本地输出 03:20:11"
+                  - button "本地输出 03:16:55":
+                    - img "本地输出 03:16:55"
+                  - button "本地输出 03:03:34":
+                    - img "本地输出 03:03:34"
+                  - button "本地输出 02:26:07":
+                    - img "本地输出 02:26:07"
+                  - button "本地输出 00:15:50":
+                    - img "本地输出 00:15:50"
+                  - button "本地输出 00:13:33":
+                    - img "本地输出 00:13:33"
+                - generic [ref=e423]:
+                  - button "本地输出 16:32:07":
+                    - img "本地输出 16:32:07"
+                  - button "本地输出 16:30:05":
+                    - img "本地输出 16:30:05"
+                  - button "本地输出 16:27:22":
+                    - img "本地输出 16:27:22"
+                  - button "本地输出 16:25:13":
+                    - img "本地输出 16:25:13"
+                  - button "本地输出 04:06:37":
+                    - img "本地输出 04:06:37"
+                  - button "本地输出 04:04:40":
+                    - img "本地输出 04:04:40"
+                  - button "本地输出 04:02:53":
+                    - img "本地输出 04:02:53"
+                  - button "本地输出 03:59:18":
+                    - img "本地输出 03:59:18"
+                  - button "本地输出 03:24:18":
+                    - img "本地输出 03:24:18"
+                  - button "本地输出 03:21:44":
+                    - img "本地输出 03:21:44"
+                  - button "本地输出 03:18:15":
+                    - img "本地输出 03:18:15"
+                  - button "本地输出 03:16:26":
+                    - img "本地输出 03:16:26"
+                  - button "本地输出 03:03:06":
+                    - img "本地输出 03:03:06"
+                  - button "本地输出 02:25:35":
+                    - img "本地输出 02:25:35"
+                  - button "本地输出 00:15:23":
+                    - img "本地输出 00:15:23"
+                - generic [ref=e424]:
+                  - button "本地输出 16:31:39":
+                    - img "本地输出 16:31:39"
+                  - button "本地输出 16:29:00":
+                    - img "本地输出 16:29:00"
+                  - button "本地输出 16:26:53":
+                    - img "本地输出 16:26:53"
+                  - button "本地输出 16:24:39":
+                    - img "本地输出 16:24:39"
+                  - button "本地输出 04:06:10":
+                    - img "本地输出 04:06:10"
+                  - button "本地输出 04:04:12":
+                    - img "本地输出 04:04:12"
+                  - button "本地输出 04:02:52":
+                    - img "本地输出 04:02:52"
+                  - button "本地输出 03:58:47":
+                    - img "本地输出 03:58:47"
+                  - button "本地输出 03:23:46":
+                    - img "本地输出 03:23:46"
+                  - button "本地输出 03:21:18":
+                    - img "本地输出 03:21:18"
+                  - button "本地输出 03:17:49":
+                    - img "本地输出 03:17:49"
+                  - button "本地输出 03:04:37":
+                    - img "本地输出 03:04:37"
+                  - button "本地输出 03:02:30":
+                    - img "本地输出 03:02:30"
+                  - button "本地输出 02:25:05":
+                    - img "本地输出 02:25:05"
+                  - button "本地输出 00:14:45":
+                    - img "本地输出 00:14:45"
+            - generic [ref=e425]:
+              - generic [ref=e426]:
+                - generic [ref=e427]:
+                  - strong [ref=e428]: 2026-03-23
+                  - generic [ref=e429]: 2026-03-23
+                - generic [ref=e430]: 43 张
+              - generic [ref=e431]:
+                - generic [ref=e432]:
+                  - button "本地输出 22:20:20":
+                    - img "本地输出 22:20:20"
+                  - button "本地输出 21:16:32":
+                    - img "本地输出 21:16:32"
+                  - button "本地输出 14:19:00":
+                    - img "本地输出 14:19:00"
+                  - button "本地输出 14:08:55":
+                    - img "本地输出 14:08:55"
+                  - button "本地输出 03:07:59":
+                    - img "本地输出 03:07:59"
+                  - button "本地输出 02:48:30":
+                    - img "本地输出 02:48:30"
+                  - button "本地输出 02:43:04":
+                    - img "本地输出 02:43:04"
+                  - button "本地输出 01:34:54":
+                    - img "本地输出 01:34:54"
+                  - button "本地输出 01:29:34":
+                    - img "本地输出 01:29:34"
+                  - button "本地输出 01:21:51":
+                    - img "本地输出 01:21:51"
+                  - button "本地输出 01:17:38":
+                    - img "本地输出 01:17:38"
+                - generic [ref=e433]:
+                  - button "本地输出 22:18:51":
+                    - img "本地输出 22:18:51"
+                  - button "本地输出 21:16:01":
+                    - img "本地输出 21:16:01"
+                  - button "本地输出 14:17:55":
+                    - img "本地输出 14:17:55"
+                  - button "本地输出 14:08:05":
+                    - img "本地输出 14:08:05"
+                  - button "本地输出 02:58:25":
+                    - img "本地输出 02:58:25"
+                  - button "本地输出 02:47:25":
+                    - img "本地输出 02:47:25"
+                  - button "本地输出 02:41:53":
+                    - img "本地输出 02:41:53"
+                  - button "本地输出 01:33:47":
+                    - img "本地输出 01:33:47"
+                  - button "本地输出 01:28:23":
+                    - img "本地输出 01:28:23"
+                  - button "本地输出 01:20:53":
+                    - img "本地输出 01:20:53"
+                  - button "本地输出 01:16:40":
+                    - img "本地输出 01:16:40"
+                - generic [ref=e434]:
+                  - button "本地输出 21:17:59":
+                    - img "本地输出 21:17:59"
+                  - button "本地输出 21:15:26":
+                    - img "本地输出 21:15:26"
+                  - button "本地输出 14:17:07":
+                    - img "本地输出 14:17:07"
+                  - button "本地输出 03:09:43":
+                    - img "本地输出 03:09:43"
+                  - button "本地输出 02:57:27":
+                    - img "本地输出 02:57:27"
+                  - button "本地输出 02:46:22":
+                    - img "本地输出 02:46:22"
+                  - button "本地输出 02:41:02":
+                    - img "本地输出 02:41:02"
+                  - button "本地输出 01:32:26":
+                    - img "本地输出 01:32:26"
+                  - button "本地输出 01:27:17":
+                    - img "本地输出 01:27:17"
+                  - button "本地输出 01:19:55":
+                    - img "本地输出 01:19:55"
+                  - button "本地输出 01:15:15":
+                    - img "本地输出 01:15:15"
+                - generic [ref=e435]:
+                  - button "本地输出 21:17:06":
+                    - img "本地输出 21:17:06"
+                  - button "本地输出 21:04:37":
+                    - img "本地输出 21:04:37"
+                  - button "本地输出 14:09:53":
+                    - img "本地输出 14:09:53"
+                  - button "本地输出 03:08:56":
+                    - img "本地输出 03:08:56"
+                  - button "本地输出 02:56:36":
+                    - img "本地输出 02:56:36"
+                  - button "本地输出 02:45:26":
+                    - img "本地输出 02:45:26"
+                  - button "本地输出 02:21:24":
+                    - img "本地输出 02:21:24"
+                  - button "本地输出 01:31:12":
+                    - img "本地输出 01:31:12"
+                  - button "本地输出 01:25:50":
+                    - img "本地输出 01:25:50"
+                  - button "本地输出 01:18:36":
+                    - img "本地输出 01:18:36"
+            - generic [ref=e436]:
+              - generic [ref=e437]:
+                - generic [ref=e438]:
+                  - strong [ref=e439]: 2026-03-22
+                  - generic [ref=e440]: 2026-03-22
+                - generic [ref=e441]: 86 张
+              - generic [ref=e442]:
+                - generic [ref=e443]:
+                  - button "本地输出 19:27:08":
+                    - img "本地输出 19:27:08"
+                  - button "本地输出 19:22:34":
+                    - img "本地输出 19:22:34"
+                  - button "本地输出 18:10:27":
+                    - img "本地输出 18:10:27"
+                  - button "本地输出 18:08:51":
+                    - img "本地输出 18:08:51"
+                  - button "本地输出 18:00:16":
+                    - img "本地输出 18:00:16"
+                  - button "本地输出 17:47:36":
+                    - img "本地输出 17:47:36"
+                  - button "本地输出 17:46:18":
+                    - img "本地输出 17:46:18"
+                  - button "本地输出 17:44:33":
+                    - img "本地输出 17:44:33"
+                  - button "本地输出 16:31:06":
+                    - img "本地输出 16:31:06"
+                  - button "本地输出 16:26:23":
+                    - img "本地输出 16:26:23"
+                  - button "本地输出 16:21:54":
+                    - img "本地输出 16:21:54"
+                  - button "本地输出 16:17:46":
+                    - img "本地输出 16:17:46"
+                  - button "本地输出 14:57:21":
+                    - img "本地输出 14:57:21"
+                  - button "本地输出 01:52:34":
+                    - img "本地输出 01:52:34"
+                  - button "本地输出 01:50:32":
+                    - img "本地输出 01:50:32"
+                  - button "本地输出 01:31:13":
+                    - img "本地输出 01:31:13"
+                  - button "本地输出 01:28:19":
+                    - img "本地输出 01:28:19"
+                  - button "本地输出 01:24:51":
+                    - img "本地输出 01:24:51"
+                  - button "本地输出 01:21:44":
+                    - img "本地输出 01:21:44"
+                  - button "本地输出 01:18:51":
+                    - img "本地输出 01:18:51"
+                  - button "本地输出 01:15:30":
+                    - img "本地输出 01:15:30"
+                  - button "本地输出 01:11:33":
+                    - img "本地输出 01:11:33"
+                - generic [ref=e444]:
+                  - button "本地输出 19:26:16":
+                    - img "本地输出 19:26:16"
+                  - button "本地输出 18:38:52":
+                    - img "本地输出 18:38:52"
+                  - button "本地输出 18:10:13":
+                    - img "本地输出 18:10:13"
+                  - button "本地输出 18:02:57":
+                    - img "本地输出 18:02:57"
+                  - button "本地输出 17:49:03":
+                    - img "本地输出 17:49:03"
+                  - button "本地输出 17:47:01":
+                    - img "本地输出 17:47:01"
+                  - button "本地输出 17:45:42":
+                    - img "本地输出 17:45:42"
+                  - button "本地输出 17:41:22":
+                    - img "本地输出 17:41:22"
+                  - button "本地输出 16:29:54":
+                    - img "本地输出 16:29:54"
+                  - button "本地输出 16:25:14":
+                    - img "本地输出 16:25:14"
+                  - button "本地输出 16:20:37":
+                    - img "本地输出 16:20:37"
+                  - button "本地输出 16:16:23":
+                    - img "本地输出 16:16:23"
+                  - button "本地输出 14:54:02":
+                    - img "本地输出 14:54:02"
+                  - button "本地输出 01:52:22":
+                    - img "本地输出 01:52:22"
+                  - button "本地输出 01:50:32":
+                    - img "本地输出 01:50:32"
+                  - button "本地输出 01:29:55":
+                    - img "本地输出 01:29:55"
+                  - button "本地输出 01:27:07":
+                    - img "本地输出 01:27:07"
+                  - button "本地输出 01:24:15":
+                    - img "本地输出 01:24:15"
+                  - button "本地输出 01:21:20":
+                    - img "本地输出 01:21:20"
+                  - button "本地输出 01:17:34":
+                    - img "本地输出 01:17:34"
+                  - button "本地输出 01:15:04":
+                    - img "本地输出 01:15:04"
+                  - button "本地输出 01:10:13":
+                    - img "本地输出 01:10:13"
+                - generic [ref=e445]:
+                  - button "本地输出 19:24:05":
+                    - img "本地输出 19:24:05"
+                  - button "本地输出 18:33:47":
+                    - img "本地输出 18:33:47"
+                  - button "本地输出 18:09:28":
+                    - img "本地输出 18:09:28"
+                  - button "本地输出 18:02:11":
+                    - img "本地输出 18:02:11"
+                  - button "本地输出 17:48:31":
+                    - img "本地输出 17:48:31"
+                  - button "本地输出 17:46:50":
+                    - img "本地输出 17:46:50"
+                  - button "本地输出 17:45:27":
+                    - img "本地输出 17:45:27"
+                  - button "本地输出 17:40:51":
+                    - img "本地输出 17:40:51"
+                  - button "本地输出 16:28:39":
+                    - img "本地输出 16:28:39"
+                  - button "本地输出 16:24:07":
+                    - img "本地输出 16:24:07"
+                  - button "本地输出 16:19:38":
+                    - img "本地输出 16:19:38"
+                  - button "本地输出 16:16:23":
+                    - img "本地输出 16:16:23"
+                  - button "本地输出 14:54:02":
+                    - img "本地输出 14:54:02"
+                  - button "本地输出 01:50:47":
+                    - img "本地输出 01:50:47"
+                  - button "本地输出 01:33:19":
+                    - img "本地输出 01:33:19"
+                  - button "本地输出 01:29:43":
+                    - img "本地输出 01:29:43"
+                  - button "本地输出 01:26:22":
+                    - img "本地输出 01:26:22"
+                  - button "本地输出 01:23:23":
+                    - img "本地输出 01:23:23"
+                  - button "本地输出 01:20:16":
+                    - img "本地输出 01:20:16"
+                  - button "本地输出 01:17:12":
+                    - img "本地输出 01:17:12"
+                  - button "本地输出 01:14:23":
+                    - img "本地输出 01:14:23"
+                - generic [ref=e446]:
+                  - button "本地输出 19:23:11":
+                    - img "本地输出 19:23:11"
+                  - button "本地输出 18:10:56":
+                    - img "本地输出 18:10:56"
+                  - button "本地输出 18:09:04":
+                    - img "本地输出 18:09:04"
+                  - button "本地输出 18:01:11":
+                    - img "本地输出 18:01:11"
+                  - button "本地输出 17:47:56":
+                    - img "本地输出 17:47:56"
+                  - button "本地输出 17:46:32":
+                    - img "本地输出 17:46:32"
+                  - button "本地输出 17:44:44":
+                    - img "本地输出 17:44:44"
+                  - button "本地输出 17:40:21":
+                    - img "本地输出 17:40:21"
+                  - button "本地输出 16:27:25":
+                    - img "本地输出 16:27:25"
+                  - button "本地输出 16:22:54":
+                    - img "本地输出 16:22:54"
+                  - button "本地输出 16:18:09":
+                    - img "本地输出 16:18:09"
+                  - button "本地输出 14:57:21":
+                    - img "本地输出 14:57:21"
+                  - button "本地输出 14:52:53":
+                    - img "本地输出 14:52:53"
+                  - button "本地输出 01:50:47":
+                    - img "本地输出 01:50:47"
+                  - button "本地输出 01:32:06":
+                    - img "本地输出 01:32:06"
+                  - button "本地输出 01:28:30":
+                    - img "本地输出 01:28:30"
+                  - button "本地输出 01:25:41":
+                    - img "本地输出 01:25:41"
+                  - button "本地输出 01:22:47":
+                    - img "本地输出 01:22:47"
+                  - button "本地输出 01:18:58":
+                    - img "本地输出 01:18:58"
+                  - button "本地输出 01:16:01":
+                    - img "本地输出 01:16:01"
+                  - button "本地输出 01:13:15":
+                    - img "本地输出 01:13:15"
+            - generic [ref=e447]:
+              - generic [ref=e448]:
+                - generic [ref=e449]:
+                  - strong [ref=e450]: 2026-03-19
+                  - generic [ref=e451]: 2026-03-19
+                - generic [ref=e452]: 30 张
+              - generic [ref=e453]:
+                - generic [ref=e454]:
+                  - button "本地输出 20:03:26":
+                    - img "本地输出 20:03:26"
+                  - button "本地输出 19:59:50":
+                    - img "本地输出 19:59:50"
+                  - button "本地输出 19:54:37":
+                    - img "本地输出 19:54:37"
+                  - button "本地输出 15:36:34":
+                    - img "本地输出 15:36:34"
+                  - button "本地输出 15:33:20":
+                    - img "本地输出 15:33:20"
+                  - button "本地输出 15:29:39":
+                    - img "本地输出 15:29:39"
+                  - button "本地输出 15:26:40":
+                    - img "本地输出 15:26:40"
+                  - button "本地输出 13:05:49":
+                    - img "本地输出 13:05:49"
+                - generic [ref=e455]:
+                  - button "本地输出 20:02:56":
+                    - img "本地输出 20:02:56"
+                  - button "本地输出 19:59:50":
+                    - img "本地输出 19:59:50"
+                  - button "本地输出 19:48:51":
+                    - img "本地输出 19:48:51"
+                  - button "本地输出 15:36:23":
+                    - img "本地输出 15:36:23"
+                  - button "本地输出 15:33:10":
+                    - img "本地输出 15:33:10"
+                  - button "本地输出 15:29:34":
+                    - img "本地输出 15:29:34"
+                  - button "本地输出 15:25:02":
+                    - img "本地输出 15:25:02"
+                  - button "本地输出 13:05:49":
+                    - img "本地输出 13:05:49"
+                - generic [ref=e456]:
+                  - button "本地输出 20:00:07":
+                    - img "本地输出 20:00:07"
+                  - button "本地输出 19:58:32":
+                    - img "本地输出 19:58:32"
+                  - button "本地输出 18:51:54":
+                    - img "本地输出 18:51:54"
+                  - button "本地输出 15:34:55":
+                    - img "本地输出 15:34:55"
+                  - button "本地输出 15:31:29":
+                    - img "本地输出 15:31:29"
+                  - button "本地输出 15:29:06":
+                    - img "本地输出 15:29:06"
+                  - button "本地输出 13:23:00":
+                    - img "本地输出 13:23:00"
+                - generic [ref=e457]:
+                  - button "本地输出 20:00:07":
+                    - img "本地输出 20:00:07"
+                  - button "本地输出 19:57:35":
+                    - img "本地输出 19:57:35"
+                  - button "本地输出 15:42:08":
+                    - img "本地输出 15:42:08"
+                  - button "本地输出 15:34:26":
+                    - img "本地输出 15:34:26"
+                  - button "本地输出 15:31:18":
+                    - img "本地输出 15:31:18"
+                  - button "本地输出 15:29:06":
+                    - img "本地输出 15:29:06"
+                  - button "本地输出 13:09:50":
+                    - img "本地输出 13:09:50"
+            - generic [ref=e458]:
+              - generic [ref=e459]:
+                - generic [ref=e460]:
+                  - strong [ref=e461]: 2026-03-18
+                  - generic [ref=e462]: 2026-03-18
+                - generic [ref=e463]: 6 张
+              - generic [ref=e464]:
+                - generic [ref=e465]:
+                  - button "本地输出 15:11:23":
+                    - img "本地输出 15:11:23"
+                  - button "本地输出 00:01:13":
+                    - img "本地输出 00:01:13"
+                - generic [ref=e466]:
+                  - button "本地输出 00:27:23":
+                    - img "本地输出 00:27:23"
+                  - button "本地输出 00:00:14":
+                    - img "本地输出 00:00:14"
+                - generic:
+                  - button "本地输出 00:25:21":
+                    - img "本地输出 00:25:21"
+                - generic:
+                  - button "本地输出 00:03:33":
+                    - img "本地输出 00:03:33"
+            - generic [ref=e467]:
+              - generic [ref=e468]:
+                - generic [ref=e469]:
+                  - strong [ref=e470]: 2026-03-17
+                  - generic [ref=e471]: 2026-03-17
+                - generic [ref=e472]: 46 张
+              - generic [ref=e473]:
+                - generic [ref=e474]:
+                  - button "本地输出 23:56:40":
+                    - img "本地输出 23:56:40"
+                  - button "本地输出 23:51:52":
+                    - img "本地输出 23:51:52"
+                  - button "本地输出 23:49:18":
+                    - img "本地输出 23:49:18"
+                  - button "本地输出 21:37:09":
+                    - img "本地输出 21:37:09"
+                  - button "本地输出 20:37:26":
+                    - img "本地输出 20:37:26"
+                  - button "本地输出 20:30:00":
+                    - img "本地输出 20:30:00"
+                  - button "本地输出 20:06:37":
+                    - img "本地输出 20:06:37"
+                  - button "本地输出 20:05:42":
+                    - img "本地输出 20:05:42"
+                  - button "本地输出 17:11:12":
+                    - img "本地输出 17:11:12"
+                  - button "本地输出 16:59:38":
+                    - img "本地输出 16:59:38"
+                  - button "本地输出 15:39:23":
+                    - img "本地输出 15:39:23"
+                  - button "本地输出 00:00:39":
+                    - img "本地输出 00:00:39"
+                - generic [ref=e475]:
+                  - button "本地输出 23:55:49":
+                    - img "本地输出 23:55:49"
+                  - button "本地输出 23:51:29":
+                    - img "本地输出 23:51:29"
+                  - button "本地输出 23:45:11":
+                    - img "本地输出 23:45:11"
+                  - button "本地输出 21:37:09":
+                    - img "本地输出 21:37:09"
+                  - button "本地输出 20:30:00":
+                    - img "本地输出 20:30:00"
+                  - button "本地输出 20:09:37":
+                    - img "本地输出 20:09:37"
+                  - button "本地输出 20:06:27":
+                    - img "本地输出 20:06:27"
+                  - button "本地输出 20:05:42":
+                    - img "本地输出 20:05:42"
+                  - button "本地输出 17:07:56":
+                    - img "本地输出 17:07:56"
+                  - button "本地输出 16:59:38":
+                    - img "本地输出 16:59:38"
+                  - button "本地输出 15:37:00":
+                    - img "本地输出 15:37:00"
+                  - button "本地输出 00:00:36":
+                    - img "本地输出 00:00:36"
+                - generic [ref=e476]:
+                  - button "本地输出 23:54:01":
+                    - img "本地输出 23:54:01"
+                  - button "本地输出 23:49:38":
+                    - img "本地输出 23:49:38"
+                  - button "本地输出 23:45:02":
+                    - img "本地输出 23:45:02"
+                  - button "本地输出 21:37:09":
+                    - img "本地输出 21:37:09"
+                  - button "本地输出 20:30:00":
+                    - img "本地输出 20:30:00"
+                  - button "本地输出 20:09:28":
+                    - img "本地输出 20:09:28"
+                  - button "本地输出 20:06:27":
+                    - img "本地输出 20:06:27"
+                  - button "本地输出 19:52:56":
+                    - img "本地输出 19:52:56"
+                  - button "本地输出 17:04:44":
+                    - img "本地输出 17:04:44"
+                  - button "本地输出 16:59:38":
+                    - img "本地输出 16:59:38"
+                  - button "本地输出 15:30:32":
+                    - img "本地输出 15:30:32"
+                - generic [ref=e477]:
+                  - button "本地输出 23:52:52":
+                    - img "本地输出 23:52:52"
+                  - button "本地输出 23:49:24":
+                    - img "本地输出 23:49:24"
+                  - button "本地输出 21:37:37":
+                    - img "本地输出 21:37:37"
+                  - button "本地输出 21:37:09":
+                    - img "本地输出 21:37:09"
+                  - button "本地输出 20:30:00":
+                    - img "本地输出 20:30:00"
+                  - button "本地输出 20:06:37":
+                    - img "本地输出 20:06:37"
+                  - button "本地输出 20:05:42":
+                    - img "本地输出 20:05:42"
+                  - button "本地输出 19:49:38":
+                    - img "本地输出 19:49:38"
+                  - button "本地输出 17:00:57":
+                    - img "本地输出 17:00:57"
+                  - button "本地输出 16:59:38":
+                    - img "本地输出 16:59:38"
+                  - button "本地输出 15:28:37":
+                    - img "本地输出 15:28:37"
+            - generic [ref=e478]:
+              - generic [ref=e479]:
+                - generic [ref=e480]:
+                  - strong [ref=e481]: 2026-03-16
+                  - generic [ref=e482]: 2026-03-16
+                - generic [ref=e483]: 38 张
+              - generic [ref=e484]:
+                - generic [ref=e485]:
+                  - button "本地输出 23:58:31":
+                    - img "本地输出 23:58:31"
+                  - button "本地输出 23:53:36":
+                    - img "本地输出 23:53:36"
+                  - button "本地输出 23:33:33":
+                    - img "本地输出 23:33:33"
+                  - button "本地输出 23:10:08":
+                    - img "本地输出 23:10:08"
+                  - button "本地输出 22:38:24":
+                    - img "本地输出 22:38:24"
+                  - button "本地输出 22:38:22":
+                    - img "本地输出 22:38:22"
+                  - button "本地输出 22:37:38":
+                    - img "本地输出 22:37:38"
+                  - button "本地输出 22:37:36":
+                    - img "本地输出 22:37:36"
+                  - button "本地输出 22:37:12":
+                    - img "本地输出 22:37:12"
+                  - button "本地输出 05:14:20":
+                    - img "本地输出 05:14:20"
+                - generic [ref=e486]:
+                  - button "本地输出 23:58:31":
+                    - img "本地输出 23:58:31"
+                  - button "本地输出 23:51:59":
+                    - img "本地输出 23:51:59"
+                  - button "本地输出 23:20:59":
+                    - img "本地输出 23:20:59"
+                  - button "本地输出 22:53:36":
+                    - img "本地输出 22:53:36"
+                  - button "本地输出 22:38:23":
+                    - img "本地输出 22:38:23"
+                  - button "本地输出 22:38:22":
+                    - img "本地输出 22:38:22"
+                  - button "本地输出 22:37:37":
+                    - img "本地输出 22:37:37"
+                  - button "本地输出 22:37:35":
+                    - img "本地输出 22:37:35"
+                  - button "本地输出 17:19:58":
+                    - img "本地输出 17:19:58"
+                  - button "本地输出 03:42:56":
+                    - img "本地输出 03:42:56"
+                - generic [ref=e487]:
+                  - button "本地输出 23:56:13":
+                    - img "本地输出 23:56:13"
+                  - button "本地输出 23:50:12":
+                    - img "本地输出 23:50:12"
+                  - button "本地输出 23:17:29":
+                    - img "本地输出 23:17:29"
+                  - button "本地输出 22:53:36":
+                    - img "本地输出 22:53:36"
+                  - button "本地输出 22:38:23":
+                    - img "本地输出 22:38:23"
+                  - button "本地输出 22:38:21":
+                    - img "本地输出 22:38:21"
+                  - button "本地输出 22:37:37":
+                    - img "本地输出 22:37:37"
+                  - button "本地输出 22:37:35":
+                    - img "本地输出 22:37:35"
+                  - button "本地输出 17:17:21":
+                    - img "本地输出 17:17:21"
+                - generic [ref=e488]:
+                  - button "本地输出 23:53:36":
+                    - img "本地输出 23:53:36"
+                  - button "本地输出 23:50:12":
+                    - img "本地输出 23:50:12"
+                  - button "本地输出 23:15:15":
+                    - img "本地输出 23:15:15"
+                  - button "本地输出 22:40:42":
+                    - img "本地输出 22:40:42"
+                  - button "本地输出 22:38:23":
+                    - img "本地输出 22:38:23"
+                  - button "本地输出 22:37:38":
+                    - img "本地输出 22:37:38"
+                  - button "本地输出 22:37:36":
+                    - img "本地输出 22:37:36"
+                  - button "本地输出 22:37:12":
+                    - img "本地输出 22:37:12"
+                  - button "本地输出 17:17:21":
+                    - img "本地输出 17:17:21"
+            - generic [ref=e489]:
+              - generic [ref=e490]:
+                - generic [ref=e491]:
+                  - strong [ref=e492]: 2026-03-15
+                  - generic [ref=e493]: 2026-03-15
+                - generic [ref=e494]: 27 张
+              - generic [ref=e495]:
+                - generic [ref=e496]:
+                  - button "本地输出 22:25:51":
+                    - img "本地输出 22:25:51"
+                  - button "本地输出 13:35:02":
+                    - img "本地输出 13:35:02"
+                  - button "本地输出 13:31:24":
+                    - img "本地输出 13:31:24"
+                  - button "本地输出 04:41:20":
+                    - img "本地输出 04:41:20"
+                  - button "本地输出 02:46:36":
+                    - img "本地输出 02:46:36"
+                  - button "本地输出 02:37:32":
+                    - img "本地输出 02:37:32"
+                  - button "本地输出 02:35:23":
+                    - img "本地输出 02:35:23"
+                - generic [ref=e497]:
+                  - button "本地输出 13:41:33":
+                    - img "本地输出 13:41:33"
+                  - button "本地输出 13:35:01":
+                    - img "本地输出 13:35:01"
+                  - button "本地输出 13:29:14":
+                    - img "本地输出 13:29:14"
+                  - button "本地输出 04:39:52":
+                    - img "本地输出 04:39:52"
+                  - button "本地输出 02:42:17":
+                    - img "本地输出 02:42:17"
+                  - button "本地输出 02:37:04":
+                    - img "本地输出 02:37:04"
+                  - button "本地输出 00:27:20":
+                    - img "本地输出 00:27:20"
+                - generic [ref=e498]:
+                  - button "本地输出 13:39:25":
+                    - img "本地输出 13:39:25"
+                  - button "本地输出 13:33:10":
+                    - img "本地输出 13:33:10"
+                  - button "本地输出 13:29:00":
+                    - img "本地输出 13:29:00"
+                  - button "本地输出 02:51:25":
+                    - img "本地输出 02:51:25"
+                  - button "本地输出 02:41:32":
+                    - img "本地输出 02:41:32"
+                  - button "本地输出 02:36:37":
+                    - img "本地输出 02:36:37"
+                  - button "本地输出 00:23:37":
+                    - img "本地输出 00:23:37"
+                - generic [ref=e499]:
+                  - button "本地输出 13:37:09":
+                    - img "本地输出 13:37:09"
+                  - button "本地输出 13:32:46":
+                    - img "本地输出 13:32:46"
+                  - button "本地输出 04:43:09":
+                    - img "本地输出 04:43:09"
+                  - button "本地输出 02:49:05":
+                    - img "本地输出 02:49:05"
+                  - button "本地输出 02:38:32":
+                    - img "本地输出 02:38:32"
+                  - button "本地输出 02:35:52":
+                    - img "本地输出 02:35:52"
+            - generic [ref=e500]:
+              - generic [ref=e501]:
+                - generic [ref=e502]:
+                  - strong [ref=e503]: 2026-03-14
+                  - generic [ref=e504]: 2026-03-14
+                - generic [ref=e505]: 2 张
+              - generic:
+                - generic:
+                  - button "本地输出 17:15:58":
+                    - img "本地输出 17:15:58"
+                - generic:
+                  - button "本地输出 17:14:44":
+                    - img "本地输出 17:14:44"
+            - generic [ref=e506]:
+              - generic [ref=e507]:
+                - generic [ref=e508]:
+                  - strong [ref=e509]: 2026-03-13
+                  - generic [ref=e510]: 2026-03-13
+                - generic [ref=e511]: 97 张
+              - generic [ref=e512]:
+                - generic [ref=e513]:
+                  - button "本地输出 21:33:24":
+                    - img "本地输出 21:33:24"
+                  - button "本地输出 21:22:14":
+                    - img "本地输出 21:22:14"
+                  - button "本地输出 21:17:58":
+                    - img "本地输出 21:17:58"
+                  - button "本地输出 21:12:55":
+                    - img "本地输出 21:12:55"
+                  - button "本地输出 21:11:14":
+                    - img "本地输出 21:11:14"
+                  - button "本地输出 20:04:42":
+                    - img "本地输出 20:04:42"
+                  - button "本地输出 19:54:28":
+                    - img "本地输出 19:54:28"
+                  - button "本地输出 19:49:46":
+                    - img "本地输出 19:49:46"
+                  - button "本地输出 19:37:26":
+                    - img "本地输出 19:37:26"
+                  - button "本地输出 18:51:57":
+                    - img "本地输出 18:51:57"
+                  - button "本地输出 16:45:07":
+                    - img "本地输出 16:45:07"
+                  - button "本地输出 16:36:35":
+                    - img "本地输出 16:36:35"
+                  - button "本地输出 16:08:03":
+                    - img "本地输出 16:08:03"
+                  - button "本地输出 15:35:56":
+                    - img "本地输出 15:35:56"
+                  - button "本地输出 14:56:33":
+                    - img "本地输出 14:56:33"
+                  - button "本地输出 14:43:53":
+                    - img "本地输出 14:43:53"
+                  - button "本地输出 14:34:40":
+                    - img "本地输出 14:34:40"
+                  - button "本地输出 14:27:50":
+                    - img "本地输出 14:27:50"
+                  - button "本地输出 14:19:56":
+                    - img "本地输出 14:19:56"
+                  - button "本地输出 14:11:52":
+                    - img "本地输出 14:11:52"
+                  - button "本地输出 14:02:40":
+                    - img "本地输出 14:02:40"
+                  - button "本地输出 13:58:42":
+                    - img "本地输出 13:58:42"
+                  - button "本地输出 13:53:06":
+                    - img "本地输出 13:53:06"
+                  - button "本地输出 02:32:05":
+                    - img "本地输出 02:32:05"
+                  - button "本地输出 00:01:14":
+                    - img "本地输出 00:01:14"
+                - generic [ref=e514]:
+                  - button "本地输出 21:31:19":
+                    - img "本地输出 21:31:19"
+                  - button "本地输出 21:20:10":
+                    - img "本地输出 21:20:10"
+                  - button "本地输出 21:17:49":
+                    - img "本地输出 21:17:49"
+                  - button "本地输出 21:12:27":
+                    - img "本地输出 21:12:27"
+                  - button "本地输出 21:11:14":
+                    - img "本地输出 21:11:14"
+                  - button "本地输出 20:04:41":
+                    - img "本地输出 20:04:41"
+                  - button "本地输出 19:54:10":
+                    - img "本地输出 19:54:10"
+                  - button "本地输出 19:48:19":
+                    - img "本地输出 19:48:19"
+                  - button "本地输出 18:54:30":
+                    - img "本地输出 18:54:30"
+                  - button "本地输出 16:47:06":
+                    - img "本地输出 16:47:06"
+                  - button "本地输出 16:44:38":
+                    - img "本地输出 16:44:38"
+                  - button "本地输出 16:15:23":
+                    - img "本地输出 16:15:23"
+                  - button "本地输出 16:06:18":
+                    - img "本地输出 16:06:18"
+                  - button "本地输出 15:05:55":
+                    - img "本地输出 15:05:55"
+                  - button "本地输出 14:52:46":
+                    - img "本地输出 14:52:46"
+                  - button "本地输出 14:40:06":
+                    - img "本地输出 14:40:06"
+                  - button "本地输出 14:33:48":
+                    - img "本地输出 14:33:48"
+                  - button "本地输出 14:24:58":
+                    - img "本地输出 14:24:58"
+                  - button "本地输出 14:17:00":
+                    - img "本地输出 14:17:00"
+                  - button "本地输出 14:08:02":
+                    - img "本地输出 14:08:02"
+                  - button "本地输出 14:01:17":
+                    - img "本地输出 14:01:17"
+                  - button "本地输出 13:56:47":
+                    - img "本地输出 13:56:47"
+                  - button "本地输出 13:51:48":
+                    - img "本地输出 13:51:48"
+                  - button "本地输出 02:29:51":
+                    - img "本地输出 02:29:51"
+                - generic [ref=e515]:
+                  - button "本地输出 21:28:40":
+                    - img "本地输出 21:28:40"
+                  - button "本地输出 21:19:49":
+                    - img "本地输出 21:19:49"
+                  - button "本地输出 21:17:01":
+                    - img "本地输出 21:17:01"
+                  - button "本地输出 21:11:49":
+                    - img "本地输出 21:11:49"
+                  - button "本地输出 20:05:51":
+                    - img "本地输出 20:05:51"
+                  - button "本地输出 20:04:18":
+                    - img "本地输出 20:04:18"
+                  - button "本地输出 19:53:10":
+                    - img "本地输出 19:53:10"
+                  - button "本地输出 19:38:41":
+                    - img "本地输出 19:38:41"
+                  - button "本地输出 18:52:46":
+                    - img "本地输出 18:52:46"
+                  - button "本地输出 16:46:27":
+                    - img "本地输出 16:46:27"
+                  - button "本地输出 16:40:56":
+                    - img "本地输出 16:40:56"
+                  - button "本地输出 16:13:14":
+                    - img "本地输出 16:13:14"
+                  - button "本地输出 16:03:51":
+                    - img "本地输出 16:03:51"
+                  - button "本地输出 15:01:46":
+                    - img "本地输出 15:01:46"
+                  - button "本地输出 14:49:54":
+                    - img "本地输出 14:49:54"
+                  - button "本地输出 14:39:11":
+                    - img "本地输出 14:39:11"
+                  - button "本地输出 14:31:49":
+                    - img "本地输出 14:31:49"
+                  - button "本地输出 14:24:13":
+                    - img "本地输出 14:24:13"
+                  - button "本地输出 14:15:10":
+                    - img "本地输出 14:15:10"
+                  - button "本地输出 14:07:16":
+                    - img "本地输出 14:07:16"
+                  - button "本地输出 13:59:31":
+                    - img "本地输出 13:59:31"
+                  - button "本地输出 13:56:19":
+                    - img "本地输出 13:56:19"
+                  - button "本地输出 13:50:05":
+                    - img "本地输出 13:50:05"
+                  - button "本地输出 02:27:26":
+                    - img "本地输出 02:27:26"
+                - generic [ref=e516]:
+                  - button "本地输出 21:24:40":
+                    - img "本地输出 21:24:40"
+                  - button "本地输出 21:18:43":
+                    - img "本地输出 21:18:43"
+                  - button "本地输出 21:17:01":
+                    - img "本地输出 21:17:01"
+                  - button "本地输出 21:11:49":
+                    - img "本地输出 21:11:49"
+                  - button "本地输出 20:05:24":
+                    - img "本地输出 20:05:24"
+                  - button "本地输出 20:03:44":
+                    - img "本地输出 20:03:44"
+                  - button "本地输出 19:52:29":
+                    - img "本地输出 19:52:29"
+                  - button "本地输出 19:37:26":
+                    - img "本地输出 19:37:26"
+                  - button "本地输出 18:51:57":
+                    - img "本地输出 18:51:57"
+                  - button "本地输出 16:45:07":
+                    - img "本地输出 16:45:07"
+                  - button "本地输出 16:38:47":
+                    - img "本地输出 16:38:47"
+                  - button "本地输出 16:11:52":
+                    - img "本地输出 16:11:52"
+                  - button "本地输出 15:48:59":
+                    - img "本地输出 15:48:59"
+                  - button "本地输出 14:59:49":
+                    - img "本地输出 14:59:49"
+                  - button "本地输出 14:47:28":
+                    - img "本地输出 14:47:28"
+                  - button "本地输出 14:37:44":
+                    - img "本地输出 14:37:44"
+                  - button "本地输出 14:28:29":
+                    - img "本地输出 14:28:29"
+                  - button "本地输出 14:21:58":
+                    - img "本地输出 14:21:58"
+                  - button "本地输出 14:13:31":
+                    - img "本地输出 14:13:31"
+                  - button "本地输出 14:06:17":
+                    - img "本地输出 14:06:17"
+                  - button "本地输出 13:59:13":
+                    - img "本地输出 13:59:13"
+                  - button "本地输出 13:54:58":
+                    - img "本地输出 13:54:58"
+                  - button "本地输出 13:47:55":
+                    - img "本地输出 13:47:55"
+                  - button "本地输出 00:03:44":
+                    - img "本地输出 00:03:44"
+            - generic [ref=e517]:
+              - generic [ref=e518]:
+                - generic [ref=e519]:
+                  - strong [ref=e520]: 2026-03-12
+                  - generic [ref=e521]: 2026-03-12
+                - generic [ref=e522]: 34 张
+              - generic [ref=e523]:
+                - generic [ref=e524]:
+                  - button "本地输出 23:33:31":
+                    - img "本地输出 23:33:31"
+                  - button "本地输出 23:19:33":
+                    - img "本地输出 23:19:33"
+                  - button "本地输出 18:19:11":
+                    - img "本地输出 18:19:11"
+                  - button "本地输出 18:15:32":
+                    - img "本地输出 18:15:32"
+                  - button "本地输出 17:22:51":
+                    - img "本地输出 17:22:51"
+                  - button "本地输出 14:07:28":
+                    - img "本地输出 14:07:28"
+                  - button "本地输出 14:03:09":
+                    - img "本地输出 14:03:09"
+                  - button "本地输出 13:57:35":
+                    - img "本地输出 13:57:35"
+                  - button "本地输出 13:28:13":
+                    - img "本地输出 13:28:13"
+                - generic [ref=e525]:
+                  - button "本地输出 23:26:51":
+                    - img "本地输出 23:26:51"
+                  - button "本地输出 23:14:37":
+                    - img "本地输出 23:14:37"
+                  - button "本地输出 18:17:46":
+                    - img "本地输出 18:17:46"
+                  - button "本地输出 18:13:02":
+                    - img "本地输出 18:13:02"
+                  - button "本地输出 14:13:30":
+                    - img "本地输出 14:13:30"
+                  - button "本地输出 14:07:17":
+                    - img "本地输出 14:07:17"
+                  - button "本地输出 14:01:09":
+                    - img "本地输出 14:01:09"
+                  - button "本地输出 13:53:16":
+                    - img "本地输出 13:53:16"
+                  - button "本地输出 13:28:04":
+                    - img "本地输出 13:28:04"
+                - generic [ref=e526]:
+                  - button "本地输出 23:24:47":
+                    - img "本地输出 23:24:47"
+                  - button "本地输出 23:07:20":
+                    - img "本地输出 23:07:20"
+                  - button "本地输出 18:17:31":
+                    - img "本地输出 18:17:31"
+                  - button "本地输出 17:28:37":
+                    - img "本地输出 17:28:37"
+                  - button "本地输出 14:10:57":
+                    - img "本地输出 14:10:57"
+                  - button "本地输出 14:04:45":
+                    - img "本地输出 14:04:45"
+                  - button "本地输出 13:59:43":
+                    - img "本地输出 13:59:43"
+                  - button "本地输出 13:52:34":
+                    - img "本地输出 13:52:34"
+                - generic [ref=e527]:
+                  - button "本地输出 23:20:48":
+                    - img "本地输出 23:20:48"
+                  - button "本地输出 22:53:14":
+                    - img "本地输出 22:53:14"
+                  - button "本地输出 18:16:03":
+                    - img "本地输出 18:16:03"
+                  - button "本地输出 17:22:51":
+                    - img "本地输出 17:22:51"
+                  - button "本地输出 14:09:15":
+                    - img "本地输出 14:09:15"
+                  - button "本地输出 14:04:17":
+                    - img "本地输出 14:04:17"
+                  - button "本地输出 13:57:36":
+                    - img "本地输出 13:57:36"
+                  - button "本地输出 13:47:45":
+                    - img "本地输出 13:47:45"
+          - generic [ref=e528]:
+            - button "向上滚动" [disabled] [ref=e529]: ↑
+            - button "拖动查看瀑布画廊" [ref=e531]
+            - button "向下滚动" [ref=e532] [cursor=pointer]: ↓
+  - complementary:
+    - generic:
+      - generic:
+        - generic:
+          - paragraph: Config
+          - heading [level=2]: 本地连接配置
+        - button: 关闭
+      - generic:
+        - generic:
+          - generic: 中转 URL
+          - textbox:
+            - /placeholder: https://api.asxs.top/v1
+            - text: https://api.asxs.top/v1
+        - generic:
+          - generic:
+            - generic: API Key
+            - generic: 已保存 sk-2***1b1f
+          - textbox:
+            - /placeholder: 留空则保持当前已保存的 key
+        - generic:
+          - generic: Responses 模型
+          - textbox:
+            - /placeholder: gpt-5.4
+            - text: gpt-5.5
+        - button: 保存配置
+        - paragraph: API Key 仅保存在本机 .local/config.json，不会回填到页面。

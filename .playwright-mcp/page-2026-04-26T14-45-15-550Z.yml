@@ -1,0 +1,1773 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - heading "Image Studio" [level=1] [ref=e9]
+          - generic [ref=e10]: AI
+        - paragraph [ref=e11]: AI 图像生成工作流
+      - tablist "视图切换" [ref=e12]:
+        - button "Studio" [ref=e13] [cursor=pointer]
+        - button "瀑布画廊" [ref=e14] [cursor=pointer]
+      - generic [ref=e15]:
+        - generic [ref=e18]: 本地已就绪
+        - generic [ref=e19]: 配置已保存
+        - button "打开输出目录" [ref=e20] [cursor=pointer]
+        - button "配置" [ref=e21] [cursor=pointer]
+    - main [ref=e22]:
+      - generic [ref=e24]:
+        - generic [ref=e25]:
+          - generic [ref=e26]:
+            - heading "瀑布画廊" [level=2] [ref=e27]
+            - paragraph [ref=e28]: Waterfall Gallery
+          - generic [ref=e29]:
+            - generic [ref=e30]: 704 张
+            - button "刷新画廊" [ref=e31] [cursor=pointer]
+        - generic [ref=e32]:
+          - generic [ref=e33]:
+            - generic [ref=e34]:
+              - generic [ref=e35]: 关键词
+              - searchbox "关键词" [ref=e36]
+            - generic [ref=e37]:
+              - generic [ref=e38]: 日期
+              - textbox "日期" [ref=e39]
+            - generic [ref=e40]:
+              - generic [ref=e41]: 尺寸
+              - combobox "尺寸" [ref=e42]:
+                - option "全部尺寸 · 704" [selected]
+                - option "4096 × 4096 · 353"
+                - option "1000 × 1000 · 64"
+                - option "928 × 1152 · 52"
+                - option "1024 × 1024 · 32"
+                - option "3584 × 4800 · 31"
+                - option "4016 × 6016 · 26"
+                - option "3072 × 5504 · 19"
+                - option "6336 × 2688 · 18"
+                - option "864 × 1536 · 17"
+                - option "4608 × 3712 · 15"
+                - option "6016 × 4016 · 12"
+                - option "1706 × 1279 · 7"
+                - option "5056 × 3392 · 6"
+                - option "1792 × 1792 · 6"
+                - option "1200 × 2248 · 5"
+                - option "445 × 445 · 5"
+                - option "1 × 1 · 5"
+                - option "1920 × 1920 · 4"
+                - option "2048 × 1152 · 4"
+                - option "800 × 800 · 4"
+                - option "3712 × 4608 · 3"
+                - option "1152 × 2048 · 3"
+                - option "1279 × 1706 · 3"
+                - option "5504 × 3072 · 2"
+                - option "1536 × 1536 · 2"
+                - option "1536 × 864 · 2"
+                - option "4800 × 3584 · 1"
+                - option "1600 × 2000 · 1"
+                - option "1024 × 1536 · 1"
+                - option "159 × 135 · 1"
+            - generic [ref=e43]:
+              - generic [ref=e44]: 参考图
+              - combobox "参考图" [ref=e45]:
+                - option "全部来源 · 704" [selected]
+                - option "带参考图 · 1"
+                - option "无参考图 · 703"
+            - button "清空筛选" [disabled] [ref=e46]
+          - generic [ref=e47]:
+            - button "全部 · 704" [ref=e3006] [cursor=pointer]
+            - button "今天 · 22" [ref=e3007] [cursor=pointer]
+            - button "近 7 天 · 30" [ref=e3008] [cursor=pointer]
+            - button "更早 · 674" [ref=e3009] [cursor=pointer]
+          - paragraph [ref=e52]: 按日期分组显示，当前共 23 组，显示 704 / 704 张。
+        - generic [ref=e53]:
+          - generic [ref=e65]:
+            - generic [ref=e3010]:
+              - generic [ref=e3011]:
+                - generic [ref=e3012]:
+                  - strong [ref=e3013]: 今天
+                  - generic [ref=e3014]: 2026-04-26
+                - generic [ref=e3015]: 22 张
+              - generic [ref=e3016]:
+                - generic [ref=e3017]:
+                  - button [ref=e3018] [cursor=pointer]:
+                    - img [ref=e3019]
+                  - button [ref=e3020] [cursor=pointer]:
+                    - img [ref=e3021]
+                  - button [ref=e3022] [cursor=pointer]:
+                    - img [ref=e3023]
+                  - button "本地输出 07:03:36" [ref=e3024] [cursor=pointer]:
+                    - img "本地输出 07:03:36" [ref=e3025]
+                - generic [ref=e3026]:
+                  - button [ref=e3027] [cursor=pointer]:
+                    - img [ref=e3028]
+                  - 'button "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e3029] [cursor=pointer]':
+                    - 'img "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e3030]'
+                  - 'button "{ \"image_generation_prompt\": { \"subject\": { \"description\": \"{argument name=\\\"subject\\\" default=\\\"年轻女性，湿润的背头红发，带有淡淡的雀斑，浸没在水中直至上胸部\\\"}\", \"expression\": \"眼神深邃迷人，直视镜头。\", \"styling\": \"深色且略微晕染的眼线，呈现出原始、真实的生活质感。自然、苍白的肤色。\" }, \"environment\": { \"setting\": \"{argument name=\\\"environment\\\" default=\\\"深色石池或按摩浴缸\\\"}\", \"atmosphere\": \"亲密、情绪化且具有电影感。\" }, \"lighting\": { \"style\": \"戏剧性的明暗对比法 (Chiaroscuro)。\", \"details\": \"温暖的金色定向光照亮了她脸部的右侧、肩膀以及水面，与左侧深邃浓郁的阴影形成强烈对比。\" }, \"technical_specifications\": { \"camera\": \"{argument name=\\\"lens\\\" default=\\\"使用 85mm 镜头拍摄\\\"}\", \"style_keywords\": [ \"纪实写实风格\", \"原始生活摄影\", \"高级时尚编辑风格\", \"黑色电影时尚\", \"超细节\", \"照片级真实感\" ], \"aspect_ratio\": \"3:4\" } } }" [ref=e3031] [cursor=pointer]':
+                    - 'img "{ \"image_generation_prompt\": { \"subject\": { \"description\": \"{argument name=\\\"subject\\\" default=\\\"年轻女性，湿润的背头红发，带有淡淡的雀斑，浸没在水中直至上胸部\\\"}\", \"expression\": \"眼神深邃迷人，直视镜头。\", \"styling\": \"深色且略微晕染的眼线，呈现出原始、真实的生活质感。自然、苍白的肤色。\" }, \"environment\": { \"setting\": \"{argument name=\\\"environment\\\" default=\\\"深色石池或按摩浴缸\\\"}\", \"atmosphere\": \"亲密、情绪化且具有电影感。\" }, \"lighting\": { \"style\": \"戏剧性的明暗对比法 (Chiaroscuro)。\", \"details\": \"温暖的金色定向光照亮了她脸部的右侧、肩膀以及水面，与左侧深邃浓郁的阴影形成强烈对比。\" }, \"technical_specifications\": { \"camera\": \"{argument name=\\\"lens\\\" default=\\\"使用 85mm 镜头拍摄\\\"}\", \"style_keywords\": [ \"纪实写实风格\", \"原始生活摄影\", \"高级时尚编辑风格\", \"黑色电影时尚\", \"超细节\", \"照片级真实感\" ], \"aspect_ratio\": \"3:4\" } } }" [ref=e3032]'
+                  - button "本地输出 06:42:06" [ref=e3033] [cursor=pointer]:
+                    - img "本地输出 06:42:06" [ref=e3034]
+                - generic [ref=e3035]:
+                  - button [ref=e3036] [cursor=pointer]:
+                    - img [ref=e3037]
+                  - 'button "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e3038] [cursor=pointer]':
+                    - 'img "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e3039]'
+                  - button "本地输出 07:30:41" [ref=e3040] [cursor=pointer]:
+                    - img "本地输出 07:30:41" [ref=e3041]
+                  - button "本地输出 01:07:48" [ref=e3042] [cursor=pointer]:
+                    - img "本地输出 01:07:48" [ref=e3043]
+                - generic [ref=e3044]:
+                  - button [ref=e3045] [cursor=pointer]:
+                    - img [ref=e3046]
+                  - 'button "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e3047] [cursor=pointer]':
+                    - 'img "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e3048]'
+                  - button "本地输出 07:30:12" [ref=e3049] [cursor=pointer]:
+                    - img "本地输出 07:30:12" [ref=e3050]
+                  - button "本地输出 00:41:39" [ref=e3051] [cursor=pointer]:
+                    - img "本地输出 00:41:39" [ref=e3052]
+                - generic [ref=e3053]:
+                  - 'button "{ \"style\": \"休闲生活摄影，亲密抓拍，柔和现代写实风格\", \"subject\": \"一位留着长波浪金发、戴着眼镜的年轻女性，画着红唇，躺在床上自拍，身穿黄色紧身连体衣\", \"pose\": \"靠在枕头上，一只手臂伸出拿着相机，手指轻轻触碰嘴唇，姿态俏皮放松\", \"environment\": \"舒适的卧室环境，带有蝴蝶图案的枕套，质感丰富的床上用品，带有台灯的床头柜，一个微型摆件，以及一些个人小物件\", \"mood\": \"温暖、放松、私密、略带俏皮\", \"lighting\": \"床头灯发出的柔和暖色室内光，结合直接闪光灯效果，营造出柔和的阴影和自然的皮肤高光\", \"details\": \"雀斑皮肤，精致的自然妆容，佩戴钥匙吊坠的精致项链，休闲的卧室纹理，柔软的织物褶皱\", \"camera\": \"近景自拍视角，略微仰角，浅景深\", \"color_palette\": \"暖黄色，柔和的奶油色，自然的肤色，温暖的琥珀色光线\", \"composition\": \"主体居中，手臂形成的对角线引导视线至面部，亲密的取景强调了面部表情和上半身\", \"influences\": \"当代社交媒体摄影，自然生活肖像摄影\", \"quality\": \"高分辨率，超写实，细节清晰，带有细微颗粒感\" }" [ref=e3054] [cursor=pointer]':
+                    - 'img "{ \"style\": \"休闲生活摄影，亲密抓拍，柔和现代写实风格\", \"subject\": \"一位留着长波浪金发、戴着眼镜的年轻女性，画着红唇，躺在床上自拍，身穿黄色紧身连体衣\", \"pose\": \"靠在枕头上，一只手臂伸出拿着相机，手指轻轻触碰嘴唇，姿态俏皮放松\", \"environment\": \"舒适的卧室环境，带有蝴蝶图案的枕套，质感丰富的床上用品，带有台灯的床头柜，一个微型摆件，以及一些个人小物件\", \"mood\": \"温暖、放松、私密、略带俏皮\", \"lighting\": \"床头灯发出的柔和暖色室内光，结合直接闪光灯效果，营造出柔和的阴影和自然的皮肤高光\", \"details\": \"雀斑皮肤，精致的自然妆容，佩戴钥匙吊坠的精致项链，休闲的卧室纹理，柔软的织物褶皱\", \"camera\": \"近景自拍视角，略微仰角，浅景深\", \"color_palette\": \"暖黄色，柔和的奶油色，自然的肤色，温暖的琥珀色光线\", \"composition\": \"主体居中，手臂形成的对角线引导视线至面部，亲密的取景强调了面部表情和上半身\", \"influences\": \"当代社交媒体摄影，自然生活肖像摄影\", \"quality\": \"高分辨率，超写实，细节清晰，带有细微颗粒感\" }" [ref=e3055]'
+                  - 'button "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e3056] [cursor=pointer]':
+                    - 'img "{\"meta\": {\"camera\": \"iPhone 17 Pro (前置摄像头)\"}, \"scene\": {\"location\": \"窗边\", \"time\": \"日落\"}, \"subject\": {\"identity\": \"Emma Myers\", \"pose\": {\"position\": \"站在窗边\", \"back\": \"自然拱起\", \"torso\": \"轻微扭转\", \"hips\": \"向后倾斜\", \"legs\": \"一条腿弯曲\", \"feet\": \"赤脚踩在地板上\"}, \"expression\": \"柔和且略带出神的表情\", \"outfit\": \"超大款衬衫从背部微微滑落\", \"details\": {\"nails\": \"法式美甲\", \"toes\": \"法式美足\"}}}" [ref=e3057]'
+                  - button "直播间护肤礼盒主视觉" [ref=e3058] [cursor=pointer]:
+                    - img "直播间护肤礼盒主视觉" [ref=e3059]
+                - generic [ref=e3060]:
+                  - 'button "{ \"style\": \"休闲生活摄影，亲密抓拍，柔和现代写实风格\", \"subject\": \"一位留着长波浪金发、戴着眼镜的年轻女性，画着红唇，躺在床上自拍，身穿黄色紧身连体衣\", \"pose\": \"靠在枕头上，一只手臂伸出拿着相机，手指轻轻触碰嘴唇，姿态俏皮放松\", \"environment\": \"舒适的卧室环境，带有蝴蝶图案的枕套，质感丰富的床上用品，带有台灯的床头柜，一个微型摆件，以及一些个人小物件\", \"mood\": \"温暖、放松、私密、略带俏皮\", \"lighting\": \"床头灯发出的柔和暖色室内光，结合直接闪光灯效果，营造出柔和的阴影和自然的皮肤高光\", \"details\": \"雀斑皮肤，精致的自然妆容，佩戴钥匙吊坠的精致项链，休闲的卧室纹理，柔软的织物褶皱\", \"camera\": \"近景自拍视角，略微仰角，浅景深\", \"color_palette\": \"暖黄色，柔和的奶油色，自然的肤色，温暖的琥珀色光线\", \"composition\": \"主体居中，手臂形成的对角线引导视线至面部，亲密的取景强调了面部表情和上半身\", \"influences\": \"当代社交媒体摄影，自然生活肖像摄影\", \"quality\": \"高分辨率，超写实，细节清晰，带有细微颗粒感\" }" [ref=e3061] [cursor=pointer]':
+                    - 'img "{ \"style\": \"休闲生活摄影，亲密抓拍，柔和现代写实风格\", \"subject\": \"一位留着长波浪金发、戴着眼镜的年轻女性，画着红唇，躺在床上自拍，身穿黄色紧身连体衣\", \"pose\": \"靠在枕头上，一只手臂伸出拿着相机，手指轻轻触碰嘴唇，姿态俏皮放松\", \"environment\": \"舒适的卧室环境，带有蝴蝶图案的枕套，质感丰富的床上用品，带有台灯的床头柜，一个微型摆件，以及一些个人小物件\", \"mood\": \"温暖、放松、私密、略带俏皮\", \"lighting\": \"床头灯发出的柔和暖色室内光，结合直接闪光灯效果，营造出柔和的阴影和自然的皮肤高光\", \"details\": \"雀斑皮肤，精致的自然妆容，佩戴钥匙吊坠的精致项链，休闲的卧室纹理，柔软的织物褶皱\", \"camera\": \"近景自拍视角，略微仰角，浅景深\", \"color_palette\": \"暖黄色，柔和的奶油色，自然的肤色，温暖的琥珀色光线\", \"composition\": \"主体居中，手臂形成的对角线引导视线至面部，亲密的取景强调了面部表情和上半身\", \"influences\": \"当代社交媒体摄影，自然生活肖像摄影\", \"quality\": \"高分辨率，超写实，细节清晰，带有细微颗粒感\" }" [ref=e3062]'
+                  - 'button "{ \"prompt\": \"一位长相酷似 {argument name=\"character\" default=\"Billie Eilish\"} 的白皙年轻女性跪在卧室蓬松的白色地毯上，正随意地扎着头发。她穿着一件略显宽松的 {argument name=\"top\" default=\"青柠色罗纹背心\"} 和黑色运动短裤。她表情平静且自信，正看向镜头。房间里有一张未整理的床、散落的物品、一张《海贼王》海报，墙上挂着发光的“Love”霓虹灯。自然光洒满房间，带来柔和的对比感。照片级真实感，休闲生活氛围，8k\", \"parameters\": { \"aspect_ratio\": \"{argument name=\"aspect ratio\" default=\"4:5\"}\" } }" [ref=e3063] [cursor=pointer]':
+                    - 'img "{ \"prompt\": \"一位长相酷似 {argument name=\"character\" default=\"Billie Eilish\"} 的白皙年轻女性跪在卧室蓬松的白色地毯上，正随意地扎着头发。她穿着一件略显宽松的 {argument name=\"top\" default=\"青柠色罗纹背心\"} 和黑色运动短裤。她表情平静且自信，正看向镜头。房间里有一张未整理的床、散落的物品、一张《海贼王》海报，墙上挂着发光的“Love”霓虹灯。自然光洒满房间，带来柔和的对比感。照片级真实感，休闲生活氛围，8k\", \"parameters\": { \"aspect_ratio\": \"{argument name=\"aspect ratio\" default=\"4:5\"}\" } }" [ref=e3064]'
+                  - button "本地输出 07:09:28" [ref=e3065] [cursor=pointer]:
+                    - img "本地输出 07:09:28" [ref=e3066]
+            - generic [ref=e3067]:
+              - generic [ref=e3068]:
+                - generic [ref=e3069]:
+                  - strong [ref=e3070]: 昨天
+                  - generic [ref=e3071]: 2026-04-25
+                - generic [ref=e3072]: 8 张
+              - generic [ref=e3073]:
+                - generic [ref=e3074]:
+                  - button "本地输出 19:02:00" [ref=e3075] [cursor=pointer]:
+                    - img "本地输出 19:02:00" [ref=e3076]
+                  - button "本地输出 00:14:19" [ref=e3077] [cursor=pointer]:
+                    - img "本地输出 00:14:19" [ref=e3078]
+                - generic [ref=e3079]:
+                  - button "本地输出 18:57:28" [ref=e3080] [cursor=pointer]:
+                    - img "本地输出 18:57:28" [ref=e3081]
+                  - button "本地输出 00:09:23" [ref=e3082] [cursor=pointer]:
+                    - img "本地输出 00:09:23" [ref=e3083]
+                - button "本地输出 18:44:49" [ref=e3085] [cursor=pointer]:
+                  - img "本地输出 18:44:49" [ref=e3086]
+                - button "本地输出 01:05:15" [ref=e3088] [cursor=pointer]:
+                  - img "本地输出 01:05:15" [ref=e3089]
+                - button "本地输出 00:15:49" [ref=e3091] [cursor=pointer]:
+                  - img "本地输出 00:15:49" [ref=e3092]
+                - button "本地输出 00:14:46" [ref=e3094] [cursor=pointer]:
+                  - img "本地输出 00:14:46" [ref=e3095]
+            - generic [ref=e3096]:
+              - generic [ref=e3097]:
+                - generic [ref=e3098]:
+                  - strong [ref=e3099]: 2026-04-16
+                  - generic [ref=e3100]: 2026-04-16
+                - generic [ref=e3101]: 2 张
+              - generic [ref=e3102]:
+                - button "本地输出 23:05:35" [ref=e3104] [cursor=pointer]:
+                  - img "本地输出 23:05:35" [ref=e3105]
+                - button "本地输出 23:04:32" [ref=e3107] [cursor=pointer]:
+                  - img "本地输出 23:04:32" [ref=e3108]
+            - generic [ref=e3109]:
+              - generic [ref=e3110]:
+                - generic [ref=e3111]:
+                  - strong [ref=e3112]: 2026-04-06
+                  - generic [ref=e3113]: 2026-04-06
+                - generic [ref=e3114]: 7 张
+              - generic [ref=e3115]:
+                - generic [ref=e3116]:
+                  - button "本地输出 17:58:22" [ref=e3117] [cursor=pointer]:
+                    - img "本地输出 17:58:22" [ref=e3118]
+                  - button "本地输出 17:51:57" [ref=e3119] [cursor=pointer]:
+                    - img "本地输出 17:51:57" [ref=e3120]
+                - button "本地输出 17:57:21" [ref=e3122] [cursor=pointer]:
+                  - img "本地输出 17:57:21" [ref=e3123]
+                - button "本地输出 17:56:13" [ref=e3125] [cursor=pointer]:
+                  - img "本地输出 17:56:13" [ref=e3126]
+                - button "本地输出 17:55:04" [ref=e3128] [cursor=pointer]:
+                  - img "本地输出 17:55:04" [ref=e3129]
+                - button "本地输出 17:54:06" [ref=e3131] [cursor=pointer]:
+                  - img "本地输出 17:54:06" [ref=e3132]
+                - button "本地输出 17:52:56" [ref=e3134] [cursor=pointer]:
+                  - img "本地输出 17:52:56" [ref=e3135]
+            - generic [ref=e3136]:
+              - generic [ref=e3137]:
+                - generic [ref=e3138]:
+                  - strong [ref=e3139]: 2026-04-03
+                  - generic [ref=e3140]: 2026-04-03
+                - generic [ref=e3141]: 18 张
+              - generic [ref=e3142]:
+                - generic [ref=e3143]:
+                  - button "本地输出 18:05:02" [ref=e3144] [cursor=pointer]:
+                    - img "本地输出 18:05:02" [ref=e3145]
+                  - button "本地输出 01:57:18" [ref=e3146] [cursor=pointer]:
+                    - img "本地输出 01:57:18" [ref=e3147]
+                  - button "本地输出 01:49:34" [ref=e3148] [cursor=pointer]:
+                    - img "本地输出 01:49:34" [ref=e3149]
+                - generic [ref=e3150]:
+                  - button "本地输出 18:02:58" [ref=e3151] [cursor=pointer]:
+                    - img "本地输出 18:02:58" [ref=e3152]
+                  - button "本地输出 01:55:55" [ref=e3153] [cursor=pointer]:
+                    - img "本地输出 01:55:55" [ref=e3154]
+                  - button "本地输出 01:47:21" [ref=e3155] [cursor=pointer]:
+                    - img "本地输出 01:47:21" [ref=e3156]
+                - generic [ref=e3157]:
+                  - button "本地输出 02:02:00" [ref=e3158] [cursor=pointer]:
+                    - img "本地输出 02:02:00" [ref=e3159]
+                  - button "本地输出 01:53:03" [ref=e3160] [cursor=pointer]:
+                    - img "本地输出 01:53:03" [ref=e3161]
+                  - button "本地输出 01:46:11" [ref=e3162] [cursor=pointer]:
+                    - img "本地输出 01:46:11" [ref=e3163]
+                - generic [ref=e3164]:
+                  - button "本地输出 02:00:47" [ref=e3165] [cursor=pointer]:
+                    - img "本地输出 02:00:47" [ref=e3166]
+                  - button "本地输出 01:52:42" [ref=e3167] [cursor=pointer]:
+                    - img "本地输出 01:52:42" [ref=e3168]
+                  - button "本地输出 01:44:38" [ref=e3169] [cursor=pointer]:
+                    - img "本地输出 01:44:38" [ref=e3170]
+                - generic [ref=e3171]:
+                  - button "本地输出 01:59:30" [ref=e3172] [cursor=pointer]:
+                    - img "本地输出 01:59:30" [ref=e3173]
+                  - button "本地输出 01:51:11" [ref=e3174] [cursor=pointer]:
+                    - img "本地输出 01:51:11" [ref=e3175]
+                  - button "本地输出 01:43:18" [ref=e3176] [cursor=pointer]:
+                    - img "本地输出 01:43:18" [ref=e3177]
+                - generic [ref=e3178]:
+                  - button "本地输出 01:58:24" [ref=e3179] [cursor=pointer]:
+                    - img "本地输出 01:58:24" [ref=e3180]
+                  - button "本地输出 01:49:50" [ref=e3181] [cursor=pointer]:
+                    - img "本地输出 01:49:50" [ref=e3182]
+                  - button "本地输出 00:00:26" [ref=e3183] [cursor=pointer]:
+                    - img "本地输出 00:00:26" [ref=e3184]
+            - generic [ref=e3185]:
+              - generic [ref=e3186]:
+                - generic [ref=e3187]:
+                  - strong [ref=e3188]: 2026-04-02
+                  - generic [ref=e3189]: 2026-04-02
+                - generic [ref=e3190]: 48 张
+              - generic [ref=e3191]:
+                - generic [ref=e3192]:
+                  - button "本地输出 21:16:37" [ref=e3193] [cursor=pointer]:
+                    - img "本地输出 21:16:37" [ref=e3194]
+                  - button "本地输出 21:12:00" [ref=e3195] [cursor=pointer]:
+                    - img "本地输出 21:12:00" [ref=e3196]
+                  - button "本地输出 21:05:30" [ref=e3197] [cursor=pointer]:
+                    - img "本地输出 21:05:30" [ref=e3198]
+                  - button "本地输出 13:50:23" [ref=e3199] [cursor=pointer]:
+                    - img "本地输出 13:50:23" [ref=e3200]
+                  - button "本地输出 13:16:55" [ref=e3201] [cursor=pointer]:
+                    - img "本地输出 13:16:55" [ref=e3202]
+                  - button "本地输出 00:12:14" [ref=e3203] [cursor=pointer]:
+                    - img "本地输出 00:12:14" [ref=e3204]
+                  - button "本地输出 00:06:52" [ref=e3205] [cursor=pointer]:
+                    - img "本地输出 00:06:52" [ref=e3206]
+                  - button "本地输出 00:02:45" [ref=e3207] [cursor=pointer]:
+                    - img "本地输出 00:02:45" [ref=e3208]
+                - generic [ref=e3209]:
+                  - button "本地输出 21:15:31" [ref=e3210] [cursor=pointer]:
+                    - img "本地输出 21:15:31" [ref=e3211]
+                  - button "本地输出 21:10:34" [ref=e3212] [cursor=pointer]:
+                    - img "本地输出 21:10:34" [ref=e3213]
+                  - button "本地输出 20:59:24" [ref=e3214] [cursor=pointer]:
+                    - img "本地输出 20:59:24" [ref=e3215]
+                  - button "本地输出 13:47:30" [ref=e3216] [cursor=pointer]:
+                    - img "本地输出 13:47:30" [ref=e3217]
+                  - button "本地输出 13:15:56" [ref=e3218] [cursor=pointer]:
+                    - img "本地输出 13:15:56" [ref=e3219]
+                  - button "本地输出 00:12:05" [ref=e3220] [cursor=pointer]:
+                    - img "本地输出 00:12:05" [ref=e3221]
+                  - button "本地输出 00:06:50" [ref=e3222] [cursor=pointer]:
+                    - img "本地输出 00:06:50" [ref=e3223]
+                  - button "本地输出 00:02:34" [ref=e3224] [cursor=pointer]:
+                    - img "本地输出 00:02:34" [ref=e3225]
+                - generic [ref=e3226]:
+                  - button "本地输出 21:14:29" [ref=e3227] [cursor=pointer]:
+                    - img "本地输出 21:14:29" [ref=e3228]
+                  - button "本地输出 21:09:22" [ref=e3229] [cursor=pointer]:
+                    - img "本地输出 21:09:22" [ref=e3230]
+                  - button "本地输出 20:58:17" [ref=e3231] [cursor=pointer]:
+                    - img "本地输出 20:58:17" [ref=e3232]
+                  - button "本地输出 13:42:47" [ref=e3233] [cursor=pointer]:
+                    - img "本地输出 13:42:47" [ref=e3234]
+                  - button "本地输出 00:14:58" [ref=e3235] [cursor=pointer]:
+                    - img "本地输出 00:14:58" [ref=e3236]
+                  - button "本地输出 00:11:22" [ref=e3237] [cursor=pointer]:
+                    - img "本地输出 00:11:22" [ref=e3238]
+                  - button "本地输出 00:05:48" [ref=e3239] [cursor=pointer]:
+                    - img "本地输出 00:05:48" [ref=e3240]
+                  - button "本地输出 00:01:56" [ref=e3241] [cursor=pointer]:
+                    - img "本地输出 00:01:56" [ref=e3242]
+                - generic [ref=e3243]:
+                  - button "本地输出 21:13:11" [ref=e3244] [cursor=pointer]:
+                    - img "本地输出 21:13:11" [ref=e3245]
+                  - button "本地输出 21:08:25" [ref=e3246] [cursor=pointer]:
+                    - img "本地输出 21:08:25" [ref=e3247]
+                  - button "本地输出 13:55:37" [ref=e3248] [cursor=pointer]:
+                    - img "本地输出 13:55:37" [ref=e3249]
+                  - button "本地输出 13:41:54" [ref=e3250] [cursor=pointer]:
+                    - img "本地输出 13:41:54" [ref=e3251]
+                  - button "本地输出 00:13:54" [ref=e3252] [cursor=pointer]:
+                    - img "本地输出 00:13:54" [ref=e3253]
+                  - button "本地输出 00:11:17" [ref=e3254] [cursor=pointer]:
+                    - img "本地输出 00:11:17" [ref=e3255]
+                  - button "本地输出 00:05:42" [ref=e3256] [cursor=pointer]:
+                    - img "本地输出 00:05:42" [ref=e3257]
+                  - button "本地输出 00:01:13" [ref=e3258] [cursor=pointer]:
+                    - img "本地输出 00:01:13" [ref=e3259]
+                - generic [ref=e3260]:
+                  - button "本地输出 21:13:01" [ref=e3261] [cursor=pointer]:
+                    - img "本地输出 21:13:01" [ref=e3262]
+                  - button "本地输出 21:07:29" [ref=e3263] [cursor=pointer]:
+                    - img "本地输出 21:07:29" [ref=e3264]
+                  - button "本地输出 13:54:41" [ref=e3265] [cursor=pointer]:
+                    - img "本地输出 13:54:41" [ref=e3266]
+                  - button "本地输出 13:19:13" [ref=e3267] [cursor=pointer]:
+                    - img "本地输出 13:19:13" [ref=e3268]
+                  - button "本地输出 00:13:02" [ref=e3269] [cursor=pointer]:
+                    - img "本地输出 00:13:02" [ref=e3270]
+                  - button "本地输出 00:09:20" [ref=e3271] [cursor=pointer]:
+                    - img "本地输出 00:09:20" [ref=e3272]
+                  - button "本地输出 00:03:42" [ref=e3273] [cursor=pointer]:
+                    - img "本地输出 00:03:42" [ref=e3274]
+                  - button "本地输出 00:00:55" [ref=e3275] [cursor=pointer]:
+                    - img "本地输出 00:00:55" [ref=e3276]
+                - generic [ref=e3277]:
+                  - button "本地输出 21:12:03" [ref=e3278] [cursor=pointer]:
+                    - img "本地输出 21:12:03" [ref=e3279]
+                  - button "本地输出 21:06:33" [ref=e3280] [cursor=pointer]:
+                    - img "本地输出 21:06:33" [ref=e3281]
+                  - button "本地输出 13:51:07" [ref=e3282] [cursor=pointer]:
+                    - img "本地输出 13:51:07" [ref=e3283]
+                  - button "本地输出 13:17:58" [ref=e3284] [cursor=pointer]:
+                    - img "本地输出 13:17:58" [ref=e3285]
+                  - button "本地输出 00:12:56" [ref=e3286] [cursor=pointer]:
+                    - img "本地输出 00:12:56" [ref=e3287]
+                  - button "本地输出 00:08:15" [ref=e3288] [cursor=pointer]:
+                    - img "本地输出 00:08:15" [ref=e3289]
+                  - button "本地输出 00:03:37" [ref=e3290] [cursor=pointer]:
+                    - img "本地输出 00:03:37" [ref=e3291]
+                  - button "本地输出 00:00:18" [ref=e3292] [cursor=pointer]:
+                    - img "本地输出 00:00:18" [ref=e3293]
+            - generic [ref=e3294]:
+              - generic [ref=e3295]:
+                - generic [ref=e3296]:
+                  - strong [ref=e3297]: 2026-04-01
+                  - generic [ref=e3298]: 2026-04-01
+                - generic [ref=e3299]: 3 张
+              - generic [ref=e3300]:
+                - button "本地输出 23:58:54" [ref=e3302] [cursor=pointer]:
+                  - img "本地输出 23:58:54" [ref=e3303]
+                - button "本地输出 00:22:43" [ref=e3305] [cursor=pointer]:
+                  - img "本地输出 00:22:43" [ref=e3306]
+                - button "本地输出 00:21:51" [ref=e3308] [cursor=pointer]:
+                  - img "本地输出 00:21:51" [ref=e3309]
+            - generic [ref=e3310]:
+              - generic [ref=e3311]:
+                - generic [ref=e3312]:
+                  - strong [ref=e3313]: 2026-03-29
+                  - generic [ref=e3314]: 2026-03-29
+                - generic [ref=e3315]: 1 张
+              - button "本地输出 12:08:01" [ref=e3318] [cursor=pointer]:
+                - img "本地输出 12:08:01" [ref=e3319]
+            - generic [ref=e3320]:
+              - generic [ref=e3321]:
+                - generic [ref=e3322]:
+                  - strong [ref=e3323]: 2026-03-28
+                  - generic [ref=e3324]: 2026-03-28
+                - generic [ref=e3325]: 68 张
+              - generic [ref=e3326]:
+                - generic [ref=e3327]:
+                  - button "本地输出 14:53:03" [ref=e3328] [cursor=pointer]:
+                    - img "本地输出 14:53:03" [ref=e3329]
+                  - button "本地输出 14:44:07" [ref=e3330] [cursor=pointer]:
+                    - img "本地输出 14:44:07" [ref=e3331]
+                  - button "本地输出 14:30:10" [ref=e3332] [cursor=pointer]:
+                    - img "本地输出 14:30:10" [ref=e3333]
+                  - button "本地输出 14:27:12" [ref=e3334] [cursor=pointer]:
+                    - img "本地输出 14:27:12" [ref=e3335]
+                  - button "本地输出 14:23:06" [ref=e3336] [cursor=pointer]:
+                    - img "本地输出 14:23:06" [ref=e3337]
+                  - button "本地输出 14:18:57" [ref=e3338] [cursor=pointer]:
+                    - img "本地输出 14:18:57" [ref=e3339]
+                  - button "本地输出 13:58:38" [ref=e3340] [cursor=pointer]:
+                    - img "本地输出 13:58:38" [ref=e3341]
+                  - button "本地输出 13:55:36" [ref=e3342] [cursor=pointer]:
+                    - img "本地输出 13:55:36" [ref=e3343]
+                  - button "本地输出 13:52:44" [ref=e3344] [cursor=pointer]:
+                    - img "本地输出 13:52:44" [ref=e3345]
+                  - button "本地输出 13:49:02" [ref=e3346] [cursor=pointer]:
+                    - img "本地输出 13:49:02" [ref=e3347]
+                  - button "本地输出 12:43:36" [ref=e3348] [cursor=pointer]:
+                    - img "本地输出 12:43:36" [ref=e3349]
+                  - button "本地输出 12:11:16" [ref=e3350] [cursor=pointer]:
+                    - img "本地输出 12:11:16" [ref=e3351]
+                - generic [ref=e3352]:
+                  - button "本地输出 14:50:18" [ref=e3353] [cursor=pointer]:
+                    - img "本地输出 14:50:18" [ref=e3354]
+                  - button "本地输出 14:43:20" [ref=e3355] [cursor=pointer]:
+                    - img "本地输出 14:43:20" [ref=e3356]
+                  - button "本地输出 14:29:18" [ref=e3357] [cursor=pointer]:
+                    - img "本地输出 14:29:18" [ref=e3358]
+                  - button "本地输出 14:26:11" [ref=e3359] [cursor=pointer]:
+                    - img "本地输出 14:26:11" [ref=e3360]
+                  - button "本地输出 14:21:44" [ref=e3361] [cursor=pointer]:
+                    - img "本地输出 14:21:44" [ref=e3362]
+                  - button "本地输出 14:01:19" [ref=e3363] [cursor=pointer]:
+                    - img "本地输出 14:01:19" [ref=e3364]
+                  - button "本地输出 13:58:25" [ref=e3365] [cursor=pointer]:
+                    - img "本地输出 13:58:25" [ref=e3366]
+                  - button "本地输出 13:55:10" [ref=e3367] [cursor=pointer]:
+                    - img "本地输出 13:55:10" [ref=e3368]
+                  - button "本地输出 13:52:22" [ref=e3369] [cursor=pointer]:
+                    - img "本地输出 13:52:22" [ref=e3370]
+                  - button "本地输出 13:47:57" [ref=e3371] [cursor=pointer]:
+                    - img "本地输出 13:47:57" [ref=e3372]
+                  - button "本地输出 12:42:24" [ref=e3373] [cursor=pointer]:
+                    - img "本地输出 12:42:24" [ref=e3374]
+                  - button "本地输出 12:10:11" [ref=e3375] [cursor=pointer]:
+                    - img "本地输出 12:10:11" [ref=e3376]
+                - generic [ref=e3377]:
+                  - button "本地输出 14:49:18" [ref=e3378] [cursor=pointer]:
+                    - img "本地输出 14:49:18" [ref=e3379]
+                  - button "本地输出 14:34:23" [ref=e3380] [cursor=pointer]:
+                    - img "本地输出 14:34:23" [ref=e3381]
+                  - button "本地输出 14:29:00" [ref=e3382] [cursor=pointer]:
+                    - img "本地输出 14:29:00" [ref=e3383]
+                  - button "本地输出 14:25:11" [ref=e3384] [cursor=pointer]:
+                    - img "本地输出 14:25:11" [ref=e3385]
+                  - button "本地输出 14:20:56" [ref=e3386] [cursor=pointer]:
+                    - img "本地输出 14:20:56" [ref=e3387]
+                  - button "本地输出 14:01:14" [ref=e3388] [cursor=pointer]:
+                    - img "本地输出 14:01:14" [ref=e3389]
+                  - button "本地输出 13:57:31" [ref=e3390] [cursor=pointer]:
+                    - img "本地输出 13:57:31" [ref=e3391]
+                  - button "本地输出 13:54:42" [ref=e3392] [cursor=pointer]:
+                    - img "本地输出 13:54:42" [ref=e3393]
+                  - button "本地输出 13:51:40" [ref=e3394] [cursor=pointer]:
+                    - img "本地输出 13:51:40" [ref=e3395]
+                  - button "本地输出 12:48:12" [ref=e3396] [cursor=pointer]:
+                    - img "本地输出 12:48:12" [ref=e3397]
+                  - button "本地输出 12:41:06" [ref=e3398] [cursor=pointer]:
+                    - img "本地输出 12:41:06" [ref=e3399]
+                - generic [ref=e3400]:
+                  - button "本地输出 14:48:12" [ref=e3401] [cursor=pointer]:
+                    - img "本地输出 14:48:12" [ref=e3402]
+                  - button "本地输出 14:33:34" [ref=e3403] [cursor=pointer]:
+                    - img "本地输出 14:33:34" [ref=e3404]
+                  - button "本地输出 14:28:16" [ref=e3405] [cursor=pointer]:
+                    - img "本地输出 14:28:16" [ref=e3406]
+                  - button "本地输出 14:24:20" [ref=e3407] [cursor=pointer]:
+                    - img "本地输出 14:24:20" [ref=e3408]
+                  - button "本地输出 14:20:54" [ref=e3409] [cursor=pointer]:
+                    - img "本地输出 14:20:54" [ref=e3410]
+                  - button "本地输出 14:00:29" [ref=e3411] [cursor=pointer]:
+                    - img "本地输出 14:00:29" [ref=e3412]
+                  - button "本地输出 13:57:25" [ref=e3413] [cursor=pointer]:
+                    - img "本地输出 13:57:25" [ref=e3414]
+                  - button "本地输出 13:54:16" [ref=e3415] [cursor=pointer]:
+                    - img "本地输出 13:54:16" [ref=e3416]
+                  - button "本地输出 13:51:18" [ref=e3417] [cursor=pointer]:
+                    - img "本地输出 13:51:18" [ref=e3418]
+                  - button "本地输出 12:46:56" [ref=e3419] [cursor=pointer]:
+                    - img "本地输出 12:46:56" [ref=e3420]
+                  - button "本地输出 12:15:28" [ref=e3421] [cursor=pointer]:
+                    - img "本地输出 12:15:28" [ref=e3422]
+                - generic [ref=e3423]:
+                  - button "本地输出 14:47:28" [ref=e3424] [cursor=pointer]:
+                    - img "本地输出 14:47:28" [ref=e3425]
+                  - button "本地输出 14:33:23" [ref=e3426] [cursor=pointer]:
+                    - img "本地输出 14:33:23" [ref=e3427]
+                  - button "本地输出 14:28:12" [ref=e3428] [cursor=pointer]:
+                    - img "本地输出 14:28:12" [ref=e3429]
+                  - button "本地输出 14:24:04" [ref=e3430] [cursor=pointer]:
+                    - img "本地输出 14:24:04" [ref=e3431]
+                  - button "本地输出 14:19:59" [ref=e3432] [cursor=pointer]:
+                    - img "本地输出 14:19:59" [ref=e3433]
+                  - button "本地输出 13:59:36" [ref=e3434] [cursor=pointer]:
+                    - img "本地输出 13:59:36" [ref=e3435]
+                  - button "本地输出 13:56:32" [ref=e3436] [cursor=pointer]:
+                    - img "本地输出 13:56:32" [ref=e3437]
+                  - button "本地输出 13:53:48" [ref=e3438] [cursor=pointer]:
+                    - img "本地输出 13:53:48" [ref=e3439]
+                  - button "本地输出 13:50:36" [ref=e3440] [cursor=pointer]:
+                    - img "本地输出 13:50:36" [ref=e3441]
+                  - button "本地输出 12:45:55" [ref=e3442] [cursor=pointer]:
+                    - img "本地输出 12:45:55" [ref=e3443]
+                  - button "本地输出 12:13:26" [ref=e3444] [cursor=pointer]:
+                    - img "本地输出 12:13:26" [ref=e3445]
+                - generic [ref=e3446]:
+                  - button "本地输出 14:44:42" [ref=e3447] [cursor=pointer]:
+                    - img "本地输出 14:44:42" [ref=e3448]
+                  - button "本地输出 14:32:12" [ref=e3449] [cursor=pointer]:
+                    - img "本地输出 14:32:12" [ref=e3450]
+                  - button "本地输出 14:27:23" [ref=e3451] [cursor=pointer]:
+                    - img "本地输出 14:27:23" [ref=e3452]
+                  - button "本地输出 14:23:20" [ref=e3453] [cursor=pointer]:
+                    - img "本地输出 14:23:20" [ref=e3454]
+                  - button "本地输出 14:19:46" [ref=e3455] [cursor=pointer]:
+                    - img "本地输出 14:19:46" [ref=e3456]
+                  - button "本地输出 13:59:22" [ref=e3457] [cursor=pointer]:
+                    - img "本地输出 13:59:22" [ref=e3458]
+                  - button "本地输出 13:56:20" [ref=e3459] [cursor=pointer]:
+                    - img "本地输出 13:56:20" [ref=e3460]
+                  - button "本地输出 13:53:22" [ref=e3461] [cursor=pointer]:
+                    - img "本地输出 13:53:22" [ref=e3462]
+                  - button "本地输出 13:50:13" [ref=e3463] [cursor=pointer]:
+                    - img "本地输出 13:50:13" [ref=e3464]
+                  - button "本地输出 12:44:51" [ref=e3465] [cursor=pointer]:
+                    - img "本地输出 12:44:51" [ref=e3466]
+                  - button "本地输出 12:12:29" [ref=e3467] [cursor=pointer]:
+                    - img "本地输出 12:12:29" [ref=e3468]
+            - generic [ref=e3469]:
+              - generic [ref=e3470]:
+                - generic [ref=e3471]:
+                  - strong [ref=e3472]: 2026-03-27
+                  - generic [ref=e3473]: 2026-03-27
+                - generic [ref=e3474]: 30 张
+              - generic [ref=e3475]:
+                - generic [ref=e3476]:
+                  - button "本地输出 22:06:25" [ref=e3477] [cursor=pointer]:
+                    - img "本地输出 22:06:25" [ref=e3478]
+                  - button "本地输出 21:03:11" [ref=e3479] [cursor=pointer]:
+                    - img "本地输出 21:03:11" [ref=e3480]
+                  - button "本地输出 12:41:37" [ref=e3481] [cursor=pointer]:
+                    - img "本地输出 12:41:37" [ref=e3482]
+                  - button "本地输出 01:43:40" [ref=e3483] [cursor=pointer]:
+                    - img "本地输出 01:43:40" [ref=e3484]
+                  - button "本地输出 01:41:02" [ref=e3485] [cursor=pointer]:
+                    - img "本地输出 01:41:02" [ref=e3486]
+                - generic [ref=e3487]:
+                  - button "本地输出 22:05:47" [ref=e3488] [cursor=pointer]:
+                    - img "本地输出 22:05:47" [ref=e3489]
+                  - button "本地输出 20:53:50" [ref=e3490] [cursor=pointer]:
+                    - img "本地输出 20:53:50" [ref=e3491]
+                  - button "本地输出 12:41:14" [ref=e3492] [cursor=pointer]:
+                    - img "本地输出 12:41:14" [ref=e3493]
+                  - button "本地输出 01:43:15" [ref=e3494] [cursor=pointer]:
+                    - img "本地输出 01:43:15" [ref=e3495]
+                  - button "本地输出 00:03:34" [ref=e3496] [cursor=pointer]:
+                    - img "本地输出 00:03:34" [ref=e3497]
+                - generic [ref=e3498]:
+                  - button "本地输出 21:52:09" [ref=e3499] [cursor=pointer]:
+                    - img "本地输出 21:52:09" [ref=e3500]
+                  - button "本地输出 16:54:33" [ref=e3501] [cursor=pointer]:
+                    - img "本地输出 16:54:33" [ref=e3502]
+                  - button "本地输出 12:40:50" [ref=e3503] [cursor=pointer]:
+                    - img "本地输出 12:40:50" [ref=e3504]
+                  - button "本地输出 01:42:48" [ref=e3505] [cursor=pointer]:
+                    - img "本地输出 01:42:48" [ref=e3506]
+                  - button "本地输出 00:03:10" [ref=e3507] [cursor=pointer]:
+                    - img "本地输出 00:03:10" [ref=e3508]
+                - generic [ref=e3509]:
+                  - button "本地输出 21:51:33" [ref=e3510] [cursor=pointer]:
+                    - img "本地输出 21:51:33" [ref=e3511]
+                  - button "本地输出 16:54:11" [ref=e3512] [cursor=pointer]:
+                    - img "本地输出 16:54:11" [ref=e3513]
+                  - button "本地输出 12:40:24" [ref=e3514] [cursor=pointer]:
+                    - img "本地输出 12:40:24" [ref=e3515]
+                  - button "本地输出 01:42:25" [ref=e3516] [cursor=pointer]:
+                    - img "本地输出 01:42:25" [ref=e3517]
+                  - button "本地输出 00:02:39" [ref=e3518] [cursor=pointer]:
+                    - img "本地输出 00:02:39" [ref=e3519]
+                - generic [ref=e3520]:
+                  - button "本地输出 21:24:22" [ref=e3521] [cursor=pointer]:
+                    - img "本地输出 21:24:22" [ref=e3522]
+                  - button "本地输出 16:42:04" [ref=e3523] [cursor=pointer]:
+                    - img "本地输出 16:42:04" [ref=e3524]
+                  - button "本地输出 12:39:58" [ref=e3525] [cursor=pointer]:
+                    - img "本地输出 12:39:58" [ref=e3526]
+                  - button "本地输出 01:42:02" [ref=e3527] [cursor=pointer]:
+                    - img "本地输出 01:42:02" [ref=e3528]
+                  - button "本地输出 00:02:14" [ref=e3529] [cursor=pointer]:
+                    - img "本地输出 00:02:14" [ref=e3530]
+                - generic [ref=e3531]:
+                  - button "本地输出 21:23:47" [ref=e3532] [cursor=pointer]:
+                    - img "本地输出 21:23:47" [ref=e3533]
+                  - button "本地输出 12:42:03" [ref=e3534] [cursor=pointer]:
+                    - img "本地输出 12:42:03" [ref=e3535]
+                  - button "本地输出 12:39:24" [ref=e3536] [cursor=pointer]:
+                    - img "本地输出 12:39:24" [ref=e3537]
+                  - button "本地输出 01:41:38" [ref=e3538] [cursor=pointer]:
+                    - img "本地输出 01:41:38" [ref=e3539]
+                  - button "本地输出 00:01:37" [ref=e3540] [cursor=pointer]:
+                    - img "本地输出 00:01:37" [ref=e3541]
+            - generic [ref=e3542]:
+              - generic [ref=e3543]:
+                - generic [ref=e3544]:
+                  - strong [ref=e3545]: 2026-03-26
+                  - generic [ref=e3546]: 2026-03-26
+                - generic [ref=e3547]: 24 张
+              - generic [ref=e3548]:
+                - generic [ref=e3549]:
+                  - button "本地输出 23:58:22" [ref=e3550] [cursor=pointer]:
+                    - img "本地输出 23:58:22" [ref=e3551]
+                  - button "本地输出 23:49:14" [ref=e3552] [cursor=pointer]:
+                    - img "本地输出 23:49:14" [ref=e3553]
+                  - button "本地输出 17:57:12" [ref=e3554] [cursor=pointer]:
+                    - img "本地输出 17:57:12" [ref=e3555]
+                  - button "本地输出 16:53:23" [ref=e3556] [cursor=pointer]:
+                    - img "本地输出 16:53:23" [ref=e3557]
+                - generic [ref=e3558]:
+                  - button "本地输出 23:56:40" [ref=e3559] [cursor=pointer]:
+                    - img "本地输出 23:56:40" [ref=e3560]
+                  - button "本地输出 23:48:44" [ref=e3561] [cursor=pointer]:
+                    - img "本地输出 23:48:44" [ref=e3562]
+                  - button "本地输出 17:56:20" [ref=e3563] [cursor=pointer]:
+                    - img "本地输出 17:56:20" [ref=e3564]
+                  - button "本地输出 16:52:16" [ref=e3565] [cursor=pointer]:
+                    - img "本地输出 16:52:16" [ref=e3566]
+                - generic [ref=e3567]:
+                  - button "本地输出 23:56:07" [ref=e3568] [cursor=pointer]:
+                    - img "本地输出 23:56:07" [ref=e3569]
+                  - button "本地输出 22:58:03" [ref=e3570] [cursor=pointer]:
+                    - img "本地输出 22:58:03" [ref=e3571]
+                  - button "本地输出 17:54:59" [ref=e3572] [cursor=pointer]:
+                    - img "本地输出 17:54:59" [ref=e3573]
+                  - button "本地输出 16:50:11" [ref=e3574] [cursor=pointer]:
+                    - img "本地输出 16:50:11" [ref=e3575]
+                - generic [ref=e3576]:
+                  - button "本地输出 23:56:03" [ref=e3577] [cursor=pointer]:
+                    - img "本地输出 23:56:03" [ref=e3578]
+                  - button "本地输出 22:57:29" [ref=e3579] [cursor=pointer]:
+                    - img "本地输出 22:57:29" [ref=e3580]
+                  - button "本地输出 17:54:03" [ref=e3581] [cursor=pointer]:
+                    - img "本地输出 17:54:03" [ref=e3582]
+                  - button "本地输出 16:49:16" [ref=e3583] [cursor=pointer]:
+                    - img "本地输出 16:49:16" [ref=e3584]
+                - generic [ref=e3585]:
+                  - button "本地输出 23:55:05" [ref=e3586] [cursor=pointer]:
+                    - img "本地输出 23:55:05" [ref=e3587]
+                  - button "本地输出 22:55:27" [ref=e3588] [cursor=pointer]:
+                    - img "本地输出 22:55:27" [ref=e3589]
+                  - button "本地输出 17:53:07" [ref=e3590] [cursor=pointer]:
+                    - img "本地输出 17:53:07" [ref=e3591]
+                  - button "本地输出 16:47:55" [ref=e3592] [cursor=pointer]:
+                    - img "本地输出 16:47:55" [ref=e3593]
+                - generic [ref=e3594]:
+                  - button "本地输出 23:54:35" [ref=e3595] [cursor=pointer]:
+                    - img "本地输出 23:54:35" [ref=e3596]
+                  - button "本地输出 22:54:43" [ref=e3597] [cursor=pointer]:
+                    - img "本地输出 22:54:43" [ref=e3598]
+                  - button "本地输出 17:52:13" [ref=e3599] [cursor=pointer]:
+                    - img "本地输出 17:52:13" [ref=e3600]
+                  - button "本地输出 16:46:56" [ref=e3601] [cursor=pointer]:
+                    - img "本地输出 16:46:56" [ref=e3602]
+            - generic [ref=e3603]:
+              - generic [ref=e3604]:
+                - generic [ref=e3605]:
+                  - strong [ref=e3606]: 2026-03-25
+                  - generic [ref=e3607]: 2026-03-25
+                - generic [ref=e3608]: 2 张
+              - generic [ref=e3609]:
+                - button "本地输出 19:57:37" [ref=e3611] [cursor=pointer]:
+                  - img "本地输出 19:57:37" [ref=e3612]
+                - button "本地输出 19:50:40" [ref=e3614] [cursor=pointer]:
+                  - img "本地输出 19:50:40" [ref=e3615]
+            - generic [ref=e3616]:
+              - generic [ref=e3617]:
+                - generic [ref=e3618]:
+                  - strong [ref=e3619]: 2026-03-24
+                  - generic [ref=e3620]: 2026-03-24
+                - generic [ref=e3621]: 62 张
+              - generic [ref=e3622]:
+                - generic [ref=e3623]:
+                  - button "本地输出 22:56:42" [ref=e3624] [cursor=pointer]:
+                    - img "本地输出 22:56:42" [ref=e3625]
+                  - button "本地输出 16:30:05" [ref=e3626] [cursor=pointer]:
+                    - img "本地输出 16:30:05" [ref=e3627]
+                  - button "本地输出 16:26:07" [ref=e3628] [cursor=pointer]:
+                    - img "本地输出 16:26:07" [ref=e3629]
+                  - button "本地输出 04:06:37" [ref=e3630] [cursor=pointer]:
+                    - img "本地输出 04:06:37" [ref=e3631]
+                  - button "本地输出 04:03:45" [ref=e3632] [cursor=pointer]:
+                    - img "本地输出 04:03:45" [ref=e3633]
+                  - button "本地输出 03:59:18" [ref=e3634] [cursor=pointer]:
+                    - img "本地输出 03:59:18" [ref=e3635]
+                  - button "本地输出 03:23:08" [ref=e3636] [cursor=pointer]:
+                    - img "本地输出 03:23:08" [ref=e3637]
+                  - button "本地输出 03:18:15" [ref=e3638] [cursor=pointer]:
+                    - img "本地输出 03:18:15" [ref=e3639]
+                  - button "本地输出 03:04:00" [ref=e3640] [cursor=pointer]:
+                    - img "本地输出 03:04:00" [ref=e3641]
+                  - button "本地输出 02:25:35" [ref=e3642] [cursor=pointer]:
+                    - img "本地输出 02:25:35" [ref=e3643]
+                  - button "本地输出 00:14:18" [ref=e3644] [cursor=pointer]:
+                    - img "本地输出 00:14:18" [ref=e3645]
+                - generic [ref=e3646]:
+                  - button "本地输出 22:55:43" [ref=e3647] [cursor=pointer]:
+                    - img "本地输出 22:55:43" [ref=e3648]
+                  - button "本地输出 16:29:00" [ref=e3649] [cursor=pointer]:
+                    - img "本地输出 16:29:00" [ref=e3650]
+                  - button "本地输出 16:25:37" [ref=e3651] [cursor=pointer]:
+                    - img "本地输出 16:25:37" [ref=e3652]
+                  - button "本地输出 04:06:10" [ref=e3653] [cursor=pointer]:
+                    - img "本地输出 04:06:10" [ref=e3654]
+                  - button "本地输出 04:03:19" [ref=e3655] [cursor=pointer]:
+                    - img "本地输出 04:03:19" [ref=e3656]
+                  - button "本地输出 03:58:47" [ref=e3657] [cursor=pointer]:
+                    - img "本地输出 03:58:47" [ref=e3658]
+                  - button "本地输出 03:22:35" [ref=e3659] [cursor=pointer]:
+                    - img "本地输出 03:22:35" [ref=e3660]
+                  - button "本地输出 03:17:49" [ref=e3661] [cursor=pointer]:
+                    - img "本地输出 03:17:49" [ref=e3662]
+                  - button "本地输出 03:03:34" [ref=e3663] [cursor=pointer]:
+                    - img "本地输出 03:03:34" [ref=e3664]
+                  - button "本地输出 02:25:05" [ref=e3665] [cursor=pointer]:
+                    - img "本地输出 02:25:05" [ref=e3666]
+                  - button "本地输出 00:13:33" [ref=e3667] [cursor=pointer]:
+                    - img "本地输出 00:13:33" [ref=e3668]
+                - generic [ref=e3669]:
+                  - button "本地输出 16:32:07" [ref=e3670] [cursor=pointer]:
+                    - img "本地输出 16:32:07" [ref=e3671]
+                  - button "本地输出 16:28:23" [ref=e3672] [cursor=pointer]:
+                    - img "本地输出 16:28:23" [ref=e3673]
+                  - button "本地输出 16:25:13" [ref=e3674] [cursor=pointer]:
+                    - img "本地输出 16:25:13" [ref=e3675]
+                  - button "本地输出 04:05:44" [ref=e3676] [cursor=pointer]:
+                    - img "本地输出 04:05:44" [ref=e3677]
+                  - button "本地输出 04:02:53" [ref=e3678] [cursor=pointer]:
+                    - img "本地输出 04:02:53" [ref=e3679]
+                  - button "本地输出 03:25:29" [ref=e3680] [cursor=pointer]:
+                    - img "本地输出 03:25:29" [ref=e3681]
+                  - button "本地输出 03:21:44" [ref=e3682] [cursor=pointer]:
+                    - img "本地输出 03:21:44" [ref=e3683]
+                  - button "本地输出 03:17:22" [ref=e3684] [cursor=pointer]:
+                    - img "本地输出 03:17:22" [ref=e3685]
+                  - button "本地输出 03:03:06" [ref=e3686] [cursor=pointer]:
+                    - img "本地输出 03:03:06" [ref=e3687]
+                  - button "本地输出 02:24:09" [ref=e3688] [cursor=pointer]:
+                    - img "本地输出 02:24:09" [ref=e3689]
+                - generic [ref=e3690]:
+                  - button "本地输出 16:31:39" [ref=e3691] [cursor=pointer]:
+                    - img "本地输出 16:31:39" [ref=e3692]
+                  - button "本地输出 16:27:55" [ref=e3693] [cursor=pointer]:
+                    - img "本地输出 16:27:55" [ref=e3694]
+                  - button "本地输出 16:24:39" [ref=e3695] [cursor=pointer]:
+                    - img "本地输出 16:24:39" [ref=e3696]
+                  - button "本地输出 04:05:15" [ref=e3697] [cursor=pointer]:
+                    - img "本地输出 04:05:15" [ref=e3698]
+                  - button "本地输出 04:02:52" [ref=e3699] [cursor=pointer]:
+                    - img "本地输出 04:02:52" [ref=e3700]
+                  - button "本地输出 03:24:49" [ref=e3701] [cursor=pointer]:
+                    - img "本地输出 03:24:49" [ref=e3702]
+                  - button "本地输出 03:21:18" [ref=e3703] [cursor=pointer]:
+                    - img "本地输出 03:21:18" [ref=e3704]
+                  - button "本地输出 03:16:55" [ref=e3705] [cursor=pointer]:
+                    - img "本地输出 03:16:55" [ref=e3706]
+                  - button "本地输出 03:02:30" [ref=e3707] [cursor=pointer]:
+                    - img "本地输出 03:02:30" [ref=e3708]
+                  - button "本地输出 00:15:50" [ref=e3709] [cursor=pointer]:
+                    - img "本地输出 00:15:50" [ref=e3710]
+                - generic [ref=e3711]:
+                  - button "本地输出 16:31:08" [ref=e3712] [cursor=pointer]:
+                    - img "本地输出 16:31:08" [ref=e3713]
+                  - button "本地输出 16:27:22" [ref=e3714] [cursor=pointer]:
+                    - img "本地输出 16:27:22" [ref=e3715]
+                  - button "本地输出 16:24:03" [ref=e3716] [cursor=pointer]:
+                    - img "本地输出 16:24:03" [ref=e3717]
+                  - button "本地输出 04:04:40" [ref=e3718] [cursor=pointer]:
+                    - img "本地输出 04:04:40" [ref=e3719]
+                  - button "本地输出 04:00:15" [ref=e3720] [cursor=pointer]:
+                    - img "本地输出 04:00:15" [ref=e3721]
+                  - button "本地输出 03:24:18" [ref=e3722] [cursor=pointer]:
+                    - img "本地输出 03:24:18" [ref=e3723]
+                  - button "本地输出 03:20:42" [ref=e3724] [cursor=pointer]:
+                    - img "本地输出 03:20:42" [ref=e3725]
+                  - button "本地输出 03:16:26" [ref=e3726] [cursor=pointer]:
+                    - img "本地输出 03:16:26" [ref=e3727]
+                  - button "本地输出 02:26:33" [ref=e3728] [cursor=pointer]:
+                    - img "本地输出 02:26:33" [ref=e3729]
+                  - button "本地输出 00:15:23" [ref=e3730] [cursor=pointer]:
+                    - img "本地输出 00:15:23" [ref=e3731]
+                - generic [ref=e3732]:
+                  - button "本地输出 16:30:38" [ref=e3733] [cursor=pointer]:
+                    - img "本地输出 16:30:38" [ref=e3734]
+                  - button "本地输出 16:26:53" [ref=e3735] [cursor=pointer]:
+                    - img "本地输出 16:26:53" [ref=e3736]
+                  - button "本地输出 04:07:05" [ref=e3737] [cursor=pointer]:
+                    - img "本地输出 04:07:05" [ref=e3738]
+                  - button "本地输出 04:04:12" [ref=e3739] [cursor=pointer]:
+                    - img "本地输出 04:04:12" [ref=e3740]
+                  - button "本地输出 03:59:47" [ref=e3741] [cursor=pointer]:
+                    - img "本地输出 03:59:47" [ref=e3742]
+                  - button "本地输出 03:23:46" [ref=e3743] [cursor=pointer]:
+                    - img "本地输出 03:23:46" [ref=e3744]
+                  - button "本地输出 03:20:11" [ref=e3745] [cursor=pointer]:
+                    - img "本地输出 03:20:11" [ref=e3746]
+                  - button "本地输出 03:04:37" [ref=e3747] [cursor=pointer]:
+                    - img "本地输出 03:04:37" [ref=e3748]
+                  - button "本地输出 02:26:07" [ref=e3749] [cursor=pointer]:
+                    - img "本地输出 02:26:07" [ref=e3750]
+                  - button "本地输出 00:14:45" [ref=e3751] [cursor=pointer]:
+                    - img "本地输出 00:14:45" [ref=e3752]
+            - generic [ref=e3753]:
+              - generic [ref=e3754]:
+                - generic [ref=e3755]:
+                  - strong [ref=e3756]: 2026-03-23
+                  - generic [ref=e3757]: 2026-03-23
+                - generic [ref=e3758]: 43 张
+              - generic [ref=e3759]:
+                - generic [ref=e3760]:
+                  - button "本地输出 22:20:20" [ref=e3761] [cursor=pointer]:
+                    - img "本地输出 22:20:20" [ref=e3762]
+                  - button "本地输出 21:15:26" [ref=e3763] [cursor=pointer]:
+                    - img "本地输出 21:15:26" [ref=e3764]
+                  - button "本地输出 14:08:55" [ref=e3765] [cursor=pointer]:
+                    - img "本地输出 14:08:55" [ref=e3766]
+                  - button "本地输出 02:57:27" [ref=e3767] [cursor=pointer]:
+                    - img "本地输出 02:57:27" [ref=e3768]
+                  - button "本地输出 02:43:04" [ref=e3769] [cursor=pointer]:
+                    - img "本地输出 02:43:04" [ref=e3770]
+                  - button "本地输出 01:32:26" [ref=e3771] [cursor=pointer]:
+                    - img "本地输出 01:32:26" [ref=e3772]
+                  - button "本地输出 01:21:51" [ref=e3773] [cursor=pointer]:
+                    - img "本地输出 01:21:51" [ref=e3774]
+                  - button "本地输出 01:15:15" [ref=e3775] [cursor=pointer]:
+                    - img "本地输出 01:15:15" [ref=e3776]
+                - generic [ref=e3777]:
+                  - button "本地输出 22:18:51" [ref=e3778] [cursor=pointer]:
+                    - img "本地输出 22:18:51" [ref=e3779]
+                  - button "本地输出 21:04:37" [ref=e3780] [cursor=pointer]:
+                    - img "本地输出 21:04:37" [ref=e3781]
+                  - button "本地输出 14:08:05" [ref=e3782] [cursor=pointer]:
+                    - img "本地输出 14:08:05" [ref=e3783]
+                  - button "本地输出 02:56:36" [ref=e3784] [cursor=pointer]:
+                    - img "本地输出 02:56:36" [ref=e3785]
+                  - button "本地输出 02:41:53" [ref=e3786] [cursor=pointer]:
+                    - img "本地输出 02:41:53" [ref=e3787]
+                  - button "本地输出 01:31:12" [ref=e3788] [cursor=pointer]:
+                    - img "本地输出 01:31:12" [ref=e3789]
+                  - button "本地输出 01:20:53" [ref=e3790] [cursor=pointer]:
+                    - img "本地输出 01:20:53" [ref=e3791]
+                - generic [ref=e3792]:
+                  - button "本地输出 21:17:59" [ref=e3793] [cursor=pointer]:
+                    - img "本地输出 21:17:59" [ref=e3794]
+                  - button "本地输出 14:19:00" [ref=e3795] [cursor=pointer]:
+                    - img "本地输出 14:19:00" [ref=e3796]
+                  - button "本地输出 03:09:43" [ref=e3797] [cursor=pointer]:
+                    - img "本地输出 03:09:43" [ref=e3798]
+                  - button "本地输出 02:48:30" [ref=e3799] [cursor=pointer]:
+                    - img "本地输出 02:48:30" [ref=e3800]
+                  - button "本地输出 02:41:02" [ref=e3801] [cursor=pointer]:
+                    - img "本地输出 02:41:02" [ref=e3802]
+                  - button "本地输出 01:29:34" [ref=e3803] [cursor=pointer]:
+                    - img "本地输出 01:29:34" [ref=e3804]
+                  - button "本地输出 01:19:55" [ref=e3805] [cursor=pointer]:
+                    - img "本地输出 01:19:55" [ref=e3806]
+                - generic [ref=e3807]:
+                  - button "本地输出 21:17:06" [ref=e3808] [cursor=pointer]:
+                    - img "本地输出 21:17:06" [ref=e3809]
+                  - button "本地输出 14:17:55" [ref=e3810] [cursor=pointer]:
+                    - img "本地输出 14:17:55" [ref=e3811]
+                  - button "本地输出 03:08:56" [ref=e3812] [cursor=pointer]:
+                    - img "本地输出 03:08:56" [ref=e3813]
+                  - button "本地输出 02:47:25" [ref=e3814] [cursor=pointer]:
+                    - img "本地输出 02:47:25" [ref=e3815]
+                  - button "本地输出 02:21:24" [ref=e3816] [cursor=pointer]:
+                    - img "本地输出 02:21:24" [ref=e3817]
+                  - button "本地输出 01:28:23" [ref=e3818] [cursor=pointer]:
+                    - img "本地输出 01:28:23" [ref=e3819]
+                  - button "本地输出 01:18:36" [ref=e3820] [cursor=pointer]:
+                    - img "本地输出 01:18:36" [ref=e3821]
+                - generic [ref=e3822]:
+                  - button "本地输出 21:16:32" [ref=e3823] [cursor=pointer]:
+                    - img "本地输出 21:16:32" [ref=e3824]
+                  - button "本地输出 14:17:07" [ref=e3825] [cursor=pointer]:
+                    - img "本地输出 14:17:07" [ref=e3826]
+                  - button "本地输出 03:07:59" [ref=e3827] [cursor=pointer]:
+                    - img "本地输出 03:07:59" [ref=e3828]
+                  - button "本地输出 02:46:22" [ref=e3829] [cursor=pointer]:
+                    - img "本地输出 02:46:22" [ref=e3830]
+                  - button "本地输出 01:34:54" [ref=e3831] [cursor=pointer]:
+                    - img "本地输出 01:34:54" [ref=e3832]
+                  - button "本地输出 01:27:17" [ref=e3833] [cursor=pointer]:
+                    - img "本地输出 01:27:17" [ref=e3834]
+                  - button "本地输出 01:17:38" [ref=e3835] [cursor=pointer]:
+                    - img "本地输出 01:17:38" [ref=e3836]
+                - generic [ref=e3837]:
+                  - button "本地输出 21:16:01" [ref=e3838] [cursor=pointer]:
+                    - img "本地输出 21:16:01" [ref=e3839]
+                  - button "本地输出 14:09:53" [ref=e3840] [cursor=pointer]:
+                    - img "本地输出 14:09:53" [ref=e3841]
+                  - button "本地输出 02:58:25" [ref=e3842] [cursor=pointer]:
+                    - img "本地输出 02:58:25" [ref=e3843]
+                  - button "本地输出 02:45:26" [ref=e3844] [cursor=pointer]:
+                    - img "本地输出 02:45:26" [ref=e3845]
+                  - button "本地输出 01:33:47" [ref=e3846] [cursor=pointer]:
+                    - img "本地输出 01:33:47" [ref=e3847]
+                  - button "本地输出 01:25:50" [ref=e3848] [cursor=pointer]:
+                    - img "本地输出 01:25:50" [ref=e3849]
+                  - button "本地输出 01:16:40" [ref=e3850] [cursor=pointer]:
+                    - img "本地输出 01:16:40" [ref=e3851]
+            - generic [ref=e3852]:
+              - generic [ref=e3853]:
+                - generic [ref=e3854]:
+                  - strong [ref=e3855]: 2026-03-22
+                  - generic [ref=e3856]: 2026-03-22
+                - generic [ref=e3857]: 86 张
+              - generic [ref=e3858]:
+                - generic [ref=e3859]:
+                  - button "本地输出 19:27:08" [ref=e3860] [cursor=pointer]:
+                    - img "本地输出 19:27:08" [ref=e3861]
+                  - button "本地输出 18:33:47" [ref=e3862] [cursor=pointer]:
+                    - img "本地输出 18:33:47" [ref=e3863]
+                  - button "本地输出 18:08:51" [ref=e3864] [cursor=pointer]:
+                    - img "本地输出 18:08:51" [ref=e3865]
+                  - button "本地输出 17:48:31" [ref=e3866] [cursor=pointer]:
+                    - img "本地输出 17:48:31" [ref=e3867]
+                  - button "本地输出 17:46:18" [ref=e3868] [cursor=pointer]:
+                    - img "本地输出 17:46:18" [ref=e3869]
+                  - button "本地输出 17:40:51" [ref=e3870] [cursor=pointer]:
+                    - img "本地输出 17:40:51" [ref=e3871]
+                  - button "本地输出 16:26:23" [ref=e3872] [cursor=pointer]:
+                    - img "本地输出 16:26:23" [ref=e3873]
+                  - button "本地输出 16:19:38" [ref=e3874] [cursor=pointer]:
+                    - img "本地输出 16:19:38" [ref=e3875]
+                  - button "本地输出 14:57:21" [ref=e3876] [cursor=pointer]:
+                    - img "本地输出 14:57:21" [ref=e3877]
+                  - button "本地输出 01:50:47" [ref=e3878] [cursor=pointer]:
+                    - img "本地输出 01:50:47" [ref=e3879]
+                  - button "本地输出 01:31:13" [ref=e3880] [cursor=pointer]:
+                    - img "本地输出 01:31:13" [ref=e3881]
+                  - button "本地输出 01:26:22" [ref=e3882] [cursor=pointer]:
+                    - img "本地输出 01:26:22" [ref=e3883]
+                  - button "本地输出 01:21:44" [ref=e3884] [cursor=pointer]:
+                    - img "本地输出 01:21:44" [ref=e3885]
+                  - button "本地输出 01:17:12" [ref=e3886] [cursor=pointer]:
+                    - img "本地输出 01:17:12" [ref=e3887]
+                  - button "本地输出 01:11:33" [ref=e3888] [cursor=pointer]:
+                    - img "本地输出 01:11:33" [ref=e3889]
+                - generic [ref=e3890]:
+                  - button "本地输出 19:26:16" [ref=e3891] [cursor=pointer]:
+                    - img "本地输出 19:26:16" [ref=e3892]
+                  - button "本地输出 18:10:56" [ref=e3893] [cursor=pointer]:
+                    - img "本地输出 18:10:56" [ref=e3894]
+                  - button "本地输出 18:02:57" [ref=e3895] [cursor=pointer]:
+                    - img "本地输出 18:02:57" [ref=e3896]
+                  - button "本地输出 17:47:56" [ref=e3897] [cursor=pointer]:
+                    - img "本地输出 17:47:56" [ref=e3898]
+                  - button "本地输出 17:45:42" [ref=e3899] [cursor=pointer]:
+                    - img "本地输出 17:45:42" [ref=e3900]
+                  - button "本地输出 17:40:21" [ref=e3901] [cursor=pointer]:
+                    - img "本地输出 17:40:21" [ref=e3902]
+                  - button "本地输出 16:25:14" [ref=e3903] [cursor=pointer]:
+                    - img "本地输出 16:25:14" [ref=e3904]
+                  - button "本地输出 16:18:09" [ref=e3905] [cursor=pointer]:
+                    - img "本地输出 16:18:09" [ref=e3906]
+                  - button "本地输出 14:54:02" [ref=e3907] [cursor=pointer]:
+                    - img "本地输出 14:54:02" [ref=e3908]
+                  - button "本地输出 01:50:47" [ref=e3909] [cursor=pointer]:
+                    - img "本地输出 01:50:47" [ref=e3910]
+                  - button "本地输出 01:29:55" [ref=e3911] [cursor=pointer]:
+                    - img "本地输出 01:29:55" [ref=e3912]
+                  - button "本地输出 01:25:41" [ref=e3913] [cursor=pointer]:
+                    - img "本地输出 01:25:41" [ref=e3914]
+                  - button "本地输出 01:21:20" [ref=e3915] [cursor=pointer]:
+                    - img "本地输出 01:21:20" [ref=e3916]
+                  - button "本地输出 01:16:01" [ref=e3917] [cursor=pointer]:
+                    - img "本地输出 01:16:01" [ref=e3918]
+                  - button "本地输出 01:10:13" [ref=e3919] [cursor=pointer]:
+                    - img "本地输出 01:10:13" [ref=e3920]
+                - generic [ref=e3921]:
+                  - button "本地输出 19:24:05" [ref=e3922] [cursor=pointer]:
+                    - img "本地输出 19:24:05" [ref=e3923]
+                  - button "本地输出 18:10:27" [ref=e3924] [cursor=pointer]:
+                    - img "本地输出 18:10:27" [ref=e3925]
+                  - button "本地输出 18:02:11" [ref=e3926] [cursor=pointer]:
+                    - img "本地输出 18:02:11" [ref=e3927]
+                  - button "本地输出 17:47:36" [ref=e3928] [cursor=pointer]:
+                    - img "本地输出 17:47:36" [ref=e3929]
+                  - button "本地输出 17:45:27" [ref=e3930] [cursor=pointer]:
+                    - img "本地输出 17:45:27" [ref=e3931]
+                  - button "本地输出 16:31:06" [ref=e3932] [cursor=pointer]:
+                    - img "本地输出 16:31:06" [ref=e3933]
+                  - button "本地输出 16:24:07" [ref=e3934] [cursor=pointer]:
+                    - img "本地输出 16:24:07" [ref=e3935]
+                  - button "本地输出 16:17:46" [ref=e3936] [cursor=pointer]:
+                    - img "本地输出 16:17:46" [ref=e3937]
+                  - button "本地输出 14:54:02" [ref=e3938] [cursor=pointer]:
+                    - img "本地输出 14:54:02" [ref=e3939]
+                  - button "本地输出 01:50:32" [ref=e3940] [cursor=pointer]:
+                    - img "本地输出 01:50:32" [ref=e3941]
+                  - button "本地输出 01:29:43" [ref=e3942] [cursor=pointer]:
+                    - img "本地输出 01:29:43" [ref=e3943]
+                  - button "本地输出 01:24:51" [ref=e3944] [cursor=pointer]:
+                    - img "本地输出 01:24:51" [ref=e3945]
+                  - button "本地输出 01:20:16" [ref=e3946] [cursor=pointer]:
+                    - img "本地输出 01:20:16" [ref=e3947]
+                  - button "本地输出 01:15:30" [ref=e3948] [cursor=pointer]:
+                    - img "本地输出 01:15:30" [ref=e3949]
+                - generic [ref=e3950]:
+                  - button "本地输出 19:23:11" [ref=e3951] [cursor=pointer]:
+                    - img "本地输出 19:23:11" [ref=e3952]
+                  - button "本地输出 18:10:13" [ref=e3953] [cursor=pointer]:
+                    - img "本地输出 18:10:13" [ref=e3954]
+                  - button "本地输出 18:01:11" [ref=e3955] [cursor=pointer]:
+                    - img "本地输出 18:01:11" [ref=e3956]
+                  - button "本地输出 17:47:01" [ref=e3957] [cursor=pointer]:
+                    - img "本地输出 17:47:01" [ref=e3958]
+                  - button "本地输出 17:44:44" [ref=e3959] [cursor=pointer]:
+                    - img "本地输出 17:44:44" [ref=e3960]
+                  - button "本地输出 16:29:54" [ref=e3961] [cursor=pointer]:
+                    - img "本地输出 16:29:54" [ref=e3962]
+                  - button "本地输出 16:22:54" [ref=e3963] [cursor=pointer]:
+                    - img "本地输出 16:22:54" [ref=e3964]
+                  - button "本地输出 16:16:23" [ref=e3965] [cursor=pointer]:
+                    - img "本地输出 16:16:23" [ref=e3966]
+                  - button "本地输出 14:52:53" [ref=e3967] [cursor=pointer]:
+                    - img "本地输出 14:52:53" [ref=e3968]
+                  - button "本地输出 01:50:32" [ref=e3969] [cursor=pointer]:
+                    - img "本地输出 01:50:32" [ref=e3970]
+                  - button "本地输出 01:28:30" [ref=e3971] [cursor=pointer]:
+                    - img "本地输出 01:28:30" [ref=e3972]
+                  - button "本地输出 01:24:15" [ref=e3973] [cursor=pointer]:
+                    - img "本地输出 01:24:15" [ref=e3974]
+                  - button "本地输出 01:18:58" [ref=e3975] [cursor=pointer]:
+                    - img "本地输出 01:18:58" [ref=e3976]
+                  - button "本地输出 01:15:04" [ref=e3977] [cursor=pointer]:
+                    - img "本地输出 01:15:04" [ref=e3978]
+                - generic [ref=e3979]:
+                  - button "本地输出 19:22:34" [ref=e3980] [cursor=pointer]:
+                    - img "本地输出 19:22:34" [ref=e3981]
+                  - button "本地输出 18:09:28" [ref=e3982] [cursor=pointer]:
+                    - img "本地输出 18:09:28" [ref=e3983]
+                  - button "本地输出 18:00:16" [ref=e3984] [cursor=pointer]:
+                    - img "本地输出 18:00:16" [ref=e3985]
+                  - button "本地输出 17:46:50" [ref=e3986] [cursor=pointer]:
+                    - img "本地输出 17:46:50" [ref=e3987]
+                  - button "本地输出 17:44:33" [ref=e3988] [cursor=pointer]:
+                    - img "本地输出 17:44:33" [ref=e3989]
+                  - button "本地输出 16:28:39" [ref=e3990] [cursor=pointer]:
+                    - img "本地输出 16:28:39" [ref=e3991]
+                  - button "本地输出 16:21:54" [ref=e3992] [cursor=pointer]:
+                    - img "本地输出 16:21:54" [ref=e3993]
+                  - button "本地输出 16:16:23" [ref=e3994] [cursor=pointer]:
+                    - img "本地输出 16:16:23" [ref=e3995]
+                  - button "本地输出 01:52:34" [ref=e3996] [cursor=pointer]:
+                    - img "本地输出 01:52:34" [ref=e3997]
+                  - button "本地输出 01:33:19" [ref=e3998] [cursor=pointer]:
+                    - img "本地输出 01:33:19" [ref=e3999]
+                  - button "本地输出 01:28:19" [ref=e4000] [cursor=pointer]:
+                    - img "本地输出 01:28:19" [ref=e4001]
+                  - button "本地输出 01:23:23" [ref=e4002] [cursor=pointer]:
+                    - img "本地输出 01:23:23" [ref=e4003]
+                  - button "本地输出 01:18:51" [ref=e4004] [cursor=pointer]:
+                    - img "本地输出 01:18:51" [ref=e4005]
+                  - button "本地输出 01:14:23" [ref=e4006] [cursor=pointer]:
+                    - img "本地输出 01:14:23" [ref=e4007]
+                - generic [ref=e4008]:
+                  - button "本地输出 18:38:52" [ref=e4009] [cursor=pointer]:
+                    - img "本地输出 18:38:52" [ref=e4010]
+                  - button "本地输出 18:09:04" [ref=e4011] [cursor=pointer]:
+                    - img "本地输出 18:09:04" [ref=e4012]
+                  - button "本地输出 17:49:03" [ref=e4013] [cursor=pointer]:
+                    - img "本地输出 17:49:03" [ref=e4014]
+                  - button "本地输出 17:46:32" [ref=e4015] [cursor=pointer]:
+                    - img "本地输出 17:46:32" [ref=e4016]
+                  - button "本地输出 17:41:22" [ref=e4017] [cursor=pointer]:
+                    - img "本地输出 17:41:22" [ref=e4018]
+                  - button "本地输出 16:27:25" [ref=e4019] [cursor=pointer]:
+                    - img "本地输出 16:27:25" [ref=e4020]
+                  - button "本地输出 16:20:37" [ref=e4021] [cursor=pointer]:
+                    - img "本地输出 16:20:37" [ref=e4022]
+                  - button "本地输出 14:57:21" [ref=e4023] [cursor=pointer]:
+                    - img "本地输出 14:57:21" [ref=e4024]
+                  - button "本地输出 01:52:22" [ref=e4025] [cursor=pointer]:
+                    - img "本地输出 01:52:22" [ref=e4026]
+                  - button "本地输出 01:32:06" [ref=e4027] [cursor=pointer]:
+                    - img "本地输出 01:32:06" [ref=e4028]
+                  - button "本地输出 01:27:07" [ref=e4029] [cursor=pointer]:
+                    - img "本地输出 01:27:07" [ref=e4030]
+                  - button "本地输出 01:22:47" [ref=e4031] [cursor=pointer]:
+                    - img "本地输出 01:22:47" [ref=e4032]
+                  - button "本地输出 01:17:34" [ref=e4033] [cursor=pointer]:
+                    - img "本地输出 01:17:34" [ref=e4034]
+                  - button "本地输出 01:13:15" [ref=e4035] [cursor=pointer]:
+                    - img "本地输出 01:13:15" [ref=e4036]
+            - generic [ref=e4037]:
+              - generic [ref=e4038]:
+                - generic [ref=e4039]:
+                  - strong [ref=e4040]: 2026-03-19
+                  - generic [ref=e4041]: 2026-03-19
+                - generic [ref=e4042]: 30 张
+              - generic [ref=e4043]:
+                - generic [ref=e4044]:
+                  - button "本地输出 20:03:26" [ref=e4045] [cursor=pointer]:
+                    - img "本地输出 20:03:26" [ref=e4046]
+                  - button "本地输出 19:58:32" [ref=e4047] [cursor=pointer]:
+                    - img "本地输出 19:58:32" [ref=e4048]
+                  - button "本地输出 15:36:34" [ref=e4049] [cursor=pointer]:
+                    - img "本地输出 15:36:34" [ref=e4050]
+                  - button "本地输出 15:31:29" [ref=e4051] [cursor=pointer]:
+                    - img "本地输出 15:31:29" [ref=e4052]
+                  - button "本地输出 15:26:40" [ref=e4053] [cursor=pointer]:
+                    - img "本地输出 15:26:40" [ref=e4054]
+                - generic [ref=e4055]:
+                  - button "本地输出 20:02:56" [ref=e4056] [cursor=pointer]:
+                    - img "本地输出 20:02:56" [ref=e4057]
+                  - button "本地输出 19:57:35" [ref=e4058] [cursor=pointer]:
+                    - img "本地输出 19:57:35" [ref=e4059]
+                  - button "本地输出 15:36:23" [ref=e4060] [cursor=pointer]:
+                    - img "本地输出 15:36:23" [ref=e4061]
+                  - button "本地输出 15:31:18" [ref=e4062] [cursor=pointer]:
+                    - img "本地输出 15:31:18" [ref=e4063]
+                  - button "本地输出 15:25:02" [ref=e4064] [cursor=pointer]:
+                    - img "本地输出 15:25:02" [ref=e4065]
+                - generic [ref=e4066]:
+                  - button "本地输出 20:00:07" [ref=e4067] [cursor=pointer]:
+                    - img "本地输出 20:00:07" [ref=e4068]
+                  - button "本地输出 19:54:37" [ref=e4069] [cursor=pointer]:
+                    - img "本地输出 19:54:37" [ref=e4070]
+                  - button "本地输出 15:34:55" [ref=e4071] [cursor=pointer]:
+                    - img "本地输出 15:34:55" [ref=e4072]
+                  - button "本地输出 15:29:39" [ref=e4073] [cursor=pointer]:
+                    - img "本地输出 15:29:39" [ref=e4074]
+                  - button "本地输出 13:23:00" [ref=e4075] [cursor=pointer]:
+                    - img "本地输出 13:23:00" [ref=e4076]
+                - generic [ref=e4077]:
+                  - button "本地输出 20:00:07" [ref=e4078] [cursor=pointer]:
+                    - img "本地输出 20:00:07" [ref=e4079]
+                  - button "本地输出 19:48:51" [ref=e4080] [cursor=pointer]:
+                    - img "本地输出 19:48:51" [ref=e4081]
+                  - button "本地输出 15:34:26" [ref=e4082] [cursor=pointer]:
+                    - img "本地输出 15:34:26" [ref=e4083]
+                  - button "本地输出 15:29:34" [ref=e4084] [cursor=pointer]:
+                    - img "本地输出 15:29:34" [ref=e4085]
+                  - button "本地输出 13:09:50" [ref=e4086] [cursor=pointer]:
+                    - img "本地输出 13:09:50" [ref=e4087]
+                - generic [ref=e4088]:
+                  - button "本地输出 19:59:50" [ref=e4089] [cursor=pointer]:
+                    - img "本地输出 19:59:50" [ref=e4090]
+                  - button "本地输出 18:51:54" [ref=e4091] [cursor=pointer]:
+                    - img "本地输出 18:51:54" [ref=e4092]
+                  - button "本地输出 15:33:20" [ref=e4093] [cursor=pointer]:
+                    - img "本地输出 15:33:20" [ref=e4094]
+                  - button "本地输出 15:29:06" [ref=e4095] [cursor=pointer]:
+                    - img "本地输出 15:29:06" [ref=e4096]
+                  - button "本地输出 13:05:49" [ref=e4097] [cursor=pointer]:
+                    - img "本地输出 13:05:49" [ref=e4098]
+                - generic [ref=e4099]:
+                  - button "本地输出 19:59:50" [ref=e4100] [cursor=pointer]:
+                    - img "本地输出 19:59:50" [ref=e4101]
+                  - button "本地输出 15:42:08" [ref=e4102] [cursor=pointer]:
+                    - img "本地输出 15:42:08" [ref=e4103]
+                  - button "本地输出 15:33:10" [ref=e4104] [cursor=pointer]:
+                    - img "本地输出 15:33:10" [ref=e4105]
+                  - button "本地输出 15:29:06" [ref=e4106] [cursor=pointer]:
+                    - img "本地输出 15:29:06" [ref=e4107]
+                  - button "本地输出 13:05:49" [ref=e4108] [cursor=pointer]:
+                    - img "本地输出 13:05:49" [ref=e4109]
+            - generic [ref=e4110]:
+              - generic [ref=e4111]:
+                - generic [ref=e4112]:
+                  - strong [ref=e4113]: 2026-03-18
+                  - generic [ref=e4114]: 2026-03-18
+                - generic [ref=e4115]: 6 张
+              - generic [ref=e4116]:
+                - button "本地输出 15:11:23" [ref=e4118] [cursor=pointer]:
+                  - img "本地输出 15:11:23" [ref=e4119]
+                - button "本地输出 00:27:23" [ref=e4121] [cursor=pointer]:
+                  - img "本地输出 00:27:23" [ref=e4122]
+                - button "本地输出 00:25:21" [ref=e4124] [cursor=pointer]:
+                  - img "本地输出 00:25:21" [ref=e4125]
+                - button "本地输出 00:03:33" [ref=e4127] [cursor=pointer]:
+                  - img "本地输出 00:03:33" [ref=e4128]
+                - button "本地输出 00:01:13" [ref=e4130] [cursor=pointer]:
+                  - img "本地输出 00:01:13" [ref=e4131]
+                - button "本地输出 00:00:14" [ref=e4133] [cursor=pointer]:
+                  - img "本地输出 00:00:14" [ref=e4134]
+            - generic [ref=e4135]:
+              - generic [ref=e4136]:
+                - generic [ref=e4137]:
+                  - strong [ref=e4138]: 2026-03-17
+                  - generic [ref=e4139]: 2026-03-17
+                - generic [ref=e4140]: 46 张
+              - generic [ref=e4141]:
+                - generic [ref=e4142]:
+                  - button "本地输出 23:56:40" [ref=e4143] [cursor=pointer]:
+                    - img "本地输出 23:56:40" [ref=e4144]
+                  - button "本地输出 23:49:38" [ref=e4145] [cursor=pointer]:
+                    - img "本地输出 23:49:38" [ref=e4146]
+                  - button "本地输出 21:37:09" [ref=e4147] [cursor=pointer]:
+                    - img "本地输出 21:37:09" [ref=e4148]
+                  - button "本地输出 20:30:00" [ref=e4149] [cursor=pointer]:
+                    - img "本地输出 20:30:00" [ref=e4150]
+                  - button "本地输出 20:06:37" [ref=e4151] [cursor=pointer]:
+                    - img "本地输出 20:06:37" [ref=e4152]
+                  - button "本地输出 19:52:56" [ref=e4153] [cursor=pointer]:
+                    - img "本地输出 19:52:56" [ref=e4154]
+                  - button "本地输出 16:59:38" [ref=e4155] [cursor=pointer]:
+                    - img "本地输出 16:59:38" [ref=e4156]
+                  - button "本地输出 15:30:32" [ref=e4157] [cursor=pointer]:
+                    - img "本地输出 15:30:32" [ref=e4158]
+                - generic [ref=e4159]:
+                  - button "本地输出 23:55:49" [ref=e4160] [cursor=pointer]:
+                    - img "本地输出 23:55:49" [ref=e4161]
+                  - button "本地输出 23:49:24" [ref=e4162] [cursor=pointer]:
+                    - img "本地输出 23:49:24" [ref=e4163]
+                  - button "本地输出 21:37:09" [ref=e4164] [cursor=pointer]:
+                    - img "本地输出 21:37:09" [ref=e4165]
+                  - button "本地输出 20:30:00" [ref=e4166] [cursor=pointer]:
+                    - img "本地输出 20:30:00" [ref=e4167]
+                  - button "本地输出 20:06:27" [ref=e4168] [cursor=pointer]:
+                    - img "本地输出 20:06:27" [ref=e4169]
+                  - button "本地输出 19:49:38" [ref=e4170] [cursor=pointer]:
+                    - img "本地输出 19:49:38" [ref=e4171]
+                  - button "本地输出 16:59:38" [ref=e4172] [cursor=pointer]:
+                    - img "本地输出 16:59:38" [ref=e4173]
+                  - button "本地输出 15:28:37" [ref=e4174] [cursor=pointer]:
+                    - img "本地输出 15:28:37" [ref=e4175]
+                - generic [ref=e4176]:
+                  - button "本地输出 23:54:01" [ref=e4177] [cursor=pointer]:
+                    - img "本地输出 23:54:01" [ref=e4178]
+                  - button "本地输出 23:49:18" [ref=e4179] [cursor=pointer]:
+                    - img "本地输出 23:49:18" [ref=e4180]
+                  - button "本地输出 21:37:09" [ref=e4181] [cursor=pointer]:
+                    - img "本地输出 21:37:09" [ref=e4182]
+                  - button "本地输出 20:30:00" [ref=e4183] [cursor=pointer]:
+                    - img "本地输出 20:30:00" [ref=e4184]
+                  - button "本地输出 20:06:27" [ref=e4185] [cursor=pointer]:
+                    - img "本地输出 20:06:27" [ref=e4186]
+                  - button "本地输出 17:11:12" [ref=e4187] [cursor=pointer]:
+                    - img "本地输出 17:11:12" [ref=e4188]
+                  - button "本地输出 16:59:38" [ref=e4189] [cursor=pointer]:
+                    - img "本地输出 16:59:38" [ref=e4190]
+                  - button "本地输出 00:00:39" [ref=e4191] [cursor=pointer]:
+                    - img "本地输出 00:00:39" [ref=e4192]
+                - generic [ref=e4193]:
+                  - button "本地输出 23:52:52" [ref=e4194] [cursor=pointer]:
+                    - img "本地输出 23:52:52" [ref=e4195]
+                  - button "本地输出 23:45:11" [ref=e4196] [cursor=pointer]:
+                    - img "本地输出 23:45:11" [ref=e4197]
+                  - button "本地输出 21:37:09" [ref=e4198] [cursor=pointer]:
+                    - img "本地输出 21:37:09" [ref=e4199]
+                  - button "本地输出 20:09:37" [ref=e4200] [cursor=pointer]:
+                    - img "本地输出 20:09:37" [ref=e4201]
+                  - button "本地输出 20:05:42" [ref=e4202] [cursor=pointer]:
+                    - img "本地输出 20:05:42" [ref=e4203]
+                  - button "本地输出 17:07:56" [ref=e4204] [cursor=pointer]:
+                    - img "本地输出 17:07:56" [ref=e4205]
+                  - button "本地输出 16:59:38" [ref=e4206] [cursor=pointer]:
+                    - img "本地输出 16:59:38" [ref=e4207]
+                  - button "本地输出 00:00:36" [ref=e4208] [cursor=pointer]:
+                    - img "本地输出 00:00:36" [ref=e4209]
+                - generic [ref=e4210]:
+                  - button "本地输出 23:51:52" [ref=e4211] [cursor=pointer]:
+                    - img "本地输出 23:51:52" [ref=e4212]
+                  - button "本地输出 23:45:02" [ref=e4213] [cursor=pointer]:
+                    - img "本地输出 23:45:02" [ref=e4214]
+                  - button "本地输出 20:37:26" [ref=e4215] [cursor=pointer]:
+                    - img "本地输出 20:37:26" [ref=e4216]
+                  - button "本地输出 20:09:28" [ref=e4217] [cursor=pointer]:
+                    - img "本地输出 20:09:28" [ref=e4218]
+                  - button "本地输出 20:05:42" [ref=e4219] [cursor=pointer]:
+                    - img "本地输出 20:05:42" [ref=e4220]
+                  - button "本地输出 17:04:44" [ref=e4221] [cursor=pointer]:
+                    - img "本地输出 17:04:44" [ref=e4222]
+                  - button "本地输出 15:39:23" [ref=e4223] [cursor=pointer]:
+                    - img "本地输出 15:39:23" [ref=e4224]
+                - generic [ref=e4225]:
+                  - button "本地输出 23:51:29" [ref=e4226] [cursor=pointer]:
+                    - img "本地输出 23:51:29" [ref=e4227]
+                  - button "本地输出 21:37:37" [ref=e4228] [cursor=pointer]:
+                    - img "本地输出 21:37:37" [ref=e4229]
+                  - button "本地输出 20:30:00" [ref=e4230] [cursor=pointer]:
+                    - img "本地输出 20:30:00" [ref=e4231]
+                  - button "本地输出 20:06:37" [ref=e4232] [cursor=pointer]:
+                    - img "本地输出 20:06:37" [ref=e4233]
+                  - button "本地输出 20:05:42" [ref=e4234] [cursor=pointer]:
+                    - img "本地输出 20:05:42" [ref=e4235]
+                  - button "本地输出 17:00:57" [ref=e4236] [cursor=pointer]:
+                    - img "本地输出 17:00:57" [ref=e4237]
+                  - button "本地输出 15:37:00" [ref=e4238] [cursor=pointer]:
+                    - img "本地输出 15:37:00" [ref=e4239]
+            - generic [ref=e4240]:
+              - generic [ref=e4241]:
+                - generic [ref=e4242]:
+                  - strong [ref=e4243]: 2026-03-16
+                  - generic [ref=e4244]: 2026-03-16
+                - generic [ref=e4245]: 38 张
+              - generic [ref=e4246]:
+                - generic [ref=e4247]:
+                  - button "本地输出 23:58:31" [ref=e4248] [cursor=pointer]:
+                    - img "本地输出 23:58:31" [ref=e4249]
+                  - button "本地输出 23:50:12" [ref=e4250] [cursor=pointer]:
+                    - img "本地输出 23:50:12" [ref=e4251]
+                  - button "本地输出 23:10:08" [ref=e4252] [cursor=pointer]:
+                    - img "本地输出 23:10:08" [ref=e4253]
+                  - button "本地输出 22:38:23" [ref=e4254] [cursor=pointer]:
+                    - img "本地输出 22:38:23" [ref=e4255]
+                  - button "本地输出 22:37:38" [ref=e4256] [cursor=pointer]:
+                    - img "本地输出 22:37:38" [ref=e4257]
+                  - button "本地输出 22:37:35" [ref=e4258] [cursor=pointer]:
+                    - img "本地输出 22:37:35" [ref=e4259]
+                  - button "本地输出 05:14:20" [ref=e4260] [cursor=pointer]:
+                    - img "本地输出 05:14:20" [ref=e4261]
+                - generic [ref=e4262]:
+                  - button "本地输出 23:58:31" [ref=e4263] [cursor=pointer]:
+                    - img "本地输出 23:58:31" [ref=e4264]
+                  - button "本地输出 23:50:12" [ref=e4265] [cursor=pointer]:
+                    - img "本地输出 23:50:12" [ref=e4266]
+                  - button "本地输出 22:53:36" [ref=e4267] [cursor=pointer]:
+                    - img "本地输出 22:53:36" [ref=e4268]
+                  - button "本地输出 22:38:23" [ref=e4269] [cursor=pointer]:
+                    - img "本地输出 22:38:23" [ref=e4270]
+                  - button "本地输出 22:37:37" [ref=e4271] [cursor=pointer]:
+                    - img "本地输出 22:37:37" [ref=e4272]
+                  - button "本地输出 22:37:12" [ref=e4273] [cursor=pointer]:
+                    - img "本地输出 22:37:12" [ref=e4274]
+                  - button "本地输出 03:42:56" [ref=e4275] [cursor=pointer]:
+                    - img "本地输出 03:42:56" [ref=e4276]
+                - generic [ref=e4277]:
+                  - button "本地输出 23:56:13" [ref=e4278] [cursor=pointer]:
+                    - img "本地输出 23:56:13" [ref=e4279]
+                  - button "本地输出 23:33:33" [ref=e4280] [cursor=pointer]:
+                    - img "本地输出 23:33:33" [ref=e4281]
+                  - button "本地输出 22:53:36" [ref=e4282] [cursor=pointer]:
+                    - img "本地输出 22:53:36" [ref=e4283]
+                  - button "本地输出 22:38:22" [ref=e4284] [cursor=pointer]:
+                    - img "本地输出 22:38:22" [ref=e4285]
+                  - button "本地输出 22:37:37" [ref=e4286] [cursor=pointer]:
+                    - img "本地输出 22:37:37" [ref=e4287]
+                  - button "本地输出 22:37:12" [ref=e4288] [cursor=pointer]:
+                    - img "本地输出 22:37:12" [ref=e4289]
+                - generic [ref=e4290]:
+                  - button "本地输出 23:53:36" [ref=e4291] [cursor=pointer]:
+                    - img "本地输出 23:53:36" [ref=e4292]
+                  - button "本地输出 23:20:59" [ref=e4293] [cursor=pointer]:
+                    - img "本地输出 23:20:59" [ref=e4294]
+                  - button "本地输出 22:40:42" [ref=e4295] [cursor=pointer]:
+                    - img "本地输出 22:40:42" [ref=e4296]
+                  - button "本地输出 22:38:22" [ref=e4297] [cursor=pointer]:
+                    - img "本地输出 22:38:22" [ref=e4298]
+                  - button "本地输出 22:37:36" [ref=e4299] [cursor=pointer]:
+                    - img "本地输出 22:37:36" [ref=e4300]
+                  - button "本地输出 17:19:58" [ref=e4301] [cursor=pointer]:
+                    - img "本地输出 17:19:58" [ref=e4302]
+                - generic [ref=e4303]:
+                  - button "本地输出 23:53:36" [ref=e4304] [cursor=pointer]:
+                    - img "本地输出 23:53:36" [ref=e4305]
+                  - button "本地输出 23:17:29" [ref=e4306] [cursor=pointer]:
+                    - img "本地输出 23:17:29" [ref=e4307]
+                  - button "本地输出 22:38:24" [ref=e4308] [cursor=pointer]:
+                    - img "本地输出 22:38:24" [ref=e4309]
+                  - button "本地输出 22:38:21" [ref=e4310] [cursor=pointer]:
+                    - img "本地输出 22:38:21" [ref=e4311]
+                  - button "本地输出 22:37:36" [ref=e4312] [cursor=pointer]:
+                    - img "本地输出 22:37:36" [ref=e4313]
+                  - button "本地输出 17:17:21" [ref=e4314] [cursor=pointer]:
+                    - img "本地输出 17:17:21" [ref=e4315]
+                - generic [ref=e4316]:
+                  - button "本地输出 23:51:59" [ref=e4317] [cursor=pointer]:
+                    - img "本地输出 23:51:59" [ref=e4318]
+                  - button "本地输出 23:15:15" [ref=e4319] [cursor=pointer]:
+                    - img "本地输出 23:15:15" [ref=e4320]
+                  - button "本地输出 22:38:23" [ref=e4321] [cursor=pointer]:
+                    - img "本地输出 22:38:23" [ref=e4322]
+                  - button "本地输出 22:37:38" [ref=e4323] [cursor=pointer]:
+                    - img "本地输出 22:37:38" [ref=e4324]
+                  - button "本地输出 22:37:35" [ref=e4325] [cursor=pointer]:
+                    - img "本地输出 22:37:35" [ref=e4326]
+                  - button "本地输出 17:17:21" [ref=e4327] [cursor=pointer]:
+                    - img "本地输出 17:17:21" [ref=e4328]
+            - generic [ref=e4329]:
+              - generic [ref=e4330]:
+                - generic [ref=e4331]:
+                  - strong [ref=e4332]: 2026-03-15
+                  - generic [ref=e4333]: 2026-03-15
+                - generic [ref=e4334]: 27 张
+              - generic [ref=e4335]:
+                - generic [ref=e4336]:
+                  - button "本地输出 22:25:51" [ref=e4337] [cursor=pointer]:
+                    - img "本地输出 22:25:51" [ref=e4338]
+                  - button "本地输出 13:33:10" [ref=e4339] [cursor=pointer]:
+                    - img "本地输出 13:33:10" [ref=e4340]
+                  - button "本地输出 04:41:20" [ref=e4341] [cursor=pointer]:
+                    - img "本地输出 04:41:20" [ref=e4342]
+                  - button "本地输出 02:41:32" [ref=e4343] [cursor=pointer]:
+                    - img "本地输出 02:41:32" [ref=e4344]
+                  - button "本地输出 02:35:23" [ref=e4345] [cursor=pointer]:
+                    - img "本地输出 02:35:23" [ref=e4346]
+                - generic [ref=e4347]:
+                  - button "本地输出 13:41:33" [ref=e4348] [cursor=pointer]:
+                    - img "本地输出 13:41:33" [ref=e4349]
+                  - button "本地输出 13:32:46" [ref=e4350] [cursor=pointer]:
+                    - img "本地输出 13:32:46" [ref=e4351]
+                  - button "本地输出 04:39:52" [ref=e4352] [cursor=pointer]:
+                    - img "本地输出 04:39:52" [ref=e4353]
+                  - button "本地输出 02:38:32" [ref=e4354] [cursor=pointer]:
+                    - img "本地输出 02:38:32" [ref=e4355]
+                  - button "本地输出 00:27:20" [ref=e4356] [cursor=pointer]:
+                    - img "本地输出 00:27:20" [ref=e4357]
+                - generic [ref=e4358]:
+                  - button "本地输出 13:39:25" [ref=e4359] [cursor=pointer]:
+                    - img "本地输出 13:39:25" [ref=e4360]
+                  - button "本地输出 13:31:24" [ref=e4361] [cursor=pointer]:
+                    - img "本地输出 13:31:24" [ref=e4362]
+                  - button "本地输出 02:51:25" [ref=e4363] [cursor=pointer]:
+                    - img "本地输出 02:51:25" [ref=e4364]
+                  - button "本地输出 02:37:32" [ref=e4365] [cursor=pointer]:
+                    - img "本地输出 02:37:32" [ref=e4366]
+                  - button "本地输出 00:23:37" [ref=e4367] [cursor=pointer]:
+                    - img "本地输出 00:23:37" [ref=e4368]
+                - generic [ref=e4369]:
+                  - button "本地输出 13:37:09" [ref=e4370] [cursor=pointer]:
+                    - img "本地输出 13:37:09" [ref=e4371]
+                  - button "本地输出 13:29:14" [ref=e4372] [cursor=pointer]:
+                    - img "本地输出 13:29:14" [ref=e4373]
+                  - button "本地输出 02:49:05" [ref=e4374] [cursor=pointer]:
+                    - img "本地输出 02:49:05" [ref=e4375]
+                  - button "本地输出 02:37:04" [ref=e4376] [cursor=pointer]:
+                    - img "本地输出 02:37:04" [ref=e4377]
+                - generic [ref=e4378]:
+                  - button "本地输出 13:35:02" [ref=e4379] [cursor=pointer]:
+                    - img "本地输出 13:35:02" [ref=e4380]
+                  - button "本地输出 13:29:00" [ref=e4381] [cursor=pointer]:
+                    - img "本地输出 13:29:00" [ref=e4382]
+                  - button "本地输出 02:46:36" [ref=e4383] [cursor=pointer]:
+                    - img "本地输出 02:46:36" [ref=e4384]
+                  - button "本地输出 02:36:37" [ref=e4385] [cursor=pointer]:
+                    - img "本地输出 02:36:37" [ref=e4386]
+                - generic [ref=e4387]:
+                  - button "本地输出 13:35:01" [ref=e4388] [cursor=pointer]:
+                    - img "本地输出 13:35:01" [ref=e4389]
+                  - button "本地输出 04:43:09" [ref=e4390] [cursor=pointer]:
+                    - img "本地输出 04:43:09" [ref=e4391]
+                  - button "本地输出 02:42:17" [ref=e4392] [cursor=pointer]:
+                    - img "本地输出 02:42:17" [ref=e4393]
+                  - button "本地输出 02:35:52" [ref=e4394] [cursor=pointer]:
+                    - img "本地输出 02:35:52" [ref=e4395]
+            - generic [ref=e4396]:
+              - generic [ref=e4397]:
+                - generic [ref=e4398]:
+                  - strong [ref=e4399]: 2026-03-14
+                  - generic [ref=e4400]: 2026-03-14
+                - generic [ref=e4401]: 2 张
+              - generic [ref=e4402]:
+                - button "本地输出 17:15:58" [ref=e4404] [cursor=pointer]:
+                  - img "本地输出 17:15:58" [ref=e4405]
+                - button "本地输出 17:14:44" [ref=e4407] [cursor=pointer]:
+                  - img "本地输出 17:14:44" [ref=e4408]
+            - generic [ref=e4409]:
+              - generic [ref=e4410]:
+                - generic [ref=e4411]:
+                  - strong [ref=e4412]: 2026-03-13
+                  - generic [ref=e4413]: 2026-03-13
+                - generic [ref=e4414]: 97 张
+              - generic [ref=e4415]:
+                - generic [ref=e4416]:
+                  - button "本地输出 21:33:24" [ref=e4417] [cursor=pointer]:
+                    - img "本地输出 21:33:24" [ref=e4418]
+                  - button "本地输出 21:19:49" [ref=e4419] [cursor=pointer]:
+                    - img "本地输出 21:19:49" [ref=e4420]
+                  - button "本地输出 21:12:55" [ref=e4421] [cursor=pointer]:
+                    - img "本地输出 21:12:55" [ref=e4422]
+                  - button "本地输出 20:05:51" [ref=e4423] [cursor=pointer]:
+                    - img "本地输出 20:05:51" [ref=e4424]
+                  - button "本地输出 19:54:28" [ref=e4425] [cursor=pointer]:
+                    - img "本地输出 19:54:28" [ref=e4426]
+                  - button "本地输出 19:38:41" [ref=e4427] [cursor=pointer]:
+                    - img "本地输出 19:38:41" [ref=e4428]
+                  - button "本地输出 18:51:57" [ref=e4429] [cursor=pointer]:
+                    - img "本地输出 18:51:57" [ref=e4430]
+                  - button "本地输出 16:40:56" [ref=e4431] [cursor=pointer]:
+                    - img "本地输出 16:40:56" [ref=e4432]
+                  - button "本地输出 16:08:03" [ref=e4433] [cursor=pointer]:
+                    - img "本地输出 16:08:03" [ref=e4434]
+                  - button "本地输出 15:01:46" [ref=e4435] [cursor=pointer]:
+                    - img "本地输出 15:01:46" [ref=e4436]
+                  - button "本地输出 14:43:53" [ref=e4437] [cursor=pointer]:
+                    - img "本地输出 14:43:53" [ref=e4438]
+                  - button "本地输出 14:31:49" [ref=e4439] [cursor=pointer]:
+                    - img "本地输出 14:31:49" [ref=e4440]
+                  - button "本地输出 14:19:56" [ref=e4441] [cursor=pointer]:
+                    - img "本地输出 14:19:56" [ref=e4442]
+                  - button "本地输出 14:07:16" [ref=e4443] [cursor=pointer]:
+                    - img "本地输出 14:07:16" [ref=e4444]
+                  - button "本地输出 13:58:42" [ref=e4445] [cursor=pointer]:
+                    - img "本地输出 13:58:42" [ref=e4446]
+                  - button "本地输出 13:50:05" [ref=e4447] [cursor=pointer]:
+                    - img "本地输出 13:50:05" [ref=e4448]
+                  - button "本地输出 00:01:14" [ref=e4449] [cursor=pointer]:
+                    - img "本地输出 00:01:14" [ref=e4450]
+                - generic [ref=e4451]:
+                  - button "本地输出 21:31:19" [ref=e4452] [cursor=pointer]:
+                    - img "本地输出 21:31:19" [ref=e4453]
+                  - button "本地输出 21:18:43" [ref=e4454] [cursor=pointer]:
+                    - img "本地输出 21:18:43" [ref=e4455]
+                  - button "本地输出 21:12:27" [ref=e4456] [cursor=pointer]:
+                    - img "本地输出 21:12:27" [ref=e4457]
+                  - button "本地输出 20:05:24" [ref=e4458] [cursor=pointer]:
+                    - img "本地输出 20:05:24" [ref=e4459]
+                  - button "本地输出 19:54:10" [ref=e4460] [cursor=pointer]:
+                    - img "本地输出 19:54:10" [ref=e4461]
+                  - button "本地输出 19:37:26" [ref=e4462] [cursor=pointer]:
+                    - img "本地输出 19:37:26" [ref=e4463]
+                  - button "本地输出 16:47:06" [ref=e4464] [cursor=pointer]:
+                    - img "本地输出 16:47:06" [ref=e4465]
+                  - button "本地输出 16:38:47" [ref=e4466] [cursor=pointer]:
+                    - img "本地输出 16:38:47" [ref=e4467]
+                  - button "本地输出 16:06:18" [ref=e4468] [cursor=pointer]:
+                    - img "本地输出 16:06:18" [ref=e4469]
+                  - button "本地输出 14:59:49" [ref=e4470] [cursor=pointer]:
+                    - img "本地输出 14:59:49" [ref=e4471]
+                  - button "本地输出 14:40:06" [ref=e4472] [cursor=pointer]:
+                    - img "本地输出 14:40:06" [ref=e4473]
+                  - button "本地输出 14:28:29" [ref=e4474] [cursor=pointer]:
+                    - img "本地输出 14:28:29" [ref=e4475]
+                  - button "本地输出 14:17:00" [ref=e4476] [cursor=pointer]:
+                    - img "本地输出 14:17:00" [ref=e4477]
+                  - button "本地输出 14:06:17" [ref=e4478] [cursor=pointer]:
+                    - img "本地输出 14:06:17" [ref=e4479]
+                  - button "本地输出 13:56:47" [ref=e4480] [cursor=pointer]:
+                    - img "本地输出 13:56:47" [ref=e4481]
+                  - button "本地输出 13:47:55" [ref=e4482] [cursor=pointer]:
+                    - img "本地输出 13:47:55" [ref=e4483]
+                - generic [ref=e4484]:
+                  - button "本地输出 21:28:40" [ref=e4485] [cursor=pointer]:
+                    - img "本地输出 21:28:40" [ref=e4486]
+                  - button "本地输出 21:17:58" [ref=e4487] [cursor=pointer]:
+                    - img "本地输出 21:17:58" [ref=e4488]
+                  - button "本地输出 21:11:49" [ref=e4489] [cursor=pointer]:
+                    - img "本地输出 21:11:49" [ref=e4490]
+                  - button "本地输出 20:04:42" [ref=e4491] [cursor=pointer]:
+                    - img "本地输出 20:04:42" [ref=e4492]
+                  - button "本地输出 19:53:10" [ref=e4493] [cursor=pointer]:
+                    - img "本地输出 19:53:10" [ref=e4494]
+                  - button "本地输出 19:37:26" [ref=e4495] [cursor=pointer]:
+                    - img "本地输出 19:37:26" [ref=e4496]
+                  - button "本地输出 16:46:27" [ref=e4497] [cursor=pointer]:
+                    - img "本地输出 16:46:27" [ref=e4498]
+                  - button "本地输出 16:36:35" [ref=e4499] [cursor=pointer]:
+                    - img "本地输出 16:36:35" [ref=e4500]
+                  - button "本地输出 16:03:51" [ref=e4501] [cursor=pointer]:
+                    - img "本地输出 16:03:51" [ref=e4502]
+                  - button "本地输出 14:56:33" [ref=e4503] [cursor=pointer]:
+                    - img "本地输出 14:56:33" [ref=e4504]
+                  - button "本地输出 14:39:11" [ref=e4505] [cursor=pointer]:
+                    - img "本地输出 14:39:11" [ref=e4506]
+                  - button "本地输出 14:27:50" [ref=e4507] [cursor=pointer]:
+                    - img "本地输出 14:27:50" [ref=e4508]
+                  - button "本地输出 14:15:10" [ref=e4509] [cursor=pointer]:
+                    - img "本地输出 14:15:10" [ref=e4510]
+                  - button "本地输出 14:02:40" [ref=e4511] [cursor=pointer]:
+                    - img "本地输出 14:02:40" [ref=e4512]
+                  - button "本地输出 13:56:19" [ref=e4513] [cursor=pointer]:
+                    - img "本地输出 13:56:19" [ref=e4514]
+                  - button "本地输出 02:32:05" [ref=e4515] [cursor=pointer]:
+                    - img "本地输出 02:32:05" [ref=e4516]
+                - generic [ref=e4517]:
+                  - button "本地输出 21:24:40" [ref=e4518] [cursor=pointer]:
+                    - img "本地输出 21:24:40" [ref=e4519]
+                  - button "本地输出 21:17:49" [ref=e4520] [cursor=pointer]:
+                    - img "本地输出 21:17:49" [ref=e4521]
+                  - button "本地输出 21:11:49" [ref=e4522] [cursor=pointer]:
+                    - img "本地输出 21:11:49" [ref=e4523]
+                  - button "本地输出 20:04:41" [ref=e4524] [cursor=pointer]:
+                    - img "本地输出 20:04:41" [ref=e4525]
+                  - button "本地输出 19:52:29" [ref=e4526] [cursor=pointer]:
+                    - img "本地输出 19:52:29" [ref=e4527]
+                  - button "本地输出 18:54:30" [ref=e4528] [cursor=pointer]:
+                    - img "本地输出 18:54:30" [ref=e4529]
+                  - button "本地输出 16:45:07" [ref=e4530] [cursor=pointer]:
+                    - img "本地输出 16:45:07" [ref=e4531]
+                  - button "本地输出 16:15:23" [ref=e4532] [cursor=pointer]:
+                    - img "本地输出 16:15:23" [ref=e4533]
+                  - button "本地输出 15:48:59" [ref=e4534] [cursor=pointer]:
+                    - img "本地输出 15:48:59" [ref=e4535]
+                  - button "本地输出 14:52:46" [ref=e4536] [cursor=pointer]:
+                    - img "本地输出 14:52:46" [ref=e4537]
+                  - button "本地输出 14:37:44" [ref=e4538] [cursor=pointer]:
+                    - img "本地输出 14:37:44" [ref=e4539]
+                  - button "本地输出 14:24:58" [ref=e4540] [cursor=pointer]:
+                    - img "本地输出 14:24:58" [ref=e4541]
+                  - button "本地输出 14:13:31" [ref=e4542] [cursor=pointer]:
+                    - img "本地输出 14:13:31" [ref=e4543]
+                  - button "本地输出 14:01:17" [ref=e4544] [cursor=pointer]:
+                    - img "本地输出 14:01:17" [ref=e4545]
+                  - button "本地输出 13:54:58" [ref=e4546] [cursor=pointer]:
+                    - img "本地输出 13:54:58" [ref=e4547]
+                  - button "本地输出 02:29:51" [ref=e4548] [cursor=pointer]:
+                    - img "本地输出 02:29:51" [ref=e4549]
+                - generic [ref=e4550]:
+                  - button "本地输出 21:22:14" [ref=e4551] [cursor=pointer]:
+                    - img "本地输出 21:22:14" [ref=e4552]
+                  - button "本地输出 21:17:01" [ref=e4553] [cursor=pointer]:
+                    - img "本地输出 21:17:01" [ref=e4554]
+                  - button "本地输出 21:11:14" [ref=e4555] [cursor=pointer]:
+                    - img "本地输出 21:11:14" [ref=e4556]
+                  - button "本地输出 20:04:18" [ref=e4557] [cursor=pointer]:
+                    - img "本地输出 20:04:18" [ref=e4558]
+                  - button "本地输出 19:49:46" [ref=e4559] [cursor=pointer]:
+                    - img "本地输出 19:49:46" [ref=e4560]
+                  - button "本地输出 18:52:46" [ref=e4561] [cursor=pointer]:
+                    - img "本地输出 18:52:46" [ref=e4562]
+                  - button "本地输出 16:45:07" [ref=e4563] [cursor=pointer]:
+                    - img "本地输出 16:45:07" [ref=e4564]
+                  - button "本地输出 16:13:14" [ref=e4565] [cursor=pointer]:
+                    - img "本地输出 16:13:14" [ref=e4566]
+                  - button "本地输出 15:35:56" [ref=e4567] [cursor=pointer]:
+                    - img "本地输出 15:35:56" [ref=e4568]
+                  - button "本地输出 14:49:54" [ref=e4569] [cursor=pointer]:
+                    - img "本地输出 14:49:54" [ref=e4570]
+                  - button "本地输出 14:34:40" [ref=e4571] [cursor=pointer]:
+                    - img "本地输出 14:34:40" [ref=e4572]
+                  - button "本地输出 14:24:13" [ref=e4573] [cursor=pointer]:
+                    - img "本地输出 14:24:13" [ref=e4574]
+                  - button "本地输出 14:11:52" [ref=e4575] [cursor=pointer]:
+                    - img "本地输出 14:11:52" [ref=e4576]
+                  - button "本地输出 13:59:31" [ref=e4577] [cursor=pointer]:
+                    - img "本地输出 13:59:31" [ref=e4578]
+                  - button "本地输出 13:53:06" [ref=e4579] [cursor=pointer]:
+                    - img "本地输出 13:53:06" [ref=e4580]
+                  - button "本地输出 02:27:26" [ref=e4581] [cursor=pointer]:
+                    - img "本地输出 02:27:26" [ref=e4582]
+                - generic [ref=e4583]:
+                  - button "本地输出 21:20:10" [ref=e4584] [cursor=pointer]:
+                    - img "本地输出 21:20:10" [ref=e4585]
+                  - button "本地输出 21:17:01" [ref=e4586] [cursor=pointer]:
+                    - img "本地输出 21:17:01" [ref=e4587]
+                  - button "本地输出 21:11:14" [ref=e4588] [cursor=pointer]:
+                    - img "本地输出 21:11:14" [ref=e4589]
+                  - button "本地输出 20:03:44" [ref=e4590] [cursor=pointer]:
+                    - img "本地输出 20:03:44" [ref=e4591]
+                  - button "本地输出 19:48:19" [ref=e4592] [cursor=pointer]:
+                    - img "本地输出 19:48:19" [ref=e4593]
+                  - button "本地输出 18:51:57" [ref=e4594] [cursor=pointer]:
+                    - img "本地输出 18:51:57" [ref=e4595]
+                  - button "本地输出 16:44:38" [ref=e4596] [cursor=pointer]:
+                    - img "本地输出 16:44:38" [ref=e4597]
+                  - button "本地输出 16:11:52" [ref=e4598] [cursor=pointer]:
+                    - img "本地输出 16:11:52" [ref=e4599]
+                  - button "本地输出 15:05:55" [ref=e4600] [cursor=pointer]:
+                    - img "本地输出 15:05:55" [ref=e4601]
+                  - button "本地输出 14:47:28" [ref=e4602] [cursor=pointer]:
+                    - img "本地输出 14:47:28" [ref=e4603]
+                  - button "本地输出 14:33:48" [ref=e4604] [cursor=pointer]:
+                    - img "本地输出 14:33:48" [ref=e4605]
+                  - button "本地输出 14:21:58" [ref=e4606] [cursor=pointer]:
+                    - img "本地输出 14:21:58" [ref=e4607]
+                  - button "本地输出 14:08:02" [ref=e4608] [cursor=pointer]:
+                    - img "本地输出 14:08:02" [ref=e4609]
+                  - button "本地输出 13:59:13" [ref=e4610] [cursor=pointer]:
+                    - img "本地输出 13:59:13" [ref=e4611]
+                  - button "本地输出 13:51:48" [ref=e4612] [cursor=pointer]:
+                    - img "本地输出 13:51:48" [ref=e4613]
+                  - button "本地输出 00:03:44" [ref=e4614] [cursor=pointer]:
+                    - img "本地输出 00:03:44" [ref=e4615]
+            - generic [ref=e4616]:
+              - generic [ref=e4617]:
+                - generic [ref=e4618]:
+                  - strong [ref=e4619]: 2026-03-12
+                  - generic [ref=e4620]: 2026-03-12
+                - generic [ref=e4621]: 34 张
+              - generic [ref=e4622]:
+                - generic [ref=e4623]:
+                  - button "本地输出 23:33:31" [ref=e4624] [cursor=pointer]:
+                    - img "本地输出 23:33:31" [ref=e4625]
+                  - button "本地输出 23:07:20" [ref=e4626] [cursor=pointer]:
+                    - img "本地输出 23:07:20" [ref=e4627]
+                  - button "本地输出 18:15:32" [ref=e4628] [cursor=pointer]:
+                    - img "本地输出 18:15:32" [ref=e4629]
+                  - button "本地输出 14:10:57" [ref=e4630] [cursor=pointer]:
+                    - img "本地输出 14:10:57" [ref=e4631]
+                  - button "本地输出 14:03:09" [ref=e4632] [cursor=pointer]:
+                    - img "本地输出 14:03:09" [ref=e4633]
+                  - button "本地输出 13:52:34" [ref=e4634] [cursor=pointer]:
+                    - img "本地输出 13:52:34" [ref=e4635]
+                - generic [ref=e4636]:
+                  - button "本地输出 23:26:51" [ref=e4637] [cursor=pointer]:
+                    - img "本地输出 23:26:51" [ref=e4638]
+                  - button "本地输出 22:53:14" [ref=e4639] [cursor=pointer]:
+                    - img "本地输出 22:53:14" [ref=e4640]
+                  - button "本地输出 18:13:02" [ref=e4641] [cursor=pointer]:
+                    - img "本地输出 18:13:02" [ref=e4642]
+                  - button "本地输出 14:09:15" [ref=e4643] [cursor=pointer]:
+                    - img "本地输出 14:09:15" [ref=e4644]
+                  - button "本地输出 14:01:09" [ref=e4645] [cursor=pointer]:
+                    - img "本地输出 14:01:09" [ref=e4646]
+                  - button "本地输出 13:47:45" [ref=e4647] [cursor=pointer]:
+                    - img "本地输出 13:47:45" [ref=e4648]
+                - generic [ref=e4649]:
+                  - button "本地输出 23:24:47" [ref=e4650] [cursor=pointer]:
+                    - img "本地输出 23:24:47" [ref=e4651]
+                  - button "本地输出 18:19:11" [ref=e4652] [cursor=pointer]:
+                    - img "本地输出 18:19:11" [ref=e4653]
+                  - button "本地输出 17:28:37" [ref=e4654] [cursor=pointer]:
+                    - img "本地输出 17:28:37" [ref=e4655]
+                  - button "本地输出 14:07:28" [ref=e4656] [cursor=pointer]:
+                    - img "本地输出 14:07:28" [ref=e4657]
+                  - button "本地输出 13:59:43" [ref=e4658] [cursor=pointer]:
+                    - img "本地输出 13:59:43" [ref=e4659]
+                  - button "本地输出 13:28:13" [ref=e4660] [cursor=pointer]:
+                    - img "本地输出 13:28:13" [ref=e4661]
+                - generic [ref=e4662]:
+                  - button "本地输出 23:20:48" [ref=e4663] [cursor=pointer]:
+                    - img "本地输出 23:20:48" [ref=e4664]
+                  - button "本地输出 18:17:46" [ref=e4665] [cursor=pointer]:
+                    - img "本地输出 18:17:46" [ref=e4666]
+                  - button "本地输出 17:22:51" [ref=e4667] [cursor=pointer]:
+                    - img "本地输出 17:22:51" [ref=e4668]
+                  - button "本地输出 14:07:17" [ref=e4669] [cursor=pointer]:
+                    - img "本地输出 14:07:17" [ref=e4670]
+                  - button "本地输出 13:57:36" [ref=e4671] [cursor=pointer]:
+                    - img "本地输出 13:57:36" [ref=e4672]
+                  - button "本地输出 13:28:04" [ref=e4673] [cursor=pointer]:
+                    - img "本地输出 13:28:04" [ref=e4674]
+                - generic [ref=e4675]:
+                  - button "本地输出 23:19:33" [ref=e4676] [cursor=pointer]:
+                    - img "本地输出 23:19:33" [ref=e4677]
+                  - button "本地输出 18:17:31" [ref=e4678] [cursor=pointer]:
+                    - img "本地输出 18:17:31" [ref=e4679]
+                  - button "本地输出 17:22:51" [ref=e4680] [cursor=pointer]:
+                    - img "本地输出 17:22:51" [ref=e4681]
+                  - button "本地输出 14:04:45" [ref=e4682] [cursor=pointer]:
+                    - img "本地输出 14:04:45" [ref=e4683]
+                  - button "本地输出 13:57:35" [ref=e4684] [cursor=pointer]:
+                    - img "本地输出 13:57:35" [ref=e4685]
+                - generic [ref=e4686]:
+                  - button "本地输出 23:14:37" [ref=e4687] [cursor=pointer]:
+                    - img "本地输出 23:14:37" [ref=e4688]
+                  - button "本地输出 18:16:03" [ref=e4689] [cursor=pointer]:
+                    - img "本地输出 18:16:03" [ref=e4690]
+                  - button "本地输出 14:13:30" [ref=e4691] [cursor=pointer]:
+                    - img "本地输出 14:13:30" [ref=e4692]
+                  - button "本地输出 14:04:17" [ref=e4693] [cursor=pointer]:
+                    - img "本地输出 14:04:17" [ref=e4694]
+                  - button "本地输出 13:53:16" [ref=e4695] [cursor=pointer]:
+                    - img "本地输出 13:53:16" [ref=e4696]
+          - generic [ref=e56]:
+            - button "向上滚动" [disabled] [ref=e3003]: ↑
+            - button "拖动查看瀑布画廊" [ref=e3004]
+            - button "向下滚动" [ref=e3005] [cursor=pointer]: ↓
+  - complementary:
+    - generic:
+      - generic:
+        - generic:
+          - paragraph: Config
+          - heading [level=2]: 本地连接配置
+        - button: 关闭
+      - generic:
+        - generic:
+          - generic: 中转 URL
+          - textbox:
+            - /placeholder: https://api.asxs.top/v1
+            - text: https://api.asxs.top/v1
+        - generic:
+          - generic:
+            - generic: API Key
+            - generic: 已保存 sk-2***1b1f
+          - textbox:
+            - /placeholder: 留空则保持当前已保存的 key
+        - generic:
+          - generic: Responses 模型
+          - textbox:
+            - /placeholder: gpt-5.4
+            - text: gpt-5.5
+        - button: 保存配置
+        - paragraph: API Key 仅保存在本机 .local/config.json，不会回填到页面。

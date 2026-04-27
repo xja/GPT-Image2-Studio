@@ -1,0 +1,171 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - heading "Image Studio" [level=1] [ref=e9]
+          - generic [ref=e10]: AI
+        - paragraph [ref=e11]: AI 图像生成工作流
+      - tablist "视图切换" [ref=e12]:
+        - button "Studio" [ref=e13] [cursor=pointer]
+        - button "瀑布画廊" [ref=e14] [cursor=pointer]
+      - generic [ref=e15]:
+        - generic [ref=e18]: 本地已就绪
+        - generic [ref=e19]: 配置已保存
+        - button "打开输出目录" [ref=e20] [cursor=pointer]
+        - button "配置" [ref=e21] [cursor=pointer]
+    - main [ref=e22]:
+      - generic [ref=e24]:
+        - generic [ref=e25]:
+          - generic [ref=e27]:
+            - heading "生成设置" [level=2] [ref=e28]
+            - paragraph [ref=e29]: Settings
+          - generic [ref=e30]:
+            - generic [ref=e31]:
+              - generic [ref=e32]:
+                - generic [ref=e33]:
+                  - generic [ref=e34]: 提示词
+                  - text: Prompt
+                - button "✦" [ref=e35] [cursor=pointer]
+              - generic [ref=e36]:
+                - textbox "0 / 1000" [ref=e37]:
+                  - /placeholder: 写下你要生成的画面，也可以先上传参考图说明修改方向。
+                - generic [ref=e38]: 0 / 1000
+            - generic [ref=e39]:
+              - generic [ref=e41]:
+                - generic [ref=e42]: 比例
+                - text: Ratio
+              - generic [ref=e43]:
+                - button "4:5 标准" [ref=e44] [cursor=pointer]:
+                  - strong [ref=e45]: 4:5
+                  - generic [ref=e46]: 标准
+                - button "1:1 方形" [ref=e47] [cursor=pointer]:
+                  - strong [ref=e48]: 1:1
+                  - generic [ref=e49]: 方形
+                - button "3:4 竖版" [ref=e50] [cursor=pointer]:
+                  - strong [ref=e51]: 3:4
+                  - generic [ref=e52]: 竖版
+                - button "16:9 宽屏" [ref=e53] [cursor=pointer]:
+                  - strong [ref=e54]: 16:9
+                  - generic [ref=e55]: 宽屏
+                - button "9:16 故事" [ref=e56] [cursor=pointer]:
+                  - strong [ref=e57]: 9:16
+                  - generic [ref=e58]: 故事
+            - generic [ref=e59]:
+              - generic [ref=e60]:
+                - generic [ref=e61]:
+                  - generic [ref=e62]: 参考图
+                  - text: Reference（可选，最多 6 张）
+                - generic [ref=e63]: 0 / 6
+              - generic [ref=e64]:
+                - button "拖入图片或点击上传 支持 JPG / PNG，建议尺寸至少 1024px 上传参考图" [ref=e65] [cursor=pointer]
+                - strong [ref=e67]: 拖入图片或点击上传
+                - generic [ref=e68]: 支持 JPG / PNG，建议尺寸至少 1024px
+                - emphasis [ref=e69]: 上传参考图
+            - group [ref=e70]:
+              - generic "高级选项 Advanced（可选）" [ref=e71] [cursor=pointer]:
+                - text: 高级选项
+                - generic [ref=e72]: Advanced（可选）
+              - option "低"
+              - option "中"
+              - option "高"
+              - option "超高" [selected]
+              - option "自动适配" [selected]
+              - option "1024 × 1280"
+              - option "1280 × 1600"
+              - option "1600 × 2000"
+              - option "1536 × 1920"
+              - option "2048 × 2560"
+            - button "开始生成" [ref=e73] [cursor=pointer]
+            - paragraph [ref=e74]: 支持最多 5 个并发任务，结果会自动写入本地 output/。
+          - generic [ref=e75]:
+            - strong [ref=e76]: 提示：
+            - paragraph [ref=e77]: 使用清晰、具体的描述词，更容易获得理想效果。尝试加入风格、光线、构图和主体关系。
+        - generic [ref=e78]:
+          - generic [ref=e80]:
+            - heading "生成结果" [level=2] [ref=e81]
+            - paragraph [ref=e82]: Output Preview
+          - generic [ref=e83]:
+            - generic [ref=e84]:
+              - generic [ref=e85]: GPT Image 2.0
+              - generic [ref=e86]: 等待生成
+              - generic [ref=e87]: "ID: --"
+              - generic [ref=e88]: "--"
+            - generic [ref=e89]:
+              - generic [ref=e90]:
+                - paragraph [ref=e91]: Output Preview
+                - heading "生成结果会在这里实时更新。" [level=3] [ref=e92]
+                - generic [ref=e93]: 右侧保留实时动态和最近输出，底部胶片条可快速切换查看。
+              - img "当前预览" [ref=e94]
+            - generic [ref=e95]:
+              - generic [ref=e96]:
+                - button "-" [ref=e97] [cursor=pointer]
+                - generic [ref=e98]: 100%
+                - button "+" [ref=e99] [cursor=pointer]
+                - button "适配" [ref=e100] [cursor=pointer]
+              - generic [ref=e101]:
+                - generic: 下载
+                - button "查看" [disabled]
+                - button "删除" [disabled]
+        - complementary [ref=e104]:
+          - generic [ref=e105]:
+            - generic [ref=e106]:
+              - generic [ref=e107]:
+                - heading "实时动态" [level=2] [ref=e108]
+                - paragraph [ref=e109]: Live Feed
+              - generic [ref=e110]: 0 / 5
+            - list [ref=e111]:
+              - listitem [ref=e112]:
+                - generic [ref=e114]:
+                  - strong [ref=e115]: 生成完成
+                  - generic [ref=e116]: 等待任务完成
+                - time [ref=e117]: "--:--:--"
+              - listitem [ref=e118]:
+                - generic [ref=e120]:
+                  - strong [ref=e121]: 模型处理中
+                  - generic [ref=e122]: GPT Image 2.0
+                - time [ref=e123]: "--:--:--"
+              - listitem [ref=e124]:
+                - generic [ref=e126]:
+                  - strong [ref=e127]: 图像生成中
+                  - generic [ref=e128]: 等待渲染启动
+                - time [ref=e129]: "--:--:--"
+              - listitem [ref=e130]:
+                - generic [ref=e132]:
+                  - strong [ref=e133]: 排队中
+                  - generic [ref=e134]: 等待资源分配
+                - time [ref=e135]: "--:--:--"
+          - generic [ref=e136]:
+            - generic [ref=e137]:
+              - generic [ref=e138]:
+                - heading "最近输出" [level=2] [ref=e139]
+                - paragraph [ref=e140]: Recent Outputs
+              - button "查看全部" [ref=e141] [cursor=pointer]
+            - generic [ref=e142]: 还没有本地输出，先生成一张图。
+            - button "清空历史记录" [ref=e143] [cursor=pointer]
+  - complementary:
+    - generic:
+      - generic:
+        - generic:
+          - paragraph: Config
+          - heading [level=2]: 本地连接配置
+        - button: 关闭
+      - generic:
+        - generic:
+          - generic: 中转 URL
+          - textbox:
+            - /placeholder: https://api.asxs.top/v1
+            - text: https://api.asxs.top/v1
+        - generic:
+          - generic:
+            - generic: API Key
+            - generic: 已保存 sk-2***1b1f
+          - textbox:
+            - /placeholder: 留空则保持当前已保存的 key
+        - generic:
+          - generic: Responses 模型
+          - textbox:
+            - /placeholder: gpt-5.4
+            - text: gpt-5.5
+        - button: 保存配置
+        - paragraph: API Key 仅保存在本机 .local/config.json，不会回填到页面。

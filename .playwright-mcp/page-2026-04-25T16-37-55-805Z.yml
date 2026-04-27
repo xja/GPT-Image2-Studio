@@ -1,0 +1,82 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - heading "Image Studio" [level=1] [ref=e9]
+          - generic [ref=e10]: AI
+        - paragraph [ref=e11]: AI 图像生成工作流
+      - tablist "视图切换" [ref=e12]:
+        - button "Studio" [ref=e13] [cursor=pointer]
+        - button "瀑布画廊" [ref=e14] [cursor=pointer]
+      - generic [ref=e15]:
+        - generic [ref=e18]: 本地已就绪
+        - generic [ref=e19]: 配置已保存
+        - button "打开输出目录" [ref=e20] [cursor=pointer]
+        - button "配置" [ref=e21] [cursor=pointer]
+    - main [ref=e22]:
+      - generic [ref=e24]:
+        - generic [ref=e25]:
+          - generic [ref=e26]:
+            - heading "瀑布画廊" [level=2] [ref=e27]
+            - paragraph [ref=e28]: Waterfall Gallery
+          - generic [ref=e29]:
+            - generic [ref=e30]: 0 张
+            - button "刷新画廊" [ref=e31] [cursor=pointer]
+        - generic [ref=e32]:
+          - generic [ref=e33]:
+            - generic [ref=e34]:
+              - generic [ref=e35]: 关键词
+              - searchbox "关键词" [ref=e36]
+            - generic [ref=e37]:
+              - generic [ref=e38]: 日期
+              - textbox "日期" [ref=e39]
+            - generic [ref=e40]:
+              - generic [ref=e41]: 尺寸
+              - combobox "尺寸" [ref=e42]:
+                - option "全部尺寸 · 0" [selected]
+            - generic [ref=e43]:
+              - generic [ref=e44]: 参考图
+              - combobox "参考图" [ref=e45]:
+                - option "全部来源 · 0" [selected]
+                - option "带参考图 · 0"
+                - option "无参考图 · 0"
+            - button "清空筛选" [disabled] [ref=e46]
+          - generic [ref=e47]:
+            - button "全部 · 0" [ref=e48] [cursor=pointer]
+            - button "今天 · 0" [ref=e49] [cursor=pointer]
+            - button "近 7 天 · 0" [ref=e50] [cursor=pointer]
+            - button "更早 · 0" [ref=e51] [cursor=pointer]
+          - paragraph [ref=e52]: 按日期分组显示，可按关键词、日期、尺寸和参考图快速筛选。
+        - generic [ref=e53]:
+          - generic [ref=e55]: 还没有本地输出，先回到 Studio 生成一张图。
+          - generic [ref=e56]:
+            - button [disabled] [ref=e57]: ↑
+            - button [ref=e59]
+            - button [disabled] [ref=e60]: ↓
+  - complementary:
+    - generic:
+      - generic:
+        - generic:
+          - paragraph: Config
+          - heading [level=2]: 本地连接配置
+        - button: 关闭
+      - generic:
+        - generic:
+          - generic: 中转 URL
+          - textbox:
+            - /placeholder: https://api.asxs.top/v1
+            - text: https://api.asxs.top/v1
+        - generic:
+          - generic:
+            - generic: API Key
+            - generic: 已保存 sk-d***b505
+          - textbox:
+            - /placeholder: 留空则保持当前已保存的 key
+        - generic:
+          - generic: Responses 模型
+          - textbox:
+            - /placeholder: gpt-5.4
+            - text: gpt-5.5
+        - button: 保存配置
+        - paragraph: API Key 仅保存在本机 .local/config.json，不会回填到页面。

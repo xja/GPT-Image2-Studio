@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { access, mkdtemp, mkdir, readdir } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -122,4 +122,43 @@ test("gallery store deletes the image file and removes the indexed metadata entr
   assert.equal(deleted.filename, "deletable.jpeg");
   await assert.rejects(access(join(outputDir, "2026-04-22", "deletable.jpeg")));
   assert.equal(items.length, 0);
+});
+
+test("gallery store can recover dated output images when the gallery index is missing", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
+  const outputDir = join(rootDir, "output");
+  const indexPath = join(rootDir, ".local", "gallery-index.json");
+
+  await mkdir(join(outputDir, "2026-04-27"), { recursive: true });
+  await writeFile(join(outputDir, "2026-04-27", "recovered.png"), Buffer.from("recovered-image"));
+
+  const items = await listGalleryItems({
+    outputDir,
+    indexPath,
+    publicBasePath: "/output",
+  });
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].filename, "recovered.png");
+  assert.equal(items[0].relativePath, "2026-04-27/recovered.png");
+  assert.match(items[0].imageUrl, /^\/output\/2026-04-27\/recovered\.png\?/);
+});
+
+test("gallery store deletes recovered images even when the gallery index is missing", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
+  const outputDir = join(rootDir, "output");
+  const indexPath = join(rootDir, ".local", "gallery-index.json");
+  const targetPath = join(outputDir, "2026-04-27", "orphan.png");
+
+  await mkdir(join(outputDir, "2026-04-27"), { recursive: true });
+  await writeFile(targetPath, Buffer.from("orphan-image"));
+
+  const deleted = await deleteGeneratedAsset({
+    outputDir,
+    indexPath,
+    filename: "orphan.png",
+  });
+
+  assert.equal(deleted.filename, "orphan.png");
+  await assert.rejects(access(targetPath));
 });
