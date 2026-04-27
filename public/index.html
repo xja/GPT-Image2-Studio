@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=20260427-gallery-toolbar-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -48,13 +48,6 @@
         <section class="view-panel studio-view" data-view-panel="studio">
           <div class="studio-grid">
             <section class="studio-panel settings-panel">
-              <div class="panel-title">
-                <div>
-                  <h2>生成设置</h2>
-                  <p>Settings</p>
-                </div>
-              </div>
-
               <form id="generateForm" class="settings-form">
                 <div class="field-group">
                   <div class="field-heading with-action">
@@ -108,7 +101,7 @@
                   <div class="reference-grid hidden" id="referenceGrid"></div>
                 </div>
 
-                <details class="advanced-box">
+                <details class="advanced-box" open>
                   <summary>高级选项 <span>Advanced（可选）</span></summary>
                   <div class="advanced-content">
                     <div class="advanced-controls">
@@ -122,10 +115,8 @@
                         <select id="sizeInput" name="size"></select>
                       </label>
                     </div>
-                    <p>外层模型：<strong id="advancedResponsesModel">gpt-5.4</strong></p>
                     <p>工具模型：<strong>gpt-image-2</strong></p>
-                    <p>输出：<strong>JPEG / High</strong></p>
-                    <p>中转地址：<strong id="advancedBaseUrl">https://api.asxs.top/v1</strong></p>
+                    <p>输出：<strong>PNG / High</strong></p>
                   </div>
                 </details>
 
@@ -140,13 +131,6 @@
             </section>
 
             <section class="studio-panel preview-panel">
-              <div class="panel-title">
-                <div>
-                  <h2>生成结果</h2>
-                  <p>Output Preview</p>
-                </div>
-              </div>
-
               <div class="preview-stage">
                 <div class="preview-meta">
                   <span class="model-badge" id="previewModel">GPT Image 2.0</span>
@@ -217,53 +201,100 @@
           </div>
         </section>
 
-        <section class="view-panel gallery-view hidden" data-view-panel="gallery">
+        <section class="view-panel gallery-view hidden" data-view-panel="gallery" data-gallery-layout="desktop">
           <section class="studio-panel gallery-panel">
-            <div class="panel-title between">
-              <div>
-                <h2>瀑布画廊</h2>
-                <p>Waterfall Gallery</p>
-              </div>
-              <div class="gallery-top-actions">
-                <span class="count-pill" id="galleryCount">0 张</span>
-                <div class="gallery-column-switch" role="group" aria-label="窗口视图列数">
-                  <span class="gallery-column-label">列</span>
-                  <button
-                    class="gallery-column-button"
-                    type="button"
-                    data-gallery-column-preset="6"
-                    aria-label="显示 6 列"
-                    aria-pressed="false"
-                  >
-                    6
-                  </button>
-                  <button
-                    class="gallery-column-button"
-                    type="button"
-                    data-gallery-column-preset="9"
-                    aria-label="显示 9 列"
-                    aria-pressed="false"
-                  >
-                    9
-                  </button>
-                  <button
-                    class="gallery-column-button active"
-                    type="button"
-                    data-gallery-column-preset="12"
-                    aria-label="显示 12 列"
-                    aria-pressed="true"
-                  >
-                    12
-                  </button>
+            <div class="gallery-toolbar">
+              <div class="gallery-toolbar-head">
+                <div class="gallery-top-actions">
+                  <span class="count-pill" id="galleryCount">0 张</span>
+                  <div class="gallery-column-switch" role="group" aria-label="画廊列数">
+                    <span class="gallery-column-label">列</span>
+                    <button
+                      class="gallery-column-button"
+                      type="button"
+                      data-gallery-column-preset="6"
+                      aria-label="显示 6 列"
+                      aria-pressed="false"
+                    >
+                      6
+                    </button>
+                    <button
+                      class="gallery-column-button"
+                      type="button"
+                      data-gallery-column-preset="9"
+                      aria-label="显示 9 列"
+                      aria-pressed="false"
+                    >
+                      9
+                    </button>
+                    <button
+                      class="gallery-column-button active"
+                      type="button"
+                      data-gallery-column-preset="12"
+                      aria-label="显示 12 列"
+                      aria-pressed="true"
+                    >
+                      12
+                    </button>
+                    <button
+                      class="gallery-column-button"
+                      type="button"
+                      data-gallery-column-preset="15"
+                      aria-label="显示 15 列"
+                      aria-pressed="false"
+                    >
+                      15
+                    </button>
+                    <button
+                      class="gallery-column-button"
+                      type="button"
+                      data-gallery-column-preset="18"
+                      aria-label="显示 18 列"
+                      aria-pressed="false"
+                    >
+                      18
+                    </button>
+                  </div>
+                  <button class="header-button" id="refreshGalleryButton" type="button">刷新画廊</button>
                 </div>
-                <button class="header-button" id="refreshGalleryButton" type="button">刷新画廊</button>
+                <div class="gallery-toolbar-meta">
+                  <div class="gallery-filters" id="galleryFilters"></div>
+                  <p class="gallery-helper-text" id="galleryHelperText">按日期分组显示，可按关键词、日期、尺寸和参考图快速筛选。</p>
+                </div>
+                <button class="gallery-reset-button" id="galleryResetFiltersButton" type="button">清空筛选</button>
               </div>
+
+              <div class="gallery-filter-row">
+                <label class="gallery-search-field">
+                  <span>关键词</span>
+                  <input
+                    class="gallery-search-input"
+                    id="gallerySearchInput"
+                    type="search"
+                    placeholder="搜索提示词、文件名、参考图名"
+                    autocomplete="off"
+                  />
+                </label>
+                <label class="gallery-inline-field">
+                  <span>日期</span>
+                  <input class="gallery-date-input" id="galleryDateInput" type="date" />
+                </label>
+                <label class="gallery-inline-field">
+                  <span>尺寸</span>
+                  <select class="gallery-filter-select" id="gallerySizeFilterInput"></select>
+                </label>
+                <label class="gallery-inline-field">
+                  <span>参考图</span>
+                  <select class="gallery-filter-select" id="galleryReferenceFilterInput"></select>
+                </label>
+              </div>
+
             </div>
 
             <div class="gallery-scroll-shell">
               <div class="gallery-scroll-region" id="galleryScrollRegion">
                 <div class="gallery-empty" id="galleryEmpty">还没有本地输出，先回到 Studio 生成一张图。</div>
-                <div class="gallery-masonry" id="galleryMasonry"></div>
+                <div class="gallery-sections" id="gallerySections"></div>
               </div>
 
               <div class="gallery-scrollbar" id="galleryScrollbar" data-disabled="true" aria-hidden="true">
@@ -309,15 +340,18 @@
         </div>
 
         <div class="lightbox-fields">
-          <label class="detail-field">
-            <span>提示词</span>
-            <textarea id="lightboxPrompt" rows="4" readonly></textarea>
-          </label>
+          <div class="detail-field">
+            <div class="detail-field-head">
+              <span id="lightboxPromptLabel">提示词</span>
+              <button class="inline-button detail-copy-button" id="copyPromptButton" type="button">复制</button>
+            </div>
+            <textarea id="lightboxPrompt" rows="4" readonly aria-labelledby="lightboxPromptLabel"></textarea>
+          </div>
 
-          <label class="detail-field">
-            <span>参数</span>
-            <textarea id="lightboxParams" rows="6" readonly></textarea>
-          </label>
+          <div class="detail-field">
+            <span id="lightboxParamsLabel">参数</span>
+            <textarea id="lightboxParams" rows="6" readonly aria-labelledby="lightboxParamsLabel"></textarea>
+          </div>
         </div>
       </div>
     </aside>
@@ -358,6 +392,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js"></script>
+    <script type="module" src="/app.js?v=20260427-gallery-toolbar-1"></script>
   </body>
 </html>

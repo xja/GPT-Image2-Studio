@@ -19,7 +19,7 @@ test("config store returns empty public config before any save", async () => {
   assert.deepEqual(config.defaults, {
     size: "1024x1536",
     quality: "high",
-    format: "jpeg",
+    format: "png",
     reasoningEffort: "xhigh",
   });
   assert.deepEqual(config.limits, {
@@ -35,7 +35,7 @@ test("config store persists private config and only exposes masked api key publi
 
   await store.saveConfig({
     baseUrl: "https://example.com/v1",
-    apiKey: "sk-test-1234567890",
+    apiKey: "placeholder-test-key-1234567890",
     responsesModel: "gpt-5.4",
     defaults: {
       size: "1536x1024",
@@ -53,7 +53,7 @@ test("config store persists private config and only exposes masked api key publi
 
   assert.equal(publicConfig.baseUrl, "https://example.com/v1");
   assert.equal(publicConfig.apiKeyConfigured, true);
-  assert.match(publicConfig.apiKeyMask, /^sk-t.*7890$/);
+  assert.match(publicConfig.apiKeyMask, /^plac.*7890$/);
   assert.equal(publicConfig.responsesModel, "gpt-5.4");
   assert.deepEqual(publicConfig.defaults, {
     size: "1536x1024",
@@ -62,6 +62,6 @@ test("config store persists private config and only exposes masked api key publi
     reasoningEffort: "medium",
   });
 
-  assert.equal(privateConfig.apiKey, "sk-test-1234567890");
-  assert.equal(raw.apiKey, "sk-test-1234567890");
+  assert.equal(privateConfig.apiKey, "placeholder-test-key-1234567890");
+  assert.equal(raw.apiKey, "placeholder-test-key-1234567890");
 });

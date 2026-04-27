@@ -1,19 +1,45 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { access, mkdtemp, mkdir, readdir, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  createTimestampedFilename,
   deleteGeneratedAsset,
   listGalleryItems,
+  repairGeneratedAssetMetadata,
+  renameGalleryAssets,
   saveGeneratedAsset,
 } from "../lib/gallery-store.mjs";
 
-test("gallery store keeps output directory image-only while preserving indexed metadata", async () => {
+test("gallery store creates readable filenames from date prompt time and id tail", () => {
+  const filename = createTimestampedFilename({
+    format: "jpeg",
+    prompt: "生成一张护肤礼盒直播带货主视觉，商业摄影风格",
+    createdAt: "2026-04-26T15:42:33",
+    idSource: "task-demo-a1b2c3d4",
+  });
+
+  assert.equal(filename, "260426-护肤礼盒-154233-c3d4.jpeg");
+});
+
+test("gallery store falls back to a compact generic keyword when prompt is not filename-friendly", () => {
+  const filename = createTimestampedFilename({
+    format: "png",
+    prompt: "   !!!   ",
+    createdAt: "2026-04-26T09:08:07",
+    idSource: "job-xyz9",
+  });
+
+  assert.equal(filename, "260426-未命名-090807-xyz9.png");
+});
+
+test("gallery store writes images into dated folders and persists searchable metadata", async () => {
   const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
   const outputDir = join(rootDir, "output");
   const indexPath = join(rootDir, ".local", "gallery-index.json");
+  const metadataDir = join(outputDir, "json", "2026-04-22");
   await mkdir(outputDir, { recursive: true });
 
   await saveGeneratedAsset({
@@ -60,18 +86,38 @@ test("gallery store keeps output directory image-only while preserving indexed m
     },
   });
 
+  await utimes(
+    join(outputDir, "2026-04-22", "older.jpeg"),
+    new Date("2026-04-22T10:00:00.000Z"),
+    new Date("2026-04-22T10:00:00.000Z"),
+  );
+  await utimes(
+    join(outputDir, "2026-04-22", "newer.png"),
+    new Date("2026-04-22T12:00:00.000Z"),
+    new Date("2026-04-22T12:00:00.000Z"),
+  );
+
   const items = await listGalleryItems({
     outputDir,
     indexPath,
     publicBasePath: "/output",
   });
+  const indexPayload = JSON.parse(await readFile(indexPath, "utf8"));
   const outputEntries = await readdir(outputDir, { withFileTypes: true });
   const datedEntries = await readdir(join(outputDir, "2026-04-22"));
+  const metadataEntries = await readdir(metadataDir);
+  const newerMetadata = JSON.parse(await readFile(join(metadataDir, "newer.json"), "utf8"));
 
   assert.equal(saved.filename, "newer.png");
-  assert.deepEqual(outputEntries.map((entry) => entry.name).sort(), ["2026-04-22"]);
+  await access(indexPath);
+  assert.deepEqual(outputEntries.map((entry) => entry.name).sort(), ["2026-04-22", "json"]);
   assert.equal(outputEntries[0].isDirectory(), true);
   assert.deepEqual(datedEntries.sort(), ["newer.png", "older.jpeg"]);
+  assert.deepEqual(metadataEntries.sort(), ["newer.json", "older.json"]);
+  assert.deepEqual(Object.keys(indexPayload).sort(), ["newer.png", "older.jpeg"]);
+  assert.equal(newerMetadata.prompt, "newer prompt");
+  assert.equal(newerMetadata.size, "1536x1024");
+  assert.equal(newerMetadata.referenceImageName, "reference-a.png");
   assert.equal(items.length, 2);
   assert.equal(items[0].filename, "newer.png");
   assert.equal(items[0].prompt, "newer prompt");
@@ -88,6 +134,7 @@ test("gallery store keeps output directory image-only while preserving indexed m
   assert.equal(items[0].ratioLabel, "宽屏 16:9");
   assert.equal(items[0].referenceImageName, "reference-a.png");
   assert.equal(items[0].reasoningEffort, "medium");
+  assert.equal(items[0].size, "1536x1024");
   assert.equal(items[1].filename, "older.jpeg");
 });
 
@@ -95,6 +142,7 @@ test("gallery store deletes the image file and removes the indexed metadata entr
   const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
   const outputDir = join(rootDir, "output");
   const indexPath = join(rootDir, ".local", "gallery-index.json");
+  const metadataPath = join(outputDir, "json", "2026-04-22", "deletable.json");
 
   await saveGeneratedAsset({
     outputDir,
@@ -121,10 +169,55 @@ test("gallery store deletes the image file and removes the indexed metadata entr
 
   assert.equal(deleted.filename, "deletable.jpeg");
   await assert.rejects(access(join(outputDir, "2026-04-22", "deletable.jpeg")));
+  await assert.rejects(access(metadataPath));
+  await assert.rejects(access(indexPath));
   assert.equal(items.length, 0);
 });
 
-test("gallery store can recover dated output images when the gallery index is missing", async () => {
+test("gallery store restores metadata from json sidecars when the index file is missing", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
+  const outputDir = join(rootDir, "output");
+  const indexPath = join(rootDir, ".local", "gallery-index.json");
+
+  await saveGeneratedAsset({
+    outputDir,
+    indexPath,
+    filename: "rehydrated.jpeg",
+    imageBuffer: Buffer.from("image"),
+    metadata: {
+      prompt: "persist me",
+      createdAt: "2026-04-24T09:30:00.000Z",
+      baseUrl: "https://api.asxs.top/v1",
+      responsesModel: "gpt-5.4",
+      imageModel: "gpt-image-2",
+      size: "1024x1536",
+      quality: "high",
+      format: "jpeg",
+      referenceImageNames: ["reference-a.png"],
+      referenceImageName: "reference-a.png",
+      ratio: "4:5",
+      ratioLabel: "标准 4:5",
+      reasoningEffort: "medium",
+    },
+  });
+
+  await rm(indexPath, { force: true });
+
+  const items = await listGalleryItems({
+    outputDir,
+    indexPath,
+    publicBasePath: "/output",
+  });
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].filename, "rehydrated.jpeg");
+  assert.equal(items[0].prompt, "persist me");
+  assert.equal(items[0].size, "1024x1536");
+  assert.equal(items[0].referenceImageName, "reference-a.png");
+  assert.equal(items[0].responsesModel, "gpt-5.4");
+});
+
+test("gallery store lists dated output images even when both index and sidecar metadata are missing", async () => {
   const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
   const outputDir = join(rootDir, "output");
   const indexPath = join(rootDir, ".local", "gallery-index.json");
@@ -144,7 +237,7 @@ test("gallery store can recover dated output images when the gallery index is mi
   assert.match(items[0].imageUrl, /^\/output\/2026-04-27\/recovered\.png\?/);
 });
 
-test("gallery store deletes recovered images even when the gallery index is missing", async () => {
+test("gallery store deletes orphaned dated output images without relying on index metadata", async () => {
   const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
   const outputDir = join(rootDir, "output");
   const indexPath = join(rootDir, ".local", "gallery-index.json");
@@ -161,4 +254,164 @@ test("gallery store deletes recovered images even when the gallery index is miss
 
   assert.equal(deleted.filename, "orphan.png");
   await assert.rejects(access(targetPath));
+});
+
+test("gallery store batch renames historical images and sidecars together", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
+  const outputDir = join(rootDir, "output");
+  const indexPath = join(rootDir, ".local", "gallery-index.json");
+
+  await saveGeneratedAsset({
+    outputDir,
+    indexPath,
+    filename: "asset_12345678-90ab-cdef-1234-567890abcdef.png",
+    imageBuffer: Buffer.from("image"),
+    metadata: {
+      prompt: "生成一张护肤礼盒直播带货主视觉",
+      createdAt: "2026-04-26T15:42:33",
+      format: "png",
+      size: "1024x1536",
+    },
+  });
+
+  const result = await renameGalleryAssets({
+    outputDir,
+    indexPath,
+  });
+
+  const items = await listGalleryItems({
+    outputDir,
+    indexPath,
+    publicBasePath: "/output",
+  });
+  const renamedFilename = "260426-护肤礼盒-154233-cdef.png";
+  const dateDir = join(outputDir, "2026-04-26");
+  const jsonDir = join(outputDir, "json", "2026-04-26");
+  const indexPayload = JSON.parse(await readFile(indexPath, "utf8"));
+
+  assert.equal(result.renamedCount, 1);
+  await access(join(dateDir, renamedFilename));
+  await access(join(jsonDir, "260426-护肤礼盒-154233-cdef.json"));
+  await assert.rejects(access(join(dateDir, "asset_12345678-90ab-cdef-1234-567890abcdef.png")));
+  assert.deepEqual(Object.keys(indexPayload), [renamedFilename]);
+  assert.equal(items[0].filename, renamedFilename);
+});
+
+test("gallery store backfills size metadata from image headers when index metadata is missing", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
+  const outputDir = join(rootDir, "output");
+  const indexPath = join(rootDir, ".local", "gallery-index.json");
+  const tinyPng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==",
+    "base64",
+  );
+
+  await saveGeneratedAsset({
+    outputDir,
+    indexPath,
+    filename: "size-from-header.png",
+    imageBuffer: tinyPng,
+    metadata: {
+      createdAt: "2026-04-23T10:30:00.000Z",
+      format: "png",
+    },
+  });
+
+  const items = await listGalleryItems({
+    outputDir,
+    indexPath,
+    publicBasePath: "/output",
+  });
+  const indexPayload = JSON.parse(await readFile(indexPath, "utf8"));
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].size, "1x1");
+  assert.equal(indexPayload["size-from-header.png"].size, "1x1");
+});
+
+test("gallery store persists sparse sidecar metadata without freezing empty placeholder fields", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
+  const outputDir = join(rootDir, "output");
+  const indexPath = join(rootDir, ".local", "gallery-index.json");
+
+  const saved = await saveGeneratedAsset({
+    outputDir,
+    indexPath,
+    filename: "sparse-sidecar.jpeg",
+    imageBuffer: Buffer.from("image"),
+    metadata: {
+      createdAt: "2026-04-26T08:20:00.000Z",
+      format: "jpeg",
+      size: "1024x1536",
+    },
+  });
+
+  const metadataPath = join(outputDir, "json", "2026-04-26", "sparse-sidecar.json");
+  const sidecarPayload = JSON.parse(await readFile(metadataPath, "utf8"));
+  const indexPayload = JSON.parse(await readFile(indexPath, "utf8"));
+
+  assert.equal(saved.filename, "sparse-sidecar.jpeg");
+  assert.equal(sidecarPayload.createdAt, "2026-04-26T08:20:00.000Z");
+  assert.equal(sidecarPayload.size, "1024x1536");
+  assert.equal(sidecarPayload.format, "jpeg");
+  assert.equal("prompt" in sidecarPayload, false);
+  assert.equal("responsesModel" in sidecarPayload, false);
+  assert.equal("ratio" in sidecarPayload, false);
+  assert.equal("prompt" in indexPayload["sparse-sidecar.jpeg"], false);
+});
+
+test("gallery store repairs sparse metadata from a richer client-side payload", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
+  const outputDir = join(rootDir, "output");
+  const indexPath = join(rootDir, ".local", "gallery-index.json");
+
+  await saveGeneratedAsset({
+    outputDir,
+    indexPath,
+    filename: "repairable.jpeg",
+    imageBuffer: Buffer.from("image"),
+    metadata: {
+      createdAt: "2026-04-26T09:30:00.000Z",
+      format: "jpeg",
+      size: "1024x1536",
+    },
+  });
+
+  await repairGeneratedAssetMetadata({
+    outputDir,
+    indexPath,
+    filename: "repairable.jpeg",
+    metadata: {
+      prompt: "直播间护肤礼盒主视觉",
+      baseUrl: "https://api.asxs.top/v1",
+      responsesModel: "gpt-5.4",
+      imageModel: "gpt-image-2",
+      ratio: "4:5",
+      ratioLabel: "标准 4:5",
+      quality: "high",
+      reasoningEffort: "xhigh",
+      referenceImageNames: ["reference-a.png"],
+      referenceImageName: "reference-a.png",
+      hasReferenceImage: true,
+    },
+  });
+
+  const items = await listGalleryItems({
+    outputDir,
+    indexPath,
+    publicBasePath: "/output",
+  });
+  const metadataPath = join(outputDir, "json", "2026-04-26", "repairable.json");
+  const sidecarPayload = JSON.parse(await readFile(metadataPath, "utf8"));
+  const indexPayload = JSON.parse(await readFile(indexPath, "utf8"));
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].prompt, "直播间护肤礼盒主视觉");
+  assert.equal(items[0].responsesModel, "gpt-5.4");
+  assert.equal(items[0].referenceImageName, "reference-a.png");
+  assert.equal(sidecarPayload.prompt, "直播间护肤礼盒主视觉");
+  assert.equal(sidecarPayload.responsesModel, "gpt-5.4");
+  assert.equal(sidecarPayload.referenceImageName, "reference-a.png");
+  assert.deepEqual(sidecarPayload.referenceImageNames, ["reference-a.png"]);
+  assert.equal(indexPayload["repairable.jpeg"].prompt, "直播间护肤礼盒主视觉");
 });

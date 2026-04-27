@@ -1,14 +1,15 @@
 {
-  "name": "responses-image-generation-demo",
+  "name": "gpt-image2-studio",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "使用 Responses API 的 image_generation 工具生成图片的 Node.js 示例",
+  "description": "使用 Responses API 和 gpt-image-2 的本地图片生成工作台",
   "scripts": {
     "start": "node server.mjs",
     "dev": "node server.mjs",
     "generate": "node generate-image.mjs",
     "help": "node generate-image.mjs --help",
+    "build:installer": "node scripts/build-windows-installer.mjs",
     "test": "node --test ./test/*.test.mjs"
   },
   "engines": {

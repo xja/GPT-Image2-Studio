@@ -3,11 +3,36 @@ import {
   formatImageModelLabel,
   formatRecentOutputMeta,
 } from "/lib/studio-formatters.mjs";
+import { getPreviewPlaceholderState } from "/lib/preview-placeholder-state.mjs";
+import {
+  buildGalleryReferenceFilterOptions,
+  buildGallerySections,
+  buildGallerySizeFilterOptions,
+  buildGalleryTimeFilterOptions,
+  distributeGalleryItemsIntoColumns,
+  filterGalleryItems,
+  getGalleryLayoutModeForWidth,
+  getRecentGalleryItems,
+  normalizeGalleryFilters,
+  sortGalleryItemsByCreatedAtDesc,
+} from "/lib/gallery-organizer.mjs";
+import {
+  buildGalleryMetadataCacheEntry,
+  collectGalleryMetadataRepairPatch,
+  mergeGalleryItemWithCachedMetadata,
+  pruneGalleryMetadataCache,
+} from "/lib/gallery-metadata-recovery.mjs";
 import {
   getDefaultGenerationSize,
   getGenerationSizeOptions,
   normalizeGenerationSize,
 } from "/lib/generation-size-options.mjs";
+import {
+  getPreviewLoadingShellTheme,
+  shouldReusePreviewLoadingShell,
+} from "/lib/preview-loading-shell.mjs";
+import { getGenerationRequestRetryPlan } from "/lib/generation-request-retry.mjs";
+import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260426-filmstrip-1";
 
 const FEATURED_RATIOS = ["4:5", "1:1", "3:4", "16:9", "9:16"];
 const SURPRISE_PROMPTS = [
@@ -28,15 +53,38 @@ const DEFAULT_LIMITS = {
   maxReferenceImages: 6,
 };
 
-const GALLERY_COLUMN_PRESETS = [6, 9, 12];
+const DEFAULT_GALLERY_CONTROLS = {
+  query: "",
+  window: "all",
+  date: "",
+  size: "all",
+  reference: "all",
+};
+
+const GALLERY_COLUMN_PRESETS = [6, 9, 12, 15, 18];
 const DEFAULT_GALLERY_COLUMN_PRESET = 12;
 const DEFAULT_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
-const DESKTOP_STUDIO_MEDIA = "(max-width: 1260px)";
+const GALLERY_METADATA_CACHE_KEY = "image-studio-gallery-metadata-cache-v2";
+const GALLERY_WINDOW_LABELS = {
+  today: "今天",
+  recent: "近 7 天",
+  older: "更早",
+};
+const GALLERY_REFERENCE_LABELS = {
+  "with-reference": "带参考图",
+  "without-reference": "无参考图",
+};
+const STACKED_STUDIO_LAYOUT_MODES = new Set(["stacked", "tablet", "mobile"]);
 
 let studioHeightSyncFrame = 0;
 let studioHeightObserver = null;
+let studioDensitySyncFrame = 0;
+let galleryPanelHeightSyncFrame = 0;
+let galleryPanelHeightObserver = null;
 let galleryScrollSyncFrame = 0;
 let galleryScrollObserver = null;
+let promptCopyFeedbackTimer = 0;
+let previewLoadingShellNodes = null;
 const galleryScrollDrag = {
   active: false,
   pointerId: null,
@@ -51,9 +99,12 @@ const state = {
   clientSessionId: "",
   config: null,
   gallery: [],
+  galleryMetadataCache: {},
+  galleryControls: { ...DEFAULT_GALLERY_CONTROLS },
   galleryColumnPreset: DEFAULT_GALLERY_COLUMN_PRESET,
   jobs: [],
   lightboxItem: null,
+  lightboxZoomed: false,
   limits: { ...DEFAULT_LIMITS },
   reasoningEfforts: [...DEFAULT_REASONING_EFFORTS],
   referenceFiles: [],
@@ -62,8 +113,6 @@ const state = {
 };
 
 const refs = {
-  advancedBaseUrl: document.querySelector("#advancedBaseUrl"),
-  advancedResponsesModel: document.querySelector("#advancedResponsesModel"),
   apiKeyInput: document.querySelector("#apiKeyInput"),
   baseUrlInput: document.querySelector("#baseUrlInput"),
   clearHistoryButton: document.querySelector("#clearHistoryButton"),
@@ -80,24 +129,36 @@ const refs = {
   focusGalleryButton: document.querySelector("#focusGalleryButton"),
   galleryCount: document.querySelector("#galleryCount"),
   galleryColumnButtons: [...document.querySelectorAll("[data-gallery-column-preset]")],
+  galleryDateInput: document.querySelector("#galleryDateInput"),
   galleryEmpty: document.querySelector("#galleryEmpty"),
-  galleryMasonry: document.querySelector("#galleryMasonry"),
+  galleryFilters: document.querySelector("#galleryFilters"),
+  galleryHelperText: document.querySelector("#galleryHelperText"),
+  galleryPanel: document.querySelector(".gallery-panel"),
+  galleryReferenceFilterInput: document.querySelector("#galleryReferenceFilterInput"),
+  galleryResetFiltersButton: document.querySelector("#galleryResetFiltersButton"),
+  gallerySearchInput: document.querySelector("#gallerySearchInput"),
+  gallerySections: document.querySelector("#gallerySections"),
+  gallerySizeFilterInput: document.querySelector("#gallerySizeFilterInput"),
   galleryScrollbar: document.querySelector("#galleryScrollbar"),
   galleryScrollDown: document.querySelector("#galleryScrollDown"),
   galleryScrollRegion: document.querySelector("#galleryScrollRegion"),
   galleryScrollThumb: document.querySelector("#galleryScrollThumb"),
   galleryScrollTrack: document.querySelector("#galleryScrollTrack"),
   galleryScrollUp: document.querySelector("#galleryScrollUp"),
+  galleryView: document.querySelector(".gallery-view"),
   generateButton: document.querySelector("#generateButton"),
   generateForm: document.querySelector("#generateForm"),
   lightbox: document.querySelector("#lightbox"),
   lightboxAmbient: document.querySelector("#lightboxAmbient"),
   lightboxBackdrop: document.querySelector("#lightboxBackdrop"),
   lightboxClose: document.querySelector("#lightboxClose"),
+  copyPromptButton: document.querySelector("#copyPromptButton"),
   lightboxDelete: document.querySelector("#lightboxDelete"),
   lightboxDownload: document.querySelector("#lightboxDownload"),
   lightboxId: document.querySelector("#lightboxId"),
   lightboxImage: document.querySelector("#lightboxImage"),
+  lightboxImageShell: document.querySelector(".lightbox-image-shell"),
+  lightboxMediaStage: document.querySelector(".lightbox-media-stage"),
   lightboxModel: document.querySelector("#lightboxModel"),
   lightboxParams: document.querySelector("#lightboxParams"),
   lightboxPrompt: document.querySelector("#lightboxPrompt"),
@@ -132,9 +193,11 @@ const refs = {
   surprisePromptButton: document.querySelector("#surprisePromptButton"),
   settingsPanel: document.querySelector(".settings-panel"),
   sideColumn: document.querySelector(".side-column"),
+  topbar: document.querySelector(".topbar"),
   timelineList: document.querySelector("#timelineList"),
   viewPanels: [...document.querySelectorAll("[data-view-panel]")],
   viewTabs: [...document.querySelectorAll("[data-view-tab]")],
+  viewRoot: document.querySelector(".view-root"),
   previewPanel: document.querySelector(".preview-panel"),
   zoomInButton: document.querySelector("#zoomInButton"),
   zoomLabel: document.querySelector("#zoomLabel"),
@@ -174,6 +237,12 @@ function formatClock(dateLike) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, milliseconds);
+  });
 }
 
 function buildReferenceFingerprint(file) {
@@ -224,6 +293,175 @@ function formatCanvasLabel(size) {
   }
 
   return size.replace("x", " × ");
+}
+
+function readGalleryMetadataCache() {
+  try {
+    const raw = window.localStorage.getItem(GALLERY_METADATA_CACHE_KEY);
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+function writeGalleryMetadataCache(cache) {
+  try {
+    window.localStorage.setItem(GALLERY_METADATA_CACHE_KEY, JSON.stringify(cache));
+  } catch (_error) {
+    // Ignore storage quota or browser privacy restrictions and keep the in-memory copy.
+  }
+}
+
+function syncGalleryMetadataCache(items) {
+  const nextCache = pruneGalleryMetadataCache(state.galleryMetadataCache, items);
+
+  items.forEach((item) => {
+    const filename = String(item?.filename || "").trim();
+    if (!filename) {
+      return;
+    }
+
+    const entry = buildGalleryMetadataCacheEntry(item);
+    if (Object.keys(entry).length > 0) {
+      nextCache[filename] = entry;
+    }
+  });
+
+  state.galleryMetadataCache = nextCache;
+  writeGalleryMetadataCache(nextCache);
+}
+
+function forgetGalleryMetadata(filename) {
+  const normalizedFilename = String(filename || "").trim();
+  if (!normalizedFilename || !state.galleryMetadataCache[normalizedFilename]) {
+    return;
+  }
+
+  const nextCache = { ...state.galleryMetadataCache };
+  delete nextCache[normalizedFilename];
+  state.galleryMetadataCache = nextCache;
+  writeGalleryMetadataCache(nextCache);
+}
+
+function hydrateGalleryItems(serverItems) {
+  const repairQueue = [];
+  const hydratedItems = serverItems.map((item) => {
+    const cachedEntry = state.galleryMetadataCache[item.filename];
+    if (!cachedEntry) {
+      return item;
+    }
+
+    const mergedItem = mergeGalleryItemWithCachedMetadata(item, cachedEntry);
+    const metadataPatch = collectGalleryMetadataRepairPatch(item, mergedItem);
+    if (Object.keys(metadataPatch).length > 0) {
+      repairQueue.push({
+        filename: item.filename,
+        metadata: metadataPatch,
+      });
+    }
+
+    return mergedItem;
+  });
+
+  syncGalleryMetadataCache(hydratedItems);
+
+  return {
+    items: hydratedItems,
+    repairQueue,
+  };
+}
+
+async function repairGalleryMetadataQueue(repairQueue = []) {
+  for (const repair of repairQueue) {
+    try {
+      const response = await fetch("/api/gallery/metadata", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(repair),
+      });
+      if (!response.ok) {
+        throw new Error(`repair failed with status ${response.status}`);
+      }
+    } catch (error) {
+      console.warn("repair gallery metadata failed", repair.filename, error);
+    }
+  }
+}
+
+function getNormalizedGalleryControls() {
+  state.galleryControls = normalizeGalleryFilters(state.galleryControls, state.gallery);
+  return state.galleryControls;
+}
+
+function getGalleryFilterSnapshot(overrides = {}) {
+  return normalizeGalleryFilters({ ...getNormalizedGalleryControls(), ...overrides }, state.gallery);
+}
+
+function hasActiveGalleryFilters(filters) {
+  return Boolean(
+    filters.query ||
+      filters.window !== "all" ||
+      filters.date ||
+      filters.size !== "all" ||
+      filters.reference !== "all",
+  );
+}
+
+function formatGalleryQuerySummary(query) {
+  const compact = query.length > 18 ? `${query.slice(0, 18)}...` : query;
+  return `关键词“${compact}”`;
+}
+
+function formatGalleryFilterSummary(filters) {
+  const parts = [];
+
+  if (filters.query) {
+    parts.push(formatGalleryQuerySummary(filters.query));
+  }
+
+  if (filters.date) {
+    parts.push(filters.date);
+  } else if (filters.window !== "all") {
+    parts.push(GALLERY_WINDOW_LABELS[filters.window] || filters.window);
+  }
+
+  if (filters.size !== "all") {
+    parts.push(formatCanvasLabel(filters.size));
+  }
+
+  if (filters.reference !== "all") {
+    parts.push(GALLERY_REFERENCE_LABELS[filters.reference] || filters.reference);
+  }
+
+  return parts.join(" · ");
+}
+
+function renderGallerySelectOptions(select, options, activeValue) {
+  if (!select) {
+    return;
+  }
+
+  select.innerHTML = "";
+  options.forEach((option) => {
+    const element = document.createElement("option");
+    element.value = option.value;
+    element.textContent = `${option.label} · ${option.count}`;
+    select.appendChild(element);
+  });
+
+  if (options.some((option) => option.value === activeValue)) {
+    select.value = activeValue;
+    return;
+  }
+
+  select.value = options[0]?.value || "all";
 }
 
 function getRatioOption(value) {
@@ -299,6 +537,129 @@ function setLightboxOpen(open) {
   refs.lightbox.setAttribute("aria-hidden", String(!open));
 }
 
+function resetPromptCopyFeedback() {
+  if (promptCopyFeedbackTimer) {
+    window.clearTimeout(promptCopyFeedbackTimer);
+    promptCopyFeedbackTimer = 0;
+  }
+
+  if (!refs.copyPromptButton) {
+    return;
+  }
+
+  refs.copyPromptButton.textContent = "复制";
+  refs.copyPromptButton.dataset.copied = "false";
+}
+
+function markPromptCopied() {
+  if (!refs.copyPromptButton) {
+    return;
+  }
+
+  resetPromptCopyFeedback();
+  refs.copyPromptButton.textContent = "已复制";
+  refs.copyPromptButton.dataset.copied = "true";
+  promptCopyFeedbackTimer = window.setTimeout(() => {
+    promptCopyFeedbackTimer = 0;
+    resetPromptCopyFeedback();
+  }, 1600);
+}
+
+function syncLightboxZoomState() {
+  refs.lightboxImage.classList.toggle("is-zoomed", state.lightboxZoomed);
+  refs.lightboxImageShell?.classList.toggle("is-zoomed", state.lightboxZoomed);
+  refs.lightboxMediaStage?.classList.toggle("is-zoomed", state.lightboxZoomed);
+}
+
+function getCurrentStudioLayoutMode() {
+  return (
+    document.documentElement.dataset.uiLayout ||
+    getStudioLayoutMode({
+      width: window.innerWidth,
+      outerWidth: window.outerWidth,
+    })
+  );
+}
+
+function getGalleryLayoutWidth() {
+  return Math.max(
+    refs.galleryPanel?.clientWidth || 0,
+    refs.galleryView?.clientWidth || 0,
+    refs.viewRoot?.clientWidth || 0,
+    window.innerWidth || 0,
+  );
+}
+
+function syncGalleryLayoutMode() {
+  if (!refs.galleryView) {
+    return;
+  }
+
+  refs.galleryView.dataset.galleryLayout = getGalleryLayoutModeForWidth(getGalleryLayoutWidth());
+}
+
+function syncStudioDensity() {
+  const settings = getStudioDensitySettings({
+    width: window.innerWidth,
+    height: window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio,
+    outerWidth: window.outerWidth,
+    visualScale: window.visualViewport?.scale || 1,
+  });
+  const layoutMode = settings.layoutMode || getStudioLayoutMode({
+    width: window.innerWidth,
+    outerWidth: window.outerWidth,
+  });
+
+  document.documentElement.dataset.uiDensity = settings.mode;
+  document.documentElement.dataset.uiLayout = layoutMode;
+
+  for (const name of ALL_VARIABLE_NAMES) {
+    document.documentElement.style.removeProperty(name);
+  }
+
+  for (const [name, value] of Object.entries(settings.variables)) {
+    document.documentElement.style.setProperty(name, value);
+  }
+}
+
+function scheduleStudioDensitySync() {
+  if (studioDensitySyncFrame) {
+    window.cancelAnimationFrame(studioDensitySyncFrame);
+  }
+
+  studioDensitySyncFrame = window.requestAnimationFrame(() => {
+    studioDensitySyncFrame = 0;
+    syncStudioDensity();
+    window.requestAnimationFrame(() => {
+      syncGalleryLayoutMode();
+      scheduleStudioHeightSync();
+      scheduleGalleryPanelHeightSync();
+      scheduleGalleryScrollSync();
+      renderGalleryView();
+    });
+  });
+}
+
+let densityZoomEndTimer = 0;
+
+function bindStudioDensitySync() {
+  window.addEventListener("resize", scheduleStudioDensitySync);
+  window.visualViewport?.addEventListener("resize", scheduleStudioDensitySync);
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("scroll", () => {
+      if (densityZoomEndTimer) {
+        window.clearTimeout(densityZoomEndTimer);
+      }
+      densityZoomEndTimer = window.setTimeout(() => {
+        densityZoomEndTimer = 0;
+        scheduleStudioDensitySync();
+      }, 150);
+    });
+  }
+}
+
 function setActiveView(view) {
   state.activeView = view;
   syncHash(view);
@@ -311,7 +672,9 @@ function setActiveView(view) {
     panel.classList.toggle("hidden", panel.dataset.viewPanel !== view);
   });
 
+  syncGalleryLayoutMode();
   scheduleStudioHeightSync();
+  scheduleGalleryPanelHeightSync();
   scheduleGalleryScrollSync();
 }
 
@@ -457,18 +820,25 @@ function renderSizeOptions() {
 }
 
 function syncStudioHeight() {
-  if (!refs.settingsPanel || !refs.previewPanel || !refs.sideColumn) {
+  if (!refs.settingsPanel || !refs.previewPanel || !refs.sideColumn || !refs.viewRoot) {
     return;
   }
 
-  if (window.matchMedia(DESKTOP_STUDIO_MEDIA).matches || state.activeView !== "studio") {
+  if (STACKED_STUDIO_LAYOUT_MODES.has(getCurrentStudioLayoutMode()) || state.activeView !== "studio") {
     document.documentElement.style.removeProperty("--studio-column-height");
     return;
   }
 
-  const settingsHeight = Math.ceil(refs.settingsPanel.getBoundingClientRect().height);
-  if (settingsHeight > 0) {
-    document.documentElement.style.setProperty("--studio-column-height", `${settingsHeight}px`);
+  document.documentElement.style.removeProperty("--studio-column-height");
+
+  void refs.settingsPanel.offsetHeight;
+
+  const viewRootRect = refs.viewRoot.getBoundingClientRect();
+  const availableHeight = Math.max(600, Math.floor(window.innerHeight - viewRootRect.top - 12));
+  const resolvedHeight = availableHeight;
+
+  if (resolvedHeight > 0) {
+    document.documentElement.style.setProperty("--studio-column-height", `${resolvedHeight}px`);
   }
 }
 
@@ -480,26 +850,66 @@ function scheduleStudioHeightSync() {
   studioHeightSyncFrame = window.requestAnimationFrame(() => {
     studioHeightSyncFrame = 0;
     syncStudioHeight();
+    window.requestAnimationFrame(() => {
+      syncStudioHeight();
+    });
+  });
+}
+
+function syncGalleryPanelHeight() {
+  if (!refs.galleryPanel || !refs.viewRoot) {
+    return;
+  }
+
+  syncGalleryLayoutMode();
+  document.documentElement.style.removeProperty("--gallery-panel-height");
+
+  void refs.viewRoot.offsetHeight;
+
+  const viewRootRect = refs.viewRoot.getBoundingClientRect();
+  const availableHeight = Math.max(320, Math.floor(window.innerHeight - viewRootRect.top - 12));
+  document.documentElement.style.setProperty("--gallery-panel-height", `${availableHeight}px`);
+}
+
+function scheduleGalleryPanelHeightSync() {
+  if (galleryPanelHeightSyncFrame) {
+    window.cancelAnimationFrame(galleryPanelHeightSyncFrame);
+  }
+
+  galleryPanelHeightSyncFrame = window.requestAnimationFrame(() => {
+    galleryPanelHeightSyncFrame = 0;
+    syncGalleryPanelHeight();
+    syncGalleryScrollUi();
   });
 }
 
 function bindStudioHeightSync() {
-  const desktopMediaQuery = window.matchMedia(DESKTOP_STUDIO_MEDIA);
-  const handleMediaChange = () => scheduleStudioHeightSync();
-
-  if (typeof desktopMediaQuery.addEventListener === "function") {
-    desktopMediaQuery.addEventListener("change", handleMediaChange);
-  } else if (typeof desktopMediaQuery.addListener === "function") {
-    desktopMediaQuery.addListener(handleMediaChange);
-  }
-
-  window.addEventListener("resize", handleMediaChange);
+  window.addEventListener("resize", () => scheduleStudioHeightSync());
 
   if (typeof ResizeObserver === "function" && refs.settingsPanel) {
     studioHeightObserver = new ResizeObserver(() => {
       scheduleStudioHeightSync();
     });
     studioHeightObserver.observe(refs.settingsPanel);
+  }
+}
+
+function bindGalleryPanelHeightSync() {
+  const handleChange = () => scheduleGalleryPanelHeightSync();
+  window.addEventListener("resize", handleChange);
+
+  if (typeof ResizeObserver === "function") {
+    galleryPanelHeightObserver = new ResizeObserver(() => {
+      scheduleGalleryPanelHeightSync();
+    });
+
+    if (refs.topbar) {
+      galleryPanelHeightObserver.observe(refs.topbar);
+    }
+
+    if (refs.viewRoot) {
+      galleryPanelHeightObserver.observe(refs.viewRoot);
+    }
   }
 }
 
@@ -642,7 +1052,7 @@ function handleGalleryThumbPointerMove(event) {
 function bindGalleryScrollSync() {
   if (
     !refs.galleryScrollRegion ||
-    !refs.galleryMasonry ||
+    !refs.gallerySections ||
     !refs.galleryScrollThumb ||
     !refs.galleryScrollTrack ||
     !refs.galleryScrollUp ||
@@ -703,7 +1113,7 @@ function bindGalleryScrollSync() {
       scheduleGalleryScrollSync();
     });
     galleryScrollObserver.observe(refs.galleryScrollRegion);
-    galleryScrollObserver.observe(refs.galleryMasonry);
+    galleryScrollObserver.observe(refs.gallerySections);
   }
 }
 
@@ -741,8 +1151,6 @@ function syncConfigUi(config) {
   refs.responsesModelInput.value = config.responsesModel || "gpt-5.4";
   refs.savedKeyMask.textContent = config.apiKeyConfigured ? `已保存 ${config.apiKeyMask || ""}` : "未保存";
   refs.configStatus.textContent = config.apiKeyConfigured ? "配置已保存" : "配置未保存";
-  refs.advancedBaseUrl.textContent = config.baseUrl || "https://api.asxs.top/v1";
-  refs.advancedResponsesModel.textContent = config.responsesModel || "gpt-5.4";
   state.aspectRatios = config.aspectRatios || [];
   state.limits = {
     ...DEFAULT_LIMITS,
@@ -762,10 +1170,6 @@ function syncConfigUi(config) {
   renderReferenceGrid();
 }
 
-function sortByCreatedAtDescending(items) {
-  return [...items].sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")));
-}
-
 function ensureSelectedPreview() {
   if (state.selectedPreviewKey.startsWith("job:")) {
     const selectedJobId = state.selectedPreviewKey.slice(4);
@@ -781,17 +1185,14 @@ function ensureSelectedPreview() {
     }
   }
 
-  const latestJob = sortByCreatedAtDescending(state.jobs)[0];
+  const latestJob = sortGalleryItemsByCreatedAtDesc(state.jobs)[0];
   if (latestJob) {
     state.selectedPreviewKey = makeJobPreviewKey(latestJob.id);
     return;
   }
 
-  const preferredGalleryItem =
-    state.gallery.find((item) => item.ratio === "4:5") ||
-    state.gallery.find((item) => item.ratio?.includes(":")) ||
-    state.gallery[0] ||
-    null;
+  const sortedGallery = sortGalleryItemsByCreatedAtDesc(state.gallery);
+  const preferredGalleryItem = sortedGallery[0] || null;
   state.selectedPreviewKey = preferredGalleryItem ? makeGalleryPreviewKey(preferredGalleryItem.filename) : "";
 }
 
@@ -827,17 +1228,24 @@ function openLightbox(item) {
   }
 
   state.lightboxItem = item;
+  state.lightboxZoomed = false;
   syncLightboxItem();
+  syncLightboxZoomState();
   setLightboxOpen(true);
 }
 
 function closeLightbox() {
   state.lightboxItem = null;
+  state.lightboxZoomed = false;
+  resetPromptCopyFeedback();
+  syncLightboxZoomState();
   setLightboxOpen(false);
 }
 
 function syncLightboxItem() {
   if (!state.lightboxItem) {
+    refs.copyPromptButton.disabled = true;
+    resetPromptCopyFeedback();
     return;
   }
 
@@ -853,12 +1261,15 @@ function syncLightboxItem() {
   refs.lightboxId.textContent = `ID: ${getDisplayId(fresh)}`;
   refs.lightboxPrompt.value = getDisplayPrompt(fresh);
   refs.lightboxParams.value = buildParameterText(fresh, state.config || {});
+  refs.copyPromptButton.disabled = refs.lightboxPrompt.value.trim().length === 0;
+  resetPromptCopyFeedback();
   refs.lightboxImage.src = imageUrl;
   refs.lightboxImage.alt = getDisplayPrompt(fresh);
   refs.lightboxAmbient.style.backgroundImage = imageUrl ? `url("${imageUrl}")` : "";
   refs.lightboxDownload.href = imageUrl || "#";
-  refs.lightboxDownload.download = fresh.filename || "preview.jpeg";
+  refs.lightboxDownload.download = fresh.filename || "preview.png";
   refs.lightboxDelete.disabled = !fresh.filename;
+  syncLightboxZoomState();
 }
 
 function recordActivity({ key, title, detail, status, at }) {
@@ -882,6 +1293,20 @@ function recordActivity({ key, title, detail, status, at }) {
 
   state.activityFeed.sort((left, right) => String(right.at).localeCompare(String(left.at)));
   state.activityFeed = state.activityFeed.slice(0, 12);
+}
+
+async function copyLightboxPrompt() {
+  const promptText = refs.lightboxPrompt.value;
+  if (!promptText.trim()) {
+    return;
+  }
+
+  if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+    throw new Error("当前浏览器不支持复制提示词。");
+  }
+
+  await navigator.clipboard.writeText(refs.lightboxPrompt.value);
+  markPromptCopied();
 }
 
 function recordJobQueued(job) {
@@ -1110,25 +1535,175 @@ function renderTimeline() {
   });
 }
 
+function createPreviewMotionNode() {
+  const motion = document.createElement("div");
+  motion.className = "preview-loading-motion";
+  motion.setAttribute("aria-hidden", "true");
+
+  [
+    "preview-loading-aura",
+    "preview-loading-morph preview-loading-morph-a",
+    "preview-loading-morph preview-loading-morph-b",
+    "preview-loading-trace",
+    "preview-loading-core-shell",
+    "preview-loading-core",
+  ].forEach((className) => {
+    const node = document.createElement("span");
+    node.className = className;
+    motion.appendChild(node);
+  });
+
+  return motion;
+}
+
+function createPreviewLoadingShellNodes() {
+  const eyebrow = document.createElement("p");
+  const shell = document.createElement("div");
+  shell.className = "preview-loading-shell";
+  shell.appendChild(createPreviewMotionNode());
+
+  const copy = document.createElement("div");
+  copy.className = "preview-loading-copy";
+
+  const title = document.createElement("h3");
+  copy.appendChild(title);
+
+  const metrics = document.createElement("div");
+  metrics.className = "preview-loading-metrics";
+
+  const jobMetric = document.createElement("span");
+  jobMetric.className = "preview-loading-metric";
+  metrics.appendChild(jobMetric);
+
+  const progressMetric = document.createElement("span");
+  progressMetric.className = "preview-loading-metric";
+  metrics.appendChild(progressMetric);
+
+  copy.appendChild(metrics);
+
+  const status = document.createElement("strong");
+  status.className = "preview-loading-status";
+  copy.appendChild(status);
+
+  const detail = document.createElement("span");
+  detail.className = "preview-loading-detail";
+  copy.appendChild(detail);
+
+  shell.appendChild(copy);
+
+  const steps = document.createElement("div");
+  steps.className = "preview-loading-steps";
+  steps.setAttribute("aria-hidden", "true");
+  shell.appendChild(steps);
+
+  return {
+    eyebrow,
+    shell,
+    title,
+    jobMetric,
+    progressMetric,
+    status,
+    detail,
+    steps,
+    state: null,
+  };
+}
+
+function syncPreviewLoadingSteps(container, steps) {
+  container.replaceChildren();
+  steps.forEach((step) => {
+    const chip = document.createElement("span");
+    chip.className = `preview-loading-step is-${step.state}`;
+    chip.textContent = step.label;
+    container.appendChild(chip);
+  });
+}
+
+function updatePreviewLoadingShell(nodes, placeholderState) {
+  const theme = getPreviewLoadingShellTheme(placeholderState);
+  nodes.eyebrow.textContent = placeholderState.eyebrow;
+  nodes.shell.dataset.stage = theme.stage;
+  nodes.shell.dataset.jobs = String(placeholderState.activeJobCount);
+  nodes.shell.style.setProperty("--loading-morph-duration-a", theme.morphDurationA);
+  nodes.shell.style.setProperty("--loading-morph-duration-b", theme.morphDurationB);
+  nodes.shell.style.setProperty("--loading-pulse-duration", theme.pulseDuration);
+  nodes.shell.style.setProperty("--loading-drift-duration", theme.driftDuration);
+  nodes.shell.style.setProperty("--loading-motion-tilt", theme.motionTilt);
+  nodes.shell.style.setProperty("--loading-motion-scale", theme.motionScale);
+  nodes.title.textContent = placeholderState.title;
+  nodes.jobMetric.textContent = placeholderState.jobCountLabel;
+  nodes.progressMetric.textContent = placeholderState.progressLabel;
+  nodes.status.textContent = placeholderState.statusText;
+  nodes.detail.textContent = placeholderState.detail;
+  syncPreviewLoadingSteps(nodes.steps, placeholderState.steps);
+  nodes.state = {
+    mode: placeholderState.mode,
+    stage: placeholderState.stage,
+  };
+}
+
+function renderPreviewPlaceholder(placeholderState) {
+  refs.previewPlaceholder.className = "preview-placeholder";
+  if (placeholderState.mode === "loading") {
+    refs.previewPlaceholder.classList.add("preview-placeholder-loading");
+
+    if (
+      !previewLoadingShellNodes ||
+      !shouldReusePreviewLoadingShell(previewLoadingShellNodes.state || {}, placeholderState)
+    ) {
+      previewLoadingShellNodes = createPreviewLoadingShellNodes();
+    }
+
+    updatePreviewLoadingShell(previewLoadingShellNodes, placeholderState);
+
+    if (
+      refs.previewPlaceholder.firstChild !== previewLoadingShellNodes.eyebrow ||
+      refs.previewPlaceholder.lastChild !== previewLoadingShellNodes.shell
+    ) {
+      refs.previewPlaceholder.replaceChildren(previewLoadingShellNodes.eyebrow, previewLoadingShellNodes.shell);
+    }
+
+    return;
+  }
+
+  previewLoadingShellNodes = null;
+  refs.previewPlaceholder.replaceChildren();
+
+  const eyebrow = document.createElement("p");
+  eyebrow.textContent = placeholderState.eyebrow;
+  refs.previewPlaceholder.appendChild(eyebrow);
+
+  const title = document.createElement("h3");
+  title.textContent = placeholderState.title;
+  refs.previewPlaceholder.appendChild(title);
+
+  const detail = document.createElement("span");
+  detail.textContent = placeholderState.detail;
+  refs.previewPlaceholder.appendChild(detail);
+}
+
 function renderPreview() {
   const item = getCurrentPreviewItem();
   const imageUrl = getImageUrl(item);
+  const placeholderState = getPreviewPlaceholderState({
+    item,
+    imageUrl,
+    prompt: item ? getDisplayPrompt(item) : "",
+    runningCount: state.jobs.length,
+    maxConcurrentTasks: state.limits.maxConcurrentTasksPerSession,
+  });
 
   refs.zoomLabel.textContent = `${Math.round(state.zoom * 100)}%`;
 
-  if (!item) {
+  if (placeholderState.mode === "idle") {
     refs.previewModel.textContent = "GPT Image 2.0";
     refs.previewTime.textContent = "等待生成";
     refs.previewId.textContent = "ID: --";
     refs.previewSize.textContent = "--";
     refs.previewPlaceholder.classList.remove("hidden");
-    refs.previewPlaceholder.innerHTML = `
-      <p>Output Preview</p>
-      <h3>生成结果会在这里实时更新。</h3>
-      <span>右侧保留实时动态和最近输出，底部胶片条可快速切换查看。</span>
-    `;
+    renderPreviewPlaceholder(placeholderState);
     refs.previewImage.removeAttribute("src");
-    refs.previewImage.classList.remove("is-visible");
+    refs.previewImage.classList.remove("is-mounted", "is-visible");
     refs.previewDownloadButton.removeAttribute("href");
     refs.previewDownloadButton.removeAttribute("download");
     refs.previewDownloadButton.classList.add("disabled");
@@ -1142,15 +1717,11 @@ function renderPreview() {
   refs.previewId.textContent = `ID: ${getDisplayId(item)}`;
   refs.previewSize.textContent = formatCanvasLabel(item.size);
 
-  if (!imageUrl) {
+  if (placeholderState.mode === "loading") {
     refs.previewPlaceholder.classList.remove("hidden");
-    refs.previewPlaceholder.innerHTML = `
-      <p>Generation Running</p>
-      <h3>${item.statusText || "正在等待上游图像返回。"}</h3>
-      <span>${getDisplayPrompt(item)}</span>
-    `;
+    renderPreviewPlaceholder(placeholderState);
     refs.previewImage.removeAttribute("src");
-    refs.previewImage.classList.remove("is-visible");
+    refs.previewImage.classList.remove("is-mounted", "is-visible");
     refs.previewDownloadButton.removeAttribute("href");
     refs.previewDownloadButton.removeAttribute("download");
     refs.previewDownloadButton.classList.add("disabled");
@@ -1161,6 +1732,7 @@ function renderPreview() {
 
   refs.previewPlaceholder.classList.add("hidden");
   refs.previewImage.classList.remove("is-visible");
+  refs.previewImage.classList.add("is-mounted");
   refs.previewImage.onload = () => {
     refs.previewImage.classList.add("is-visible");
   };
@@ -1168,26 +1740,26 @@ function renderPreview() {
   refs.previewImage.src = imageUrl;
   refs.previewImage.alt = getDisplayPrompt(item);
   refs.previewDownloadButton.href = imageUrl;
-  refs.previewDownloadButton.download = item.filename || "preview.jpeg";
+  refs.previewDownloadButton.download = item.filename || "preview.png";
   refs.previewDownloadButton.classList.remove("disabled");
   refs.previewLightboxButton.disabled = false;
   refs.previewDeleteButton.disabled = !item.filename;
 }
 
 function getFilmstripItems() {
-  const activeJobs = sortByCreatedAtDescending(state.jobs).map((job) => ({
+  const activeJobs = sortGalleryItemsByCreatedAtDesc(state.jobs).map((job) => ({
     key: makeJobPreviewKey(job.id),
     item: job,
     label: job.statusText || formatClock(job.createdAt),
   }));
 
-  const recentGallery = sortByCreatedAtDescending(state.gallery).slice(0, 8).map((item) => ({
+  const recentGallery = sortGalleryItemsByCreatedAtDesc(state.gallery).slice(0, 12).map((item) => ({
     key: makeGalleryPreviewKey(item.filename),
     item,
     label: formatClock(item.createdAt),
   }));
 
-  return [...activeJobs, ...recentGallery].slice(0, 10);
+  return [...activeJobs, ...recentGallery].slice(0, 14);
 }
 
 function renderFilmstrip() {
@@ -1287,11 +1859,9 @@ function renderRecentOutputs() {
   refs.recentList.innerHTML = "";
   refs.recentEmpty.classList.toggle("hidden", state.gallery.length > 0);
 
-  sortByCreatedAtDescending(state.gallery)
-    .slice(0, 5)
-    .forEach((item) => {
-      refs.recentList.appendChild(createRecentOutputItem(item));
-    });
+  getRecentGalleryItems(state.gallery).forEach((item) => {
+    refs.recentList.appendChild(createRecentOutputItem(item));
+  });
 }
 
 function createGalleryTile(item) {
@@ -1307,30 +1877,16 @@ function createGalleryTile(item) {
   image.alt = getDisplayPrompt(item);
   image.loading = "lazy";
   button.appendChild(image);
-
-  const overlay = document.createElement("div");
-  overlay.className = "gallery-tile-overlay";
-
-  const badge = document.createElement("span");
-  badge.className = "model-badge small";
-  badge.textContent = formatImageModelLabel(item.imageModel);
-  overlay.appendChild(badge);
-
-  const prompt = document.createElement("strong");
-  prompt.textContent = getDisplayPrompt(item);
-  overlay.appendChild(prompt);
-
-  const meta = document.createElement("span");
-  meta.textContent = formatRecentOutputMeta(item);
-  overlay.appendChild(meta);
-
-  button.appendChild(overlay);
   return button;
 }
 
 function normalizeGalleryColumnPreset(value) {
   const preset = Number(value);
   return GALLERY_COLUMN_PRESETS.includes(preset) ? preset : DEFAULT_GALLERY_COLUMN_PRESET;
+}
+
+function getGalleryColumnCount() {
+  return normalizeGalleryColumnPreset(state.galleryColumnPreset);
 }
 
 function renderGalleryColumnPresetButtons() {
@@ -1341,17 +1897,124 @@ function renderGalleryColumnPresetButtons() {
   });
 }
 
-function renderGalleryView() {
-  refs.galleryMasonry.innerHTML = "";
-  refs.galleryMasonry.style.setProperty("--gallery-columns", String(state.galleryColumnPreset));
-  refs.galleryCount.textContent = `${state.gallery.length} 张`;
-  refs.galleryEmpty.classList.toggle("hidden", state.gallery.length > 0);
-  renderGalleryColumnPresetButtons();
+function getVisibleGalleryItems(overrides = {}) {
+  return filterGalleryItems(state.gallery, getGalleryFilterSnapshot(overrides));
+}
 
-  sortByCreatedAtDescending(state.gallery).forEach((item) => {
-    refs.galleryMasonry.appendChild(createGalleryTile(item));
+function renderGalleryFilters(visibleItems, sections) {
+  const filters = getGalleryFilterSnapshot();
+  const timeOptions = buildGalleryTimeFilterOptions(getVisibleGalleryItems({ window: "all" }));
+  const sizeOptions = buildGallerySizeFilterOptions(getVisibleGalleryItems({ size: "all" }));
+  const referenceOptions = buildGalleryReferenceFilterOptions(getVisibleGalleryItems({ reference: "all" }));
+  const resolvedSizeOptions =
+    filters.size === "all" || sizeOptions.some((option) => option.value === filters.size)
+      ? sizeOptions
+      : [...sizeOptions, { value: filters.size, label: formatCanvasLabel(filters.size), count: 0 }];
+
+  refs.gallerySearchInput.value = filters.query;
+  refs.galleryDateInput.value = filters.date;
+  renderGallerySelectOptions(refs.gallerySizeFilterInput, resolvedSizeOptions, filters.size);
+  renderGallerySelectOptions(refs.galleryReferenceFilterInput, referenceOptions, filters.reference);
+  refs.galleryResetFiltersButton.disabled = !hasActiveGalleryFilters(filters);
+
+  refs.galleryFilters.innerHTML = "";
+  timeOptions.forEach((option) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "gallery-filter-chip";
+
+    if (option.value === filters.window) {
+      button.classList.add("active");
+    }
+
+    button.textContent = `${option.label} · ${option.count}`;
+    button.addEventListener("click", () => {
+      state.galleryControls.window = option.value;
+      if (option.value !== "all") {
+        state.galleryControls.date = "";
+      }
+      renderGalleryView();
+    });
+    refs.galleryFilters.appendChild(button);
   });
 
+  const summary = formatGalleryFilterSummary(filters);
+  if (visibleItems.length === 0) {
+    refs.galleryHelperText.textContent = summary
+      ? `没有匹配 ${summary} 的结果。`
+      : "按日期分组显示，可按关键词、日期、尺寸和参考图快速筛选。";
+    return;
+  }
+
+  const prefix = summary ? `已按 ${summary} 筛选，` : "";
+  refs.galleryHelperText.textContent = `${prefix}按日期分组显示，当前共 ${sections.length} 组，显示 ${visibleItems.length} / ${state.gallery.length} 张。`;
+}
+
+function createGallerySection(section) {
+  const wrapper = document.createElement("section");
+  wrapper.className = "gallery-section";
+
+  const header = document.createElement("div");
+  header.className = "gallery-section-head";
+
+  const copy = document.createElement("div");
+  copy.className = "gallery-section-copy";
+
+  const dateText = document.createElement("strong");
+  dateText.textContent = section.dateText || section.label;
+  copy.appendChild(dateText);
+
+  header.appendChild(copy);
+
+  const count = document.createElement("span");
+  count.className = "count-pill small";
+  count.textContent = `${section.count} 张`;
+  header.appendChild(count);
+
+  wrapper.appendChild(header);
+
+  const masonry = document.createElement("div");
+  masonry.className = "gallery-masonry";
+  const columnCount = Math.min(section.items.length || 1, getGalleryColumnCount());
+  masonry.style.setProperty("--gallery-columns", String(columnCount));
+  distributeGalleryItemsIntoColumns(section.items, columnCount).forEach((columnItems) => {
+    const column = document.createElement("div");
+    column.className = "gallery-masonry-column";
+    columnItems.forEach((item) => {
+      column.appendChild(createGalleryTile(item));
+    });
+    masonry.appendChild(column);
+  });
+  wrapper.appendChild(masonry);
+
+  return wrapper;
+}
+
+function renderGalleryView() {
+  const filters = getGalleryFilterSnapshot();
+  const visibleItems = getVisibleGalleryItems();
+  const sections = buildGallerySections(visibleItems);
+
+  refs.gallerySections.innerHTML = "";
+  refs.galleryCount.textContent =
+    visibleItems.length === state.gallery.length
+      ? `${state.gallery.length} 张`
+      : `${visibleItems.length} / ${state.gallery.length} 张`;
+  refs.galleryEmpty.textContent =
+    state.gallery.length === 0
+      ? "还没有本地输出，先回到 Studio 生成一张图。"
+      : hasActiveGalleryFilters(filters)
+        ? "当前筛选没有命中结果，试试清空部分筛选。"
+        : "当前还没有可展示的本地输出。";
+  refs.galleryEmpty.classList.toggle("hidden", visibleItems.length > 0);
+  renderGalleryFilters(visibleItems, sections);
+  renderGalleryColumnPresetButtons();
+
+  sections.forEach((section) => {
+    refs.gallerySections.appendChild(createGallerySection(section));
+  });
+
+  scheduleGalleryPanelHeightSync();
   scheduleGalleryScrollSync();
 }
 
@@ -1374,9 +2037,11 @@ function renderAll() {
 }
 
 function upsertGalleryItem(item) {
-  const next = state.gallery.filter((entry) => entry.filename !== item.filename);
-  next.unshift(item);
-  state.gallery = sortByCreatedAtDescending(next);
+  const hydratedItem = mergeGalleryItemWithCachedMetadata(item, state.galleryMetadataCache[item?.filename]);
+  const next = state.gallery.filter((entry) => entry.filename !== hydratedItem.filename);
+  next.unshift(hydratedItem);
+  state.gallery = sortGalleryItemsByCreatedAtDesc(next);
+  syncGalleryMetadataCache(state.gallery);
 }
 
 function selectRandomPrompt() {
@@ -1468,16 +2133,18 @@ function createJob() {
     sizeSetting,
     size,
     quality: state.config?.defaults?.quality || "high",
-    format: state.config?.defaults?.format || "jpeg",
+    format: state.config?.defaults?.format || "png",
     baseUrl: state.config?.baseUrl || refs.baseUrlInput.value.trim(),
     responsesModel: state.config?.responsesModel || refs.responsesModelInput.value.trim() || "gpt-5.4",
     imageModel: "gpt-image-2",
     reasoningEffort: refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
+    requestRetryCount: 0,
     referenceFiles,
     hasReferenceImage: referenceFiles.length > 0,
     referenceImageName: referenceImageNames[0] || "",
     referenceImageNames,
-    statusText: "正在连接上游服务",
+    statusStage: "uploading",
+    statusText: "正在准备生成请求",
     previewUrl: "",
   };
 }
@@ -1497,6 +2164,46 @@ function removeJob(jobId) {
   state.jobs = state.jobs.filter((job) => job.id !== jobId);
 }
 
+async function requestGenerationStream(job) {
+  while (true) {
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "x-client-session-id": state.clientSessionId,
+        },
+        body: buildGenerationFormData(job),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error("生成请求失败");
+      }
+
+      return response;
+    } catch (error) {
+      const retryPlan = getGenerationRequestRetryPlan({
+        error,
+        retryCount: job.requestRetryCount || 0,
+      });
+      if (!retryPlan.shouldRetry) {
+        if (retryPlan.retryable) {
+          throw new Error(retryPlan.message);
+        }
+        throw error;
+      }
+
+      job.requestRetryCount = retryPlan.nextRetryCount;
+      updateJob(job.id, {
+        requestRetryCount: retryPlan.nextRetryCount,
+        statusStage: "connecting",
+        statusText: retryPlan.message,
+      });
+      handleActivityStatus(job.id, "connecting", retryPlan.message);
+      await wait(900);
+    }
+  }
+}
+
 async function loadConfig() {
   const response = await fetch("/api/config");
   if (!response.ok) {
@@ -1514,8 +2221,11 @@ async function loadGallery() {
   }
 
   const payload = await response.json();
-  state.gallery = sortByCreatedAtDescending(Array.isArray(payload) ? payload : []);
+  const sortedItems = sortGalleryItemsByCreatedAtDesc(Array.isArray(payload) ? payload : []);
+  const hydratedGallery = hydrateGalleryItems(sortedItems);
+  state.gallery = sortGalleryItemsByCreatedAtDesc(hydratedGallery.items);
   renderAll();
+  void repairGalleryMetadataQueue(hydratedGallery.repairQueue);
 }
 
 async function saveConfig(event) {
@@ -1582,6 +2292,7 @@ async function deleteGalleryItem(item) {
   }
 
   state.gallery = state.gallery.filter((entry) => entry.filename !== item.filename);
+  forgetGalleryMetadata(item.filename);
 
   if (state.selectedPreviewKey === makeGalleryPreviewKey(item.filename)) {
     state.selectedPreviewKey = "";
@@ -1621,6 +2332,8 @@ async function clearHistory() {
   }
 
   state.gallery = [];
+  state.galleryMetadataCache = {};
+  writeGalleryMetadataCache(state.galleryMetadataCache);
   state.selectedPreviewKey = "";
   closeLightbox();
   renderAll();
@@ -1643,21 +2356,12 @@ function buildGenerationFormData(job) {
 
 async function runGeneration(job) {
   try {
-    const response = await fetch("/api/generate", {
-      method: "POST",
-      headers: {
-        "x-client-session-id": state.clientSessionId,
-      },
-      body: buildGenerationFormData(job),
-    });
-
-    if (!response.ok || !response.body) {
-      throw new Error("生成请求失败");
-    }
+    const response = await requestGenerationStream(job);
 
     await consumeSse(response.body, async (eventName, payload) => {
       if (eventName === "status") {
         updateJob(job.id, {
+          statusStage: payload.stage,
           statusText: payload.message,
         });
         handleActivityStatus(job.id, payload.stage, payload.message);
@@ -1790,6 +2494,30 @@ function bindEvents() {
       renderGalleryView();
     });
   });
+  refs.gallerySearchInput.addEventListener("input", (event) => {
+    state.galleryControls.query = event.target.value;
+    renderGalleryView();
+  });
+  refs.galleryDateInput.addEventListener("input", (event) => {
+    state.galleryControls.date = event.target.value;
+    if (event.target.value) {
+      state.galleryControls.window = "all";
+    }
+    renderGalleryView();
+  });
+  refs.gallerySizeFilterInput.addEventListener("change", (event) => {
+    state.galleryControls.size = event.target.value;
+    renderGalleryView();
+  });
+  refs.galleryReferenceFilterInput.addEventListener("change", (event) => {
+    state.galleryControls.reference = event.target.value;
+    renderGalleryView();
+  });
+  refs.galleryResetFiltersButton.addEventListener("click", () => {
+    state.galleryControls = { ...DEFAULT_GALLERY_CONTROLS };
+    renderGalleryView();
+    refs.gallerySearchInput.focus();
+  });
   refs.focusGalleryButton.addEventListener("click", () => {
     setActiveView("gallery");
   });
@@ -1828,6 +2556,19 @@ function bindEvents() {
 
     deleteGalleryItem(state.lightboxItem).catch((error) => showError(error.message));
   });
+  refs.copyPromptButton.addEventListener("click", () => {
+    copyLightboxPrompt().catch((error) => {
+      showError(error.message);
+    });
+  });
+  refs.lightboxImage.addEventListener("click", () => {
+    if (!state.lightboxItem || !getImageUrl(state.lightboxItem)) {
+      return;
+    }
+
+    state.lightboxZoomed = !state.lightboxZoomed;
+    syncLightboxZoomState();
+  });
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
@@ -1845,9 +2586,14 @@ function bindEvents() {
 
 async function bootstrap() {
   state.clientSessionId = getOrCreateClientSessionId();
+  state.galleryMetadataCache = readGalleryMetadataCache();
   bindEvents();
+  bindStudioDensitySync();
   bindStudioHeightSync();
+  bindGalleryPanelHeightSync();
   bindGalleryScrollSync();
+  scheduleStudioDensitySync();
+  syncGalleryLayoutMode();
   updatePromptCounter();
   renderRatioGrid();
   renderReasoningOptions();
@@ -1858,6 +2604,7 @@ async function bootstrap() {
   renderStudio();
   renderGalleryView();
   setActiveView(getViewFromHash());
+  scheduleGalleryPanelHeightSync();
   scheduleGalleryScrollSync();
 
   try {

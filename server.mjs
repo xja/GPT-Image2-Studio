@@ -24,6 +24,7 @@ import {
   deleteGeneratedAsset,
   formatDateFolder,
   listGalleryItems,
+  repairGeneratedAssetMetadata,
   saveGeneratedAsset,
 } from "./lib/gallery-store.mjs";
 import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
@@ -38,7 +39,6 @@ const rootDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(rootDir, "public");
 const libDir = join(rootDir, "lib");
 const outputDir = join(homedir(), "Pictures");
-const galleryIndexPath = join(rootDir, ".local", "gallery-index.json");
 const configStore = createConfigStore({ rootDir });
 const port = Number(process.env.PORT || 3600);
 const activeTasksBySession = new Map();
@@ -222,7 +222,6 @@ async function handleGalleryGet(response) {
   const items = await listGalleryItems({
     outputDir,
     publicBasePath: "/output",
-    indexPath: galleryIndexPath,
   });
 
   sendJson(response, 200, items);
@@ -251,7 +250,6 @@ async function handleDeleteOutput(request, response) {
   try {
     const deleted = await deleteGeneratedAsset({
       outputDir,
-      indexPath: galleryIndexPath,
       filename,
     });
 
@@ -259,6 +257,44 @@ async function handleDeleteOutput(request, response) {
       ok: true,
       filename: deleted.filename,
       absolutePath: deleted.absolutePath,
+    });
+  } catch (error) {
+    if (error && typeof error === "object" && error.code === "ENOENT") {
+      return sendJson(response, 404, {
+        message: "Not found",
+      });
+    }
+
+    throw error;
+  }
+}
+
+async function handleGalleryMetadataRepair(request, response) {
+  const payload = await readJsonBody(request);
+  const filename = String(payload.filename || "").trim();
+
+  if (!isSafeOutputFilename(filename)) {
+    return sendJson(response, 400, {
+      message: "Invalid filename",
+    });
+  }
+
+  try {
+    await repairGeneratedAssetMetadata({
+      outputDir,
+      filename,
+      metadata: payload.metadata || {},
+    });
+
+    const items = await listGalleryItems({
+      outputDir,
+      publicBasePath: "/output",
+    });
+    const item = items.find((entry) => entry.filename === filename) || null;
+
+    return sendJson(response, 200, {
+      ok: true,
+      item,
     });
   } catch (error) {
     if (error && typeof error === "object" && error.code === "ENOENT") {
@@ -403,7 +439,7 @@ async function handleGenerate(request, response) {
     const finalPrompt = appendRatioHintToPrompt(prompt, ratioOption);
     const finalSize = requestedSize === "auto" ? getDefaultGenerationSize(ratioOption.value) : requestedSize;
     const finalQuality = config.defaults?.quality || "high";
-    const finalFormat = config.defaults?.format || "jpeg";
+    const finalFormat = config.defaults?.format || "png";
     const createdAt = new Date().toISOString();
     let finalBase64 = "";
 
@@ -451,11 +487,15 @@ async function handleGenerate(request, response) {
       message: "正在保存到本地图片目录",
     });
 
-    const filename = createTimestampedFilename(finalFormat);
+    const filename = createTimestampedFilename({
+      format: finalFormat,
+      prompt,
+      createdAt,
+      idSource: taskId,
+    });
     const imageBuffer = Buffer.from(normalizeBase64(finalBase64), "base64");
     const saved = await saveGeneratedAsset({
       outputDir,
-      indexPath: galleryIndexPath,
       filename,
       imageBuffer,
       metadata: {
@@ -537,6 +577,10 @@ async function routeRequest(request, response) {
 
   if (request.method === "POST" && url.pathname === "/api/output/delete") {
     return handleDeleteOutput(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/gallery/metadata") {
+    return handleGalleryMetadataRepair(request, response);
   }
 
   if (request.method === "POST" && url.pathname === "/api/generate") {

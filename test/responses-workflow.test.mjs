@@ -71,6 +71,18 @@ test("createResponsesRequestBody keeps gpt-5.4 on the outer model and passes rea
   assert.equal(requestBody.tools[0].model, "gpt-image-2");
 });
 
+test("createResponsesRequestBody defaults to png output and leaves compression unset", () => {
+  const requestBody = createResponsesRequestBody({
+    prompt: "生成一张图",
+    size: "1024x1536",
+    quality: "high",
+    responsesModel: "gpt-5.4",
+  });
+
+  assert.equal(requestBody.tools[0].output_format, "png");
+  assert.equal("output_compression" in requestBody.tools[0], false);
+});
+
 test("consumeResponsesSse emits partial and final events, and tolerates terminated stream after success", async () => {
   const chunks = [
     [
