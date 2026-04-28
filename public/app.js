@@ -26,7 +26,7 @@ import {
   getDefaultGenerationSize,
   getGenerationSizeOptions,
   normalizeGenerationSize,
-} from "/lib/generation-size-options.mjs?v=20260428-desc-resolutions-1";
+} from "/lib/generation-size-options.mjs?v=20260428-table-resolutions-1";
 import {
   getPreviewLoadingShellTheme,
   shouldReusePreviewLoadingShell,
