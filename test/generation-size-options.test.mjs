@@ -31,6 +31,25 @@ test("size compatibility rejects mismatched ratios", () => {
   assert.equal(isGenerationSizeCompatible("9:16", "2048x1152"), false);
 });
 
+test("size options include the maximum legal resolution for every ratio", () => {
+  const maxLegalSizes = {
+    "1:1": "2880x2880",
+    "5:4": "3200x2560",
+    "9:16": "2160x3840",
+    "21:9": "4368x1872",
+    "16:9": "3840x2160",
+    "4:3": "3264x2448",
+    "3:2": "3504x2336",
+    "4:5": "2560x3200",
+    "3:4": "2448x3264",
+    "2:3": "2336x3504",
+  };
+
+  for (const [ratio, size] of Object.entries(maxLegalSizes)) {
+    assert.equal(isGenerationSizeCompatible(ratio, size), true, `${ratio} should include ${size}`);
+  }
+});
+
 test("normalizeGenerationSize falls back to auto for invalid resolutions", () => {
   assert.equal(normalizeGenerationSize("4:5", "2048x2560"), "2048x2560");
   assert.equal(normalizeGenerationSize("4:5", "2048x2048"), "auto");
