@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260427-gallery-toolbar-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260428-prompt-agent-2" />
   </head>
   <body>
     <div class="app-shell">
@@ -40,6 +40,7 @@
           </div>
           <div class="header-pill" id="configStatus">配置未保存</div>
           <button class="header-button" id="openOutputButton" type="button">打开输出目录</button>
+          <button class="header-button" id="openPromptAgentButton" type="button">图片转提示词</button>
           <button class="header-button strong" id="openConfigButton" type="button">配置</button>
         </div>
       </header>
@@ -356,6 +357,94 @@
       </div>
     </aside>
 
+    <aside class="prompt-agent-modal hidden" id="promptAgentModal" aria-hidden="true">
+      <div class="prompt-agent-backdrop" id="promptAgentBackdrop"></div>
+      <div class="prompt-agent-dialog" role="dialog" aria-modal="true" aria-label="图片提示词分析">
+        <div class="prompt-agent-head">
+          <div>
+            <p class="drawer-eyebrow">Prompt Agent</p>
+            <h2>图片转 JSON 提示词</h2>
+          </div>
+          <button class="header-button" id="promptAgentCloseButton" type="button">关闭</button>
+        </div>
+
+        <div class="prompt-agent-body">
+          <section class="prompt-agent-upload">
+            <label class="prompt-agent-dropzone" id="promptAgentDropzone">
+              <input id="promptAgentImageInput" type="file" accept="image/*" />
+              <div class="reference-icon" aria-hidden="true"></div>
+              <strong>上传图片后分析</strong>
+              <span>返回可长期保留的 JSON 提示词</span>
+              <em>选择图片</em>
+            </label>
+
+            <div class="prompt-agent-preview hidden" id="promptAgentPreview">
+              <button
+                class="prompt-agent-preview-button"
+                id="promptAgentPreviewButton"
+                type="button"
+                aria-label="放大查看待分析图片"
+              >
+                <img id="promptAgentPreviewImage" alt="待分析图片预览" />
+                <span class="prompt-agent-zoom-badge">点击放大</span>
+                <span class="prompt-agent-scan-line" aria-hidden="true"></span>
+              </button>
+              <div>
+                <strong id="promptAgentFilename">--</strong>
+                <span id="promptAgentFileMeta">--</span>
+                <span class="prompt-agent-preview-hint">可放大查看细节</span>
+              </div>
+            </div>
+
+            <div class="prompt-agent-analysis-motion" id="promptAgentAnalysisMotion" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+
+            <button class="generate-button" id="promptAgentAnalyzeButton" type="button">分析图片</button>
+            <p class="prompt-agent-feedback" id="promptAgentFeedback"></p>
+          </section>
+
+          <section class="prompt-agent-output">
+            <div class="detail-field">
+              <div class="detail-field-head">
+                <span id="promptAgentResultLabel">JSON 结果</span>
+                <button class="inline-button detail-copy-button" id="copyPromptAgentJsonButton" type="button">复制 JSON</button>
+              </div>
+              <textarea id="promptAgentResult" rows="12" readonly aria-labelledby="promptAgentResultLabel"></textarea>
+            </div>
+
+            <div class="prompt-agent-history-head">
+              <div>
+                <h3>长期保留</h3>
+                <p>点击提示词可映射到 Studio 文本框。</p>
+              </div>
+              <span class="count-pill small" id="promptAgentHistoryCount">0 条</span>
+            </div>
+            <div class="prompt-agent-history-empty" id="promptAgentHistoryEmpty">还没有分析记录。</div>
+            <div class="prompt-agent-history-list" id="promptAgentHistoryList"></div>
+          </section>
+        </div>
+      </div>
+    </aside>
+
+    <aside class="prompt-agent-image-viewer" id="promptAgentImageViewer" aria-hidden="true">
+      <button
+        class="prompt-agent-image-viewer-backdrop"
+        id="promptAgentImageViewerBackdrop"
+        type="button"
+        aria-label="关闭放大预览"
+      ></button>
+      <div class="prompt-agent-image-viewer-dialog" role="dialog" aria-modal="true" aria-label="待分析图片放大预览">
+        <div class="prompt-agent-image-viewer-head">
+          <span>待分析图片</span>
+          <button class="header-button" id="promptAgentImageViewerClose" type="button">关闭</button>
+        </div>
+        <img id="promptAgentImageViewerImage" alt="待分析图片放大预览" />
+      </div>
+    </aside>
+
     <aside class="config-drawer" id="configDrawer" aria-hidden="true">
       <div class="drawer-backdrop" id="closeConfigBackdrop"></div>
       <div class="drawer-panel">
@@ -392,6 +481,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260427-gallery-toolbar-1"></script>
+    <script type="module" src="/app.js?v=20260428-prompt-agent-2"></script>
   </body>
 </html>

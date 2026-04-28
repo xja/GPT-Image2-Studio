@@ -106,6 +106,14 @@ const state = {
   lightboxItem: null,
   lightboxZoomed: false,
   limits: { ...DEFAULT_LIMITS },
+  promptAgent: {
+    file: null,
+    history: [],
+    previewUrl: "",
+    result: null,
+    running: false,
+    viewerOpen: false,
+  },
   reasoningEfforts: [...DEFAULT_REASONING_EFFORTS],
   referenceFiles: [],
   selectedPreviewKey: "",
@@ -166,6 +174,7 @@ const refs = {
   liveCount: document.querySelector("#liveCount"),
   openConfigButton: document.querySelector("#openConfigButton"),
   openOutputButton: document.querySelector("#openOutputButton"),
+  openPromptAgentButton: document.querySelector("#openPromptAgentButton"),
   previewDeleteButton: document.querySelector("#previewDeleteButton"),
   previewDownloadButton: document.querySelector("#previewDownloadButton"),
   previewId: document.querySelector("#previewId"),
@@ -176,6 +185,28 @@ const refs = {
   previewSize: document.querySelector("#previewSize"),
   previewTime: document.querySelector("#previewTime"),
   promptCounter: document.querySelector("#promptCounter"),
+  promptAgentAnalyzeButton: document.querySelector("#promptAgentAnalyzeButton"),
+  promptAgentBackdrop: document.querySelector("#promptAgentBackdrop"),
+  promptAgentCloseButton: document.querySelector("#promptAgentCloseButton"),
+  copyPromptAgentJsonButton: document.querySelector("#copyPromptAgentJsonButton"),
+  promptAgentDropzone: document.querySelector("#promptAgentDropzone"),
+  promptAgentFeedback: document.querySelector("#promptAgentFeedback"),
+  promptAgentFilename: document.querySelector("#promptAgentFilename"),
+  promptAgentFileMeta: document.querySelector("#promptAgentFileMeta"),
+  promptAgentHistoryCount: document.querySelector("#promptAgentHistoryCount"),
+  promptAgentHistoryEmpty: document.querySelector("#promptAgentHistoryEmpty"),
+  promptAgentHistoryList: document.querySelector("#promptAgentHistoryList"),
+  promptAgentImageViewer: document.querySelector("#promptAgentImageViewer"),
+  promptAgentImageViewerBackdrop: document.querySelector("#promptAgentImageViewerBackdrop"),
+  promptAgentImageViewerClose: document.querySelector("#promptAgentImageViewerClose"),
+  promptAgentImageViewerImage: document.querySelector("#promptAgentImageViewerImage"),
+  promptAgentImageInput: document.querySelector("#promptAgentImageInput"),
+  promptAgentModal: document.querySelector("#promptAgentModal"),
+  promptAgentAnalysisMotion: document.querySelector("#promptAgentAnalysisMotion"),
+  promptAgentPreview: document.querySelector("#promptAgentPreview"),
+  promptAgentPreviewButton: document.querySelector("#promptAgentPreviewButton"),
+  promptAgentPreviewImage: document.querySelector("#promptAgentPreviewImage"),
+  promptAgentResult: document.querySelector("#promptAgentResult"),
   promptInput: document.querySelector("#promptInput"),
   ratioGrid: document.querySelector("#ratioGrid"),
   ratioInput: document.querySelector("#ratioInput"),
@@ -233,6 +264,19 @@ function formatClock(dateLike) {
   }
 
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function formatFileSize(bytes) {
+  const value = Number(bytes || 0);
+  if (value <= 0) {
+    return "--";
+  }
+
+  if (value < 1024 * 1024) {
+    return `${Math.max(1, Math.round(value / 1024))} KB`;
+  }
+
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function nowIso() {
@@ -496,8 +540,33 @@ function getOrCreateClientSessionId() {
   return next;
 }
 
+function compactErrorMessage(message, fallbackLabel = "请求失败") {
+  const raw = String(message || fallbackLabel).trim();
+  const httpStatus = raw.match(/HTTP\s+(\d{3})/i)?.[1] || raw.match(/"status"\s*:\s*(\d{3})/i)?.[1] || "";
+  const errorCode =
+    raw.match(/错误码\s*([A-Za-z0-9_.-]+)/i)?.[1] ||
+    raw.match(/"error_code"\s*:\s*"?([A-Za-z0-9_.-]+)"?/i)?.[1] ||
+    raw.match(/"code"\s*:\s*"([^"]+)"/i)?.[1] ||
+    httpStatus;
+
+  if (!httpStatus && !errorCode) {
+    return raw;
+  }
+
+  let label = fallbackLabel;
+  if (/图片分析|Prompt Agent/i.test(raw)) {
+    label = "图片分析请求失败";
+  } else if (/生成|接口请求|image_generation/i.test(raw)) {
+    label = "生成请求失败";
+  }
+
+  return `${label}：${[httpStatus ? `HTTP ${httpStatus}` : "", errorCode ? `错误码 ${errorCode}` : ""]
+    .filter(Boolean)
+    .join("，")}`;
+}
+
 function showError(message) {
-  refs.errorBanner.textContent = message;
+  refs.errorBanner.textContent = compactErrorMessage(message);
   refs.errorBanner.classList.remove("hidden");
 }
 
@@ -692,6 +761,148 @@ function updateGenerateButton() {
   refs.generateButton.disabled = runningCount >= maxCount;
   refs.generateButton.textContent = runningCount > 0 ? `生成中 ${runningCount}/${maxCount}` : "开始生成";
   refs.liveCount.textContent = `${runningCount} / ${maxCount}`;
+}
+
+function setPromptAgentFeedback(message, kind = "") {
+  refs.promptAgentFeedback.textContent =
+    kind === "error" ? compactErrorMessage(message, "图片分析请求失败") : message || "";
+  refs.promptAgentFeedback.dataset.state = kind;
+}
+
+function revokePromptAgentPreview() {
+  if (state.promptAgent.previewUrl) {
+    URL.revokeObjectURL(state.promptAgent.previewUrl);
+  }
+}
+
+function setPromptAgentOpen(open) {
+  refs.promptAgentModal.classList.toggle("hidden", !open);
+  refs.promptAgentModal.setAttribute("aria-hidden", String(!open));
+  if (open) {
+    renderPromptAgent();
+    loadPromptAgentHistory().catch((error) => setPromptAgentFeedback(error.message, "error"));
+  }
+}
+
+function getPromptAgentItem(itemId) {
+  const current = state.promptAgent.result;
+  if (current?.id === itemId) {
+    return current;
+  }
+
+  return state.promptAgent.history.find((item) => item.id === itemId) || null;
+}
+
+function getPromptAgentPrompt(item) {
+  return String(item?.json?.prompt || "").trim();
+}
+
+function getPromptAgentJsonText(item = state.promptAgent.result) {
+  if (!item?.json) {
+    return "";
+  }
+
+  return JSON.stringify(item.json, null, 2);
+}
+
+function renderPromptAgentPreview() {
+  const file = state.promptAgent.file;
+  refs.promptAgentPreview.classList.toggle("hidden", !file);
+  refs.promptAgentPreview.classList.toggle("is-analyzing", state.promptAgent.running);
+  refs.promptAgentAnalysisMotion.classList.toggle("is-active", state.promptAgent.running);
+
+  if (!file) {
+    refs.promptAgentPreviewImage.removeAttribute("src");
+    refs.promptAgentFilename.textContent = "--";
+    refs.promptAgentFileMeta.textContent = "--";
+    return;
+  }
+
+  refs.promptAgentPreviewImage.src = state.promptAgent.previewUrl;
+  refs.promptAgentFilename.textContent = file.name || "uploaded-image";
+  refs.promptAgentFileMeta.textContent = `${file.type || "image"} · ${formatFileSize(file.size)}`;
+}
+
+function openPromptAgentImageViewer() {
+  if (!state.promptAgent.previewUrl) {
+    return;
+  }
+
+  state.promptAgent.viewerOpen = true;
+  refs.promptAgentImageViewerImage.src = state.promptAgent.previewUrl;
+  refs.promptAgentImageViewer.classList.add("open");
+  refs.promptAgentImageViewer.setAttribute("aria-hidden", "false");
+}
+
+function closePromptAgentImageViewer() {
+  state.promptAgent.viewerOpen = false;
+  refs.promptAgentImageViewer.classList.remove("open");
+  refs.promptAgentImageViewer.setAttribute("aria-hidden", "true");
+}
+
+function createPromptAgentHistoryCard(item) {
+  const card = document.createElement("article");
+  card.className = "prompt-agent-history-card";
+
+  const titleRow = document.createElement("div");
+  titleRow.className = "prompt-agent-history-title";
+
+  const title = document.createElement("strong");
+  title.textContent = item.json?.title || "图片提示词";
+
+  const time = document.createElement("span");
+  time.textContent = formatTime(item.createdAt);
+
+  titleRow.append(title, time);
+
+  const promptButton = document.createElement("button");
+  promptButton.className = "prompt-agent-prompt-button";
+  promptButton.type = "button";
+  promptButton.dataset.promptAgentMapId = item.id;
+  promptButton.textContent = getPromptAgentPrompt(item) || "未返回 prompt 字段";
+
+  const meta = document.createElement("div");
+  meta.className = "prompt-agent-history-meta";
+  const tags = Array.isArray(item.json?.style_tags) ? item.json.style_tags.slice(0, 4).join(" / ") : "";
+  meta.textContent = [item.filename, item.json?.aspect_ratio, tags].filter(Boolean).join(" · ");
+
+  const actions = document.createElement("div");
+  actions.className = "prompt-agent-history-actions";
+
+  const mapButton = document.createElement("button");
+  mapButton.className = "inline-button";
+  mapButton.type = "button";
+  mapButton.dataset.promptAgentMapId = item.id;
+  mapButton.textContent = "映射到提示词";
+
+  const copyButton = document.createElement("button");
+  copyButton.className = "inline-button";
+  copyButton.type = "button";
+  copyButton.dataset.promptAgentCopyId = item.id;
+  copyButton.textContent = "复制 JSON";
+
+  actions.append(mapButton, copyButton);
+  card.append(titleRow, promptButton, meta, actions);
+  return card;
+}
+
+function renderPromptAgentHistory() {
+  refs.promptAgentHistoryList.replaceChildren();
+  refs.promptAgentHistoryCount.textContent = `${state.promptAgent.history.length} 条`;
+  refs.promptAgentHistoryEmpty.classList.toggle("hidden", state.promptAgent.history.length > 0);
+
+  state.promptAgent.history.forEach((item) => {
+    refs.promptAgentHistoryList.append(createPromptAgentHistoryCard(item));
+  });
+}
+
+function renderPromptAgent() {
+  renderPromptAgentPreview();
+  refs.promptAgentAnalyzeButton.disabled = state.promptAgent.running || !state.promptAgent.file;
+  refs.promptAgentAnalyzeButton.textContent = state.promptAgent.running ? "分析中..." : "分析图片";
+  refs.copyPromptAgentJsonButton.disabled = !state.promptAgent.result?.json;
+  refs.promptAgentResult.value = getPromptAgentJsonText();
+  renderPromptAgentHistory();
 }
 
 function revokeReferencePreview(item) {
@@ -1426,7 +1637,7 @@ function handleActivityFailure(jobId, message) {
   recordActivity({
     key: `${jobId}:error`,
     title: "生成失败",
-    detail: message,
+    detail: compactErrorMessage(message, "生成请求失败"),
     status: "error",
     at: nowIso(),
   });
@@ -2228,6 +2439,17 @@ async function loadGallery() {
   void repairGalleryMetadataQueue(hydratedGallery.repairQueue);
 }
 
+async function loadPromptAgentHistory() {
+  const response = await fetch("/api/prompt-agent/history");
+  if (!response.ok) {
+    throw new Error("读取图片提示词历史失败");
+  }
+
+  const payload = await response.json();
+  state.promptAgent.history = Array.isArray(payload) ? payload : [];
+  renderPromptAgent();
+}
+
 async function saveConfig(event) {
   event.preventDefault();
   clearError();
@@ -2354,6 +2576,96 @@ function buildGenerationFormData(job) {
   return formData;
 }
 
+function applyPromptAgentFile(fileList) {
+  const file = [...(fileList || [])].find((item) => item.type.startsWith("image/"));
+  if (!file) {
+    setPromptAgentFeedback("请选择一张图片。", "error");
+    return;
+  }
+
+  revokePromptAgentPreview();
+  state.promptAgent.file = file;
+  state.promptAgent.previewUrl = URL.createObjectURL(file);
+  state.promptAgent.result = null;
+  refs.promptAgentImageInput.value = "";
+  setPromptAgentFeedback("", "");
+  renderPromptAgent();
+}
+
+function buildPromptAgentFormData() {
+  const formData = new FormData();
+  formData.set("image", state.promptAgent.file);
+  formData.set(
+    "reasoningEffort",
+    refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
+  );
+  return formData;
+}
+
+async function analyzePromptAgentImage() {
+  clearError();
+  if (!state.promptAgent.file) {
+    setPromptAgentFeedback("请先上传一张图片。", "error");
+    return;
+  }
+
+  state.promptAgent.running = true;
+  setPromptAgentFeedback("正在分析图片...", "busy");
+  renderPromptAgent();
+
+  try {
+    const response = await fetch("/api/prompt-agent/analyze", {
+      method: "POST",
+      body: buildPromptAgentFormData(),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.message || "图片分析失败。");
+    }
+
+    state.promptAgent.result = payload.item;
+    state.promptAgent.history = [
+      payload.item,
+      ...state.promptAgent.history.filter((item) => item.id !== payload.item.id),
+    ];
+    setPromptAgentFeedback("已生成 JSON 提示词。", "success");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setPromptAgentFeedback(message, "error");
+    showError(message);
+  } finally {
+    state.promptAgent.running = false;
+    renderPromptAgent();
+  }
+}
+
+function mapPromptAgentPrompt(itemId) {
+  const item = getPromptAgentItem(itemId);
+  const promptText = getPromptAgentPrompt(item);
+  if (!promptText) {
+    setPromptAgentFeedback("这条记录没有可映射的 prompt 字段。", "error");
+    return;
+  }
+
+  refs.promptInput.value = promptText;
+  updatePromptCounter();
+  setPromptAgentFeedback("已映射到 Studio 提示词。", "success");
+  setPromptAgentOpen(false);
+  refs.promptInput.focus();
+}
+
+async function copyPromptAgentJson(itemId) {
+  const item = itemId ? getPromptAgentItem(itemId) : state.promptAgent.result;
+  const jsonText = getPromptAgentJsonText(item);
+  if (!jsonText) {
+    setPromptAgentFeedback("没有可复制的 JSON。", "error");
+    return;
+  }
+
+  await navigator.clipboard.writeText(jsonText);
+  setPromptAgentFeedback("JSON 已复制。", "success");
+}
+
 async function runGeneration(job) {
   try {
     const response = await requestGenerationStream(job);
@@ -2401,8 +2713,9 @@ async function runGeneration(job) {
       }
 
       if (eventName === "error") {
-        handleActivityFailure(job.id, payload.message);
-        showError(payload.message);
+        const message = compactErrorMessage(payload.message, "生成请求失败");
+        handleActivityFailure(job.id, message);
+        showError(message);
         removeJob(job.id);
         renderAll();
       }
@@ -2456,6 +2769,12 @@ function bindEvents() {
   refs.openConfigButton.addEventListener("click", () => setDrawerOpen(true));
   refs.closeConfigButton.addEventListener("click", () => setDrawerOpen(false));
   refs.closeConfigBackdrop.addEventListener("click", () => setDrawerOpen(false));
+  refs.openPromptAgentButton.addEventListener("click", () => setPromptAgentOpen(true));
+  refs.promptAgentCloseButton.addEventListener("click", () => setPromptAgentOpen(false));
+  refs.promptAgentBackdrop.addEventListener("click", () => setPromptAgentOpen(false));
+  refs.promptAgentPreviewButton.addEventListener("click", openPromptAgentImageViewer);
+  refs.promptAgentImageViewerBackdrop.addEventListener("click", closePromptAgentImageViewer);
+  refs.promptAgentImageViewerClose.addEventListener("click", closePromptAgentImageViewer);
   refs.openOutputButton.addEventListener("click", () => {
     openOutputDirectory().catch((error) => showError(error.message));
   });
@@ -2479,6 +2798,45 @@ function bindEvents() {
     event.preventDefault();
     refs.referenceDropzone.classList.remove("dragover");
     applyReferenceFiles(event.dataTransfer?.files);
+  });
+  refs.promptAgentImageInput.addEventListener("change", (event) => {
+    applyPromptAgentFile(event.target.files);
+  });
+  refs.promptAgentDropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    refs.promptAgentDropzone.classList.add("dragover");
+  });
+  refs.promptAgentDropzone.addEventListener("dragleave", () => {
+    refs.promptAgentDropzone.classList.remove("dragover");
+  });
+  refs.promptAgentDropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    refs.promptAgentDropzone.classList.remove("dragover");
+    applyPromptAgentFile(event.dataTransfer?.files);
+  });
+  refs.promptAgentAnalyzeButton.addEventListener("click", () => {
+    analyzePromptAgentImage().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      setPromptAgentFeedback(message, "error");
+      showError(message);
+    });
+  });
+  refs.copyPromptAgentJsonButton.addEventListener("click", () => {
+    copyPromptAgentJson().catch((error) => setPromptAgentFeedback(error.message, "error"));
+  });
+  refs.promptAgentHistoryList.addEventListener("click", (event) => {
+    const mapTarget = event.target.closest("[data-prompt-agent-map-id]");
+    if (mapTarget) {
+      mapPromptAgentPrompt(mapTarget.dataset.promptAgentMapId);
+      return;
+    }
+
+    const copyTarget = event.target.closest("[data-prompt-agent-copy-id]");
+    if (copyTarget) {
+      copyPromptAgentJson(copyTarget.dataset.promptAgentCopyId).catch((error) => {
+        setPromptAgentFeedback(error.message, "error");
+      });
+    }
   });
   refs.refreshGalleryButton.addEventListener("click", () => {
     loadGallery().catch((error) => showError(error.message));
@@ -2577,8 +2935,18 @@ function bindEvents() {
         return;
       }
 
+      if (refs.promptAgentImageViewer.classList.contains("open")) {
+        closePromptAgentImageViewer();
+        return;
+      }
+
       if (refs.configDrawer.classList.contains("open")) {
         setDrawerOpen(false);
+        return;
+      }
+
+      if (!refs.promptAgentModal.classList.contains("hidden")) {
+        setPromptAgentOpen(false);
       }
     }
   });
@@ -2610,6 +2978,7 @@ async function bootstrap() {
   try {
     await loadConfig();
     await loadGallery();
+    await loadPromptAgentHistory();
   } catch (error) {
     showError(error instanceof Error ? error.message : String(error));
     setConnectionState("error", "初始化失败");

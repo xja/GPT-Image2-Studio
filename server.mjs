@@ -34,12 +34,15 @@ import {
   MAX_REFERENCE_IMAGES,
   REASONING_EFFORT_OPTIONS,
 } from "./lib/studio-constants.mjs";
+import { requestPromptAgentAnalysis } from "./lib/prompt-agent.mjs";
+import { createPromptAgentStore } from "./lib/prompt-agent-store.mjs";
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(rootDir, "public");
 const libDir = join(rootDir, "lib");
 const outputDir = join(homedir(), "Pictures");
 const configStore = createConfigStore({ rootDir });
+const promptAgentStore = createPromptAgentStore({ rootDir });
 const port = Number(process.env.PORT || 3600);
 const activeTasksBySession = new Map();
 
@@ -227,6 +230,10 @@ async function handleGalleryGet(response) {
   sendJson(response, 200, items);
 }
 
+async function handlePromptAgentHistoryGet(response) {
+  sendJson(response, 200, await promptAgentStore.list());
+}
+
 async function handleOpenOutput(response) {
   const todayOutputDir = join(outputDir, formatDateFolder(new Date()));
   await mkdir(todayOutputDir, { recursive: true });
@@ -327,6 +334,62 @@ async function toReferenceImages(files) {
       };
     }),
   );
+}
+
+async function handlePromptAgentAnalyze(request, response) {
+  const formData = await readFormDataBody(request);
+  const rawImages = [
+    ...formData.getAll("image"),
+    ...formData.getAll("promptAgentImage"),
+  ];
+  const images = await toReferenceImages(rawImages);
+
+  if (images.length === 0) {
+    return sendJson(response, 400, {
+      message: "请先上传一张图片。",
+    });
+  }
+
+  const image = images[0];
+  if (!image.mimeType.startsWith("image/")) {
+    return sendJson(response, 400, {
+      message: "仅支持图片文件。",
+    });
+  }
+
+  const config = await configStore.readPrivateConfig();
+  if (!config.apiKey) {
+    return sendJson(response, 400, {
+      message: "当前未保存 API Key，请先在配置中保存。",
+    });
+  }
+
+  const reasoningEffort = normalizeReasoningEffort(
+    formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+  );
+  const createdAt = new Date().toISOString();
+  const json = await requestPromptAgentAnalysis({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    image,
+    responsesModel: config.responsesModel,
+    reasoningEffort,
+  });
+  const item = await promptAgentStore.append({
+    id: `prompt-json-${randomUUID()}`,
+    createdAt,
+    filename: image.filename,
+    imageMimeType: image.mimeType,
+    imageSize: image.buffer.length,
+    responsesModel: config.responsesModel,
+    reasoningEffort,
+    json,
+  });
+
+  return sendJson(response, 200, {
+    ok: true,
+    item,
+  });
 }
 
 function buildSavedItem({
@@ -569,6 +632,14 @@ async function routeRequest(request, response) {
 
   if (request.method === "GET" && url.pathname === "/api/gallery") {
     return handleGalleryGet(response);
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/prompt-agent/history") {
+    return handlePromptAgentHistoryGet(response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/prompt-agent/analyze") {
+    return handlePromptAgentAnalyze(request, response);
   }
 
   if (request.method === "POST" && url.pathname === "/api/output/open") {

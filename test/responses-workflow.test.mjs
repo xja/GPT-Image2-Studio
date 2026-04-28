@@ -5,6 +5,7 @@ import {
   buildResponsesInput,
   consumeResponsesSse,
   createResponsesRequestBody,
+  requestImageGeneration,
 } from "../lib/responses-workflow.mjs";
 
 test("buildResponsesInput returns plain text for prompt-only generation", () => {
@@ -131,4 +132,31 @@ test("consumeResponsesSse emits partial and final events, and tolerates terminat
   assert.deepEqual(seenEvents, ["partial_image", "final_image", "complete"]);
   assert.equal(result.finalImageBase64, "ZmluYWw=");
   assert.equal(result.partialImages.length, 1);
+});
+
+test("requestImageGeneration returns compact upstream HTTP errors", async () => {
+  await assert.rejects(
+    () =>
+      requestImageGeneration({
+        baseUrl: "https://example.test/v1",
+        apiKey: "test-key",
+        prompt: "生成一张图",
+        size: "1024x1536",
+        quality: "high",
+        responsesModel: "gpt-5.4",
+        async fetchImpl() {
+          return new Response(
+            JSON.stringify({
+              type: "https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-5xx-errors/error-524/",
+              detail: "The origin web server did not respond within the timeout window.",
+              error_code: 524,
+            }),
+            { status: 524 },
+          );
+        },
+      }),
+    {
+      message: "生成请求失败：HTTP 524，错误码 524",
+    },
+  );
 });

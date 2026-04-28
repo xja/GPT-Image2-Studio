@@ -97,6 +97,52 @@ test("studio panels start without redundant title blocks and keep advanced optio
   assert.doesNotMatch(app, /advancedBaseUrl/);
 });
 
+test("prompt agent opens from the header without adding another view tab", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /<button class="header-button" id="openPromptAgentButton" type="button">图片转提示词<\/button>/);
+  assert.match(html, /<aside class="prompt-agent-modal hidden" id="promptAgentModal"/);
+  assert.match(html, /id="promptAgentHistoryList"/);
+  assert.doesNotMatch(html, /data-view-tab="prompt-agent"/);
+  assert.match(styles, /\.prompt-agent-modal\s*\{[\s\S]*position:\s*fixed;/);
+  assert.match(app, /fetch\("\/api\/prompt-agent\/analyze"/);
+  assert.match(app, /refs\.promptInput\.value = promptText;/);
+  assert.match(app, /loadPromptAgentHistory/);
+});
+
+test("prompt agent preview marks uploaded images as zoomable and animates analysis", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /id="promptAgentPreviewButton"[\s\S]*aria-label="放大查看待分析图片"/);
+  assert.match(html, /class="prompt-agent-zoom-badge"[\s\S]*点击放大/);
+  assert.match(html, /id="promptAgentImageViewer"/);
+  assert.match(html, /class="prompt-agent-analysis-motion" id="promptAgentAnalysisMotion"/);
+  assert.match(styles, /@keyframes prompt-agent-scan/);
+  assert.match(styles, /\.prompt-agent-preview\.is-analyzing[\s\S]*prompt-agent-scan-line/);
+  assert.match(styles, /\.prompt-agent-image-viewer\.open[\s\S]*display:\s*grid;/);
+  assert.match(app, /function openPromptAgentImageViewer\(\)/);
+  assert.match(app, /refs\.promptAgentPreviewButton\.addEventListener\("click", openPromptAgentImageViewer\)/);
+  assert.match(app, /refs\.promptAgentPreview\.classList\.toggle\("is-analyzing", state\.promptAgent\.running\)/);
+  assert.match(
+    styles,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.prompt-agent-preview\.is-analyzing \.prompt-agent-scan-line[\s\S]*animation:\s*none;/,
+  );
+});
+
+test("studio error surfaces compact long upstream HTTP failures before rendering", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /function compactErrorMessage\(message, fallbackLabel = "请求失败"\)/);
+  assert.match(app, /refs\.errorBanner\.textContent = compactErrorMessage\(message\);/);
+  assert.match(app, /compactErrorMessage\(message, "生成请求失败"\)/);
+  assert.match(app, /compactErrorMessage\(message, "图片分析请求失败"\)/);
+  assert.match(app, /"error_code"\\s\*:\\s\*"\?\(\[A-Za-z0-9_\.-\]\+\)"\?/);
+});
+
 test("studio layout consumes density variables for wide-screen adaptation without changing structure", async () => {
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
