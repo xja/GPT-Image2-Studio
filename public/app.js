@@ -34,7 +34,6 @@ import {
 import { getGenerationRequestRetryPlan } from "/lib/generation-request-retry.mjs";
 import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260426-filmstrip-1";
 
-const FEATURED_RATIOS = ["4:5", "1:1", "3:4", "16:9", "9:16"];
 const SURPRISE_PROMPTS = [
   "生成一张美女抖音直播带货主视觉，主播面对镜头展示护肤礼盒，商业摄影质感，暖金色补光，画面干净适合电商封面。",
   "生成一张中国风直播间服饰带货海报，女主播站在布景前介绍新款汉服，柔和边缘光，细节精致，适合社媒首图。",
@@ -532,8 +531,7 @@ function getRatioOption(value) {
 }
 
 function getVisibleRatios() {
-  const featured = FEATURED_RATIOS.map((value) => getRatioOption(value)).filter(Boolean);
-  return featured.length > 0 ? featured : state.aspectRatios.slice(0, 5);
+  return [...state.aspectRatios];
 }
 
 function getViewFromHash() {

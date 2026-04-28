@@ -97,6 +97,14 @@ test("studio panels start without redundant title blocks and keep advanced optio
   assert.doesNotMatch(app, /advancedBaseUrl/);
 });
 
+test("ratio picker renders every configured aspect ratio instead of a featured subset", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /function getVisibleRatios\(\) \{[\s\S]*return \[\.\.\.state\.aspectRatios\];[\s\S]*\}/);
+  assert.doesNotMatch(app, /FEATURED_RATIOS/);
+  assert.doesNotMatch(app, /state\.aspectRatios\.slice\(0,\s*5\)/);
+});
+
 test("prompt agent opens from the header without adding another view tab", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
