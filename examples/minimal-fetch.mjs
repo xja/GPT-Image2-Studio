@@ -2,15 +2,16 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { consumeSseStream } from "./shared-sse-parser.mjs";
 
-const apiKey = process.env.ASXS_API_KEY || process.env.OPENAI_API_KEY;
-const baseUrl = (process.env.ASXS_BASE_URL || "https://api.asxs.top/v1").replace(/\/+$/, "");
+const DEFAULT_BASE_URL = "https://api.openai.com/v1";
+const apiKey = process.env.OPENAI_API_KEY;
+const baseUrl = (process.env.OPENAI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
 const prompt =
   process.argv[2] ||
   "生成一张美女抖音直播带货的写实风图片，主播坐在直播桌前展示商品，竖版构图，灯光专业，适合电商宣传。";
 const outputPath = resolve("output", "minimal-fetch.jpeg");
 
 if (!apiKey) {
-  throw new Error("缺少 ASXS_API_KEY 或 OPENAI_API_KEY 环境变量");
+  throw new Error("缺少 OPENAI_API_KEY 环境变量");
 }
 
 const response = await fetch(`${baseUrl}/responses`, {

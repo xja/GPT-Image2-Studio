@@ -31,6 +31,7 @@ import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflo
 import {
   DEFAULT_REASONING_EFFORT,
   MAX_CONCURRENT_TASKS_PER_SESSION,
+  MAX_PARALLEL_TASKS_PER_SESSION,
   MAX_REFERENCE_IMAGES,
   REASONING_EFFORT_OPTIONS,
 } from "./lib/studio-constants.mjs";
@@ -165,7 +166,7 @@ function getClientSessionId(request, formData) {
 
 function claimSessionTaskSlot(sessionId, taskId) {
   const activeTasks = activeTasksBySession.get(sessionId) || new Set();
-  if (activeTasks.size >= MAX_CONCURRENT_TASKS_PER_SESSION) {
+  if (activeTasks.size >= MAX_PARALLEL_TASKS_PER_SESSION) {
     return false;
   }
 
@@ -488,7 +489,7 @@ async function handleGenerate(request, response) {
 
     if (!claimSessionTaskSlot(clientSessionId, taskId)) {
       writeSseEvent(response, "error", {
-        message: `同一会话最多同时进行 ${MAX_CONCURRENT_TASKS_PER_SESSION} 个生成任务。`,
+        message: `同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`,
       });
       return;
     }

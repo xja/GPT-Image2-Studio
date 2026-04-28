@@ -2,13 +2,15 @@
 
 一个面向本地创作流的图片生成工作台：用浏览器管理提示词、参考图、比例、分辨率和历史画廊，通过本机 Node 服务转发 `Responses API`，并使用内置 `image_generation` 工具调用 `gpt-image-2` 生成图片。
 
-> API Key 只保存在本机 `.local/config.json`，生成结果默认写入 Windows 图片目录，不会随源码提交到 GitHub。
+> API Key 只保存在本机 `.local/config.json`，公开仓库不内置私人 Base URL，生成结果默认写入 Windows 图片目录，不会随源码提交到 GitHub。
 
 ## 功能概览
 
 | 模块 | 能力 |
 | --- | --- |
 | Studio | 提示词输入、参考图上传、比例选择、分辨率选择、推理强度选择、实时生成状态 |
+| 队列 | 最多 12 个生成任务排队，最多 4 个任务并发请求 |
+| 模板 | 本地提示词模板，可创建、修改、插入和删除 |
 | 画廊 | 按日期分组、本地缩略图、关键词筛选、日期筛选、尺寸筛选、参考图筛选 |
 | 本地服务 | 静态页面托管、配置保存、SSE 转发、图片写入、输出目录打开 |
 | 命令行 | 支持直接用 `npm run generate` 生成单张图片 |
@@ -75,10 +77,12 @@ npm run help
 
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
-| Base URL | `https://api.asxs.top/v1` | Responses API 根路径 |
+| Base URL | `https://api.openai.com/v1` | Responses API 根路径 |
 | API Key | 空 | 可使用你的中转 Key 或 OpenAI Key |
 | Responses Model | `gpt-5.4` | 外层 Responses 模型 |
 | Image Model | `gpt-image-2` | 固定由图片工具调用 |
+
+公开仓库只保留 OpenAI 官方根路径作为安全默认值。如果使用私有中转服务，请只在工作台配置、`.env` 或命令行临时环境变量中填写真实 Base URL，不要写入 README、示例代码或可提交文件。
 
 配置会保存到：
 
@@ -101,6 +105,13 @@ npm run help
 | 推理强度 | `low`、`medium`、`high`、`xhigh` | 默认 `xhigh` |
 | 图片质量 | `high` | 当前默认高质量 |
 | 输出格式 | `png` | 工作台默认保存为 PNG |
+
+### 任务队列与提示词模板
+
+- 同一会话最多保留 12 个生成任务，最多 4 个任务并发请求，剩余任务会在前序任务完成后自动继续。
+- 提示词框旁的模板按钮会打开本地 Prompt Kit，可创建、修改、插入和删除提示词模板，模板数据保存在浏览器本地。
+
+![提示词模板弹窗](prompt-template-popover.png)
 
 ### 比例与默认尺寸
 
@@ -126,16 +137,18 @@ npm run help
 | `--quality` | `high` | 图片质量 |
 | `--format` | `jpeg` | 输出格式 |
 | `--output` | `output/generated-时间戳.<ext>` | 输出文件路径 |
-| `--base-url` | `ASXS_BASE_URL` 或 `https://api.asxs.top/v1` | API 根路径 |
+| `--base-url` | `OPENAI_BASE_URL` 或 `https://api.openai.com/v1` | API 根路径 |
 | `--model` | `RESPONSES_MODEL` 或 `gpt-5.4` | 外层 Responses 模型 |
 
 命令行模式需要环境变量：
 
 ```powershell
-$env:ASXS_API_KEY="你的 API Key"
-$env:ASXS_BASE_URL="https://api.asxs.top/v1"
+$env:OPENAI_API_KEY="你的 API Key"
+$env:OPENAI_BASE_URL="https://api.openai.com/v1"
 $env:RESPONSES_MODEL="gpt-5.4"
 ```
+
+如果接入兼容代理，把 `OPENAI_BASE_URL` 替换为你的私有端点即可；真实地址建议只放在本机 `.env` 或当前终端环境变量里。
 
 ## 输出路径
 
@@ -194,7 +207,7 @@ artifacts/windows-installer/<build-id>/GPT-Image2-Studio-Setup-v0.1.0.exe
 gh release create v0.1.0 artifacts/windows-installer/<build-id>/GPT-Image2-Studio-Setup-v0.1.0.exe --title "GPT-Image2-Studio v0.1.0" --notes-file docs/windows-installer.md
 ```
 
-发布前请确认 `.local/`、`.env*`、`output/`、`artifacts/` 和日志文件没有进入提交。
+发布前请确认 `.local/`、除 `.env.example` 外的 `.env*`、`output/`、`artifacts/` 和日志文件没有进入提交。
 
 ## 项目结构
 

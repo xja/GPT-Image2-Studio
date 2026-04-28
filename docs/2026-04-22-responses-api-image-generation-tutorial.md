@@ -1,10 +1,10 @@
-# 2026-04-22 实测：`api.asxs.top` 图片生成优先走 `POST /responses`
+# 2026-04-22 实测：图片生成优先走 `POST /responses`
 
 这篇是可直接发帖的教程版结论，基于 2026-04-22 的一次真实跑通结果整理。
 
 ## 一句话结论
 
-如果你在 `api.asxs.top` 这类 OpenAI 兼容代理上做图片生成，不要默认先试：
+如果你在 OpenAI 或兼容端点上做图片生成，不要默认先试：
 
 ```text
 POST /v1/images/generations
@@ -13,7 +13,7 @@ POST /v1/images/generations
 更稳的方式是优先试：
 
 ```text
-POST https://api.asxs.top/v1/responses
+POST https://api.openai.com/v1/responses
 ```
 
 然后在 `tools` 里启用 `image_generation`，并显式指定：
@@ -29,7 +29,7 @@ POST https://api.asxs.top/v1/responses
 
 2026-04-22 我对下面这条链路做了真实请求验证：
 
-- 根路径：`https://api.asxs.top/v1`
+- 根路径：`https://api.openai.com/v1`，兼容代理请替换为自己的本机私有配置
 - 接口：`POST /responses`
 - 外层模型：`gpt-5.4`
 - 图片工具模型：`gpt-image-2`
@@ -82,14 +82,14 @@ POST https://api.asxs.top/v1/responses
 使用方法：
 
 ```powershell
-$env:ASXS_API_KEY="你的 key"
+$env:OPENAI_API_KEY="你的 key"
 node .\examples\minimal-fetch.mjs
 ```
 
 它的核心逻辑就是：
 
 ```js
-const response = await fetch("https://api.asxs.top/v1/responses", {
+const response = await fetch("https://api.openai.com/v1/responses", {
   method: "POST",
   headers: {
     Authorization: `Bearer ${apiKey}`,
@@ -121,8 +121,8 @@ const response = await fetch("https://api.asxs.top/v1/responses", {
 
 ```powershell
 curl.exe -N ^
-  -X POST "https://api.asxs.top/v1/responses" ^
-  -H "Authorization: Bearer %ASXS_API_KEY%" ^
+  -X POST "https://api.openai.com/v1/responses" ^
+  -H "Authorization: Bearer %OPENAI_API_KEY%" ^
   -H "Content-Type: application/json" ^
   -H "Accept: text/event-stream" ^
   --data "@examples/request-body.json"
@@ -138,8 +138,8 @@ curl.exe -N ^
 
 ```powershell
 curl.exe -N `
-  -X POST "https://api.asxs.top/v1/responses" `
-  -H "Authorization: Bearer $env:ASXS_API_KEY" `
+  -X POST "https://api.openai.com/v1/responses" `
+  -H "Authorization: Bearer $env:OPENAI_API_KEY" `
   -H "Content-Type: application/json" `
   -H "Accept: text/event-stream" `
   --data "@examples/request-body.json"
@@ -204,11 +204,11 @@ payload.item.result
 这个结论分两层看：
 
 1. OpenAI 官方已经支持在 Responses API 里通过图像工具生成图片。
-2. `api.asxs.top` 这样的第三方代理，具体支持哪些前缀、是否有旧版 schema 校验、是否对模型名做兼容转换，取决于它自己的实现。
+2. 第三方兼容代理具体支持哪些前缀、是否有旧版 schema 校验、是否对模型名做兼容转换，取决于它自己的实现。
 
 所以你写教程时，建议把表述写成：
 
-> 在 `api.asxs.top` 的当前实测下，优先使用 `POST /v1/responses + tools.image_generation`，而不是默认尝试 `/v1/images/generations`。
+> 在兼容端点的当前实测下，优先使用 `POST /v1/responses + tools.image_generation`，而不是默认尝试 `/v1/images/generations`。
 
 这样更准确，不会把代理的实现细节误写成 OpenAI 官方的强制规则。
 
@@ -216,7 +216,7 @@ payload.item.result
 
 可以直接发这段：
 
-> 实测 `api.asxs.top` 做图片生成时，不要优先试传统的 `POST /v1/images/generations`。  
+> 实测兼容端点做图片生成时，不要优先试传统的 `POST /v1/images/generations`。  
 > 更稳的方式是走 `POST /v1/responses`，外层模型继续用 `gpt-5.4`，在 `tools` 里启用 `image_generation` 并显式指定 `model: "gpt-image-2"`，同时开启 `stream: true`。  
 > 流式事件里，最终图片建议从 `response.output_item.done` 抓：当 `item.type === "image_generation_call"` 且 `item.result` 存在时，`item.result` 就是最终图片 base64。  
 > `response.completed` 可以作为兜底，但不建议作为唯一抓图点。

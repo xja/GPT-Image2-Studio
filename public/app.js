@@ -49,9 +49,16 @@ const REASONING_LABELS = {
 };
 
 const DEFAULT_LIMITS = {
-  maxConcurrentTasksPerSession: 5,
+  maxConcurrentTasksPerSession: 12,
+  maxParallelTasksPerSession: 4,
   maxReferenceImages: 6,
 };
+const PROMPT_TEMPLATE_STORAGE_KEY = "image-studio-prompt-templates-v1";
+const DEFAULT_PROMPT_TEMPLATES = SURPRISE_PROMPTS.map((prompt, index) => ({
+  id: `default-template-${index + 1}`,
+  name: ["直播带货", "国风服饰", "数码产品"][index] || `模板 ${index + 1}`,
+  prompt,
+}));
 
 const DEFAULT_GALLERY_CONTROLS = {
   query: "",
@@ -114,8 +121,10 @@ const state = {
     running: false,
     viewerOpen: false,
   },
+  promptTemplates: [],
   reasoningEfforts: [...DEFAULT_REASONING_EFFORTS],
   referenceFiles: [],
+  selectedPromptTemplateId: "",
   selectedPreviewKey: "",
   zoom: 1,
 };
@@ -208,6 +217,12 @@ const refs = {
   promptAgentPreviewImage: document.querySelector("#promptAgentPreviewImage"),
   promptAgentResult: document.querySelector("#promptAgentResult"),
   promptInput: document.querySelector("#promptInput"),
+  promptTemplateFeedback: document.querySelector("#promptTemplateFeedback"),
+  promptTemplateForm: document.querySelector("#promptTemplateForm"),
+  promptTemplateList: document.querySelector("#promptTemplateList"),
+  promptTemplateNameInput: document.querySelector("#promptTemplateNameInput"),
+  promptTemplatePopover: document.querySelector("#promptTemplatePopover"),
+  promptTemplateTextInput: document.querySelector("#promptTemplateTextInput"),
   ratioGrid: document.querySelector("#ratioGrid"),
   ratioInput: document.querySelector("#ratioInput"),
   reasoningEffortInput: document.querySelector("#reasoningEffortInput"),
@@ -222,6 +237,10 @@ const refs = {
   savedKeyMask: document.querySelector("#savedKeyMask"),
   sizeInput: document.querySelector("#sizeInput"),
   surprisePromptButton: document.querySelector("#surprisePromptButton"),
+  applyPromptTemplateButton: document.querySelector("#applyPromptTemplateButton"),
+  closePromptTemplateButton: document.querySelector("#closePromptTemplateButton"),
+  deletePromptTemplateButton: document.querySelector("#deletePromptTemplateButton"),
+  newPromptTemplateButton: document.querySelector("#newPromptTemplateButton"),
   settingsPanel: document.querySelector(".settings-panel"),
   sideColumn: document.querySelector(".side-column"),
   topbar: document.querySelector(".topbar"),
@@ -581,9 +600,9 @@ function setConnectionState(kind, label) {
 }
 
 function syncConnectionState() {
-  const runningCount = state.jobs.length;
-  if (runningCount > 0) {
-    setConnectionState("busy", `生成中 ${runningCount}/${state.limits.maxConcurrentTasksPerSession}`);
+  const queuedCount = getQueuedJobCount();
+  if (queuedCount > 0) {
+    setConnectionState("busy", `并发 ${getRunningJobCount()}/${getMaxParallelJobCount()} · 队列 ${queuedCount}/${getMaxQueuedJobCount()}`);
     return;
   }
 
@@ -751,16 +770,31 @@ function updatePromptCounter() {
   refs.promptCounter.textContent = String(refs.promptInput.value.length);
 }
 
-function getRunningJobCount() {
+function getQueuedJobCount() {
   return state.jobs.length;
+}
+
+function getRunningJobCount() {
+  return state.jobs.filter((job) => job.isRunning).length;
+}
+
+function getMaxQueuedJobCount() {
+  return state.limits.maxConcurrentTasksPerSession || DEFAULT_LIMITS.maxConcurrentTasksPerSession;
+}
+
+function getMaxParallelJobCount() {
+  return state.limits.maxParallelTasksPerSession || DEFAULT_LIMITS.maxParallelTasksPerSession;
 }
 
 function updateGenerateButton() {
   const runningCount = getRunningJobCount();
-  const maxCount = state.limits.maxConcurrentTasksPerSession;
-  refs.generateButton.disabled = runningCount >= maxCount;
-  refs.generateButton.textContent = runningCount > 0 ? `生成中 ${runningCount}/${maxCount}` : "开始生成";
-  refs.liveCount.textContent = `${runningCount} / ${maxCount}`;
+  const queuedCount = getQueuedJobCount();
+  const maxQueuedCount = getMaxQueuedJobCount();
+  const maxParallelCount = getMaxParallelJobCount();
+  refs.generateButton.disabled = queuedCount >= maxQueuedCount;
+  refs.generateButton.textContent =
+    queuedCount > 0 ? `队列 ${queuedCount}/${maxQueuedCount}` : "开始生成";
+  refs.liveCount.textContent = `${runningCount} / ${maxParallelCount}`;
 }
 
 function setPromptAgentFeedback(message, kind = "") {
@@ -1363,9 +1397,14 @@ function syncConfigUi(config) {
   refs.savedKeyMask.textContent = config.apiKeyConfigured ? `已保存 ${config.apiKeyMask || ""}` : "未保存";
   refs.configStatus.textContent = config.apiKeyConfigured ? "配置已保存" : "配置未保存";
   state.aspectRatios = config.aspectRatios || [];
+  const configLimits = config.limits || {};
   state.limits = {
     ...DEFAULT_LIMITS,
-    ...(config.limits || {}),
+    ...configLimits,
+    maxConcurrentTasksPerSession:
+      "maxParallelTasksPerSession" in configLimits
+        ? configLimits.maxConcurrentTasksPerSession || DEFAULT_LIMITS.maxConcurrentTasksPerSession
+        : DEFAULT_LIMITS.maxConcurrentTasksPerSession,
   };
   state.reasoningEfforts = [...(config.reasoningEfforts || DEFAULT_REASONING_EFFORTS)];
 
@@ -2255,10 +2294,172 @@ function upsertGalleryItem(item) {
   syncGalleryMetadataCache(state.gallery);
 }
 
-function selectRandomPrompt() {
-  const prompt = SURPRISE_PROMPTS[Math.floor(Math.random() * SURPRISE_PROMPTS.length)];
+function createPromptTemplateId() {
+  return `template-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizePromptTemplate(template, index = 0) {
+  const prompt = String(template?.prompt || "").trim();
+  if (!prompt) {
+    return null;
+  }
+
+  return {
+    id: String(template?.id || createPromptTemplateId()),
+    name: String(template?.name || `模板 ${index + 1}`).trim() || `模板 ${index + 1}`,
+    prompt,
+  };
+}
+
+function readPromptTemplates() {
+  try {
+    const raw = window.localStorage.getItem(PROMPT_TEMPLATE_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    const templates = Array.isArray(parsed)
+      ? parsed.map(normalizePromptTemplate).filter(Boolean)
+      : [];
+    return templates.length > 0 ? templates : DEFAULT_PROMPT_TEMPLATES.map((template) => ({ ...template }));
+  } catch {
+    return DEFAULT_PROMPT_TEMPLATES.map((template) => ({ ...template }));
+  }
+}
+
+function writePromptTemplates() {
+  window.localStorage.setItem(PROMPT_TEMPLATE_STORAGE_KEY, JSON.stringify(state.promptTemplates));
+}
+
+function getSelectedPromptTemplate() {
+  return state.promptTemplates.find((template) => template.id === state.selectedPromptTemplateId) || null;
+}
+
+function setPromptTemplateFeedback(message = "") {
+  refs.promptTemplateFeedback.textContent = message;
+}
+
+function selectPromptTemplate(templateId) {
+  const template = state.promptTemplates.find((entry) => entry.id === templateId) || state.promptTemplates[0] || null;
+  state.selectedPromptTemplateId = template?.id || "";
+  refs.promptTemplateNameInput.value = template?.name || "";
+  refs.promptTemplateTextInput.value = template?.prompt || "";
+  renderPromptTemplates();
+}
+
+function renderPromptTemplates() {
+  refs.promptTemplateList.innerHTML = "";
+
+  if (state.promptTemplates.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "prompt-template-empty";
+    empty.textContent = "暂无模板";
+    refs.promptTemplateList.appendChild(empty);
+    return;
+  }
+
+  state.promptTemplates.forEach((template) => {
+    const button = document.createElement("button");
+    button.className = "prompt-template-item";
+    button.type = "button";
+    button.classList.toggle("active", template.id === state.selectedPromptTemplateId);
+    button.addEventListener("click", () => {
+      selectPromptTemplate(template.id);
+      setPromptTemplateFeedback("");
+    });
+
+    const name = document.createElement("strong");
+    name.textContent = template.name;
+    button.appendChild(name);
+
+    const prompt = document.createElement("span");
+    prompt.textContent = template.prompt;
+    button.appendChild(prompt);
+
+    refs.promptTemplateList.appendChild(button);
+  });
+}
+
+function resetPromptTemplateForm() {
+  state.selectedPromptTemplateId = "";
+  refs.promptTemplateNameInput.value = "";
+  refs.promptTemplateTextInput.value = "";
+  refs.promptTemplateNameInput.focus();
+  setPromptTemplateFeedback("");
+  renderPromptTemplates();
+}
+
+function savePromptTemplate(event) {
+  event.preventDefault();
+  const prompt = refs.promptTemplateTextInput.value.trim();
+  if (!prompt) {
+    setPromptTemplateFeedback("模板内容不能为空。");
+    refs.promptTemplateTextInput.focus();
+    return;
+  }
+
+  const existing = getSelectedPromptTemplate();
+  const name = refs.promptTemplateNameInput.value.trim() || existing?.name || `模板 ${state.promptTemplates.length + 1}`;
+  if (existing) {
+    existing.name = name;
+    existing.prompt = prompt;
+  } else {
+    const template = {
+      id: createPromptTemplateId(),
+      name,
+      prompt,
+    };
+    state.promptTemplates.unshift(template);
+    state.selectedPromptTemplateId = template.id;
+  }
+
+  writePromptTemplates();
+  selectPromptTemplate(state.selectedPromptTemplateId);
+  setPromptTemplateFeedback("模板已保存。");
+}
+
+function applyPromptTemplate() {
+  const prompt = refs.promptTemplateTextInput.value.trim();
+  if (!prompt) {
+    setPromptTemplateFeedback("先选择或填写一个模板。");
+    refs.promptTemplateTextInput.focus();
+    return;
+  }
+
   refs.promptInput.value = prompt;
   updatePromptCounter();
+  setPromptTemplatePopoverOpen(false);
+  refs.promptInput.focus();
+}
+
+function deletePromptTemplate() {
+  const selected = getSelectedPromptTemplate();
+  if (!selected) {
+    setPromptTemplateFeedback("先选择一个模板。");
+    return;
+  }
+
+  state.promptTemplates = state.promptTemplates.filter((template) => template.id !== selected.id);
+  writePromptTemplates();
+  const next = state.promptTemplates[0] || null;
+  state.selectedPromptTemplateId = next?.id || "";
+  selectPromptTemplate(state.selectedPromptTemplateId);
+  setPromptTemplateFeedback("模板已删除。");
+}
+
+function setPromptTemplatePopoverOpen(open) {
+  refs.promptTemplatePopover.classList.toggle("hidden", !open);
+  refs.promptTemplatePopover.setAttribute("aria-hidden", open ? "false" : "true");
+  refs.surprisePromptButton.setAttribute("aria-expanded", open ? "true" : "false");
+
+  if (open) {
+    if (!state.selectedPromptTemplateId && state.promptTemplates.length > 0) {
+      state.selectedPromptTemplateId = state.promptTemplates[0].id;
+    }
+    selectPromptTemplate(state.selectedPromptTemplateId);
+    refs.promptTemplateTextInput.focus();
+  }
+}
+
+function selectRandomPrompt() {
+  setPromptTemplatePopoverOpen(true);
 }
 
 function resetZoom() {
@@ -2354,8 +2555,10 @@ function createJob() {
     hasReferenceImage: referenceFiles.length > 0,
     referenceImageName: referenceImageNames[0] || "",
     referenceImageNames,
-    statusStage: "uploading",
-    statusText: "正在准备生成请求",
+    isRunning: false,
+    started: false,
+    statusStage: "queued",
+    statusText: "等待并发槽位",
     previewUrl: "",
   };
 }
@@ -2666,7 +2869,30 @@ async function copyPromptAgentJson(itemId) {
   setPromptAgentFeedback("JSON 已复制。", "success");
 }
 
+function scheduleGenerationQueue() {
+  const availableSlots = Math.max(0, getMaxParallelJobCount() - getRunningJobCount());
+  if (availableSlots === 0) {
+    return;
+  }
+
+  const queuedJobs = state.jobs.filter((job) => !job.started);
+  const nextJobs = queuedJobs.slice(Math.max(0, queuedJobs.length - availableSlots)).reverse();
+  nextJobs.forEach((job) => {
+    job.started = true;
+    job.isRunning = true;
+    job.statusStage = "uploading";
+    job.statusText = "正在准备生成请求";
+    void runGeneration(job);
+  });
+
+  if (nextJobs.length > 0) {
+    renderAll();
+  }
+}
+
 async function runGeneration(job) {
+  job.started = true;
+  job.isRunning = true;
   try {
     const response = await requestGenerationStream(job);
 
@@ -2726,6 +2952,13 @@ async function runGeneration(job) {
     showError(message);
     removeJob(job.id);
     renderAll();
+  } finally {
+    const currentJob = state.jobs.find((entry) => entry.id === job.id);
+    if (currentJob) {
+      currentJob.isRunning = false;
+    }
+    updateGenerateButton();
+    scheduleGenerationQueue();
   }
 }
 
@@ -2740,8 +2973,8 @@ function startGeneration(event) {
     return;
   }
 
-  if (getRunningJobCount() >= state.limits.maxConcurrentTasksPerSession) {
-    showError(`同一会话最多同时进行 ${state.limits.maxConcurrentTasksPerSession} 个生成任务。`);
+  if (getQueuedJobCount() >= getMaxQueuedJobCount()) {
+    showError(`同一会话最多排队 ${getMaxQueuedJobCount()} 个生成任务。`);
     return;
   }
 
@@ -2752,7 +2985,7 @@ function startGeneration(event) {
   renderAll();
   setActiveView("studio");
 
-  void runGeneration(job);
+  scheduleGenerationQueue();
 }
 
 function bindEvents() {
@@ -2783,6 +3016,11 @@ function bindEvents() {
   });
   refs.generateForm.addEventListener("submit", startGeneration);
   refs.surprisePromptButton.addEventListener("click", selectRandomPrompt);
+  refs.closePromptTemplateButton.addEventListener("click", () => setPromptTemplatePopoverOpen(false));
+  refs.promptTemplateForm.addEventListener("submit", savePromptTemplate);
+  refs.newPromptTemplateButton.addEventListener("click", resetPromptTemplateForm);
+  refs.applyPromptTemplateButton.addEventListener("click", applyPromptTemplate);
+  refs.deletePromptTemplateButton.addEventListener("click", deletePromptTemplate);
   refs.promptInput.addEventListener("input", updatePromptCounter);
   refs.referenceInput.addEventListener("change", (event) => {
     applyReferenceFiles(event.target.files);
@@ -2930,6 +3168,11 @@ function bindEvents() {
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
+      if (!refs.promptTemplatePopover.classList.contains("hidden")) {
+        setPromptTemplatePopoverOpen(false);
+        return;
+      }
+
       if (!refs.lightbox.classList.contains("hidden")) {
         closeLightbox();
         return;
@@ -2950,11 +3193,28 @@ function bindEvents() {
       }
     }
   });
+
+  document.addEventListener("pointerdown", (event) => {
+    if (refs.promptTemplatePopover.classList.contains("hidden")) {
+      return;
+    }
+
+    if (
+      refs.promptTemplatePopover.contains(event.target) ||
+      refs.surprisePromptButton.contains(event.target)
+    ) {
+      return;
+    }
+
+    setPromptTemplatePopoverOpen(false);
+  });
 }
 
 async function bootstrap() {
   state.clientSessionId = getOrCreateClientSessionId();
   state.galleryMetadataCache = readGalleryMetadataCache();
+  state.promptTemplates = readPromptTemplates();
+  state.selectedPromptTemplateId = state.promptTemplates[0]?.id || "";
   bindEvents();
   bindStudioDensitySync();
   bindStudioHeightSync();
@@ -2968,6 +3228,7 @@ async function bootstrap() {
   renderSizeOptions();
   updateGenerateButton();
   renderReferenceGrid();
+  renderPromptTemplates();
   renderTimeline();
   renderStudio();
   renderGalleryView();

@@ -1700,8 +1700,8 @@
         - generic:
           - generic: 中转 URL
           - textbox:
-            - /placeholder: https://api.asxs.top/v1
-            - text: https://api.asxs.top/v1
+            - /placeholder: https://api.openai.com/v1
+            - text: https://api.openai.com/v1
         - generic:
           - generic:
             - generic: API Key

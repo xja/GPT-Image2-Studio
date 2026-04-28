@@ -50,7 +50,7 @@ test("gallery store writes images into dated folders and persists searchable met
     metadata: {
       prompt: "older prompt",
       createdAt: "2026-04-22T10:00:00.000Z",
-      baseUrl: "https://api.asxs.top/v1",
+      baseUrl: "https://api.openai.com/v1",
       responsesModel: "gpt-5.4",
       imageModel: "gpt-image-2",
       size: "1024x1536",
@@ -71,7 +71,7 @@ test("gallery store writes images into dated folders and persists searchable met
     metadata: {
       prompt: "newer prompt",
       createdAt: "2026-04-22T12:00:00.000Z",
-      baseUrl: "https://api.asxs.top/v1",
+      baseUrl: "https://api.openai.com/v1",
       responsesModel: "gpt-5.4",
       imageModel: "gpt-image-2",
       size: "1536x1024",
@@ -126,7 +126,7 @@ test("gallery store writes images into dated folders and persists searchable met
   assert.deepEqual(items[0].referenceImageNames, ["reference-a.png", "reference-b.png"]);
   assert.equal(items[0].absolutePath, join(outputDir, "2026-04-22", "newer.png"));
   assert.equal(items[0].imageUrl, items[0].thumbnailUrl);
-  assert.equal(items[0].baseUrl, "https://api.asxs.top/v1");
+  assert.equal(items[0].baseUrl, "https://api.openai.com/v1");
   assert.equal(items[0].responsesModel, "gpt-5.4");
   assert.equal(items[0].imageModel, "gpt-image-2");
   assert.equal(items[0].quality, "medium");
@@ -187,7 +187,7 @@ test("gallery store restores metadata from json sidecars when the index file is 
     metadata: {
       prompt: "persist me",
       createdAt: "2026-04-24T09:30:00.000Z",
-      baseUrl: "https://api.asxs.top/v1",
+      baseUrl: "https://api.openai.com/v1",
       responsesModel: "gpt-5.4",
       imageModel: "gpt-image-2",
       size: "1024x1536",
@@ -383,7 +383,7 @@ test("gallery store repairs sparse metadata from a richer client-side payload", 
     filename: "repairable.jpeg",
     metadata: {
       prompt: "直播间护肤礼盒主视觉",
-      baseUrl: "https://api.asxs.top/v1",
+      baseUrl: "https://api.openai.com/v1",
       responsesModel: "gpt-5.4",
       imageModel: "gpt-image-2",
       ratio: "4:5",

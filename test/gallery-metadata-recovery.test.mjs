@@ -68,7 +68,7 @@ test("gallery metadata recovery fills missing server fields from local cache wit
     referenceImageNames: ["reference-a.png"],
     referenceImageName: "reference-a.png",
     hasReferenceImage: true,
-    baseUrl: "https://api.asxs.top/v1",
+    baseUrl: "https://api.openai.com/v1",
   };
 
   const merged = mergeGalleryItemWithCachedMetadata(serverItem, cachedEntry);
@@ -84,7 +84,7 @@ test("gallery metadata recovery fills missing server fields from local cache wit
   assert.equal(merged.referenceImageName, "reference-a.png");
   assert.deepEqual(merged.referenceImageNames, ["reference-a.png"]);
   assert.equal(merged.hasReferenceImage, true);
-  assert.equal(merged.baseUrl, "https://api.asxs.top/v1");
+  assert.equal(merged.baseUrl, "https://api.openai.com/v1");
 });
 
 test("gallery metadata recovery only requests repair fields that are missing on the server item", () => {
@@ -116,14 +116,14 @@ test("gallery metadata recovery only requests repair fields that are missing on 
     referenceImageNames: ["reference-a.png"],
     referenceImageName: "reference-a.png",
     hasReferenceImage: true,
-    baseUrl: "https://api.asxs.top/v1",
+    baseUrl: "https://api.openai.com/v1",
   };
 
   const patch = collectGalleryMetadataRepairPatch(serverItem, mergedItem);
 
   assert.deepEqual(patch, {
     prompt: "直播带货主视觉",
-    baseUrl: "https://api.asxs.top/v1",
+    baseUrl: "https://api.openai.com/v1",
     responsesModel: "gpt-5.4",
     imageModel: "gpt-image-2",
     hasReferenceImage: true,

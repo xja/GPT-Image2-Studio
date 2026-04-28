@@ -12,7 +12,7 @@ test("config store returns empty public config before any save", async () => {
 
   const config = await store.readPublicConfig();
 
-  assert.equal(config.baseUrl, "https://api.asxs.top/v1");
+  assert.equal(config.baseUrl, "https://api.openai.com/v1");
   assert.equal(config.apiKeyConfigured, false);
   assert.equal(config.apiKeyMask, undefined);
   assert.equal(config.responsesModel, "gpt-5.4");
@@ -23,7 +23,8 @@ test("config store returns empty public config before any save", async () => {
     reasoningEffort: "xhigh",
   });
   assert.deepEqual(config.limits, {
-    maxConcurrentTasksPerSession: 5,
+    maxConcurrentTasksPerSession: 12,
+    maxParallelTasksPerSession: 4,
     maxReferenceImages: 6,
   });
   assert.deepEqual(config.reasoningEfforts, ["low", "medium", "high", "xhigh"]);

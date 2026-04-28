@@ -90,7 +90,7 @@
                   - strong [ref=e82]: JPEG / High
                 - paragraph [ref=e83]:
                   - text: 中转地址：
-                  - strong [ref=e84]: https://api.asxs.top/v1
+                  - strong [ref=e84]: https://api.openai.com/v1
             - button "开始生成" [ref=e85] [cursor=pointer]
             - paragraph [ref=e86]: 支持最多 5 个并发任务，结果会自动写入本地 output/。
           - generic [ref=e87]:
@@ -239,8 +239,8 @@
         - generic [ref=e261]:
           - generic [ref=e262]: 中转 URL
           - textbox "中转 URL" [ref=e263]:
-            - /placeholder: https://api.asxs.top/v1
-            - text: https://api.asxs.top/v1
+            - /placeholder: https://api.openai.com/v1
+            - text: https://api.openai.com/v1
         - generic [ref=e264]:
           - generic [ref=e265]:
             - generic [ref=e266]: API Key

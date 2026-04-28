@@ -1,6 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 
+import { DEFAULT_BASE_URL } from "./lib/studio-constants.mjs";
+
 const DEFAULT_PROMPT =
   "生成一张美女抖音直播带货的写实风商业摄影图片，竖版构图，直播间灯光明亮，主播坐在桌前展示商品，画面精致自然，符合电商直播宣传海报质感。";
 
@@ -14,12 +16,12 @@ function printHelp() {
   --quality     图片质量，默认 high
   --format      输出格式，默认 jpeg
   --output      输出文件路径，默认写入 output/<timestamp>.<ext>
-  --base-url    接口根路径，默认读取 ASXS_BASE_URL 或 https://api.asxs.top/v1
+  --base-url    接口根路径，默认读取 OPENAI_BASE_URL 或 ${DEFAULT_BASE_URL}
   --model       外层 Responses 模型，默认读取 RESPONSES_MODEL 或 gpt-5.4
 
 环境变量:
-  ASXS_API_KEY  或 OPENAI_API_KEY
-  ASXS_BASE_URL
+  OPENAI_API_KEY
+  OPENAI_BASE_URL
   RESPONSES_MODEL`);
 }
 
@@ -30,7 +32,7 @@ function parseArgs(argv) {
     quality: "high",
     format: "jpeg",
     output: "",
-    baseUrl: process.env.ASXS_BASE_URL || "https://api.asxs.top/v1",
+    baseUrl: process.env.OPENAI_BASE_URL || DEFAULT_BASE_URL,
     model: process.env.RESPONSES_MODEL || "gpt-5.4",
   };
 
@@ -279,9 +281,9 @@ async function main() {
     return;
   }
 
-  const apiKey = process.env.ASXS_API_KEY || process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    throw new Error("缺少 ASXS_API_KEY 或 OPENAI_API_KEY 环境变量");
+    throw new Error("缺少 OPENAI_API_KEY 环境变量");
   }
 
   const baseUrl = normalizeBaseUrl(options.baseUrl);
