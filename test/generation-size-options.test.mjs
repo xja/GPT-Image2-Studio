@@ -8,18 +8,18 @@ import {
   normalizeGenerationSize,
 } from "../lib/generation-size-options.mjs";
 
-test("size options are filtered by ratio and keep previously supported sizes intact", () => {
+test("size options are filtered by ratio and list larger resolutions first", () => {
   const square = getGenerationSizeOptions("1:1").map((option) => option.value);
   const portrait = getGenerationSizeOptions("4:5").map((option) => option.value);
   const poster = getGenerationSizeOptions("3:4").map((option) => option.value);
   const widescreen = getGenerationSizeOptions("16:9").map((option) => option.value);
   const story = getGenerationSizeOptions("9:16").map((option) => option.value);
 
-  assert.deepEqual(square, ["auto", "1024x1024", "1536x1536", "2048x2048", "2880x2880"]);
-  assert.deepEqual(portrait, ["auto", "1024x1280", "1280x1600", "1600x2000", "1536x1920", "2048x2560", "2560x3200"]);
-  assert.deepEqual(poster, ["auto", "768x1024", "1152x1536", "1536x2048", "1008x1344", "2064x2752", "2448x3264"]);
-  assert.deepEqual(widescreen, ["auto", "1280x720", "1536x864", "2048x1152", "1792x1008", "2816x1584", "3584x2016", "3840x2160"]);
-  assert.deepEqual(story, ["auto", "720x1280", "864x1536", "1152x2048", "1008x1792", "1584x2816", "2016x3584", "2160x3840"]);
+  assert.deepEqual(square, ["auto", "2880x2880", "2048x2048", "1536x1536", "1024x1024"]);
+  assert.deepEqual(portrait, ["auto", "2560x3200", "2048x2560", "1600x2000", "1536x1920", "1280x1600", "1024x1280"]);
+  assert.deepEqual(poster, ["auto", "2448x3264", "2064x2752", "1536x2048", "1152x1536", "1008x1344", "768x1024"]);
+  assert.deepEqual(widescreen, ["auto", "3840x2160", "3584x2016", "2816x1584", "2048x1152", "1792x1008", "1536x864", "1280x720"]);
+  assert.deepEqual(story, ["auto", "2160x3840", "2016x3584", "1584x2816", "1152x2048", "1008x1792", "864x1536", "720x1280"]);
 });
 
 test("size compatibility rejects mismatched ratios", () => {
@@ -47,6 +47,37 @@ test("size options include the maximum legal resolution for every ratio", () => 
 
   for (const [ratio, size] of Object.entries(maxLegalSizes)) {
     assert.equal(isGenerationSizeCompatible(ratio, size), true, `${ratio} should include ${size}`);
+  }
+});
+
+test("size options include requested intermediate legal resolutions", () => {
+  const requestedSizes = {
+    "1:1": "2048x2048",
+    "5:4": "2560x2048",
+    "9:16": "2016x3584",
+    "21:9": "4368x1872",
+    "16:9": "3584x2016",
+    "4:3": "2752x2064",
+    "3:2": "3072x2048",
+    "4:5": "2048x2560",
+    "3:4": "2064x2752",
+    "2:3": "2048x3072",
+  };
+
+  for (const [ratio, size] of Object.entries(requestedSizes)) {
+    assert.equal(isGenerationSizeCompatible(ratio, size), true, `${ratio} should include ${size}`);
+  }
+});
+
+test("size options are sorted by descending leading width value", () => {
+  const ratios = ["1:1", "5:4", "9:16", "21:9", "16:9", "4:3", "3:2", "4:5", "3:4", "2:3"];
+
+  for (const ratio of ratios) {
+    const widths = getGenerationSizeOptions(ratio)
+      .map((option) => option.value)
+      .filter((value) => value !== "auto")
+      .map((value) => Number(value.split("x")[0]));
+    assert.deepEqual(widths, [...widths].sort((left, right) => right - left), `${ratio} widths should descend`);
   }
 });
 
