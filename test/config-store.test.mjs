@@ -17,14 +17,14 @@ test("config store returns empty public config before any save", async () => {
   assert.equal(config.apiKeyMask, undefined);
   assert.equal(config.responsesModel, "gpt-5.4");
   assert.deepEqual(config.defaults, {
-    size: "1024x1536",
+    size: "1024x1280",
     quality: "high",
     format: "png",
     reasoningEffort: "xhigh",
   });
   assert.deepEqual(config.limits, {
-    maxConcurrentTasksPerSession: 12,
-    maxParallelTasksPerSession: 4,
+    maxConcurrentTasksPerSession: 20,
+    maxParallelTasksPerSession: 2,
     maxReferenceImages: 6,
   });
   assert.deepEqual(config.reasoningEfforts, ["low", "medium", "high", "xhigh"]);

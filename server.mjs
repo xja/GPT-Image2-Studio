@@ -19,6 +19,11 @@ import {
   normalizeGenerationSize,
 } from "./lib/generation-size-options.mjs";
 import {
+  normalizeOutputFormat,
+  toApiOutputFormat,
+  toOutputFormatMimeType,
+} from "./lib/output-format-options.mjs";
+import {
   createTimestampedFilename,
   buildPublicAssetUrl,
   deleteGeneratedAsset,
@@ -28,6 +33,7 @@ import {
   saveGeneratedAsset,
 } from "./lib/gallery-store.mjs";
 import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
+import { createGenerationTaskStore } from "./lib/generation-task-store.mjs";
 import {
   DEFAULT_REASONING_EFFORT,
   MAX_CONCURRENT_TASKS_PER_SESSION,
@@ -44,6 +50,7 @@ const libDir = join(rootDir, "lib");
 const outputDir = join(homedir(), "Pictures");
 const configStore = createConfigStore({ rootDir });
 const promptAgentStore = createPromptAgentStore({ rootDir });
+const generationTaskStore = createGenerationTaskStore();
 const port = Number(process.env.PORT || 3600);
 const activeTasksBySession = new Map();
 
@@ -79,8 +86,17 @@ function sendText(response, statusCode, message) {
 }
 
 function writeSseEvent(response, type, payload) {
-  response.write(`event: ${type}\n`);
-  response.write(`data: ${JSON.stringify(payload)}\n\n`);
+  if (response.destroyed || response.writableEnded) {
+    return false;
+  }
+
+  try {
+    response.write(`event: ${type}\n`);
+    response.write(`data: ${JSON.stringify(payload)}\n\n`);
+    return true;
+  } catch (_error) {
+    return false;
+  }
 }
 
 async function readJsonBody(request) {
@@ -164,6 +180,13 @@ function getClientSessionId(request, formData) {
   return resolved || "global-default-session";
 }
 
+function getClientSessionIdFromRequest(request, url) {
+  const headerValue = request.headers["x-client-session-id"];
+  const queryValue = url.searchParams.get("clientSessionId");
+  const resolved = String(headerValue || queryValue || "").trim();
+  return resolved || "global-default-session";
+}
+
 function claimSessionTaskSlot(sessionId, taskId) {
   const activeTasks = activeTasksBySession.get(sessionId) || new Set();
   if (activeTasks.size >= MAX_PARALLEL_TASKS_PER_SESSION) {
@@ -229,6 +252,10 @@ async function handleGalleryGet(response) {
   });
 
   sendJson(response, 200, items);
+}
+
+async function handleGenerationTasksGet(request, response, url) {
+  sendJson(response, 200, generationTaskStore.listTasks(getClientSessionIdFromRequest(request, url)));
 }
 
 async function handlePromptAgentHistoryGet(response) {
@@ -435,8 +462,11 @@ function buildSavedItem({
 }
 
 async function handleGenerate(request, response) {
-  const taskId = randomUUID();
+  const fallbackTaskId = randomUUID();
+  let taskId = fallbackTaskId;
   let clientSessionId = "";
+  let slotClaimed = false;
+  let taskRegistered = false;
 
   response.writeHead(200, {
     "Cache-Control": "no-cache, no-transform",
@@ -451,12 +481,35 @@ async function handleGenerate(request, response) {
     });
 
     const formData = await readFormDataBody(request);
+    taskId = String(formData.get("jobId") || fallbackTaskId).trim() || fallbackTaskId;
     const prompt = String(formData.get("prompt") || "").trim();
     const ratio = String(formData.get("ratio") || "4:5");
     const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
+    const requestedFormatInput = String(formData.get("format") || "").trim().toLowerCase();
     clientSessionId = getClientSessionId(request, formData);
+    const createdAt = new Date().toISOString();
+
+    function recordRunningTask(patch = {}) {
+      taskRegistered = true;
+      generationTaskStore.upsertTask(clientSessionId, {
+        id: taskId,
+        prompt,
+        ratio,
+        size: requestedSizeInput,
+        status: "running",
+        statusStage: "uploading",
+        statusText: "正在读取提交内容",
+        createdAt,
+        ...patch,
+      });
+    }
+
+    recordRunningTask();
 
     if (!prompt) {
+      generationTaskStore.failTask(clientSessionId, taskId, {
+        errorMessage: "提示词不能为空。",
+      });
       writeSseEvent(response, "error", {
         message: "提示词不能为空。",
       });
@@ -469,6 +522,9 @@ async function handleGenerate(request, response) {
     ];
     const referenceImages = await toReferenceImages(rawReferenceImages);
     if (referenceImages.length > MAX_REFERENCE_IMAGES) {
+      generationTaskStore.failTask(clientSessionId, taskId, {
+        errorMessage: `参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`,
+      });
       writeSseEvent(response, "error", {
         message: `参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`,
       });
@@ -477,6 +533,9 @@ async function handleGenerate(request, response) {
 
     const config = await configStore.readPrivateConfig();
     if (!config.apiKey) {
+      generationTaskStore.failTask(clientSessionId, taskId, {
+        errorMessage: "当前未保存 API Key，请先在配置中保存。",
+      });
       writeSseEvent(response, "error", {
         message: "当前未保存 API Key，请先在配置中保存。",
       });
@@ -488,11 +547,15 @@ async function handleGenerate(request, response) {
     );
 
     if (!claimSessionTaskSlot(clientSessionId, taskId)) {
+      generationTaskStore.failTask(clientSessionId, taskId, {
+        errorMessage: `同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`,
+      });
       writeSseEvent(response, "error", {
         message: `同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`,
       });
       return;
     }
+    slotClaimed = true;
 
     const ratioOption = resolveAspectRatioOption(ratio);
     const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
@@ -503,9 +566,22 @@ async function handleGenerate(request, response) {
     const finalPrompt = appendRatioHintToPrompt(prompt, ratioOption);
     const finalSize = requestedSize === "auto" ? getDefaultGenerationSize(ratioOption.value) : requestedSize;
     const finalQuality = config.defaults?.quality || "high";
-    const finalFormat = config.defaults?.format || "png";
-    const createdAt = new Date().toISOString();
+    const finalFormat = normalizeOutputFormat(requestedFormatInput || config.defaults?.format || "png");
     let finalBase64 = "";
+
+    generationTaskStore.updateTask(clientSessionId, taskId, {
+      ratio: ratioOption.value,
+      ratioLabel: ratioOption.label,
+      size: finalSize,
+      quality: finalQuality,
+      format: finalFormat,
+      responsesModel: config.responsesModel,
+      imageModel: "gpt-image-2",
+      hasReferenceImage: referenceImages.length > 0,
+      referenceImageNames: referenceImages.map((image) => image.filename),
+      referenceImageName: referenceImages[0]?.filename || "",
+      reasoningEffort,
+    });
 
     await requestImageGeneration({
       baseUrl: config.baseUrl,
@@ -514,11 +590,16 @@ async function handleGenerate(request, response) {
       referenceImages,
       size: finalSize,
       quality: finalQuality,
-      format: finalFormat,
+      format: toApiOutputFormat(finalFormat),
       responsesModel: config.responsesModel,
       reasoningEffort,
       async onEvent(event) {
         if (event.type === "status") {
+          generationTaskStore.updateTask(clientSessionId, taskId, {
+            status: "running",
+            statusStage: event.stage,
+            statusText: event.message,
+          });
           writeSseEvent(response, "status", {
             stage: event.stage,
             message: event.message,
@@ -527,6 +608,11 @@ async function handleGenerate(request, response) {
         }
 
         if (event.type === "partial_image") {
+          generationTaskStore.updateTask(clientSessionId, taskId, {
+            status: "running",
+            statusStage: "generating",
+            statusText: "已收到中途预览",
+          });
           writeSseEvent(response, "partial_image", {
             dataUrl: event.dataUrl,
           });
@@ -535,8 +621,13 @@ async function handleGenerate(request, response) {
 
         if (event.type === "final_image") {
           finalBase64 = event.base64;
+          generationTaskStore.updateTask(clientSessionId, taskId, {
+            status: "running",
+            statusStage: "saving",
+            statusText: "已拿到最终图像，正在写入本地",
+          });
           writeSseEvent(response, "final_image", {
-            dataUrl: `data:image/${finalFormat};base64,${normalizeBase64(event.base64)}`,
+            dataUrl: `data:${toOutputFormatMimeType(finalFormat)};base64,${normalizeBase64(event.base64)}`,
           });
         }
       },
@@ -546,6 +637,11 @@ async function handleGenerate(request, response) {
       throw new Error("上游响应结束，但没有拿到最终图片。");
     }
 
+    generationTaskStore.updateTask(clientSessionId, taskId, {
+      status: "running",
+      statusStage: "saving",
+      statusText: "正在保存到本地图片目录",
+    });
     writeSseEvent(response, "status", {
       stage: "saving",
       message: "正在保存到本地图片目录",
@@ -596,6 +692,13 @@ async function handleGenerate(request, response) {
       reasoningEffort,
     });
 
+    generationTaskStore.completeTask(clientSessionId, taskId, {
+      filename,
+      absolutePath: saved.absolutePath,
+      relativePath: saved.relativePath,
+      item,
+    });
+
     writeSseEvent(response, "saved", {
       filename,
       absolutePath: saved.absolutePath,
@@ -609,14 +712,22 @@ async function handleGenerate(request, response) {
       absolutePath: saved.absolutePath,
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (clientSessionId && taskRegistered) {
+      generationTaskStore.failTask(clientSessionId, taskId, {
+        errorMessage: message,
+      });
+    }
     writeSseEvent(response, "error", {
-      message: error instanceof Error ? error.message : String(error),
+      message,
     });
   } finally {
-    if (clientSessionId) {
+    if (clientSessionId && slotClaimed) {
       releaseSessionTaskSlot(clientSessionId, taskId);
     }
-    response.end();
+    if (!response.destroyed && !response.writableEnded) {
+      response.end();
+    }
   }
 }
 
@@ -633,6 +744,10 @@ async function routeRequest(request, response) {
 
   if (request.method === "GET" && url.pathname === "/api/gallery") {
     return handleGalleryGet(response);
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/generation/tasks") {
+    return handleGenerationTasksGet(request, response, url);
   }
 
   if (request.method === "GET" && url.pathname === "/api/prompt-agent/history") {

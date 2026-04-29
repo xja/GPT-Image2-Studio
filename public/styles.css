@@ -478,7 +478,6 @@ textarea::-webkit-scrollbar-corner {
 .panel-title p,
 .drawer-head p,
 .field-heading small,
-.generate-note,
 .config-note,
 .settings-tip p,
 .reference-dropzone span,
@@ -595,12 +594,8 @@ textarea {
 
 .ratio-chip strong {
   font-family: "Sora", sans-serif;
-  font-size: 0.94rem;
-}
-
-.ratio-chip span {
-  color: var(--muted);
-  font-size: 0.73rem;
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .ratio-chip.active {
@@ -734,32 +729,11 @@ textarea {
   justify-self: start;
 }
 
-.advanced-box {
+.parameter-settings .advanced-content {
   border-radius: 14px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.02);
-  padding: 0 12px;
-}
-
-.advanced-box summary {
-  list-style: none;
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.advanced-box summary span {
-  color: var(--muted);
-  font-weight: 400;
-}
-
-.advanced-box[open] {
-  padding-bottom: 10px;
+  padding: 10px 12px;
 }
 
 .advanced-content {
@@ -772,17 +746,6 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-}
-
-.advanced-content p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
-.advanced-content strong {
-  color: var(--text);
-  font-weight: 500;
 }
 
 .compact-field {
@@ -828,6 +791,31 @@ textarea {
 .compact-field select option {
   color: #101728;
   background: #edf1ff;
+}
+
+.parameter-meta {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-content: end;
+  align-items: baseline;
+  column-gap: 8px;
+  row-gap: 5px;
+  min-height: 64px;
+  padding: 20px 0 3px;
+}
+
+.parameter-meta span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.parameter-meta strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .generate-button {
@@ -1328,11 +1316,18 @@ textarea {
   padding-bottom: 6px;
 }
 
+.filmstrip-entry {
+  position: relative;
+  width: 92px;
+  min-height: 104px;
+}
+
 .filmstrip-item {
   display: grid;
   grid-template-rows: 84px auto;
   justify-items: center;
   align-content: start;
+  width: 100%;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 10px;
@@ -1380,12 +1375,42 @@ textarea {
   box-shadow: 0 0 0 2px rgba(111, 124, 255, 0.16);
 }
 
+.filmstrip-cancel {
+  position: absolute;
+  top: 3px;
+  right: 7px;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(14, 18, 32, 0.9);
+  color: #ffffff;
+  font-size: 17px;
+  line-height: 1;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.22);
+}
+
+.filmstrip-cancel:hover {
+  border-color: rgba(255, 148, 137, 0.62);
+  background: rgba(255, 148, 137, 0.24);
+  color: #ffd3cf;
+}
+
 .side-column {
   display: grid;
   gap: var(--studio-grid-gap, 14px);
   min-height: 0;
   height: var(--studio-column-height, auto);
-  grid-template-rows: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.live-panel {
+  height: 100%;
+  position: relative;
 }
 
 .error-banner {
@@ -1406,10 +1431,44 @@ textarea {
   overflow: auto;
 }
 
+.timeline-new-indicator {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(132, 148, 255, 0.34);
+  border-radius: 999px;
+  background: rgba(17, 23, 42, 0.92);
+  color: #eef2ff;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(14px);
+}
+
+.timeline-new-indicator:hover {
+  border-color: rgba(150, 164, 255, 0.58);
+  background: rgba(31, 39, 72, 0.94);
+}
+
+.timeline-new-indicator span {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.timeline-new-indicator strong {
+  font-size: 0.82rem;
+}
+
 .timeline-item {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: 24px minmax(0, 1fr) auto auto auto;
+  column-gap: 10px;
+  row-gap: 3px;
   padding: var(--timeline-item-padding-y, 8px) 0;
   position: relative;
 }
@@ -1425,6 +1484,8 @@ textarea {
 }
 
 .timeline-dot {
+  grid-column: 1;
+  grid-row: 1 / span 2;
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -1474,21 +1535,50 @@ textarea {
 }
 
 .timeline-copy {
-  display: grid;
-  gap: 3px;
+  display: contents;
 }
 
 .timeline-copy strong {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
   font-size: 0.94rem;
 }
 
+.timeline-copy > span {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  min-width: 0;
+}
+
 .timeline-copy span,
+.timeline-ratio,
+.timeline-resolution,
 .timeline-item time {
   color: var(--muted);
   font-size: 0.8rem;
 }
 
+.timeline-ratio {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.timeline-resolution {
+  grid-column: 4;
+  grid-row: 1;
+}
+
+.timeline-ratio,
+.timeline-resolution {
+  align-self: start;
+  white-space: nowrap;
+}
+
 .timeline-item time {
+  grid-column: 5;
+  grid-row: 1;
+  align-self: start;
   white-space: nowrap;
 }
 
@@ -2557,26 +2647,69 @@ textarea {
 }
 
 .prompt-agent-history-title {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
+  gap: 8px;
 }
 
-.prompt-agent-prompt-button {
-  width: 100%;
+.prompt-agent-history-title-button {
+  min-width: 0;
   min-height: 0;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--text);
+  font: inherit;
+  font-weight: 700;
   line-height: 1.55;
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.prompt-agent-prompt-button:hover {
+.prompt-agent-history-title-button:hover {
   color: #ffffff;
   text-decoration: underline;
   text-decoration-color: rgba(112, 226, 162, 0.58);
   text-underline-offset: 3px;
+}
+
+.prompt-agent-history-time {
+  white-space: nowrap;
+}
+
+.prompt-agent-history-expand-button {
+  justify-self: end;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.prompt-agent-history-expand-button:hover,
+.prompt-agent-history-expand-button[aria-expanded="true"] {
+  border-color: rgba(112, 226, 162, 0.38);
+  color: var(--text);
+  background: rgba(112, 226, 162, 0.1);
+}
+
+.prompt-agent-history-detail {
+  display: grid;
+  gap: 8px;
+}
+
+.prompt-agent-history-detail.hidden {
+  display: none;
+}
+
+.prompt-agent-history-prompt {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.55;
 }
 
 .prompt-agent-history-actions {
@@ -2776,7 +2909,9 @@ textarea {
   width: 100%;
   min-width: 0;
   display: grid;
-  gap: 5px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
   padding: 11px 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -2792,20 +2927,44 @@ textarea {
     rgba(255, 255, 255, 0.04);
 }
 
-.prompt-template-item strong,
-.prompt-template-item span {
+.prompt-template-title-button {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 650;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.prompt-template-item strong {
-  font-size: 0.9rem;
+.prompt-template-title-button:hover {
+  color: #ffffff;
+  text-decoration: underline;
+  text-decoration-color: rgba(142, 156, 255, 0.62);
+  text-underline-offset: 3px;
 }
 
-.prompt-template-item span {
-  color: var(--muted);
-  font-size: 0.78rem;
+.prompt-template-row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.prompt-template-row-actions .mini-action {
+  min-height: 28px;
+  padding: 0 9px;
+  border-color: rgba(142, 156, 255, 0.18);
+}
+
+.prompt-template-row-actions .mini-action.danger {
+  color: #ffd7d7;
+  border-color: rgba(255, 124, 124, 0.22);
+  background: rgba(255, 124, 124, 0.08);
 }
 
 .prompt-template-empty {

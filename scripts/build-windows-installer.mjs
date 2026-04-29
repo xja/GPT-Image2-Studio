@@ -35,6 +35,7 @@ const includePaths = [
   "package.json",
   "public",
   "server.mjs",
+  "stop-studio-services.cmd",
 ];
 
 function run(command, args, options = {}) {

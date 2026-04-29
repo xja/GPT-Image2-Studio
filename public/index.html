@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260428-local-merge-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260428-live-unread-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -50,6 +50,16 @@
           <div class="studio-grid">
             <section class="studio-panel settings-panel">
               <form id="generateForm" class="settings-form">
+                <button
+                  class="generate-button"
+                  id="generateButton"
+                  type="submit"
+                  title="开始生成（Ctrl+Enter）"
+                  aria-keyshortcuts="Control+Enter"
+                >
+                  开始生成
+                </button>
+
                 <div class="field-group">
                   <div class="field-heading with-action">
                     <div>
@@ -71,15 +81,40 @@
                   </label>
                 </div>
 
-                <div class="field-group">
+                <div class="field-group parameter-settings">
                   <div class="field-heading">
                     <div>
-                      <span>比例</span>
-                      <small>Ratio</small>
+                      <span>参数设置</span>
+                      <small>Parameters</small>
                     </div>
                   </div>
                   <div class="ratio-grid" id="ratioGrid"></div>
                   <input id="ratioInput" name="ratio" type="hidden" value="4:5" />
+                  <div class="advanced-content">
+                    <div class="advanced-controls">
+                      <label class="compact-field">
+                        <span>推理强度</span>
+                        <select id="reasoningEffortInput" name="reasoningEffort"></select>
+                      </label>
+
+                      <label class="compact-field">
+                        <span>分辨率</span>
+                        <select id="sizeInput" name="size"></select>
+                      </label>
+
+                      <label class="compact-field">
+                        <span>输出格式</span>
+                        <select id="outputFormatInput" name="format"></select>
+                      </label>
+
+                      <div class="parameter-meta" aria-label="工具模型与质量">
+                        <span>工具模型</span>
+                        <strong>gpt-image-2</strong>
+                        <span>质量</span>
+                        <strong>High</strong>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="field-group">
@@ -101,28 +136,6 @@
 
                   <div class="reference-grid hidden" id="referenceGrid"></div>
                 </div>
-
-                <details class="advanced-box" open>
-                  <summary>高级选项 <span>Advanced（可选）</span></summary>
-                  <div class="advanced-content">
-                    <div class="advanced-controls">
-                      <label class="compact-field">
-                        <span>推理强度</span>
-                        <select id="reasoningEffortInput" name="reasoningEffort"></select>
-                      </label>
-
-                      <label class="compact-field">
-                        <span>分辨率</span>
-                        <select id="sizeInput" name="size"></select>
-                      </label>
-                    </div>
-                    <p>工具模型：<strong>gpt-image-2</strong></p>
-                    <p>输出：<strong>PNG / High</strong></p>
-                  </div>
-                </details>
-
-                <button class="generate-button" id="generateButton" type="submit">开始生成</button>
-                <p class="generate-note">支持最多 12 个任务排队，4 个并发生成，结果会自动写入本地图片目录。</p>
               </form>
 
               <div class="settings-tip">
@@ -144,7 +157,7 @@
                   <div class="preview-placeholder" id="previewPlaceholder">
                     <p>Output Preview</p>
                     <h3>生成结果会在这里实时更新。</h3>
-                    <span>右侧保留实时动态和最近输出，底部胶片条可快速切换查看。</span>
+                    <span>生成过程会在右侧实时更新，底部胶片条可快速切换查看。</span>
                   </div>
                   <img id="previewImage" alt="当前预览" />
                 </div>
@@ -182,22 +195,12 @@
 
                 <div class="error-banner hidden" id="errorBanner"></div>
                 <ol class="timeline-list" id="timelineList"></ol>
+                <button class="timeline-new-indicator hidden" id="timelineNewIndicator" type="button" aria-label="查看新动态">
+                  <span aria-hidden="true">↑</span>
+                  <strong id="timelineNewCount">0</strong>
+                </button>
               </section>
 
-              <section class="studio-panel recent-panel">
-                <div class="panel-title between">
-                  <div>
-                    <h2>最近输出</h2>
-                    <p>Recent Outputs</p>
-                  </div>
-                  <button class="ghost-link" id="focusGalleryButton" type="button">查看全部</button>
-                </div>
-
-                <div class="recent-empty" id="recentEmpty">还没有本地输出，先生成一张图。</div>
-                <div class="recent-list" id="recentList"></div>
-
-                <button class="clear-history-button" id="clearHistoryButton" type="button">清空历史记录</button>
-              </section>
             </aside>
           </div>
         </section>
@@ -518,6 +521,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260428-table-resolutions-1"></script>
+    <script type="module" src="/app.js?v=20260429-3-4-3072-1"></script>
   </body>
 </html>

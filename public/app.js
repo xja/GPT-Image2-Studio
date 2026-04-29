@@ -26,12 +26,24 @@ import {
   getDefaultGenerationSize,
   getGenerationSizeOptions,
   normalizeGenerationSize,
-} from "/lib/generation-size-options.mjs?v=20260428-table-resolutions-1";
+} from "/lib/generation-size-options.mjs?v=20260429-3-4-3072-1";
+import {
+  getOutputFormatOptions,
+  normalizeOutputFormat,
+} from "/lib/output-format-options.mjs?v=20260428-output-format-1";
 import {
   getPreviewLoadingShellTheme,
   shouldReusePreviewLoadingShell,
 } from "/lib/preview-loading-shell.mjs";
-import { getGenerationRequestRetryPlan } from "/lib/generation-request-retry.mjs";
+import {
+  getGenerationRequestRetryPlan,
+  isGenerationRequestRetryMessage,
+} from "/lib/generation-request-retry.mjs";
+import {
+  cancelQueuedGenerationJob,
+  isQueuedGenerationJob,
+  selectNextQueuedGenerationJobs,
+} from "/lib/generation-queue.mjs?v=20260428-queue-cancel-1";
 import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260426-filmstrip-1";
 
 const SURPRISE_PROMPTS = [
@@ -48,8 +60,8 @@ const REASONING_LABELS = {
 };
 
 const DEFAULT_LIMITS = {
-  maxConcurrentTasksPerSession: 12,
-  maxParallelTasksPerSession: 4,
+  maxConcurrentTasksPerSession: 20,
+  maxParallelTasksPerSession: 2,
   maxReferenceImages: 6,
 };
 const PROMPT_TEMPLATE_STORAGE_KEY = "image-studio-prompt-templates-v1";
@@ -71,6 +83,18 @@ const GALLERY_COLUMN_PRESETS = [6, 9, 12, 15, 18];
 const DEFAULT_GALLERY_COLUMN_PRESET = 12;
 const DEFAULT_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
 const GALLERY_METADATA_CACHE_KEY = "image-studio-gallery-metadata-cache-v2";
+const GENERATION_ACTIVITY_STORAGE_KEY = "image-studio-generation-activity-v1";
+const GENERATION_TASK_POLL_INTERVAL_MS = 2500;
+const GENERATION_TASK_STATUS_LABELS = {
+  running: "生成中",
+  completed: "生成完成",
+  error: "错误",
+};
+const GENERATION_TASK_TIMELINE_STATUS = {
+  running: "active",
+  completed: "done",
+  error: "error",
+};
 const GALLERY_WINDOW_LABELS = {
   today: "今天",
   recent: "近 7 天",
@@ -89,6 +113,7 @@ let galleryPanelHeightSyncFrame = 0;
 let galleryPanelHeightObserver = null;
 let galleryScrollSyncFrame = 0;
 let galleryScrollObserver = null;
+let generationTaskPollTimer = 0;
 let promptCopyFeedbackTimer = 0;
 let previewLoadingShellNodes = null;
 const galleryScrollDrag = {
@@ -108,6 +133,7 @@ const state = {
   galleryMetadataCache: {},
   galleryControls: { ...DEFAULT_GALLERY_CONTROLS },
   galleryColumnPreset: DEFAULT_GALLERY_COLUMN_PRESET,
+  generationTasks: [],
   jobs: [],
   lightboxItem: null,
   lightboxZoomed: false,
@@ -125,6 +151,9 @@ const state = {
   referenceFiles: [],
   selectedPromptTemplateId: "",
   selectedPreviewKey: "",
+  timelineHasRendered: false,
+  timelineSignatures: new Map(),
+  timelineUnreadCount: 0,
   zoom: 1,
 };
 
@@ -183,6 +212,7 @@ const refs = {
   openConfigButton: document.querySelector("#openConfigButton"),
   openOutputButton: document.querySelector("#openOutputButton"),
   openPromptAgentButton: document.querySelector("#openPromptAgentButton"),
+  outputFormatInput: document.querySelector("#outputFormatInput"),
   previewDeleteButton: document.querySelector("#previewDeleteButton"),
   previewDownloadButton: document.querySelector("#previewDownloadButton"),
   previewId: document.querySelector("#previewId"),
@@ -244,6 +274,8 @@ const refs = {
   sideColumn: document.querySelector(".side-column"),
   topbar: document.querySelector(".topbar"),
   timelineList: document.querySelector("#timelineList"),
+  timelineNewCount: document.querySelector("#timelineNewCount"),
+  timelineNewIndicator: document.querySelector("#timelineNewIndicator"),
   viewPanels: [...document.querySelectorAll("[data-view-panel]")],
   viewTabs: [...document.querySelectorAll("[data-view-tab]")],
   viewRoot: document.querySelector(".view-root"),
@@ -355,6 +387,80 @@ function formatCanvasLabel(size) {
   }
 
   return size.replace("x", " × ");
+}
+
+function formatCompactSizeLabel(size) {
+  const normalized = String(size || "")
+    .trim()
+    .replace(/\s*[x×]\s*/i, "x");
+
+  return /^\d+x\d+$/.test(normalized) ? normalized : "";
+}
+
+function formatCompactRatioLabel(ratio) {
+  const normalized = String(ratio || "")
+    .trim()
+    .replace(/\s*[：:]\s*/g, ":");
+
+  return /^\d+:\d+$/.test(normalized) ? normalized : "";
+}
+
+function formatFilmstripSizeLabel(item) {
+  return formatCompactSizeLabel(item?.size);
+}
+
+function compactTimelineText(value, fallback = "未命名任务") {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return fallback;
+  }
+
+  return raw.length > 34 ? `${raw.slice(0, 34)}...` : raw;
+}
+
+function normalizeGenerationTaskStatus(status) {
+  return status === "completed" || status === "error" ? status : "running";
+}
+
+function normalizeActivityEntry(entry) {
+  const key = String(entry?.key || "").trim();
+  const title = String(entry?.title || "").trim();
+  const detail = String(entry?.detail || "");
+  if (!key || !title) {
+    return null;
+  }
+
+  if (isGenerationRequestRetryMessage(detail)) {
+    return null;
+  }
+
+  return {
+    key,
+    title,
+    detail,
+    ratio: formatCompactRatioLabel(entry?.ratio),
+    size: formatCompactSizeLabel(entry?.size),
+    status: ["active", "done", "error", "pending"].includes(entry?.status) ? entry.status : "active",
+    at: String(entry?.at || ""),
+  };
+}
+
+function readGenerationActivityFeed() {
+  try {
+    const raw = window.localStorage.getItem(GENERATION_ACTIVITY_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.map(normalizeActivityEntry).filter(Boolean).slice(0, 12) : [];
+  } catch (_error) {
+    return [];
+  }
+}
+
+function writeGenerationActivityFeed() {
+  try {
+    window.localStorage.setItem(GENERATION_ACTIVITY_STORAGE_KEY, JSON.stringify(state.activityFeed.slice(0, 12)));
+  } catch (_error) {
+    // Ignore storage quota or privacy-mode failures; the in-memory feed still works.
+  }
 }
 
 function readGalleryMetadataCache() {
@@ -875,23 +981,40 @@ function closePromptAgentImageViewer() {
 function createPromptAgentHistoryCard(item) {
   const card = document.createElement("article");
   card.className = "prompt-agent-history-card";
+  card.dataset.expanded = "false";
 
   const titleRow = document.createElement("div");
   titleRow.className = "prompt-agent-history-title";
 
-  const title = document.createElement("strong");
-  title.textContent = item.json?.title || "图片提示词";
+  const titleButton = document.createElement("button");
+  titleButton.className = "prompt-agent-history-title-button";
+  titleButton.type = "button";
+  titleButton.dataset.promptAgentMapId = item.id;
+  titleButton.textContent = item.json?.title || "图片提示词";
+  titleButton.title = titleButton.textContent;
 
   const time = document.createElement("span");
+  time.className = "prompt-agent-history-time";
   time.textContent = formatTime(item.createdAt);
 
-  titleRow.append(title, time);
+  const expandButton = document.createElement("button");
+  expandButton.className = "prompt-agent-history-expand-button";
+  expandButton.type = "button";
+  expandButton.dataset.promptAgentExpandId = item.id;
+  expandButton.setAttribute("aria-expanded", "false");
+  expandButton.textContent = "展开";
 
-  const promptButton = document.createElement("button");
-  promptButton.className = "prompt-agent-prompt-button";
-  promptButton.type = "button";
-  promptButton.dataset.promptAgentMapId = item.id;
-  promptButton.textContent = getPromptAgentPrompt(item) || "未返回 prompt 字段";
+  const detail = document.createElement("div");
+  detail.className = "prompt-agent-history-detail hidden";
+  detail.id = `prompt-agent-history-detail-${String(item.id).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+  expandButton.setAttribute("aria-controls", detail.id);
+  expandButton.setAttribute("aria-label", `展开 ${titleButton.textContent}`);
+
+  titleRow.append(titleButton, time, expandButton);
+
+  const promptText = document.createElement("p");
+  promptText.className = "prompt-agent-history-prompt";
+  promptText.textContent = getPromptAgentPrompt(item) || "未返回 prompt 字段";
 
   const meta = document.createElement("div");
   meta.className = "prompt-agent-history-meta";
@@ -901,21 +1024,35 @@ function createPromptAgentHistoryCard(item) {
   const actions = document.createElement("div");
   actions.className = "prompt-agent-history-actions";
 
-  const mapButton = document.createElement("button");
-  mapButton.className = "inline-button";
-  mapButton.type = "button";
-  mapButton.dataset.promptAgentMapId = item.id;
-  mapButton.textContent = "映射到提示词";
-
   const copyButton = document.createElement("button");
   copyButton.className = "inline-button";
   copyButton.type = "button";
   copyButton.dataset.promptAgentCopyId = item.id;
   copyButton.textContent = "复制 JSON";
 
-  actions.append(mapButton, copyButton);
-  card.append(titleRow, promptButton, meta, actions);
+  actions.append(copyButton);
+  detail.append(promptText, meta, actions);
+  card.append(titleRow, detail);
   return card;
+}
+
+function setPromptAgentHistoryCardExpanded(card, expanded) {
+  const detail = card.querySelector(".prompt-agent-history-detail");
+  const expandButton = card.querySelector(".prompt-agent-history-expand-button");
+  card.dataset.expanded = expanded ? "true" : "false";
+  detail?.classList.toggle("hidden", !expanded);
+  if (expandButton) {
+    expandButton.setAttribute("aria-expanded", String(expanded));
+    expandButton.textContent = expanded ? "收起" : "展开";
+  }
+}
+
+function togglePromptAgentHistoryCard(button) {
+  const card = button.closest(".prompt-agent-history-card");
+  if (!card) {
+    return;
+  }
+  setPromptAgentHistoryCardExpanded(card, card.dataset.expanded !== "true");
 }
 
 function renderPromptAgentHistory() {
@@ -1047,6 +1184,20 @@ function renderReasoningOptions() {
   }
 }
 
+function renderOutputFormatOptions() {
+  const currentValue = normalizeOutputFormat(refs.outputFormatInput.value || state.config?.defaults?.format || "png");
+  refs.outputFormatInput.innerHTML = "";
+
+  getOutputFormatOptions().forEach((option) => {
+    const element = document.createElement("option");
+    element.value = option.value;
+    element.textContent = option.label;
+    refs.outputFormatInput.appendChild(element);
+  });
+
+  refs.outputFormatInput.value = currentValue;
+}
+
 function renderSizeOptions() {
   const ratioValue = refs.ratioInput.value || "4:5";
   const currentValue = normalizeGenerationSize(ratioValue, refs.sizeInput.value || "auto");
@@ -1062,13 +1213,33 @@ function renderSizeOptions() {
   refs.sizeInput.value = currentValue;
 }
 
+function getSettingsFormScrollTop() {
+  return refs.generateForm?.scrollTop || 0;
+}
+
+function restoreSettingsFormScrollTop(scrollTop) {
+  if (!refs.generateForm || !Number.isFinite(scrollTop)) {
+    return;
+  }
+
+  const restore = () => {
+    refs.generateForm.scrollTop = scrollTop;
+  };
+
+  restore();
+  window.requestAnimationFrame(restore);
+}
+
 function syncStudioHeight() {
   if (!refs.settingsPanel || !refs.previewPanel || !refs.sideColumn || !refs.viewRoot) {
     return;
   }
 
+  const settingsScrollTop = getSettingsFormScrollTop();
+
   if (STACKED_STUDIO_LAYOUT_MODES.has(getCurrentStudioLayoutMode()) || state.activeView !== "studio") {
     document.documentElement.style.removeProperty("--studio-column-height");
+    restoreSettingsFormScrollTop(settingsScrollTop);
     return;
   }
 
@@ -1083,6 +1254,8 @@ function syncStudioHeight() {
   if (resolvedHeight > 0) {
     document.documentElement.style.setProperty("--studio-column-height", `${resolvedHeight}px`);
   }
+
+  restoreSettingsFormScrollTop(settingsScrollTop);
 }
 
 function scheduleStudioHeightSync() {
@@ -1375,10 +1548,6 @@ function renderRatioGrid() {
     title.textContent = option.value;
     button.appendChild(title);
 
-    const subtitle = document.createElement("span");
-    subtitle.textContent = option.label.replace(/\s*\d+:\d+/, "").trim();
-    button.appendChild(subtitle);
-
     button.addEventListener("click", () => {
       refs.ratioInput.value = option.value;
       renderRatioGrid();
@@ -1400,7 +1569,7 @@ function syncConfigUi(config) {
     ...DEFAULT_LIMITS,
     ...configLimits,
     maxConcurrentTasksPerSession:
-      "maxParallelTasksPerSession" in configLimits
+      "maxConcurrentTasksPerSession" in configLimits
         ? configLimits.maxConcurrentTasksPerSession || DEFAULT_LIMITS.maxConcurrentTasksPerSession
         : DEFAULT_LIMITS.maxConcurrentTasksPerSession,
   };
@@ -1412,6 +1581,7 @@ function syncConfigUi(config) {
 
   renderRatioGrid();
   renderReasoningOptions();
+  renderOutputFormatOptions();
   renderSizeOptions();
   syncConnectionState();
   updateGenerateButton();
@@ -1520,13 +1690,25 @@ function syncLightboxItem() {
   syncLightboxZoomState();
 }
 
-function recordActivity({ key, title, detail, status, at }) {
+function getJobActivitySize(jobId) {
+  return state.jobs.find((job) => job.id === jobId)?.size || "";
+}
+
+function getJobActivityRatio(jobId) {
+  return state.jobs.find((job) => job.id === jobId)?.ratio || "";
+}
+
+function recordActivity({ key, title, detail, ratio, size, status, at }) {
   const nextAt = at || nowIso();
+  const nextRatio = formatCompactRatioLabel(ratio);
+  const nextSize = formatCompactSizeLabel(size);
   const existing = state.activityFeed.find((item) => item.key === key);
 
   if (existing) {
     existing.title = title;
     existing.detail = detail;
+    existing.ratio = nextRatio || existing.ratio || "";
+    existing.size = nextSize || existing.size || "";
     existing.status = status;
     existing.at = nextAt;
   } else {
@@ -1534,6 +1716,8 @@ function recordActivity({ key, title, detail, status, at }) {
       key,
       title,
       detail,
+      ratio: nextRatio,
+      size: nextSize,
       status,
       at: nextAt,
     });
@@ -1541,6 +1725,7 @@ function recordActivity({ key, title, detail, status, at }) {
 
   state.activityFeed.sort((left, right) => String(right.at).localeCompare(String(left.at)));
   state.activityFeed = state.activityFeed.slice(0, 12);
+  writeGenerationActivityFeed();
 }
 
 async function copyLightboxPrompt() {
@@ -1559,112 +1744,59 @@ async function copyLightboxPrompt() {
 
 function recordJobQueued(job) {
   recordActivity({
-    key: `${job.id}:queue`,
-    title: "排队中",
+    key: `${job.id}:task`,
+    title: GENERATION_TASK_STATUS_LABELS.running,
     detail: "等待资源分配",
+    ratio: job.ratio,
+    size: job.size,
     status: "active",
     at: job.createdAt,
   });
 }
 
 function handleActivityStatus(jobId, stage, message) {
-  const stamp = nowIso();
-
-  if (stage === "uploading" || stage === "connecting") {
-    recordActivity({
-      key: `${jobId}:queue`,
-      title: "排队中",
-      detail: message,
-      status: "active",
-      at: stamp,
-    });
-    return;
-  }
-
-  if (stage === "generating") {
-    recordActivity({
-      key: `${jobId}:queue`,
-      title: "排队中",
-      detail: "等待资源分配",
-      status: "done",
-      at: stamp,
-    });
-    recordActivity({
-      key: `${jobId}:render`,
-      title: "图像生成中",
-      detail: message,
-      status: "active",
-      at: stamp,
-    });
-    return;
-  }
-
-  if (stage === "saving") {
-    recordActivity({
-      key: `${jobId}:render`,
-      title: "图像生成中",
-      detail: "图像渲染完成",
-      status: "done",
-      at: stamp,
-    });
-    recordActivity({
-      key: `${jobId}:model`,
-      title: "模型处理中",
-      detail: "最终图片已返回",
-      status: "done",
-      at: stamp,
-    });
-    recordActivity({
-      key: `${jobId}:complete`,
-      title: "生成完成",
-      detail: message,
-      status: "active",
-      at: stamp,
-    });
-  }
+  recordActivity({
+    key: `${jobId}:task`,
+    title: GENERATION_TASK_STATUS_LABELS.running,
+    detail: message || (stage === "saving" ? "正在保存到本地图片目录" : "正在生成图片"),
+    ratio: getJobActivityRatio(jobId),
+    size: getJobActivitySize(jobId),
+    status: "active",
+    at: nowIso(),
+  });
 }
 
 function handleActivityPartial(jobId) {
-  const stamp = nowIso();
   recordActivity({
-    key: `${jobId}:render`,
-    title: "图像生成中",
+    key: `${jobId}:task`,
+    title: GENERATION_TASK_STATUS_LABELS.running,
     detail: "已收到中途预览",
-    status: "done",
-    at: stamp,
-  });
-  recordActivity({
-    key: `${jobId}:model`,
-    title: "模型处理中",
-    detail: "GPT Image 2.0 正在返回最终图像",
+    ratio: getJobActivityRatio(jobId),
+    size: getJobActivitySize(jobId),
     status: "active",
-    at: stamp,
+    at: nowIso(),
   });
 }
 
 function handleActivityFinal(jobId) {
-  const stamp = nowIso();
   recordActivity({
-    key: `${jobId}:model`,
-    title: "模型处理中",
-    detail: "最终图片已返回",
-    status: "done",
-    at: stamp,
-  });
-  recordActivity({
-    key: `${jobId}:complete`,
-    title: "生成完成",
+    key: `${jobId}:task`,
+    title: GENERATION_TASK_STATUS_LABELS.running,
     detail: "正在写入本地 output",
+    ratio: getJobActivityRatio(jobId),
+    size: getJobActivitySize(jobId),
     status: "active",
-    at: stamp,
+    at: nowIso(),
   });
 }
 
 function handleActivitySuccess(jobId) {
   recordActivity({
-    key: `${jobId}:complete`,
-    title: "生成完成",
+    key: `${jobId}:task`,
+    title: GENERATION_TASK_STATUS_LABELS.completed,
     detail: "图像已成功生成",
+    ratio: getJobActivityRatio(jobId),
+    size: getJobActivitySize(jobId),
     status: "done",
     at: nowIso(),
   });
@@ -1672,11 +1804,45 @@ function handleActivitySuccess(jobId) {
 
 function handleActivityFailure(jobId, message) {
   recordActivity({
-    key: `${jobId}:error`,
-    title: "生成失败",
+    key: `${jobId}:task`,
+    title: GENERATION_TASK_STATUS_LABELS.error,
     detail: compactErrorMessage(message, "生成请求失败"),
+    ratio: getJobActivityRatio(jobId),
+    size: getJobActivitySize(jobId),
     status: "error",
     at: nowIso(),
+  });
+}
+
+function handleActivityCanceled(job) {
+  recordActivity({
+    key: `${job.id}:task`,
+    title: "已取消",
+    detail: `已取消排队任务 · ${compactTimelineText(job.prompt)}`,
+    ratio: job.ratio,
+    size: job.size,
+    status: "pending",
+    at: nowIso(),
+  });
+}
+
+function recordGenerationTaskActivity(task) {
+  const status = normalizeGenerationTaskStatus(task?.status);
+  const statusText =
+    status === "error"
+      ? compactErrorMessage(task?.errorMessage || task?.statusText, "生成请求失败")
+      : String(task?.statusText || "").trim();
+  const promptText = compactTimelineText(task?.prompt);
+  const detail = statusText ? `${statusText} · ${promptText}` : promptText;
+
+  recordActivity({
+    key: `${task.id}:task`,
+    title: GENERATION_TASK_STATUS_LABELS[status],
+    detail,
+    ratio: formatCompactRatioLabel(task?.ratio),
+    size: formatCompactSizeLabel(task?.size),
+    status: GENERATION_TASK_TIMELINE_STATUS[status],
+    at: task.updatedAt || task.createdAt,
   });
 }
 
@@ -1690,29 +1856,10 @@ function getTimelineItems() {
     return [
       {
         key: "complete:fallback",
-        title: "生成完成",
+        title: GENERATION_TASK_STATUS_LABELS.completed,
         detail: "图像已成功生成",
-        status: "done",
-        at: current.createdAt,
-      },
-      {
-        key: "model:fallback",
-        title: "模型处理中",
-        detail: "最终图片已返回",
-        status: "done",
-        at: current.createdAt,
-      },
-      {
-        key: "render:fallback",
-        title: "图像生成中",
-        detail: "图像渲染完成",
-        status: "done",
-        at: current.createdAt,
-      },
-      {
-        key: "queue:fallback",
-        title: "排队中",
-        detail: "等待资源分配",
+        ratio: current.ratio || current.json?.aspect_ratio,
+        size: current.size,
         status: "done",
         at: current.createdAt,
       },
@@ -1721,42 +1868,116 @@ function getTimelineItems() {
 
   return [
     {
-      key: "complete:idle",
-      title: "生成完成",
-      detail: "等待任务完成",
+      key: "running:idle",
+      title: GENERATION_TASK_STATUS_LABELS.running,
+      detail: "等待任务开始",
       status: "pending",
       at: "",
     },
     {
-      key: "model:idle",
-      title: "模型处理中",
-      detail: "GPT Image 2.0",
+      key: "completed:idle",
+      title: GENERATION_TASK_STATUS_LABELS.completed,
+      detail: "等待生成结果",
       status: "pending",
       at: "",
     },
     {
-      key: "render:idle",
-      title: "图像生成中",
-      detail: "等待渲染启动",
-      status: "pending",
-      at: "",
-    },
-    {
-      key: "queue:idle",
-      title: "排队中",
-      detail: "等待资源分配",
+      key: "error:idle",
+      title: GENERATION_TASK_STATUS_LABELS.error,
+      detail: "暂无错误",
       status: "pending",
       at: "",
     },
   ];
 }
 
+function isTimelineAtTop() {
+  return refs.timelineList.scrollTop <= 4;
+}
+
+function getTimelineItemSignature(item) {
+  return [item.key, item.title, item.detail, item.ratio || "", item.size || "", item.status, item.at || ""].join("\u001f");
+}
+
+function countTimelineChanges(items) {
+  if (!state.timelineHasRendered) {
+    return 0;
+  }
+
+  return items.reduce((count, item) => {
+    return state.timelineSignatures.get(item.key) === getTimelineItemSignature(item) ? count : count + 1;
+  }, 0);
+}
+
+function getTimelineScrollAnchor() {
+  const listRect = refs.timelineList.getBoundingClientRect();
+  return [...refs.timelineList.children].reduce((anchor, row) => {
+    if (anchor) {
+      return anchor;
+    }
+
+    const rowRect = row.getBoundingClientRect();
+    return rowRect.bottom >= listRect.top + 1
+      ? { key: row.dataset.timelineKey, offset: rowRect.top - listRect.top }
+      : null;
+  }, null);
+}
+
+function restoreTimelineScrollAnchor(anchor, fallbackScrollTop) {
+  if (!anchor?.key) {
+    refs.timelineList.scrollTop = fallbackScrollTop;
+    return;
+  }
+
+  const row = [...refs.timelineList.children].find((candidate) => candidate.dataset.timelineKey === anchor.key);
+  if (!row) {
+    refs.timelineList.scrollTop = fallbackScrollTop;
+    return;
+  }
+
+  const rowRect = row.getBoundingClientRect();
+  const listRect = refs.timelineList.getBoundingClientRect();
+  refs.timelineList.scrollTop += rowRect.top - listRect.top - anchor.offset;
+}
+
+function setTimelineSignatures(items) {
+  state.timelineSignatures = new Map(items.map((item) => [item.key, getTimelineItemSignature(item)]));
+  state.timelineHasRendered = true;
+}
+
+function renderTimelineNewIndicator() {
+  refs.timelineNewCount.textContent = String(state.timelineUnreadCount);
+  refs.timelineNewIndicator.classList.toggle("hidden", state.timelineUnreadCount <= 0);
+}
+
+function handleTimelineScroll() {
+  if (!isTimelineAtTop()) {
+    return;
+  }
+
+  state.timelineUnreadCount = 0;
+  renderTimelineNewIndicator();
+}
+
+function scrollTimelineToNewest() {
+  refs.timelineList.scrollTo({ top: 0, behavior: "smooth" });
+  state.timelineUnreadCount = 0;
+  renderTimelineNewIndicator();
+}
+
 function renderTimeline() {
+  const items = getTimelineItems();
+  const isAtTop = isTimelineAtTop();
+  const previousScrollTop = refs.timelineList.scrollTop;
+  const scrollAnchor = isAtTop ? null : getTimelineScrollAnchor();
+  const changedCount = countTimelineChanges(items);
+
   refs.timelineList.innerHTML = "";
 
-  getTimelineItems().forEach((item) => {
+  items.forEach((item) => {
     const row = document.createElement("li");
     row.className = `timeline-item ${item.status}`;
+    row.dataset.timelineKey = item.key;
 
     const dot = document.createElement("span");
     dot.className = "timeline-dot";
@@ -1775,12 +1996,33 @@ function renderTimeline() {
 
     row.appendChild(copy);
 
+    const ratio = document.createElement("span");
+    ratio.className = "timeline-ratio";
+    ratio.textContent = formatCompactRatioLabel(item.ratio);
+    row.appendChild(ratio);
+
+    const resolution = document.createElement("span");
+    resolution.className = "timeline-resolution";
+    resolution.textContent = formatCompactSizeLabel(item.size);
+    row.appendChild(resolution);
+
     const time = document.createElement("time");
     time.textContent = formatClock(item.at);
     row.appendChild(time);
 
     refs.timelineList.appendChild(row);
   });
+
+  if (isAtTop) {
+    state.timelineUnreadCount = 0;
+    refs.timelineList.scrollTop = 0;
+  } else {
+    restoreTimelineScrollAnchor(scrollAnchor, previousScrollTop);
+    state.timelineUnreadCount += changedCount;
+  }
+
+  setTimelineSignatures(items);
+  renderTimelineNewIndicator();
 }
 
 function createPreviewMotionNode() {
@@ -1998,13 +2240,13 @@ function getFilmstripItems() {
   const activeJobs = sortGalleryItemsByCreatedAtDesc(state.jobs).map((job) => ({
     key: makeJobPreviewKey(job.id),
     item: job,
-    label: job.statusText || formatClock(job.createdAt),
+    label: formatFilmstripSizeLabel(job) || job.statusText || formatClock(job.createdAt),
   }));
 
   const recentGallery = sortGalleryItemsByCreatedAtDesc(state.gallery).slice(0, 12).map((item) => ({
     key: makeGalleryPreviewKey(item.filename),
     item,
-    label: formatClock(item.createdAt),
+    label: formatFilmstripSizeLabel(item) || formatClock(item.createdAt),
   }));
 
   return [...activeJobs, ...recentGallery].slice(0, 14);
@@ -2014,6 +2256,9 @@ function renderFilmstrip() {
   refs.filmstrip.innerHTML = "";
 
   getFilmstripItems().forEach(({ key, item, label }) => {
+    const shell = document.createElement("div");
+    shell.className = "filmstrip-entry";
+
     const button = document.createElement("button");
     button.type = "button";
     button.className = "filmstrip-item";
@@ -2043,7 +2288,23 @@ function renderFilmstrip() {
       setSelectedPreviewKey(key);
     });
 
-    refs.filmstrip.appendChild(button);
+    shell.appendChild(button);
+
+    if (key.startsWith("job:") && isQueuedGenerationJob(item)) {
+      const cancelButton = document.createElement("button");
+      cancelButton.type = "button";
+      cancelButton.className = "filmstrip-cancel";
+      cancelButton.textContent = "×";
+      cancelButton.title = "取消排队任务";
+      cancelButton.setAttribute("aria-label", "取消排队任务");
+      cancelButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        cancelQueuedJob(item.id);
+      });
+      shell.appendChild(cancelButton);
+    }
+
+    refs.filmstrip.appendChild(shell);
   });
 }
 
@@ -2104,6 +2365,10 @@ function createRecentOutputItem(item) {
 }
 
 function renderRecentOutputs() {
+  if (!refs.recentList || !refs.recentEmpty) {
+    return;
+  }
+
   refs.recentList.innerHTML = "";
   refs.recentEmpty.classList.toggle("hidden", state.gallery.length > 0);
 
@@ -2275,6 +2540,8 @@ function renderStudio() {
 }
 
 function renderAll() {
+  const settingsScrollTop = getSettingsFormScrollTop();
+
   ensureSelectedPreview();
   syncConnectionState();
   updateGenerateButton();
@@ -2282,6 +2549,8 @@ function renderAll() {
   renderStudio();
   renderGalleryView();
   syncLightboxItem();
+
+  restoreSettingsFormScrollTop(settingsScrollTop);
 }
 
 function upsertGalleryItem(item) {
@@ -2312,11 +2581,12 @@ function normalizePromptTemplate(template, index = 0) {
 function readPromptTemplates() {
   try {
     const raw = window.localStorage.getItem(PROMPT_TEMPLATE_STORAGE_KEY);
+    if (raw === null) {
+      return DEFAULT_PROMPT_TEMPLATES.map((template) => ({ ...template }));
+    }
+
     const parsed = raw ? JSON.parse(raw) : [];
-    const templates = Array.isArray(parsed)
-      ? parsed.map(normalizePromptTemplate).filter(Boolean)
-      : [];
-    return templates.length > 0 ? templates : DEFAULT_PROMPT_TEMPLATES.map((template) => ({ ...template }));
+    return Array.isArray(parsed) ? parsed.map(normalizePromptTemplate).filter(Boolean) : [];
   } catch {
     return DEFAULT_PROMPT_TEMPLATES.map((template) => ({ ...template }));
   }
@@ -2354,24 +2624,44 @@ function renderPromptTemplates() {
   }
 
   state.promptTemplates.forEach((template) => {
-    const button = document.createElement("button");
-    button.className = "prompt-template-item";
-    button.type = "button";
-    button.classList.toggle("active", template.id === state.selectedPromptTemplateId);
-    button.addEventListener("click", () => {
-      selectPromptTemplate(template.id);
+    const row = document.createElement("div");
+    row.className = "prompt-template-item";
+    row.classList.toggle("active", template.id === state.selectedPromptTemplateId);
+
+    const titleButton = document.createElement("button");
+    titleButton.className = "prompt-template-title-button";
+    titleButton.type = "button";
+    titleButton.textContent = template.name;
+    titleButton.title = template.name;
+    titleButton.addEventListener("click", () => {
+      applyPromptTemplate(template.id);
       setPromptTemplateFeedback("");
     });
+    row.appendChild(titleButton);
 
-    const name = document.createElement("strong");
-    name.textContent = template.name;
-    button.appendChild(name);
+    const actions = document.createElement("div");
+    actions.className = "prompt-template-row-actions";
 
-    const prompt = document.createElement("span");
-    prompt.textContent = template.prompt;
-    button.appendChild(prompt);
+    const editButton = document.createElement("button");
+    editButton.className = "mini-action";
+    editButton.type = "button";
+    editButton.textContent = "编辑";
+    editButton.addEventListener("click", () => {
+      editPromptTemplate(template.id);
+    });
+    actions.appendChild(editButton);
 
-    refs.promptTemplateList.appendChild(button);
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "mini-action danger";
+    deleteButton.type = "button";
+    deleteButton.textContent = "删除";
+    deleteButton.addEventListener("click", () => {
+      deletePromptTemplate(template.id);
+    });
+    actions.appendChild(deleteButton);
+
+    row.appendChild(actions);
+    refs.promptTemplateList.appendChild(row);
   });
 }
 
@@ -2413,30 +2703,49 @@ function savePromptTemplate(event) {
   setPromptTemplateFeedback("模板已保存。");
 }
 
-function applyPromptTemplate() {
-  const prompt = refs.promptTemplateTextInput.value.trim();
+function applyPromptTemplate(templateId = "") {
+  const template = templateId ? state.promptTemplates.find((entry) => entry.id === templateId) : getSelectedPromptTemplate();
+  const prompt = (template?.prompt || refs.promptTemplateTextInput.value).trim();
   if (!prompt) {
     setPromptTemplateFeedback("先选择或填写一个模板。");
     refs.promptTemplateTextInput.focus();
     return;
   }
 
+  if (template) {
+    state.selectedPromptTemplateId = template.id;
+  }
   refs.promptInput.value = prompt;
   updatePromptCounter();
   setPromptTemplatePopoverOpen(false);
   refs.promptInput.focus();
 }
 
-function deletePromptTemplate() {
-  const selected = getSelectedPromptTemplate();
+function editPromptTemplate(templateId) {
+  selectPromptTemplate(templateId);
+  setPromptTemplateFeedback("");
+  refs.promptTemplateNameInput.focus();
+}
+
+function deletePromptTemplate(templateId = "") {
+  const selected = templateId
+    ? state.promptTemplates.find((template) => template.id === templateId)
+    : getSelectedPromptTemplate();
   if (!selected) {
     setPromptTemplateFeedback("先选择一个模板。");
     return;
   }
 
+  if (!window.confirm(`删除提示词模板「${selected.name}」？`)) {
+    return;
+  }
+
   state.promptTemplates = state.promptTemplates.filter((template) => template.id !== selected.id);
   writePromptTemplates();
-  const next = state.promptTemplates[0] || null;
+  const next =
+    state.selectedPromptTemplateId === selected.id
+      ? state.promptTemplates[0] || null
+      : getSelectedPromptTemplate() || state.promptTemplates[0] || null;
   state.selectedPromptTemplateId = next?.id || "";
   selectPromptTemplate(state.selectedPromptTemplateId);
   setPromptTemplateFeedback("模板已删除。");
@@ -2543,7 +2852,7 @@ function createJob() {
     sizeSetting,
     size,
     quality: state.config?.defaults?.quality || "high",
-    format: state.config?.defaults?.format || "png",
+    format: normalizeOutputFormat(refs.outputFormatInput.value || state.config?.defaults?.format || "png"),
     baseUrl: state.config?.baseUrl || refs.baseUrlInput.value.trim(),
     responsesModel: state.config?.responsesModel || refs.responsesModelInput.value.trim() || "gpt-5.4",
     imageModel: "gpt-image-2",
@@ -2576,6 +2885,22 @@ function removeJob(jobId) {
   state.jobs = state.jobs.filter((job) => job.id !== jobId);
 }
 
+function cancelQueuedJob(jobId) {
+  const { jobs, canceledJob } = cancelQueuedGenerationJob(state.jobs, jobId);
+  if (!canceledJob) {
+    return false;
+  }
+
+  state.jobs = jobs;
+  if (state.selectedPreviewKey === makeJobPreviewKey(canceledJob.id)) {
+    state.selectedPreviewKey = "";
+  }
+  handleActivityCanceled(canceledJob);
+  scheduleGenerationQueue();
+  renderAll();
+  return true;
+}
+
 async function requestGenerationStream(job) {
   while (true) {
     try {
@@ -2598,8 +2923,8 @@ async function requestGenerationStream(job) {
         retryCount: job.requestRetryCount || 0,
       });
       if (!retryPlan.shouldRetry) {
-        if (retryPlan.retryable) {
-          throw new Error(retryPlan.message);
+        if (retryPlan.retryable && !retryPlan.shouldSurfaceError) {
+          return null;
         }
         throw error;
       }
@@ -2610,7 +2935,6 @@ async function requestGenerationStream(job) {
         statusStage: "connecting",
         statusText: retryPlan.message,
       });
-      handleActivityStatus(job.id, "connecting", retryPlan.message);
       await wait(900);
     }
   }
@@ -2638,6 +2962,113 @@ async function loadGallery() {
   state.gallery = sortGalleryItemsByCreatedAtDesc(hydratedGallery.items);
   renderAll();
   void repairGalleryMetadataQueue(hydratedGallery.repairQueue);
+}
+
+function normalizeGenerationTaskSnapshot(task) {
+  const id = String(task?.id || "").trim();
+  if (!id) {
+    return null;
+  }
+
+  const status = normalizeGenerationTaskStatus(task.status);
+  return {
+    ...task,
+    id,
+    status,
+    createdAt: String(task.createdAt || nowIso()),
+    updatedAt: String(task.updatedAt || task.createdAt || nowIso()),
+    prompt: String(task.prompt || ""),
+    statusText: String(task.statusText || ""),
+    errorMessage: String(task.errorMessage || ""),
+    referenceFiles: [],
+    started: status === "running",
+    isRunning: status === "running",
+    statusStage: String(task.statusStage || status),
+  };
+}
+
+function applyGenerationTaskSnapshots(tasks, { render = true } = {}) {
+  const snapshots = (Array.isArray(tasks) ? tasks : []).map(normalizeGenerationTaskSnapshot).filter(Boolean);
+  const snapshotIds = new Set(snapshots.map((task) => task.id));
+  const existingJobs = new Map(state.jobs.map((job) => [job.id, job]));
+
+  snapshots.forEach((task) => {
+    if (task.status === "completed" && task.item) {
+      upsertGalleryItem(task.item);
+      if (state.selectedPreviewKey === makeJobPreviewKey(task.id) && task.item.filename) {
+        state.selectedPreviewKey = makeGalleryPreviewKey(task.item.filename);
+      }
+    }
+
+    if (task.status === "error" && state.selectedPreviewKey === makeJobPreviewKey(task.id)) {
+      state.selectedPreviewKey = "";
+    }
+
+    recordGenerationTaskActivity(task);
+  });
+
+  const remoteRunningJobs = snapshots
+    .filter((task) => task.status === "running")
+    .map((task) => {
+      const existing = existingJobs.get(task.id);
+      return {
+        ...task,
+        referenceFiles: existing?.referenceFiles || [],
+        previewUrl: existing?.previewUrl || task.previewUrl || "",
+        requestRetryCount: existing?.requestRetryCount || 0,
+      };
+    });
+  const localTransientJobs = state.jobs.filter((job) => !snapshotIds.has(job.id) && (job.isRunning || !job.started));
+
+  state.generationTasks = snapshots;
+  state.jobs = sortGalleryItemsByCreatedAtDesc([...remoteRunningJobs, ...localTransientJobs]);
+
+  if (!state.selectedPreviewKey && state.jobs.length > 0) {
+    state.selectedPreviewKey = makeJobPreviewKey(state.jobs[0].id);
+  }
+
+  if (render) {
+    renderAll();
+  }
+
+  scheduleGenerationTaskPolling();
+}
+
+async function loadGenerationTasks({ render = true } = {}) {
+  const response = await fetch("/api/generation/tasks", {
+    headers: {
+      "x-client-session-id": state.clientSessionId,
+    },
+  });
+  if (response.status === 404) {
+    applyGenerationTaskSnapshots([], { render });
+    return;
+  }
+  if (!response.ok) {
+    throw new Error("读取生成任务失败");
+  }
+
+  applyGenerationTaskSnapshots(await response.json(), { render });
+}
+
+function hasRunningGenerationTasks() {
+  return state.jobs.some((job) => normalizeGenerationTaskStatus(job.status) === "running" || job.isRunning);
+}
+
+function scheduleGenerationTaskPolling() {
+  if (generationTaskPollTimer || !hasRunningGenerationTasks()) {
+    return;
+  }
+
+  generationTaskPollTimer = window.setTimeout(async () => {
+    generationTaskPollTimer = 0;
+    try {
+      await loadGenerationTasks();
+    } catch (error) {
+      console.warn("load generation tasks failed", error);
+    }
+    scheduleGenerationTaskPolling();
+  }, GENERATION_TASK_POLL_INTERVAL_MS);
 }
 
 async function loadPromptAgentHistory() {
@@ -2764,9 +3195,11 @@ async function clearHistory() {
 
 function buildGenerationFormData(job) {
   const formData = new FormData();
+  formData.set("jobId", job.id);
   formData.set("prompt", job.prompt);
   formData.set("ratio", job.ratio);
   formData.set("size", job.size);
+  formData.set("format", job.format);
   formData.set("reasoningEffort", job.reasoningEffort);
   formData.set("clientSessionId", state.clientSessionId);
 
@@ -2873,8 +3306,7 @@ function scheduleGenerationQueue() {
     return;
   }
 
-  const queuedJobs = state.jobs.filter((job) => !job.started);
-  const nextJobs = queuedJobs.slice(Math.max(0, queuedJobs.length - availableSlots)).reverse();
+  const nextJobs = selectNextQueuedGenerationJobs(state.jobs, availableSlots);
   nextJobs.forEach((job) => {
     job.started = true;
     job.isRunning = true;
@@ -2885,6 +3317,7 @@ function scheduleGenerationQueue() {
 
   if (nextJobs.length > 0) {
     renderAll();
+    scheduleGenerationTaskPolling();
   }
 }
 
@@ -2893,6 +3326,11 @@ async function runGeneration(job) {
   job.isRunning = true;
   try {
     const response = await requestGenerationStream(job);
+    if (!response) {
+      removeJob(job.id);
+      renderAll();
+      return;
+    }
 
     await consumeSse(response.body, async (eventName, payload) => {
       if (eventName === "status") {
@@ -2986,6 +3424,19 @@ function startGeneration(event) {
   scheduleGenerationQueue();
 }
 
+function isStartGenerationShortcut(event) {
+  return event.ctrlKey && !event.altKey && !event.metaKey && event.key === "Enter";
+}
+
+function handlePromptGenerationShortcut(event) {
+  if (!isStartGenerationShortcut(event) || event.isComposing) {
+    return;
+  }
+
+  event.preventDefault();
+  refs.generateButton.click();
+}
+
 function bindEvents() {
   refs.viewTabs.forEach((button) => {
     button.addEventListener("click", () => {
@@ -3013,6 +3464,8 @@ function bindEvents() {
     saveConfig(event).catch((error) => showError(error.message));
   });
   refs.generateForm.addEventListener("submit", startGeneration);
+  refs.timelineNewIndicator.addEventListener("click", scrollTimelineToNewest);
+  refs.timelineList.addEventListener("scroll", handleTimelineScroll, { passive: true });
   refs.surprisePromptButton.addEventListener("click", selectRandomPrompt);
   refs.closePromptTemplateButton.addEventListener("click", () => setPromptTemplatePopoverOpen(false));
   refs.promptTemplateForm.addEventListener("submit", savePromptTemplate);
@@ -3020,6 +3473,7 @@ function bindEvents() {
   refs.applyPromptTemplateButton.addEventListener("click", applyPromptTemplate);
   refs.deletePromptTemplateButton.addEventListener("click", deletePromptTemplate);
   refs.promptInput.addEventListener("input", updatePromptCounter);
+  refs.promptInput.addEventListener("keydown", handlePromptGenerationShortcut);
   refs.referenceInput.addEventListener("change", (event) => {
     applyReferenceFiles(event.target.files);
   });
@@ -3061,6 +3515,12 @@ function bindEvents() {
     copyPromptAgentJson().catch((error) => setPromptAgentFeedback(error.message, "error"));
   });
   refs.promptAgentHistoryList.addEventListener("click", (event) => {
+    const expandTarget = event.target.closest("[data-prompt-agent-expand-id]");
+    if (expandTarget) {
+      togglePromptAgentHistoryCard(expandTarget);
+      return;
+    }
+
     const mapTarget = event.target.closest("[data-prompt-agent-map-id]");
     if (mapTarget) {
       mapPromptAgentPrompt(mapTarget.dataset.promptAgentMapId);
@@ -3112,10 +3572,10 @@ function bindEvents() {
     renderGalleryView();
     refs.gallerySearchInput.focus();
   });
-  refs.focusGalleryButton.addEventListener("click", () => {
+  refs.focusGalleryButton?.addEventListener("click", () => {
     setActiveView("gallery");
   });
-  refs.clearHistoryButton.addEventListener("click", () => {
+  refs.clearHistoryButton?.addEventListener("click", () => {
     clearHistory().catch((error) => showError(error.message));
   });
   refs.previewLightboxButton.addEventListener("click", () => {
@@ -3210,6 +3670,7 @@ function bindEvents() {
 
 async function bootstrap() {
   state.clientSessionId = getOrCreateClientSessionId();
+  state.activityFeed = readGenerationActivityFeed();
   state.galleryMetadataCache = readGalleryMetadataCache();
   state.promptTemplates = readPromptTemplates();
   state.selectedPromptTemplateId = state.promptTemplates[0]?.id || "";
@@ -3237,6 +3698,7 @@ async function bootstrap() {
   try {
     await loadConfig();
     await loadGallery();
+    await loadGenerationTasks();
     await loadPromptAgentHistory();
   } catch (error) {
     showError(error instanceof Error ? error.message : String(error));

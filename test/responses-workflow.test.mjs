@@ -84,6 +84,18 @@ test("createResponsesRequestBody defaults to png output and leaves compression u
   assert.equal("output_compression" in requestBody.tools[0], false);
 });
 
+test("createResponsesRequestBody can disable streaming for fallback requests", () => {
+  const requestBody = createResponsesRequestBody({
+    prompt: "生成一张图",
+    size: "1024x1536",
+    quality: "high",
+    responsesModel: "gpt-5.4",
+    stream: false,
+  });
+
+  assert.equal(requestBody.stream, false);
+});
+
 test("consumeResponsesSse emits partial and final events, and tolerates terminated stream after success", async () => {
   const chunks = [
     [
@@ -132,6 +144,169 @@ test("consumeResponsesSse emits partial and final events, and tolerates terminat
   assert.deepEqual(seenEvents, ["partial_image", "final_image", "complete"]);
   assert.equal(result.finalImageBase64, "ZmluYWw=");
   assert.equal(result.partialImages.length, 1);
+});
+
+test("consumeResponsesSse extracts image_generation.completed b64_json final images", async () => {
+  const chunks = [
+    [
+      "event: image_generation.completed",
+      'data: {"type":"image_generation.completed","b64_json":"ZmluYWwtaW1hZ2U="}',
+      "",
+      "",
+      "data: [DONE]",
+      "",
+      "",
+    ].join("\n"),
+  ];
+  let index = 0;
+  const fakeStream = {
+    getReader() {
+      return {
+        async read() {
+          if (index >= chunks.length) {
+            return { done: true };
+          }
+
+          const chunk = chunks[index];
+          index += 1;
+          return {
+            done: false,
+            value: new TextEncoder().encode(chunk),
+          };
+        },
+      };
+    },
+  };
+
+  const seenEvents = [];
+  const result = await consumeResponsesSse(fakeStream, {
+    onEvent(event) {
+      seenEvents.push(event.type);
+    },
+  });
+
+  assert.deepEqual(seenEvents, ["final_image", "complete"]);
+  assert.equal(result.finalImageBase64, "ZmluYWwtaW1hZ2U=");
+});
+
+test("consumeResponsesSse processes final image events left in the EOF buffer", async () => {
+  const chunks = [
+    [
+      "event: response.output_item.done",
+      'data: {"item":{"type":"image_generation_call","result":"ZW9mLWZpbmFs"}}',
+    ].join("\n"),
+  ];
+  let index = 0;
+  const fakeStream = {
+    getReader() {
+      return {
+        async read() {
+          if (index >= chunks.length) {
+            return { done: true };
+          }
+
+          const chunk = chunks[index];
+          index += 1;
+          return {
+            done: false,
+            value: new TextEncoder().encode(chunk),
+          };
+        },
+      };
+    },
+  };
+
+  const result = await consumeResponsesSse(fakeStream);
+
+  assert.equal(result.finalImageBase64, "ZW9mLWZpbmFs");
+});
+
+test("consumeResponsesSse surfaces response.failed messages instead of returning empty images", async () => {
+  const chunks = [
+    [
+      "event: response.failed",
+      'data: {"type":"response.failed","response":{"error":{"code":"rate_limit_exceeded","message":"Too many image requests"}}}',
+      "",
+      "",
+    ].join("\n"),
+  ];
+  let index = 0;
+  const fakeStream = {
+    getReader() {
+      return {
+        async read() {
+          if (index >= chunks.length) {
+            return { done: true };
+          }
+
+          const chunk = chunks[index];
+          index += 1;
+          return {
+            done: false,
+            value: new TextEncoder().encode(chunk),
+          };
+        },
+      };
+    },
+  };
+
+  await assert.rejects(() => consumeResponsesSse(fakeStream), {
+    message: "上游生成失败：rate_limit_exceeded Too many image requests",
+  });
+});
+
+test("requestImageGeneration falls back to non-streaming when SSE completes without final image", async () => {
+  const requests = [];
+  const chunks = [
+    [
+      "event: response.image_generation_call.completed",
+      'data: {"type":"response.image_generation_call.completed","item_id":"ig_1","output_index":0}',
+      "",
+      "",
+      "event: response.completed",
+      'data: {"type":"response.completed","response":{"output":[]}}',
+      "",
+      "",
+      "data: [DONE]",
+      "",
+      "",
+    ].join("\n"),
+  ];
+
+  const result = await requestImageGeneration({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    prompt: "生成一张图",
+    size: "1024x1536",
+    quality: "high",
+    responsesModel: "gpt-5.4",
+    async fetchImpl(_url, init) {
+      const body = JSON.parse(init.body);
+      requests.push(body);
+
+      if (requests.length === 1) {
+        return new Response(chunks.join(""), {
+          status: 200,
+          headers: {
+            "content-type": "text/event-stream",
+          },
+        });
+      }
+
+      return new Response(
+        JSON.stringify({
+          output: [{ type: "image_generation_call", result: "ZmFsbGJhY2stZmluYWw=" }],
+        }),
+        { status: 200 },
+      );
+    },
+  });
+
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].stream, true);
+  assert.equal(requests[1].stream, false);
+  assert.equal(result.finalImageBase64, "ZmFsbGJhY2stZmluYWw=");
+  assert.equal(result.fallbackUsed, true);
 });
 
 test("requestImageGeneration returns compact upstream HTTP errors", async () => {
