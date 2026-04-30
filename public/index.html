@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260428-live-unread-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260430-ppt-motion-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -30,6 +30,7 @@
 
         <div class="view-tabs" role="tablist" aria-label="视图切换">
           <button class="view-tab active" data-view-tab="studio" type="button">Studio</button>
+          <button class="view-tab" data-view-tab="ppt" type="button">PPT 演示</button>
           <button class="view-tab" data-view-tab="gallery" type="button">瀑布画廊</button>
         </div>
 
@@ -201,6 +202,193 @@
                 </button>
               </section>
 
+            </aside>
+          </div>
+        </section>
+
+        <section class="view-panel ppt-view hidden" data-view-panel="ppt">
+          <div class="ppt-workspace">
+            <section class="studio-panel ppt-settings-panel">
+              <form class="ppt-form" id="pptForm">
+                <div class="panel-title between">
+                  <div>
+                    <h2>PPT 演示文稿制作</h2>
+                    <p>上传文档、输入文本或主题，自动生成图片型 PPTX</p>
+                  </div>
+                  <span class="count-pill small" id="pptDeckCount">0 套</span>
+                </div>
+
+                <div class="field-group">
+                  <div class="field-heading">
+                    <div>
+                      <span>输入来源</span>
+                      <small>三选一或组合使用</small>
+                    </div>
+                  </div>
+                  <div class="ppt-source-options" role="radiogroup" aria-label="PPT 输入来源">
+                    <label class="ppt-source-option">
+                      <input id="pptSourceModeUpload" name="pptSourceMode" type="radio" value="upload" checked />
+                      <span>上传文档</span>
+                    </label>
+                    <label class="ppt-source-option">
+                      <input id="pptSourceModeText" name="pptSourceMode" type="radio" value="text" />
+                      <span>输入文本</span>
+                    </label>
+                    <label class="ppt-source-option">
+                      <input id="pptSourceModeTopic" name="pptSourceMode" type="radio" value="topic" />
+                      <span>输入主题</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="ppt-source-panel" data-ppt-source-panel="upload">
+                  <div class="field-heading">
+                    <div>
+                      <span>文档文件</span>
+                      <small>PDF / DOCX / PPTX / TXT / MD / CSV</small>
+                    </div>
+                    <small id="pptFileCount">0 个文件</small>
+                  </div>
+                  <label class="reference-dropzone ppt-dropzone" id="pptDropzone">
+                    <input
+                      id="pptSourceInput"
+                      name="sourceFiles"
+                      type="file"
+                      accept=".pdf,.docx,.pptx,.txt,.md,.csv"
+                      multiple
+                    />
+                    <div class="reference-icon" aria-hidden="true"></div>
+                    <strong>拖入文档或点击上传</strong>
+                    <span>源文档只用于本次解析，不保存到本地历史。</span>
+                    <em>上传文档</em>
+                  </label>
+                  <div class="ppt-file-list" id="pptFileList"></div>
+                </div>
+
+                <div class="ppt-source-panel hidden" data-ppt-source-panel="text">
+                  <label class="compact-field">
+                    <span>文本材料</span>
+                    <textarea
+                      id="pptSourceTextInput"
+                      name="sourceText"
+                      rows="8"
+                      placeholder="可以直接粘贴材料、需求、提纲或正文。"
+                    ></textarea>
+                  </label>
+                </div>
+
+                <div class="ppt-source-panel hidden" data-ppt-source-panel="topic">
+                  <label class="compact-field">
+                    <span>主题</span>
+                    <input
+                      id="pptTopicInput"
+                      name="topic"
+                      type="text"
+                      placeholder="例如：新品发布会、年度经营复盘、课程发布"
+                    />
+                  </label>
+                </div>
+
+                <div class="ppt-control-grid">
+                  <label class="compact-field">
+                    <span>页数</span>
+                    <input id="pptPageCountInput" name="pageCount" type="number" min="1" max="20" value="8" />
+                  </label>
+                  <label class="compact-field">
+                    <span>视觉风格</span>
+                    <select id="pptStylePresetInput" name="stylePreset">
+                      <option value="business">商务汇报</option>
+                      <option value="education">教育培训</option>
+                      <option value="product">产品发布</option>
+                      <option value="marketing">营销提案</option>
+                      <option value="tech">科技发布</option>
+                      <option value="finance">金融数据</option>
+                      <option value="startup">创业路演</option>
+                      <option value="academic">学术研究</option>
+                      <option value="medical">医疗健康</option>
+                      <option value="minimal">极简留白</option>
+                      <option value="bold">大胆海报</option>
+                      <option value="chinese">东方雅致</option>
+                      <option value="luxury">高端品牌</option>
+                      <option value="sales">销售战报</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="ppt-motion-grid">
+                  <label class="compact-field">
+                    <span>动态组件</span>
+                    <select id="pptDynamicPresetInput" name="dynamicPreset">
+                      <option value="smart">智能动态</option>
+                      <option value="spotlight">演讲聚焦</option>
+                      <option value="data-pulse">数据脉冲</option>
+                      <option value="storyline">路径叙事</option>
+                      <option value="product-demo">产品演示</option>
+                      <option value="cinematic">电影动势</option>
+                      <option value="none">静态专业</option>
+                    </select>
+                  </label>
+                  <label class="compact-field">
+                    <span>切换效果</span>
+                    <select id="pptTransitionPresetInput" name="transitionPreset">
+                      <option value="fade">淡入</option>
+                      <option value="push">推入</option>
+                      <option value="wipe">擦除</option>
+                      <option value="split">分割</option>
+                      <option value="random-bars">条带</option>
+                      <option value="morph-flow">流动切换</option>
+                      <option value="none">无切换</option>
+                    </select>
+                  </label>
+                  <label class="compact-field">
+                    <span>切换速度</span>
+                    <select id="pptTransitionSpeedInput" name="transitionSpeed">
+                      <option value="medium">中速</option>
+                      <option value="fast">快速</option>
+                      <option value="slow">慢速</option>
+                    </select>
+                  </label>
+                  <label class="compact-field">
+                    <span>自动换页</span>
+                    <input id="pptAutoAdvanceInput" name="autoAdvanceSeconds" type="number" min="0" max="60" step="0.5" value="0" />
+                  </label>
+                </div>
+                <p class="ppt-motion-note">动态组件影响每页画面设计；切换效果会写入导出的 PPTX 播放设置。</p>
+
+                <button class="generate-button" id="pptGenerateButton" type="submit">生成 PPT 演示文稿</button>
+                <p class="ppt-feedback" id="pptFeedback"></p>
+              </form>
+            </section>
+
+            <section class="studio-panel ppt-result-panel">
+              <div class="panel-title between">
+                <div>
+                  <h2>PPT 结果</h2>
+                  <p id="pptStatusText">等待生成</p>
+                </div>
+                <div class="ppt-output-actions">
+                  <span class="ppt-completion-ratio" id="pptCompletionRatio">0 / 0 页成功</span>
+                  <button class="toolbar-button hidden" id="pptCompleteMissingButton" type="button">补齐缺页</button>
+                  <a class="toolbar-button disabled" id="pptDownloadLink" href="#" download aria-disabled="true">下载 PPTX</a>
+                </div>
+              </div>
+              <div class="ppt-progress">
+                <div class="ppt-progress-bar" id="pptProgressBar"></div>
+              </div>
+              <div class="ppt-outline-box" id="pptOutlineBox">生成后会在这里显示大纲和每一页图片。</div>
+              <div class="ppt-slide-list" id="pptSlideList"></div>
+            </section>
+
+            <aside class="studio-panel ppt-history-panel">
+              <div class="panel-title between">
+                <div>
+                  <h2>历史演示</h2>
+                  <p>Deck History</p>
+                </div>
+                <button class="toolbar-button" id="pptRefreshHistoryButton" type="button">刷新</button>
+              </div>
+              <div class="ppt-history-empty" id="pptHistoryEmpty">还没有生成过 PPT。</div>
+              <div class="ppt-history-list" id="pptHistoryList"></div>
             </aside>
           </div>
         </section>
@@ -521,6 +709,42 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260429-3-4-3072-1"></script>
+    <aside class="ppt-edit-modal hidden" id="pptEditModal" aria-hidden="true">
+      <button class="ppt-edit-backdrop" id="pptEditBackdrop" type="button" aria-label="关闭 PPT 页面编辑器"></button>
+      <div class="ppt-edit-dialog" role="dialog" aria-modal="true" aria-label="编辑 PPT 页面">
+        <div class="ppt-edit-head">
+          <div>
+            <p class="drawer-eyebrow">Slide Editor</p>
+            <h2 id="pptEditTitle">编辑本页</h2>
+          </div>
+          <button class="header-button" id="pptEditCloseButton" type="button">关闭</button>
+        </div>
+        <div class="ppt-edit-body">
+          <div class="ppt-edit-canvas-wrap">
+            <img id="pptEditImage" alt="待编辑 PPT 页面" />
+            <canvas id="pptEditCanvas"></canvas>
+          </div>
+          <div class="ppt-edit-side">
+            <div class="ppt-edit-toolbar" role="toolbar" aria-label="标注工具">
+              <button class="toolbar-button active" id="pptEditDrawButton" type="button">画笔</button>
+              <button class="toolbar-button" id="pptEditEraseButton" type="button">橡皮</button>
+              <button class="toolbar-button" id="pptEditClearButton" type="button">清空</button>
+            </div>
+            <label class="compact-field">
+              <span>修改说明</span>
+              <textarea
+                id="pptEditInstructionInput"
+                rows="7"
+                placeholder="例如：删除红圈里的图标，把标题放大，右侧换成流程图。"
+              ></textarea>
+            </label>
+            <button class="generate-button" id="pptSubmitEditButton" type="button">重新生成本页</button>
+            <p class="ppt-feedback" id="pptEditFeedback"></p>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <script type="module" src="/app.js?v=20260430-ppt-motion-1"></script>
   </body>
 </html>

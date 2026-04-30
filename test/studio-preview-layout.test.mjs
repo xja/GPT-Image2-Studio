@@ -134,6 +134,15 @@ test("generate action appears above the prompt field", async () => {
   assert.doesNotMatch(html, /<div class="reference-grid hidden" id="referenceGrid"><\/div>[\s\S]*<button class="generate-button" id="generateButton"/);
 });
 
+test("reference preview cards do not render uploaded filenames", async () => {
+  const app = await readFile(appPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+
+  assert.doesNotMatch(app, /name\.textContent\s*=\s*item\.file\.name/);
+  assert.doesNotMatch(app, /reference-card-meta/);
+  assert.doesNotMatch(styles, /\.reference-card-meta/);
+});
+
 test("prompt field can start generation with Ctrl+Enter", async () => {
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
@@ -331,4 +340,87 @@ test("prompt template storage respects an intentionally empty saved list", async
 
   assert.match(app, /if \(raw === null\) \{[\s\S]*return DEFAULT_PROMPT_TEMPLATES\.map/);
   assert.match(app, /return Array\.isArray\(parsed\) \? parsed\.map\(normalizePromptTemplate\)\.filter\(Boolean\) : \[\];/);
+});
+
+test("PPT view exposes source options, page count, progress, retry and PPTX download controls", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /data-view-tab="ppt"[\s\S]*PPT 演示/);
+  assert.match(html, /data-view-panel="ppt"/);
+  assert.match(html, /id="pptSourceModeUpload"[\s\S]*上传文档/);
+  assert.match(html, /id="pptSourceModeText"[\s\S]*输入文本/);
+  assert.match(html, /id="pptSourceModeTopic"[\s\S]*输入主题/);
+  assert.match(html, /id="pptSourceInput"[\s\S]*sourceFiles/);
+  assert.match(html, /id="pptSourceTextInput"[\s\S]*sourceText/);
+  assert.match(html, /id="pptTopicInput"[\s\S]*topic/);
+  assert.match(html, /id="pptPageCountInput"[\s\S]*pageCount/);
+  assert.match(html, /id="pptCompletionRatio"/);
+  assert.match(html, /id="pptCompleteMissingButton"[\s\S]*补齐缺页/);
+  assert.match(html, /id="pptDownloadLink"[\s\S]*下载 PPTX/);
+
+  assert.match(styles, /\.ppt-workspace\s*\{/);
+  assert.match(styles, /\.ppt-source-options\s*\{/);
+  assert.match(styles, /\.ppt-output-actions\s*\{/);
+  assert.match(styles, /\.ppt-slide-retry-button\s*\{/);
+
+  assert.match(app, /ppt:\s*\{/);
+  assert.match(app, /fetch\("\/api\/ppt\/generate"/);
+  assert.match(app, /fetch\("\/api\/ppt\/complete"/);
+  assert.match(app, /function getPptCompletionStats\(\)/);
+  assert.match(app, /function getPptMissingSlideNumbers\(\)/);
+  assert.match(app, /function retryPptSlide\(slideNumber\)/);
+  assert.match(app, /function completeMissingPptSlides\(\)/);
+  assert.match(app, /data-ppt-retry-slide/);
+  assert.match(app, /refs\.pptCompleteMissingButton\.addEventListener\("click", completeMissingPptSlides\)/);
+  assert.match(app, /eventName === "slide_failed"/);
+});
+
+test("PPT view supports richer styles and direct slide annotation editing", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /<option value="tech">科技发布<\/option>/);
+  assert.match(html, /<option value="finance">金融数据<\/option>/);
+  assert.match(html, /<option value="luxury">高端品牌<\/option>/);
+  assert.match(html, /id="pptEditModal"/);
+  assert.match(html, /id="pptEditCanvas"/);
+  assert.match(html, /id="pptEditInstructionInput"/);
+  assert.match(html, /id="pptSubmitEditButton"[\s\S]*重新生成本页/);
+
+  assert.match(styles, /\.ppt-edit-modal\s*\{/);
+  assert.match(styles, /\.ppt-edit-canvas-wrap\s*\{/);
+  assert.match(styles, /\.ppt-edit-toolbar\s*\{/);
+
+  assert.match(app, /function openPptSlideEditor\(slideNumber\)/);
+  assert.match(app, /function drawPptEditStroke/);
+  assert.match(app, /function submitPptSlideEdit\(\)/);
+  assert.match(app, /fetch\("\/api\/ppt\/slide\/edit"/);
+  assert.match(app, /data-ppt-edit-slide/);
+  assert.match(app, /refs\.pptSubmitEditButton\.addEventListener\("click",/);
+});
+
+test("PPT view exposes dynamic components and transition effect controls", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /id="pptDynamicPresetInput"/);
+  assert.match(html, /<option value="storyline">路径叙事<\/option>/);
+  assert.match(html, /<option value="data-pulse">数据脉冲<\/option>/);
+  assert.match(html, /id="pptTransitionPresetInput"/);
+  assert.match(html, /<option value="fade">淡入<\/option>/);
+  assert.match(html, /<option value="morph-flow">流动切换<\/option>/);
+  assert.match(html, /id="pptTransitionSpeedInput"/);
+
+  assert.match(styles, /\.ppt-motion-grid\s*\{/);
+  assert.match(styles, /\.ppt-motion-note\s*\{/);
+
+  assert.match(app, /pptDynamicPresetInput: document\.querySelector\("#pptDynamicPresetInput"\)/);
+  assert.match(app, /pptTransitionPresetInput: document\.querySelector\("#pptTransitionPresetInput"\)/);
+  assert.match(app, /formData\.set\("dynamicPreset", refs\.pptDynamicPresetInput\.value\)/);
+  assert.match(app, /formData\.set\("transitionPreset", refs\.pptTransitionPresetInput\.value\)/);
+  assert.match(app, /transitionSpeed: refs\.pptTransitionSpeedInput\.value/);
 });

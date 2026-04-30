@@ -105,6 +105,7 @@ const GALLERY_REFERENCE_LABELS = {
   "without-reference": "无参考图",
 };
 const STACKED_STUDIO_LAYOUT_MODES = new Set(["stacked", "tablet", "mobile"]);
+const PPT_SOURCE_MODES = new Set(["upload", "text", "topic"]);
 
 let studioHeightSyncFrame = 0;
 let studioHeightObserver = null;
@@ -145,6 +146,26 @@ const state = {
     result: null,
     running: false,
     viewerOpen: false,
+  },
+  ppt: {
+    deckId: "",
+    decks: [],
+    edit: {
+      active: false,
+      drawing: false,
+      erasing: false,
+      slideNumber: 0,
+      hasMarks: false,
+      imageUrl: "",
+    },
+    files: [],
+    generating: false,
+    outline: null,
+    pptxUrl: "",
+    slides: [],
+    sourceMode: "upload",
+    statusText: "等待生成",
+    currentSlideNumber: 0,
   },
   promptTemplates: [],
   reasoningEfforts: [...DEFAULT_REASONING_EFFORTS],
@@ -245,6 +266,46 @@ const refs = {
   promptAgentPreviewButton: document.querySelector("#promptAgentPreviewButton"),
   promptAgentPreviewImage: document.querySelector("#promptAgentPreviewImage"),
   promptAgentResult: document.querySelector("#promptAgentResult"),
+  pptCompleteMissingButton: document.querySelector("#pptCompleteMissingButton"),
+  pptCompletionRatio: document.querySelector("#pptCompletionRatio"),
+  pptDeckCount: document.querySelector("#pptDeckCount"),
+  pptDownloadLink: document.querySelector("#pptDownloadLink"),
+  pptDropzone: document.querySelector("#pptDropzone"),
+  pptAutoAdvanceInput: document.querySelector("#pptAutoAdvanceInput"),
+  pptDynamicPresetInput: document.querySelector("#pptDynamicPresetInput"),
+  pptEditBackdrop: document.querySelector("#pptEditBackdrop"),
+  pptEditCanvas: document.querySelector("#pptEditCanvas"),
+  pptEditClearButton: document.querySelector("#pptEditClearButton"),
+  pptEditCloseButton: document.querySelector("#pptEditCloseButton"),
+  pptEditDrawButton: document.querySelector("#pptEditDrawButton"),
+  pptEditEraseButton: document.querySelector("#pptEditEraseButton"),
+  pptEditFeedback: document.querySelector("#pptEditFeedback"),
+  pptEditImage: document.querySelector("#pptEditImage"),
+  pptEditInstructionInput: document.querySelector("#pptEditInstructionInput"),
+  pptEditModal: document.querySelector("#pptEditModal"),
+  pptEditTitle: document.querySelector("#pptEditTitle"),
+  pptFeedback: document.querySelector("#pptFeedback"),
+  pptFileCount: document.querySelector("#pptFileCount"),
+  pptFileList: document.querySelector("#pptFileList"),
+  pptForm: document.querySelector("#pptForm"),
+  pptGenerateButton: document.querySelector("#pptGenerateButton"),
+  pptHistoryEmpty: document.querySelector("#pptHistoryEmpty"),
+  pptHistoryList: document.querySelector("#pptHistoryList"),
+  pptOutlineBox: document.querySelector("#pptOutlineBox"),
+  pptPageCountInput: document.querySelector("#pptPageCountInput"),
+  pptProgressBar: document.querySelector("#pptProgressBar"),
+  pptRefreshHistoryButton: document.querySelector("#pptRefreshHistoryButton"),
+  pptSlideList: document.querySelector("#pptSlideList"),
+  pptSourceInput: document.querySelector("#pptSourceInput"),
+  pptSourceModeInputs: [...document.querySelectorAll("input[name=\"pptSourceMode\"]")],
+  pptSourcePanels: [...document.querySelectorAll("[data-ppt-source-panel]")],
+  pptSourceTextInput: document.querySelector("#pptSourceTextInput"),
+  pptStatusText: document.querySelector("#pptStatusText"),
+  pptStylePresetInput: document.querySelector("#pptStylePresetInput"),
+  pptSubmitEditButton: document.querySelector("#pptSubmitEditButton"),
+  pptTopicInput: document.querySelector("#pptTopicInput"),
+  pptTransitionPresetInput: document.querySelector("#pptTransitionPresetInput"),
+  pptTransitionSpeedInput: document.querySelector("#pptTransitionSpeedInput"),
   promptInput: document.querySelector("#promptInput"),
   promptTemplateFeedback: document.querySelector("#promptTemplateFeedback"),
   promptTemplateForm: document.querySelector("#promptTemplateForm"),
@@ -641,11 +702,17 @@ function getVisibleRatios() {
 }
 
 function getViewFromHash() {
-  return window.location.hash === "#gallery" ? "gallery" : "studio";
+  if (window.location.hash === "#gallery") {
+    return "gallery";
+  }
+  if (window.location.hash === "#ppt") {
+    return "ppt";
+  }
+  return "studio";
 }
 
 function syncHash(view) {
-  const nextHash = view === "gallery" ? "#gallery" : "#studio";
+  const nextHash = view === "gallery" ? "#gallery" : view === "ppt" ? "#ppt" : "#studio";
   if (window.location.hash !== nextHash) {
     window.history.replaceState(null, "", nextHash);
   }
@@ -1144,24 +1211,15 @@ function renderReferenceGrid() {
 
     const image = document.createElement("img");
     image.src = item.previewUrl;
-    image.alt = item.file.name;
+    image.alt = "参考图预览";
     card.appendChild(image);
-
-    const meta = document.createElement("div");
-    meta.className = "reference-card-meta";
-
-    const name = document.createElement("span");
-    name.textContent = item.file.name;
-    meta.appendChild(name);
 
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "reference-remove";
     remove.textContent = "移除";
     remove.addEventListener("click", () => removeReferenceFile(item.id));
-    meta.appendChild(remove);
-
-    card.appendChild(meta);
+    card.appendChild(remove);
     refs.referenceGrid.appendChild(card);
   });
 }
@@ -2547,6 +2605,7 @@ function renderAll() {
   updateGenerateButton();
   renderTimeline();
   renderStudio();
+  renderPptView();
   renderGalleryView();
   syncLightboxItem();
 
@@ -2834,6 +2893,688 @@ async function consumeSse(body, onEvent) {
       await onEvent(parsed.eventName, JSON.parse(parsed.data));
     }
   }
+}
+
+function setPptFeedback(message = "", kind = "") {
+  refs.pptFeedback.textContent = message ? compactErrorMessage(message, "PPT 请求失败") : "";
+  refs.pptFeedback.dataset.state = kind;
+}
+
+function setPptEditFeedback(message = "", kind = "") {
+  refs.pptEditFeedback.textContent = message ? compactErrorMessage(message, "PPT 页面编辑失败") : "";
+  refs.pptEditFeedback.dataset.state = kind;
+}
+
+function setPptSourceMode(mode) {
+  state.ppt.sourceMode = PPT_SOURCE_MODES.has(mode) ? mode : "upload";
+  refs.pptSourceModeInputs.forEach((input) => {
+    input.checked = input.value === state.ppt.sourceMode;
+  });
+  refs.pptSourcePanels.forEach((panel) => {
+    panel.classList.toggle("hidden", panel.dataset.pptSourcePanel !== state.ppt.sourceMode);
+  });
+}
+
+function applyPptFiles(files) {
+  state.ppt.files = [...(files || [])];
+  renderPptView();
+}
+
+function renderPptFiles() {
+  refs.pptFileList.innerHTML = "";
+  refs.pptFileCount.textContent = `${state.ppt.files.length} 个文件`;
+
+  state.ppt.files.forEach((file) => {
+    const item = document.createElement("div");
+    item.className = "ppt-file-item";
+
+    const name = document.createElement("strong");
+    name.textContent = file.name || "未命名文档";
+    item.appendChild(name);
+
+    const meta = document.createElement("span");
+    meta.textContent = `${file.type || "application/octet-stream"} · ${formatFileSize(file.size)}`;
+    item.appendChild(meta);
+
+    refs.pptFileList.appendChild(item);
+  });
+}
+
+function resetPptGenerationState() {
+  state.ppt.deckId = "";
+  state.ppt.outline = null;
+  state.ppt.pptxUrl = "";
+  state.ppt.slides = [];
+  state.ppt.statusText = "正在生成 PPT 大纲";
+  state.ppt.currentSlideNumber = 0;
+}
+
+function isPptSlideComplete(slide) {
+  return Boolean(slide?.slideNumber && slide?.relativePath && (slide?.imageUrl || slide?.thumbnailUrl));
+}
+
+function getPptTotalSlideCount() {
+  return Array.isArray(state.ppt.outline?.slides) ? state.ppt.outline.slides.length : 0;
+}
+
+function getPptCompletionStats() {
+  const total = getPptTotalSlideCount();
+  const completed = new Set(
+    state.ppt.slides
+      .filter(isPptSlideComplete)
+      .map((slide) => Number(slide.slideNumber))
+      .filter((slideNumber) => slideNumber >= 1 && slideNumber <= total),
+  ).size;
+
+  return { completed, total };
+}
+
+function getPptMissingSlideNumbers() {
+  const { total } = getPptCompletionStats();
+  const completed = new Set(
+    state.ppt.slides
+      .filter(isPptSlideComplete)
+      .map((slide) => Number(slide.slideNumber)),
+  );
+  const missing = [];
+
+  for (let slideNumber = 1; slideNumber <= total; slideNumber += 1) {
+    if (!completed.has(slideNumber)) {
+      missing.push(slideNumber);
+    }
+  }
+
+  return missing;
+}
+
+function getCompletedPptSlides() {
+  return state.ppt.slides.filter(isPptSlideComplete).map((slide) => ({
+    slideNumber: slide.slideNumber,
+    title: slide.title,
+    filename: slide.filename,
+    relativePath: slide.relativePath,
+    imageUrl: slide.imageUrl,
+    thumbnailUrl: slide.thumbnailUrl,
+    prompt: slide.prompt,
+  }));
+}
+
+function upsertPptSlide(slide) {
+  const slideNumber = Number(slide?.slideNumber);
+  if (!slideNumber) {
+    return;
+  }
+
+  const next = state.ppt.slides.filter((entry) => Number(entry.slideNumber) !== slideNumber);
+  next.push({ ...slide, slideNumber });
+  state.ppt.slides = next.sort((left, right) => Number(left.slideNumber) - Number(right.slideNumber));
+}
+
+function markPptSlideFailed(slideNumber, message) {
+  const number = Number(slideNumber);
+  if (!number) {
+    return;
+  }
+
+  const outlineSlide = state.ppt.outline?.slides?.find((slide) => Number(slide.slideNumber) === number);
+  upsertPptSlide({
+    slideNumber: number,
+    title: outlineSlide?.title || `第 ${number} 页`,
+    statusText: "生成失败",
+    errorMessage: compactErrorMessage(message, "PPT 页面生成失败"),
+  });
+}
+
+function getPptRenderableSlides() {
+  if (!state.ppt.outline?.slides?.length) {
+    return state.ppt.slides;
+  }
+
+  const slidesByNumber = new Map(state.ppt.slides.map((slide) => [Number(slide.slideNumber), slide]));
+  return state.ppt.outline.slides.map((outlineSlide) => ({
+    ...outlineSlide,
+    ...(slidesByNumber.get(Number(outlineSlide.slideNumber)) || {}),
+  }));
+}
+
+function getPptSlideByNumber(slideNumber) {
+  return state.ppt.slides.find((slide) => Number(slide.slideNumber) === Number(slideNumber)) || null;
+}
+
+function resizePptEditCanvas() {
+  const canvas = refs.pptEditCanvas;
+  canvas.width = 2048;
+  canvas.height = 1152;
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  state.ppt.edit.hasMarks = false;
+}
+
+function openPptSlideEditor(slideNumber) {
+  const slide = getPptSlideByNumber(slideNumber);
+  const imageUrl = slide?.imageUrl || slide?.thumbnailUrl || "";
+  if (!slide || !imageUrl) {
+    setPptFeedback("这一页还没有生成图片，无法编辑。", "error");
+    return;
+  }
+
+  state.ppt.edit = {
+    active: true,
+    drawing: false,
+    erasing: false,
+    slideNumber: Number(slideNumber),
+    hasMarks: false,
+    imageUrl,
+  };
+  refs.pptEditTitle.textContent = `编辑第 ${slideNumber} 页`;
+  refs.pptEditInstructionInput.value = "";
+  refs.pptEditImage.src = imageUrl;
+  refs.pptEditModal.classList.remove("hidden");
+  refs.pptEditModal.setAttribute("aria-hidden", "false");
+  setPptEditFeedback("");
+  resizePptEditCanvas();
+}
+
+function closePptSlideEditor() {
+  state.ppt.edit.active = false;
+  state.ppt.edit.drawing = false;
+  refs.pptEditModal.classList.add("hidden");
+  refs.pptEditModal.setAttribute("aria-hidden", "true");
+}
+
+function setPptEditTool(tool) {
+  state.ppt.edit.erasing = tool === "erase";
+  refs.pptEditDrawButton.classList.toggle("active", !state.ppt.edit.erasing);
+  refs.pptEditEraseButton.classList.toggle("active", state.ppt.edit.erasing);
+}
+
+function getPptEditCanvasPoint(event) {
+  const rect = refs.pptEditCanvas.getBoundingClientRect();
+  return {
+    x: ((event.clientX - rect.left) / rect.width) * refs.pptEditCanvas.width,
+    y: ((event.clientY - rect.top) / rect.height) * refs.pptEditCanvas.height,
+  };
+}
+
+function drawPptEditStroke(from, to) {
+  const context = refs.pptEditCanvas.getContext("2d");
+  context.save();
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.lineWidth = state.ppt.edit.erasing ? 70 : 18;
+  context.strokeStyle = state.ppt.edit.erasing ? "rgba(0,0,0,1)" : "rgba(255,72,72,0.92)";
+  context.globalCompositeOperation = state.ppt.edit.erasing ? "destination-out" : "source-over";
+  context.beginPath();
+  context.moveTo(from.x, from.y);
+  context.lineTo(to.x, to.y);
+  context.stroke();
+  context.restore();
+  state.ppt.edit.hasMarks = true;
+}
+
+function beginPptEditStroke(event) {
+  event.preventDefault();
+  refs.pptEditCanvas.setPointerCapture(event.pointerId);
+  state.ppt.edit.drawing = true;
+  state.ppt.edit.lastPoint = getPptEditCanvasPoint(event);
+}
+
+function continuePptEditStroke(event) {
+  if (!state.ppt.edit.drawing) {
+    return;
+  }
+  const point = getPptEditCanvasPoint(event);
+  drawPptEditStroke(state.ppt.edit.lastPoint, point);
+  state.ppt.edit.lastPoint = point;
+}
+
+function endPptEditStroke(event) {
+  state.ppt.edit.drawing = false;
+  try {
+    refs.pptEditCanvas.releasePointerCapture(event.pointerId);
+  } catch {
+    // Pointer capture may already be released by the browser.
+  }
+}
+
+function clearPptEditCanvas() {
+  resizePptEditCanvas();
+  setPptEditFeedback("");
+}
+
+async function canvasToBlob(canvas, type = "image/png") {
+  return await new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+      } else {
+        reject(new Error("无法导出标注图片。"));
+      }
+    }, type);
+  });
+}
+
+async function buildAnnotatedPptSlideBlob() {
+  if (!refs.pptEditImage.complete) {
+    await refs.pptEditImage.decode().catch(() => {});
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = refs.pptEditCanvas.width;
+  canvas.height = refs.pptEditCanvas.height;
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#0b1020";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(refs.pptEditImage, 0, 0, canvas.width, canvas.height);
+  context.drawImage(refs.pptEditCanvas, 0, 0, canvas.width, canvas.height);
+  return canvasToBlob(canvas);
+}
+
+async function requestPptSlideEditStream() {
+  const slideNumber = state.ppt.edit.slideNumber;
+  const instruction = refs.pptEditInstructionInput.value.trim();
+  if (!state.ppt.edit.hasMarks && !instruction) {
+    throw new Error("请先在页面上涂抹/标注，或填写修改说明。");
+  }
+
+  const sourceResponse = await fetch(state.ppt.edit.imageUrl);
+  if (!sourceResponse.ok) {
+    throw new Error("读取当前 PPT 页面图片失败。");
+  }
+
+  const formData = new FormData();
+  formData.set("deckId", state.ppt.deckId);
+  formData.set("outline", JSON.stringify(state.ppt.outline));
+  formData.set("existingSlides", JSON.stringify(getCompletedPptSlides()));
+  formData.set("slideNumber", String(slideNumber));
+  formData.set("stylePreset", refs.pptStylePresetInput.value);
+  formData.set("dynamicPreset", refs.pptDynamicPresetInput.value);
+  formData.set("transitionPreset", refs.pptTransitionPresetInput.value);
+  formData.set("transitionSpeed", refs.pptTransitionSpeedInput.value);
+  formData.set("autoAdvanceSeconds", refs.pptAutoAdvanceInput.value);
+  formData.set("editInstruction", instruction);
+  formData.set("reasoningEffort", refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh");
+  formData.set("sourceSlideImage", await sourceResponse.blob(), `slide-${slideNumber}-source.png`);
+  formData.set("annotatedSlideImage", await buildAnnotatedPptSlideBlob(), `slide-${slideNumber}-annotated.png`);
+
+  const response = await fetch("/api/ppt/slide/edit", {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok || !response.body) {
+    throw new Error("PPT 页面编辑请求失败");
+  }
+  return response;
+}
+
+async function submitPptSlideEdit() {
+  if (state.ppt.generating) {
+    return;
+  }
+
+  state.ppt.generating = true;
+  state.ppt.statusText = `正在重新生成第 ${state.ppt.edit.slideNumber} 页`;
+  setPptEditFeedback("正在提交标注并重新生成...", "");
+  renderPptView();
+
+  try {
+    await runPptStream(await requestPptSlideEditStream());
+    closePptSlideEditor();
+    await loadPptDecks();
+  } catch (error) {
+    const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "PPT 页面编辑失败");
+    setPptEditFeedback(message, "error");
+    setPptFeedback(message, "error");
+  } finally {
+    state.ppt.generating = false;
+    renderPptView();
+  }
+}
+
+function buildPptFormData() {
+  const formData = new FormData();
+  state.ppt.files.forEach((file) => formData.append("sourceFiles", file));
+  formData.set("sourceText", refs.pptSourceTextInput.value.trim());
+  formData.set("topic", refs.pptTopicInput.value.trim());
+  formData.set("pageCount", refs.pptPageCountInput.value);
+  formData.set("stylePreset", refs.pptStylePresetInput.value);
+  formData.set("dynamicPreset", refs.pptDynamicPresetInput.value);
+  formData.set("transitionPreset", refs.pptTransitionPresetInput.value);
+  formData.set("transitionSpeed", refs.pptTransitionSpeedInput.value);
+  formData.set("autoAdvanceSeconds", refs.pptAutoAdvanceInput.value);
+  formData.set("reasoningEffort", refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh");
+  return formData;
+}
+
+function buildPptCompletionRequest(slideNumbers) {
+  return {
+    deckId: state.ppt.deckId,
+    outline: state.ppt.outline,
+    existingSlides: getCompletedPptSlides(),
+    slideNumbers,
+    stylePreset: refs.pptStylePresetInput.value,
+    dynamicPreset: refs.pptDynamicPresetInput.value,
+    transitionPreset: refs.pptTransitionPresetInput.value,
+    transitionSpeed: refs.pptTransitionSpeedInput.value,
+    autoAdvanceSeconds: refs.pptAutoAdvanceInput.value,
+    reasoningEffort: refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
+  };
+}
+
+async function requestPptGenerationStream() {
+  const response = await fetch("/api/ppt/generate", {
+    method: "POST",
+    body: buildPptFormData(),
+  });
+  if (!response.ok || !response.body) {
+    throw new Error("PPT 生成请求失败");
+  }
+  return response;
+}
+
+async function requestPptCompletionStream(slideNumbers) {
+  const response = await fetch("/api/ppt/complete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(buildPptCompletionRequest(slideNumbers)),
+  });
+  if (!response.ok || !response.body) {
+    throw new Error("PPT 补页请求失败");
+  }
+  return response;
+}
+
+function handlePptStreamEvent(eventName, payload) {
+  if (eventName === "status") {
+    state.ppt.statusText = payload.message || state.ppt.statusText;
+    renderPptView();
+    return;
+  }
+
+  if (eventName === "outline") {
+    state.ppt.deckId = payload.deckId || state.ppt.deckId;
+    state.ppt.outline = payload.outline || state.ppt.outline;
+    state.ppt.statusText = "正在逐页生成图片";
+    renderPptView();
+    return;
+  }
+
+  if (eventName === "slide_started") {
+    state.ppt.currentSlideNumber = Number(payload.slideNumber) || 0;
+    state.ppt.statusText = `正在生成第 ${payload.slideNumber} 页`;
+    upsertPptSlide({
+      slideNumber: Number(payload.slideNumber),
+      title: payload.title || `第 ${payload.slideNumber} 页`,
+      statusText: "生成中",
+    });
+    renderPptView();
+    return;
+  }
+
+  if (eventName === "partial_image") {
+    upsertPptSlide({
+      slideNumber: Number(payload.slideNumber || state.ppt.currentSlideNumber),
+      previewUrl: payload.dataUrl,
+      statusText: "已收到预览",
+    });
+    renderPptView();
+    return;
+  }
+
+  if (eventName === "slide_saved") {
+    upsertPptSlide(payload.slide);
+    state.ppt.statusText = "页面已保存";
+    renderPptView();
+    return;
+  }
+
+  if (eventName === "slide_failed") {
+    markPptSlideFailed(payload.slideNumber || state.ppt.currentSlideNumber, payload.message);
+    state.ppt.statusText = "部分页面生成失败";
+    renderPptView();
+    return;
+  }
+
+  if (eventName === "deck_saved") {
+    const deck = payload.deck;
+    state.ppt.pptxUrl = deck?.pptxUrl || "";
+    state.ppt.statusText = "PPTX 已生成";
+    if (deck) {
+      state.ppt.decks = [deck, ...state.ppt.decks.filter((entry) => entry.deckId !== deck.deckId)];
+    }
+    renderPptView();
+    return;
+  }
+
+  if (eventName === "complete") {
+    const missing = Array.isArray(payload.missingSlideNumbers) ? payload.missingSlideNumbers : getPptMissingSlideNumbers();
+    state.ppt.statusText = missing.length > 0 ? `仍有 ${missing.length} 页未完成` : "生成完成";
+    if (payload.deck?.pptxUrl) {
+      state.ppt.pptxUrl = payload.deck.pptxUrl;
+    }
+    renderPptView();
+    return;
+  }
+
+  if (eventName === "error") {
+    const message = compactErrorMessage(payload.message, "PPT 请求失败");
+    if (payload.slideNumber || state.ppt.currentSlideNumber) {
+      markPptSlideFailed(payload.slideNumber || state.ppt.currentSlideNumber, message);
+    }
+    setPptFeedback(message, "error");
+    state.ppt.statusText = message;
+    renderPptView();
+  }
+}
+
+async function runPptStream(response) {
+  await consumeSse(response.body, async (eventName, payload) => {
+    handlePptStreamEvent(eventName, payload);
+  });
+}
+
+async function startPptGeneration(event) {
+  event.preventDefault();
+  clearError();
+  setPptFeedback("");
+
+  const hasInput =
+    state.ppt.files.length > 0 ||
+    refs.pptSourceTextInput.value.trim().length > 0 ||
+    refs.pptTopicInput.value.trim().length > 0;
+  if (!hasInput) {
+    setPptFeedback("请先上传文档、输入文本或输入主题。", "error");
+    return;
+  }
+
+  state.ppt.generating = true;
+  resetPptGenerationState();
+  renderPptView();
+
+  try {
+    await runPptStream(await requestPptGenerationStream());
+    await loadPptDecks();
+  } catch (error) {
+    const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "PPT 请求失败");
+    setPptFeedback(message, "error");
+    state.ppt.statusText = message;
+    showError(message);
+  } finally {
+    state.ppt.generating = false;
+    renderPptView();
+  }
+}
+
+async function runPptCompletion(slideNumbers) {
+  if (!state.ppt.outline || state.ppt.generating) {
+    return;
+  }
+
+  const numbers = [...new Set(slideNumbers.map((value) => Number(value)).filter(Boolean))];
+  if (numbers.length === 0) {
+    return;
+  }
+
+  state.ppt.generating = true;
+  state.ppt.statusText = numbers.length === 1 ? `正在重试第 ${numbers[0]} 页` : `正在补齐 ${numbers.length} 页`;
+  setPptFeedback("");
+  renderPptView();
+
+  try {
+    await runPptStream(await requestPptCompletionStream(numbers));
+    await loadPptDecks();
+  } catch (error) {
+    const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "PPT 补页请求失败");
+    setPptFeedback(message, "error");
+    showError(message);
+  } finally {
+    state.ppt.generating = false;
+    renderPptView();
+  }
+}
+
+function retryPptSlide(slideNumber) {
+  runPptCompletion([slideNumber]).catch((error) => setPptFeedback(error.message, "error"));
+}
+
+function completeMissingPptSlides() {
+  runPptCompletion(getPptMissingSlideNumbers()).catch((error) => setPptFeedback(error.message, "error"));
+}
+
+async function loadPptDecks() {
+  const response = await fetch("/api/ppt/decks");
+  if (!response.ok) {
+    throw new Error("读取 PPT 历史失败");
+  }
+  const payload = await response.json();
+  state.ppt.decks = Array.isArray(payload) ? payload : [];
+  renderPptView();
+}
+
+function createPptSlideCard(slide) {
+  const card = document.createElement("article");
+  card.className = "ppt-slide-card";
+  const complete = isPptSlideComplete(slide);
+  card.dataset.status = complete ? "saved" : slide.errorMessage ? "failed" : "pending";
+
+  const thumb = document.createElement("div");
+  thumb.className = "ppt-slide-thumb";
+  const imageUrl = slide.imageUrl || slide.thumbnailUrl || slide.previewUrl || "";
+  if (imageUrl) {
+    const image = document.createElement("img");
+    image.src = imageUrl;
+    image.alt = slide.title || `第 ${slide.slideNumber} 页`;
+    thumb.appendChild(image);
+  } else {
+    thumb.textContent = slide.errorMessage || slide.statusText || "等待生成";
+  }
+  card.appendChild(thumb);
+
+  const copy = document.createElement("div");
+  copy.className = "ppt-slide-copy";
+
+  const title = document.createElement("strong");
+  title.textContent = `${slide.slideNumber}. ${slide.title || "未命名页面"}`;
+  copy.appendChild(title);
+
+  const message = document.createElement("p");
+  message.textContent = slide.keyMessage || slide.prompt || slide.statusText || "";
+  copy.appendChild(message);
+
+  const status = document.createElement("span");
+  status.textContent = complete ? "已生成" : slide.errorMessage || slide.statusText || "待生成";
+  copy.appendChild(status);
+
+  if (state.ppt.outline && !complete) {
+    const retryButton = document.createElement("button");
+    retryButton.className = "inline-button ppt-slide-retry-button";
+    retryButton.type = "button";
+    retryButton.dataset.pptRetrySlide = String(slide.slideNumber);
+    retryButton.setAttribute("data-ppt-retry-slide", String(slide.slideNumber));
+    retryButton.textContent = slide.errorMessage ? "重试本页" : "生成本页";
+    retryButton.disabled = state.ppt.generating;
+    copy.appendChild(retryButton);
+  }
+
+  if (complete) {
+    const editButton = document.createElement("button");
+    editButton.className = "inline-button ppt-slide-edit-button";
+    editButton.type = "button";
+    editButton.dataset.pptEditSlide = String(slide.slideNumber);
+    editButton.setAttribute("data-ppt-edit-slide", String(slide.slideNumber));
+    editButton.textContent = "编辑本页";
+    editButton.disabled = state.ppt.generating;
+    copy.appendChild(editButton);
+  }
+
+  card.appendChild(copy);
+  return card;
+}
+
+function renderPptSlides() {
+  refs.pptSlideList.innerHTML = "";
+  getPptRenderableSlides().forEach((slide) => {
+    refs.pptSlideList.appendChild(createPptSlideCard(slide));
+  });
+}
+
+function renderPptHistory() {
+  refs.pptDeckCount.textContent = `${state.ppt.decks.length} 套`;
+  refs.pptHistoryEmpty.classList.toggle("hidden", state.ppt.decks.length > 0);
+  refs.pptHistoryList.innerHTML = "";
+
+  state.ppt.decks.forEach((deck) => {
+    const item = document.createElement("article");
+    item.className = "ppt-history-item";
+
+    const title = document.createElement("strong");
+    title.textContent = deck.title || "未命名演示";
+    item.appendChild(title);
+
+    const meta = document.createElement("span");
+    meta.textContent = `${deck.pageCount || deck.slides?.length || 0} 页 · ${formatTime(deck.createdAt)}`;
+    item.appendChild(meta);
+
+    const actions = document.createElement("div");
+    actions.className = "ppt-history-actions";
+    const link = document.createElement("a");
+    link.className = "toolbar-button";
+    link.href = deck.pptxUrl || "#";
+    link.download = deck.pptxFilename || "";
+    link.textContent = "下载 PPTX";
+    actions.appendChild(link);
+    item.appendChild(actions);
+
+    refs.pptHistoryList.appendChild(item);
+  });
+}
+
+function renderPptView() {
+  setPptSourceMode(state.ppt.sourceMode);
+  renderPptFiles();
+
+  const stats = getPptCompletionStats();
+  const missing = getPptMissingSlideNumbers();
+  refs.pptStatusText.textContent = state.ppt.statusText;
+  refs.pptCompletionRatio.textContent = `${stats.completed} / ${stats.total} 页成功`;
+  refs.pptProgressBar.style.width = stats.total > 0 ? `${Math.round((stats.completed / stats.total) * 100)}%` : "0%";
+  refs.pptCompleteMissingButton.classList.toggle("hidden", missing.length === 0 || !state.ppt.outline);
+  refs.pptCompleteMissingButton.disabled = state.ppt.generating || missing.length === 0;
+  refs.pptCompleteMissingButton.textContent = missing.length > 0 ? `补齐缺页 (${missing.length})` : "补齐缺页";
+  refs.pptGenerateButton.disabled = state.ppt.generating;
+  refs.pptGenerateButton.textContent = state.ppt.generating ? "正在生成..." : "生成 PPT 演示文稿";
+
+  refs.pptDownloadLink.href = state.ppt.pptxUrl || "#";
+  refs.pptDownloadLink.classList.toggle("disabled", !state.ppt.pptxUrl);
+  refs.pptDownloadLink.setAttribute("aria-disabled", String(!state.ppt.pptxUrl));
+
+  if (state.ppt.outline) {
+    refs.pptOutlineBox.textContent = `${state.ppt.outline.title} · ${state.ppt.outline.slides.length} 页`;
+  } else {
+    refs.pptOutlineBox.textContent = "生成后会在这里显示大纲和每一页图片。";
+  }
+
+  renderPptSlides();
+  renderPptHistory();
 }
 
 function createJob() {
@@ -3464,6 +4205,55 @@ function bindEvents() {
     saveConfig(event).catch((error) => showError(error.message));
   });
   refs.generateForm.addEventListener("submit", startGeneration);
+  refs.pptForm.addEventListener("submit", startPptGeneration);
+  refs.pptCompleteMissingButton.addEventListener("click", completeMissingPptSlides);
+  refs.pptRefreshHistoryButton.addEventListener("click", () => {
+    loadPptDecks().catch((error) => setPptFeedback(error.message, "error"));
+  });
+  refs.pptSourceModeInputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      setPptSourceMode(input.value);
+    });
+  });
+  refs.pptSourceInput.addEventListener("change", (event) => {
+    applyPptFiles(event.target.files);
+  });
+  refs.pptDropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    refs.pptDropzone.classList.add("dragover");
+  });
+  refs.pptDropzone.addEventListener("dragleave", () => {
+    refs.pptDropzone.classList.remove("dragover");
+  });
+  refs.pptDropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    refs.pptDropzone.classList.remove("dragover");
+    applyPptFiles(event.dataTransfer?.files);
+  });
+  refs.pptSlideList.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-ppt-retry-slide]");
+    if (target) {
+      retryPptSlide(Number(target.dataset.pptRetrySlide));
+      return;
+    }
+
+    const editTarget = event.target.closest("[data-ppt-edit-slide]");
+    if (editTarget) {
+      openPptSlideEditor(Number(editTarget.dataset.pptEditSlide));
+    }
+  });
+  refs.pptEditBackdrop.addEventListener("click", closePptSlideEditor);
+  refs.pptEditCloseButton.addEventListener("click", closePptSlideEditor);
+  refs.pptEditDrawButton.addEventListener("click", () => setPptEditTool("draw"));
+  refs.pptEditEraseButton.addEventListener("click", () => setPptEditTool("erase"));
+  refs.pptEditClearButton.addEventListener("click", clearPptEditCanvas);
+  refs.pptSubmitEditButton.addEventListener("click", () => {
+    submitPptSlideEdit().catch((error) => setPptEditFeedback(error.message, "error"));
+  });
+  refs.pptEditCanvas.addEventListener("pointerdown", beginPptEditStroke);
+  refs.pptEditCanvas.addEventListener("pointermove", continuePptEditStroke);
+  refs.pptEditCanvas.addEventListener("pointerup", endPptEditStroke);
+  refs.pptEditCanvas.addEventListener("pointercancel", endPptEditStroke);
   refs.timelineNewIndicator.addEventListener("click", scrollTimelineToNewest);
   refs.timelineList.addEventListener("scroll", handleTimelineScroll, { passive: true });
   refs.surprisePromptButton.addEventListener("click", selectRandomPrompt);
@@ -3690,6 +4480,7 @@ async function bootstrap() {
   renderPromptTemplates();
   renderTimeline();
   renderStudio();
+  renderPptView();
   renderGalleryView();
   setActiveView(getViewFromHash());
   scheduleGalleryPanelHeightSync();
@@ -3700,6 +4491,7 @@ async function bootstrap() {
     await loadGallery();
     await loadGenerationTasks();
     await loadPromptAgentHistory();
+    await loadPptDecks();
   } catch (error) {
     showError(error instanceof Error ? error.message : String(error));
     setConnectionState("error", "初始化失败");

@@ -1,0 +1,43 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const serverPath = new URL("../server.mjs", import.meta.url);
+const packagePath = new URL("../package.json", import.meta.url);
+const galleryStorePath = new URL("../lib/gallery-store.mjs", import.meta.url);
+
+test("server exposes PPT generation, completion and deck history endpoints", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /async function handlePptGenerate/);
+  assert.match(server, /async function handlePptComplete/);
+  assert.match(server, /url\.pathname === "\/api\/ppt\/generate"/);
+  assert.match(server, /url\.pathname === "\/api\/ppt\/complete"/);
+  assert.match(server, /url\.pathname === "\/api\/ppt\/slide\/edit"/);
+  assert.match(server, /url\.pathname === "\/api\/ppt\/decks"/);
+  assert.match(server, /writeSseEvent\(response, "slide_failed"/);
+  assert.match(server, /writeSseEvent\(response, "deck_saved"/);
+  assert.match(server, /async function handlePptSlideEdit/);
+  assert.match(server, /formData\.get\("sourceSlideImage"\)/);
+  assert.match(server, /formData\.get\("annotatedSlideImage"\)/);
+  assert.match(server, /formData\.get\("dynamicPreset"\)/);
+  assert.match(server, /formData\.get\("transitionPreset"\)/);
+  assert.match(server, /buildSlideImagePrompts\(\{\s*outline,[\s\S]*dynamicPreset/);
+  assert.match(server, /exportPptxDeck\(\{[\s\S]*motion:/);
+  assert.match(server, /"\.pptx": "application\/vnd\.openxmlformats-officedocument\.presentationml\.presentation"/);
+});
+
+test("server marks PPT slide assets hidden from the waterfall gallery", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const galleryStore = await readFile(galleryStorePath, "utf8");
+
+  assert.match(server, /assetKind:\s*"ppt-slide"/);
+  assert.match(server, /galleryVisible:\s*false/);
+  assert.match(galleryStore, /galleryVisible/);
+  assert.match(galleryStore, /if \(!normalizedMetadata\.galleryVisible\) \{/);
+});
+
+test("package declares pptxgenjs dependency for deck export", async () => {
+  const pkg = JSON.parse(await readFile(packagePath, "utf8"));
+  assert.match(pkg.dependencies?.pptxgenjs || "", /\^4\.0\.1/);
+});

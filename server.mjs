@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
 import { mkdir, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
@@ -43,6 +43,16 @@ import {
 } from "./lib/studio-constants.mjs";
 import { requestPromptAgentAnalysis } from "./lib/prompt-agent.mjs";
 import { createPromptAgentStore } from "./lib/prompt-agent-store.mjs";
+import { generatePptDeckOutline } from "./lib/ppt-deck-workflow.mjs";
+import { buildSlideEditPrompt, buildSlideImagePrompts } from "./lib/ppt-slide-prompts.mjs";
+import { createPptDeckStore } from "./lib/ppt-deck-store.mjs";
+import { exportPptxDeck } from "./lib/ppt-export.mjs";
+import {
+  getMissingPptSlideNumbers,
+  mergePptSlides,
+  normalizePptCompletionRequest,
+} from "./lib/ppt-completion.mjs";
+import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(rootDir, "public");
@@ -51,8 +61,12 @@ const outputDir = join(homedir(), "Pictures");
 const configStore = createConfigStore({ rootDir });
 const promptAgentStore = createPromptAgentStore({ rootDir });
 const generationTaskStore = createGenerationTaskStore();
+const pptDeckStore = createPptDeckStore({ outputDir, publicBasePath: "/output" });
 const port = Number(process.env.PORT || 3600);
 const activeTasksBySession = new Map();
+const PPT_SOURCE_EXTENSIONS = new Set([".pdf", ".docx", ".pptx", ".txt", ".md", ".csv"]);
+const PPT_SLIDE_SIZE = "2048x1152";
+const PPT_SLIDE_FORMAT = "png";
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -63,6 +77,7 @@ const MIME_TYPES = {
   ".json": "application/json; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
   ".png": "image/png",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   ".svg": "image/svg+xml",
   ".webp": "image/webp",
 };
@@ -362,6 +377,518 @@ async function toReferenceImages(files) {
       };
     }),
   );
+}
+
+function normalizePptRelativePath(relativePath) {
+  return String(relativePath || "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter(Boolean)
+    .join("/");
+}
+
+function buildPptPublicUrl(relativePath) {
+  return `/output/${normalizePptRelativePath(relativePath)}`;
+}
+
+function resolveOutputAssetPath(relativePath) {
+  const normalized = normalizePptRelativePath(relativePath);
+  const target = resolve(outputDir, normalized);
+  const base = resolve(outputDir);
+  const pathFromBase = relative(base, target);
+  if (!normalized || pathFromBase.startsWith("..") || isAbsolute(pathFromBase)) {
+    throw new Error("PPT 页面图片路径无效。");
+  }
+  return target;
+}
+
+async function hydrateExistingPptSlide(slide) {
+  const relativePath = normalizePptRelativePath(slide.relativePath);
+  const absolutePath = resolveOutputAssetPath(relativePath);
+  await stat(absolutePath);
+  return {
+    ...slide,
+    relativePath,
+    absolutePath,
+    imageUrl: slide.imageUrl || buildPptPublicUrl(relativePath),
+    thumbnailUrl: slide.thumbnailUrl || buildPptPublicUrl(relativePath),
+  };
+}
+
+function normalizePptFilenamePart(value) {
+  return String(value || "")
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
+    .replace(/\s+/g, "")
+    .trim()
+    .slice(0, 32);
+}
+
+async function toPptSourceDocuments(files) {
+  const validFiles = files.filter(
+    (file) => file && typeof file === "object" && typeof file.arrayBuffer === "function" && file.size > 0,
+  );
+
+  return Promise.all(
+    validFiles.map(async (file, index) => {
+      const filename = String(file.name || `source-${index + 1}`).trim();
+      const extension = extname(filename).toLowerCase();
+      if (!PPT_SOURCE_EXTENSIONS.has(extension)) {
+        throw new Error("PPT 文档仅支持 PDF / DOCX / PPTX / TXT / MD / CSV。");
+      }
+
+      const buffer = Buffer.from(await file.arrayBuffer());
+      return {
+        filename,
+        mimeType: file.type || "application/octet-stream",
+        buffer,
+        base64: buffer.toString("base64"),
+      };
+    }),
+  );
+}
+
+async function generateAndSavePptSlide({
+  response,
+  slidePrompt,
+  outline,
+  deckId,
+  createdAt,
+  config,
+  reasoningEffort,
+  referenceImages = [],
+}) {
+  writeSseEvent(response, "slide_started", {
+    slideNumber: slidePrompt.slideNumber,
+    title: slidePrompt.title,
+  });
+
+  let finalBase64 = "";
+  await requestImageGeneration({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    prompt: slidePrompt.prompt,
+    referenceImages,
+    size: PPT_SLIDE_SIZE,
+    quality: config.defaults?.quality || "high",
+    format: toApiOutputFormat(PPT_SLIDE_FORMAT),
+    responsesModel: config.responsesModel,
+    reasoningEffort,
+    async onEvent(event) {
+      if (event.type === "partial_image") {
+        writeSseEvent(response, "partial_image", {
+          slideNumber: slidePrompt.slideNumber,
+          dataUrl: event.dataUrl,
+        });
+        return;
+      }
+
+      if (event.type === "final_image") {
+        finalBase64 = event.base64;
+      }
+    },
+  });
+
+  if (!finalBase64) {
+    const error = new Error("上游响应结束，但没有拿到最终 PPT 页面图片。");
+    error.slideNumber = slidePrompt.slideNumber;
+    throw error;
+  }
+
+  const filename = createTimestampedFilename({
+    format: PPT_SLIDE_FORMAT,
+    prompt: `${outline.title}-${slidePrompt.title}`,
+    createdAt,
+    idSource: `${deckId}-${slidePrompt.slideNumber}`,
+  });
+  const saved = await saveGeneratedAsset({
+    outputDir,
+    filename,
+    imageBuffer: Buffer.from(normalizeBase64(finalBase64), "base64"),
+    metadata: {
+      prompt: slidePrompt.prompt,
+      createdAt,
+      baseUrl: config.baseUrl,
+      responsesModel: config.responsesModel,
+      imageModel: "gpt-image-2",
+      ratio: "16:9",
+      ratioLabel: "PPT 16:9",
+      size: PPT_SLIDE_SIZE,
+      quality: config.defaults?.quality || "high",
+      format: PPT_SLIDE_FORMAT,
+      reasoningEffort,
+      assetKind: "ppt-slide",
+      deckId,
+      slideNumber: String(slidePrompt.slideNumber),
+      galleryVisible: false,
+    },
+  });
+
+  return {
+    slideNumber: slidePrompt.slideNumber,
+    title: slidePrompt.title,
+    filename,
+    relativePath: saved.relativePath,
+    absolutePath: saved.absolutePath,
+    imageUrl: buildPptPublicUrl(saved.relativePath),
+    thumbnailUrl: buildPptPublicUrl(saved.relativePath),
+    prompt: slidePrompt.promptSummary || slidePrompt.prompt,
+  };
+}
+
+async function saveCompletedPptDeck({ deckId, outline, slides, createdAt, sources = {}, config, reasoningEffort, motion = {} }) {
+  const sortedSlides = [...slides].sort((left, right) => left.slideNumber - right.slideNumber);
+  const titlePart = normalizePptFilenamePart(outline.title) || "PPT演示";
+  const pptxFilename = `${titlePart}-${deckId.slice(-8)}.pptx`;
+  const pptxRelativePath = normalizePptRelativePath(`${formatDateFolder(createdAt)}/${pptxFilename}`);
+  const pptxAbsolutePath = resolveOutputAssetPath(pptxRelativePath);
+
+  await exportPptxDeck({
+    outputPath: pptxAbsolutePath,
+    title: outline.title,
+    motion: motion,
+    slides: sortedSlides.map((slide) => ({
+      title: slide.title,
+      imagePath: slide.absolutePath,
+    })),
+  });
+
+  return pptDeckStore.saveManifest({
+    deckId,
+    title: outline.title,
+    pageCount: outline.slides.length,
+    createdAt,
+    sources,
+    outline,
+    slides: sortedSlides.map(({ absolutePath: _absolutePath, ...slide }) => slide),
+    pptxRelativePath,
+    pptxFilename,
+    responsesModel: config.responsesModel,
+    imageModel: "gpt-image-2",
+    reasoningEffort,
+    motion,
+  });
+}
+
+async function handlePptDecksGet(response) {
+  sendJson(response, 200, await pptDeckStore.listManifests());
+}
+
+function writePptGenerationError(response, error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const slideNumber = Number(error?.slideNumber) || 0;
+  if (slideNumber) {
+    writeSseEvent(response, "slide_failed", {
+      slideNumber,
+      message,
+    });
+  }
+  writeSseEvent(response, "error", {
+    message,
+    slideNumber,
+  });
+}
+
+async function handlePptGenerate(request, response) {
+  response.writeHead(200, {
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "Content-Type": "text/event-stream; charset=utf-8",
+  });
+
+  try {
+    writeSseEvent(response, "status", { stage: "uploading", message: "正在读取 PPT 输入" });
+
+    const formData = await readFormDataBody(request);
+    const sourceDocuments = await toPptSourceDocuments([
+      ...formData.getAll("sourceFiles"),
+      ...formData.getAll("sourceFiles[]"),
+    ]);
+    const sourceText = String(formData.get("sourceText") || "").trim();
+    const topic = String(formData.get("topic") || "").trim();
+    const pageCount = Number.parseInt(String(formData.get("pageCount") || "0"), 10);
+    const stylePreset = String(formData.get("stylePreset") || "").trim();
+    const motion = normalizePptMotionOptions({
+      dynamicPreset: formData.get("dynamicPreset"),
+      transitionPreset: formData.get("transitionPreset"),
+      transitionSpeed: formData.get("transitionSpeed"),
+      autoAdvanceSeconds: formData.get("autoAdvanceSeconds"),
+    });
+    const config = await configStore.readPrivateConfig();
+    const reasoningEffort = normalizeReasoningEffort(
+      formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    );
+
+    if (!config.apiKey) {
+      throw new Error("当前未保存 API Key，请先在配置中保存。");
+    }
+
+    const deckId = `ppt-deck-${randomUUID()}`;
+    const createdAt = new Date().toISOString();
+    writeSseEvent(response, "status", { stage: "outline", message: "正在生成 PPT 大纲" });
+    const outline = await generatePptDeckOutline({
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      responsesModel: config.responsesModel,
+      reasoningEffort,
+      sourceDocuments,
+      sourceText,
+      topic,
+      pageCount,
+      stylePreset,
+    });
+
+    writeSseEvent(response, "outline", { deckId, outline });
+
+    const slidePrompts = buildSlideImagePrompts({ outline, theme: stylePreset, dynamicPreset: motion.dynamicPreset });
+    const slides = [];
+    for (const slidePrompt of slidePrompts) {
+      try {
+        const slide = await generateAndSavePptSlide({
+          response,
+          slidePrompt,
+          outline,
+          deckId,
+          createdAt,
+          config,
+          reasoningEffort,
+        });
+        slides.push(slide);
+        writeSseEvent(response, "slide_saved", { slide });
+      } catch (error) {
+        error.slideNumber ||= slidePrompt.slideNumber;
+        throw error;
+      }
+    }
+
+    const deck = await saveCompletedPptDeck({
+      deckId,
+      outline,
+      slides,
+      createdAt,
+      sources: {
+        filenames: sourceDocuments.map((file) => file.filename),
+        hasSourceText: Boolean(sourceText),
+        topic,
+        stylePreset,
+        ...motion,
+      },
+      config,
+      reasoningEffort,
+      motion,
+    });
+
+    writeSseEvent(response, "deck_saved", { deck });
+    writeSseEvent(response, "complete", { deck, missingSlideNumbers: [] });
+  } catch (error) {
+    writePptGenerationError(response, error);
+  } finally {
+    if (!response.destroyed && !response.writableEnded) {
+      response.end();
+    }
+  }
+}
+
+async function handlePptComplete(request, response) {
+  response.writeHead(200, {
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "Content-Type": "text/event-stream; charset=utf-8",
+  });
+
+  try {
+    const payload = await readJsonBody(request);
+    const motion = normalizePptMotionOptions({
+      dynamicPreset: payload.dynamicPreset,
+      transitionPreset: payload.transitionPreset,
+      transitionSpeed: payload.transitionSpeed,
+      autoAdvanceSeconds: payload.autoAdvanceSeconds,
+    });
+    const completion = normalizePptCompletionRequest({
+      deckId: payload.deckId,
+      outline: payload.outline,
+      existingSlides: payload.existingSlides,
+      slideNumbers: payload.slideNumbers,
+      theme: payload.stylePreset || payload.theme,
+    });
+    const config = await configStore.readPrivateConfig();
+    const reasoningEffort = normalizeReasoningEffort(
+      payload.reasoningEffort || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    );
+
+    if (!config.apiKey) {
+      throw new Error("当前未保存 API Key，请先在配置中保存。");
+    }
+
+    const deckId = completion.deckId || `ppt-deck-${randomUUID()}`;
+    const createdAt = new Date().toISOString();
+    const existingSlides = await Promise.all(completion.existingSlides.map(hydrateExistingPptSlide));
+    const slidePrompts = buildSlideImagePrompts({
+      outline: completion.outline,
+      theme: completion.theme,
+      dynamicPreset: motion.dynamicPreset,
+    }).filter((slidePrompt) => completion.slideNumbers.includes(slidePrompt.slideNumber));
+    const generatedSlides = [];
+
+    writeSseEvent(response, "outline", { deckId, outline: completion.outline });
+
+    for (const slidePrompt of slidePrompts) {
+      try {
+        const slide = await generateAndSavePptSlide({
+          response,
+          slidePrompt,
+          outline: completion.outline,
+          deckId,
+          createdAt,
+          config,
+          reasoningEffort,
+        });
+        generatedSlides.push(slide);
+        writeSseEvent(response, "slide_saved", { slide });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        writeSseEvent(response, "slide_failed", {
+          slideNumber: slidePrompt.slideNumber,
+          message,
+        });
+      }
+    }
+
+    const mergedSlides = mergePptSlides(existingSlides, generatedSlides);
+    const missingSlideNumbers = getMissingPptSlideNumbers({
+      outline: completion.outline,
+      slides: mergedSlides,
+    });
+    let deck = null;
+
+    if (missingSlideNumbers.length === 0) {
+      deck = await saveCompletedPptDeck({
+        deckId,
+        outline: completion.outline,
+        slides: mergedSlides,
+        createdAt,
+        sources: payload.sources || {},
+        config,
+        reasoningEffort,
+        motion,
+      });
+      writeSseEvent(response, "deck_saved", { deck });
+    }
+
+    writeSseEvent(response, "complete", { deck, missingSlideNumbers });
+  } catch (error) {
+    writePptGenerationError(response, error);
+  } finally {
+    if (!response.destroyed && !response.writableEnded) {
+      response.end();
+    }
+  }
+}
+
+async function handlePptSlideEdit(request, response) {
+  response.writeHead(200, {
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "Content-Type": "text/event-stream; charset=utf-8",
+  });
+
+  try {
+    const formData = await readFormDataBody(request);
+    const sourceSlideImage = formData.get("sourceSlideImage");
+    const annotatedSlideImage = formData.get("annotatedSlideImage");
+    const referenceImages = await toReferenceImages([sourceSlideImage, annotatedSlideImage]);
+    if (referenceImages.length < 2) {
+      throw new Error("请先在页面上完成标注后再重新生成。");
+    }
+
+    const outline = JSON.parse(String(formData.get("outline") || "{}"));
+    const existingSlides = JSON.parse(String(formData.get("existingSlides") || "[]"));
+    const slideNumber = Number.parseInt(String(formData.get("slideNumber") || "0"), 10);
+    const stylePreset = String(formData.get("stylePreset") || "").trim();
+    const motion = normalizePptMotionOptions({
+      dynamicPreset: formData.get("dynamicPreset"),
+      transitionPreset: formData.get("transitionPreset"),
+      transitionSpeed: formData.get("transitionSpeed"),
+      autoAdvanceSeconds: formData.get("autoAdvanceSeconds"),
+    });
+    const editInstruction = String(formData.get("editInstruction") || "").trim();
+    const completion = normalizePptCompletionRequest({
+      deckId: formData.get("deckId"),
+      outline,
+      existingSlides,
+      slideNumbers: [slideNumber],
+      theme: stylePreset,
+    });
+    const config = await configStore.readPrivateConfig();
+    const reasoningEffort = normalizeReasoningEffort(
+      formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    );
+
+    if (!config.apiKey) {
+      throw new Error("当前未保存 API Key，请先在配置中保存。");
+    }
+
+    const deckId = completion.deckId || `ppt-deck-${randomUUID()}`;
+    const createdAt = new Date().toISOString();
+    const existingHydratedSlides = await Promise.all(completion.existingSlides.map(hydrateExistingPptSlide));
+    const slide = completion.outline.slides.find((entry) => Number(entry.slideNumber) === slideNumber);
+    if (!slide) {
+      throw new Error("未找到要编辑的 PPT 页面。");
+    }
+
+    writeSseEvent(response, "outline", { deckId, outline: completion.outline });
+    const generatedSlide = await generateAndSavePptSlide({
+      response,
+      slidePrompt: {
+        slideNumber,
+        title: slide.title,
+        prompt: buildSlideEditPrompt({
+          outline: completion.outline,
+          slideNumber,
+          theme: stylePreset,
+          editInstruction,
+          dynamicPreset: motion.dynamicPreset,
+        }),
+        promptSummary: `${slide.title}：${editInstruction || "按标注重新生成"}`,
+      },
+      outline: completion.outline,
+      deckId,
+      createdAt,
+      config,
+      reasoningEffort,
+      referenceImages,
+    });
+
+    writeSseEvent(response, "slide_saved", { slide: generatedSlide });
+
+    const mergedSlides = mergePptSlides(existingHydratedSlides, [generatedSlide]);
+    const missingSlideNumbers = getMissingPptSlideNumbers({
+      outline: completion.outline,
+      slides: mergedSlides,
+    });
+    let deck = null;
+
+    if (missingSlideNumbers.length === 0) {
+      deck = await saveCompletedPptDeck({
+        deckId,
+        outline: completion.outline,
+        slides: mergedSlides,
+        createdAt,
+        sources: { editedSlideNumber: slideNumber, stylePreset, ...motion },
+        config,
+        reasoningEffort,
+        motion,
+      });
+      writeSseEvent(response, "deck_saved", { deck });
+    }
+
+    writeSseEvent(response, "complete", { deck, missingSlideNumbers });
+  } catch (error) {
+    writePptGenerationError(response, error);
+  } finally {
+    if (!response.destroyed && !response.writableEnded) {
+      response.end();
+    }
+  }
 }
 
 async function handlePromptAgentAnalyze(request, response) {
@@ -746,6 +1273,10 @@ async function routeRequest(request, response) {
     return handleGalleryGet(response);
   }
 
+  if (request.method === "GET" && url.pathname === "/api/ppt/decks") {
+    return handlePptDecksGet(response);
+  }
+
   if (request.method === "GET" && url.pathname === "/api/generation/tasks") {
     return handleGenerationTasksGet(request, response, url);
   }
@@ -772,6 +1303,18 @@ async function routeRequest(request, response) {
 
   if (request.method === "POST" && url.pathname === "/api/generate") {
     return handleGenerate(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/ppt/generate") {
+    return handlePptGenerate(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/ppt/complete") {
+    return handlePptComplete(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/ppt/slide/edit") {
+    return handlePptSlideEdit(request, response);
   }
 
   if (request.method === "GET" && url.pathname.startsWith("/output/")) {
