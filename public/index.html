@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260430-ppt-motion-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260504-mobile-ui-adapt-3" />
   </head>
   <body>
     <div class="app-shell">
@@ -32,6 +32,7 @@
           <button class="view-tab active" data-view-tab="studio" type="button">Studio</button>
           <button class="view-tab" data-view-tab="ppt" type="button">PPT 演示</button>
           <button class="view-tab" data-view-tab="gallery" type="button">瀑布画廊</button>
+          <button class="view-tab" data-view-tab="ppt-record" type="button">PPT记录</button>
         </div>
 
         <div class="topbar-actions">
@@ -90,7 +91,7 @@
                     </div>
                   </div>
                   <div class="ratio-grid" id="ratioGrid"></div>
-                  <input id="ratioInput" name="ratio" type="hidden" value="4:5" />
+                  <input id="ratioInput" name="ratio" type="hidden" value="1:1" />
                   <div class="advanced-content">
                     <div class="advanced-controls">
                       <label class="compact-field">
@@ -317,7 +318,7 @@
 
                 <div class="ppt-motion-grid">
                   <label class="compact-field">
-                    <span>动态组件</span>
+                    <span>渐进披露</span>
                     <select id="pptDynamicPresetInput" name="dynamicPreset">
                       <option value="smart">智能动态</option>
                       <option value="spotlight">演讲聚焦</option>
@@ -331,6 +332,7 @@
                   <label class="compact-field">
                     <span>切换效果</span>
                     <select id="pptTransitionPresetInput" name="transitionPreset">
+                      <option value="smooth">平滑</option>
                       <option value="fade">淡入</option>
                       <option value="push">推入</option>
                       <option value="wipe">擦除</option>
@@ -353,7 +355,7 @@
                     <input id="pptAutoAdvanceInput" name="autoAdvanceSeconds" type="number" min="0" max="60" step="0.5" value="0" />
                   </label>
                 </div>
-                <p class="ppt-motion-note">动态组件影响每页画面设计；切换效果会写入导出的 PPTX 播放设置。</p>
+                <p class="ppt-motion-note">渐进披露会把每个逻辑页导出为多步页面；切换效果会写入导出的 PPTX 播放设置。</p>
 
                 <button class="generate-button" id="pptGenerateButton" type="submit">生成 PPT 演示文稿</button>
                 <p class="ppt-feedback" id="pptFeedback"></p>
@@ -452,6 +454,11 @@
                 <div class="gallery-toolbar-meta">
                   <div class="gallery-filters" id="galleryFilters"></div>
                   <p class="gallery-helper-text" id="galleryHelperText">按日期分组显示，可按关键词、日期、尺寸和参考图快速筛选。</p>
+                  <div class="gallery-pagination hidden" id="galleryPagination" aria-label="画廊历史分页">
+                    <button class="gallery-page-button" id="galleryPreviousPageButton" type="button">上一页</button>
+                    <span class="gallery-page-status" id="galleryPageStatus">第 1 / 1 页</span>
+                    <button class="gallery-page-button" id="galleryNextPageButton" type="button">下一页</button>
+                  </div>
                 </div>
                 <button class="gallery-reset-button" id="galleryResetFiltersButton" type="button">清空筛选</button>
               </div>
@@ -502,6 +509,23 @@
                 <button class="gallery-scroll-arrow" id="galleryScrollDown" type="button" aria-label="向下滚动">↓</button>
               </div>
             </div>
+          </section>
+        </section>
+
+        <section class="view-panel ppt-record-view hidden" data-view-panel="ppt-record">
+          <section class="studio-panel ppt-record-panel">
+            <div class="panel-title between">
+              <div>
+                <h2>PPT记录</h2>
+                <p>生成记录和文件夹历史</p>
+              </div>
+              <div class="ppt-record-actions">
+                <span class="count-pill" id="pptRecordCount">0 个</span>
+                <button class="toolbar-button" id="pptRecordRefreshButton" type="button">刷新记录</button>
+              </div>
+            </div>
+            <div class="ppt-record-empty" id="pptRecordEmpty">还没有找到 PPT 文件。</div>
+            <div class="ppt-record-list" id="pptRecordList"></div>
           </section>
         </section>
       </main>
@@ -658,16 +682,16 @@
               <span>API Key</span>
               <small id="savedKeyMask">未保存</small>
             </div>
-            <input id="apiKeyInput" name="apiKey" type="password" placeholder="留空则保持当前已保存的 key" />
+            <input id="apiKeyInput" name="apiKey" type="password" placeholder="留空则保持当前浏览器已保存的 key" />
           </label>
 
           <label class="field">
             <span>Responses 模型</span>
-            <input id="responsesModelInput" name="responsesModel" type="text" placeholder="gpt-5.4" />
+            <input id="responsesModelInput" name="responsesModel" type="text" placeholder="gpt-5.5" />
           </label>
 
           <button class="generate-button" type="submit">保存配置</button>
-          <p class="config-note" id="configFeedback">API Key 仅保存在本机 .local/config.json，不会回填到页面。</p>
+          <p class="config-note" id="configFeedback">API Key 只保存在当前浏览器，不会写入源码或 Cloudflare 环境变量。</p>
         </form>
       </div>
     </aside>
@@ -745,6 +769,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260430-ppt-motion-1"></script>
+    <script type="module" src="/app.js?v=20260504-async-queue-1"></script>
   </body>
 </html>

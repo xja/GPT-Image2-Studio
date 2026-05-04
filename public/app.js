@@ -14,6 +14,7 @@ import {
   getGalleryLayoutModeForWidth,
   getRecentGalleryItems,
   normalizeGalleryFilters,
+  paginateGallerySections,
   sortGalleryItemsByCreatedAtDesc,
 } from "/lib/gallery-organizer.mjs";
 import {
@@ -26,7 +27,7 @@ import {
   getDefaultGenerationSize,
   getGenerationSizeOptions,
   normalizeGenerationSize,
-} from "/lib/generation-size-options.mjs?v=20260429-3-4-3072-1";
+} from "/lib/generation-size-options.mjs?v=20260504-mobile-ui-adapt-2";
 import {
   getOutputFormatOptions,
   normalizeOutputFormat,
@@ -44,12 +45,53 @@ import {
   isQueuedGenerationJob,
   selectNextQueuedGenerationJobs,
 } from "/lib/generation-queue.mjs?v=20260428-queue-cancel-1";
-import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260426-filmstrip-1";
+import {
+  sortGenerationActivityFeed,
+  upsertGenerationActivityEntry,
+} from "/lib/generation-activity-feed.mjs?v=20260504-stable-activity-order-1";
+import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260504-mobile-ui-adapt-2";
 
 const SURPRISE_PROMPTS = [
-  "生成一张美女抖音直播带货主视觉，主播面对镜头展示护肤礼盒，商业摄影质感，暖金色补光，画面干净适合电商封面。",
-  "生成一张中国风直播间服饰带货海报，女主播站在布景前介绍新款汉服，柔和边缘光，细节精致，适合社媒首图。",
-  "生成一张数码产品直播间宣传图，主播坐在桌前讲解耳机，科技蓝氛围光，产品主体清晰，适合带货直播封面。",
+  {
+    name: "清晨通勤",
+    prompt: "生成一张清晨城市通勤生活照，年轻上班族手拿咖啡走出地铁站，晨光穿过街边树影，画面自然真实，轻微运动模糊，适合生活方式摄影。",
+  },
+  {
+    name: "家庭早餐",
+    prompt: "生成一张温暖家庭早餐场景，木质餐桌上有吐司、煎蛋、牛奶和水果，家人围坐聊天，窗外柔和日光洒入，构图干净，有真实居家氛围。",
+  },
+  {
+    name: "居家阅读",
+    prompt: "生成一张安静居家阅读画面，人物坐在窗边单人椅上看书，旁边有茶杯和落地灯，浅色窗帘、柔和阴影，画面舒适松弛，细节清晰。",
+  },
+  {
+    name: "厨房做饭",
+    prompt: "生成一张周末厨房做饭场景，人物在明亮厨房里切菜备餐，台面摆放新鲜蔬菜和锅具，暖白色顶光，生活化抓拍视角，干净有烟火气。",
+  },
+  {
+    name: "超市采购",
+    prompt: "生成一张日常超市采购场景，人物推着购物车经过蔬果区，货架陈列丰富但不杂乱，室内灯光明亮，色彩自然，像真实生活纪录照片。",
+  },
+  {
+    name: "午后办公",
+    prompt: "生成一张午后居家办公场景，人物坐在整洁书桌前使用笔记本电脑，桌上有记事本、耳机和半杯咖啡，窗边自然光，画面专注而安静。",
+  },
+  {
+    name: "健身运动",
+    prompt: "生成一张清爽健身运动场景，人物在公园步道上做拉伸，穿着简洁运动服，背景有晨间草地和远处城市轮廓，光线清透，健康积极。",
+  },
+  {
+    name: "朋友聚会",
+    prompt: "生成一张朋友小聚生活场景，几位朋友围坐在餐桌边分享披萨和饮料，表情自然放松，暖色室内灯光，桌面细节丰富，氛围亲密真实。",
+  },
+  {
+    name: "亲子手作",
+    prompt: "生成一张亲子手作场景，家长和孩子在桌前一起制作彩色纸艺，桌上有剪刀、彩纸和胶水，画面明亮安全，表情专注，充满家庭陪伴感。",
+  },
+  {
+    name: "夜晚学习",
+    prompt: "生成一张夜晚学习场景，人物坐在书桌前整理笔记，台灯形成温暖光区，窗外是安静夜色，桌面有书本和便签，整体专注、平静、有秩序。",
+  },
 ];
 
 const REASONING_LABELS = {
@@ -61,14 +103,14 @@ const REASONING_LABELS = {
 
 const DEFAULT_LIMITS = {
   maxConcurrentTasksPerSession: 20,
-  maxParallelTasksPerSession: 2,
+  maxParallelTasksPerSession: 4,
   maxReferenceImages: 6,
 };
-const PROMPT_TEMPLATE_STORAGE_KEY = "image-studio-prompt-templates-v1";
-const DEFAULT_PROMPT_TEMPLATES = SURPRISE_PROMPTS.map((prompt, index) => ({
+const PROMPT_TEMPLATE_STORAGE_KEY = "image-studio-prompt-templates-v2";
+const DEFAULT_PROMPT_TEMPLATES = SURPRISE_PROMPTS.map((template, index) => ({
   id: `default-template-${index + 1}`,
-  name: ["直播带货", "国风服饰", "数码产品"][index] || `模板 ${index + 1}`,
-  prompt,
+  name: template.name,
+  prompt: template.prompt,
 }));
 
 const DEFAULT_GALLERY_CONTROLS = {
@@ -82,8 +124,14 @@ const DEFAULT_GALLERY_CONTROLS = {
 const GALLERY_COLUMN_PRESETS = [6, 9, 12, 15, 18];
 const DEFAULT_GALLERY_COLUMN_PRESET = 12;
 const DEFAULT_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
+const DEFAULT_UI_RATIO = "1:1";
+const DEFAULT_UI_RATIO_LABEL = "方形 1:1";
 const GALLERY_METADATA_CACHE_KEY = "image-studio-gallery-metadata-cache-v2";
 const GENERATION_ACTIVITY_STORAGE_KEY = "image-studio-generation-activity-v1";
+const BROWSER_CONFIG_STORAGE_KEY = "image-studio-browser-config-v1";
+const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";
+const BROWSER_IMAGE_CACHE_DB_NAME = "image-studio-browser-image-cache-v1";
+const BROWSER_IMAGE_CACHE_STORE_NAME = "generated-images";
 const GENERATION_TASK_POLL_INTERVAL_MS = 2500;
 const GENERATION_TASK_STATUS_LABELS = {
   running: "生成中",
@@ -133,6 +181,7 @@ const state = {
   gallery: [],
   galleryMetadataCache: {},
   galleryControls: { ...DEFAULT_GALLERY_CONTROLS },
+  galleryHistoryPage: 0,
   galleryColumnPreset: DEFAULT_GALLERY_COLUMN_PRESET,
   generationTasks: [],
   jobs: [],
@@ -199,7 +248,11 @@ const refs = {
   galleryEmpty: document.querySelector("#galleryEmpty"),
   galleryFilters: document.querySelector("#galleryFilters"),
   galleryHelperText: document.querySelector("#galleryHelperText"),
+  galleryNextPageButton: document.querySelector("#galleryNextPageButton"),
+  galleryPageStatus: document.querySelector("#galleryPageStatus"),
+  galleryPagination: document.querySelector("#galleryPagination"),
   galleryPanel: document.querySelector(".gallery-panel"),
+  galleryPreviousPageButton: document.querySelector("#galleryPreviousPageButton"),
   galleryReferenceFilterInput: document.querySelector("#galleryReferenceFilterInput"),
   galleryResetFiltersButton: document.querySelector("#galleryResetFiltersButton"),
   gallerySearchInput: document.querySelector("#gallerySearchInput"),
@@ -294,6 +347,10 @@ const refs = {
   pptOutlineBox: document.querySelector("#pptOutlineBox"),
   pptPageCountInput: document.querySelector("#pptPageCountInput"),
   pptProgressBar: document.querySelector("#pptProgressBar"),
+  pptRecordCount: document.querySelector("#pptRecordCount"),
+  pptRecordEmpty: document.querySelector("#pptRecordEmpty"),
+  pptRecordList: document.querySelector("#pptRecordList"),
+  pptRecordRefreshButton: document.querySelector("#pptRecordRefreshButton"),
   pptRefreshHistoryButton: document.querySelector("#pptRefreshHistoryButton"),
   pptSlideList: document.querySelector("#pptSlideList"),
   pptSourceInput: document.querySelector("#pptSourceInput"),
@@ -429,6 +486,297 @@ function getImageUrl(item) {
   return item?.imageUrl || item?.thumbnailUrl || item?.previewUrl || "";
 }
 
+function isCacheableBrowserImageUrl(url) {
+  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(String(url || ""));
+}
+
+function isServerImageProxyUrl(url) {
+  const raw = String(url || "").trim();
+  if (!raw) {
+    return false;
+  }
+
+  if (raw.startsWith("/api/images/")) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(raw, window.location.origin);
+    return parsed.origin === window.location.origin && parsed.pathname.startsWith("/api/images/");
+  } catch (_error) {
+    return false;
+  }
+}
+
+function readBlobAsDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("FileReader failed"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function fetchServerImageAsDataUrl(imageUrl) {
+  const response = await fetch(imageUrl, {
+    credentials: "same-origin",
+    cache: "force-cache",
+  });
+  if (!response.ok) {
+    throw new Error(`server image fetch failed with status ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  if (!blob.type.startsWith("image/")) {
+    throw new Error("server image response is not an image");
+  }
+  return readBlobAsDataUrl(blob);
+}
+
+function normalizeBrowserCachedGalleryItem(item = {}) {
+  const filename = String(item.filename || "").trim();
+  if (!filename) {
+    return null;
+  }
+
+  const imageUrl = String(item.imageUrl || "");
+  const thumbnailUrl = String(item.thumbnailUrl || "");
+  const normalized = {
+    id: String(item.id || ""),
+    filename,
+    createdAt: String(item.createdAt || nowIso()),
+    prompt: String(item.prompt || ""),
+    baseUrl: String(item.baseUrl || ""),
+    responsesModel: String(item.responsesModel || ""),
+    imageModel: String(item.imageModel || "gpt-image-2"),
+    hasReferenceImage: Boolean(item.hasReferenceImage),
+    referenceImageNames: Array.isArray(item.referenceImageNames) ? item.referenceImageNames.map(String).filter(Boolean) : [],
+    referenceImageName: String(item.referenceImageName || ""),
+    ratio: String(item.ratio || ""),
+    ratioLabel: String(item.ratioLabel || ""),
+    size: String(item.size || ""),
+    quality: String(item.quality || ""),
+    format: String(item.format || ""),
+    reasoningEffort: String(item.reasoningEffort || ""),
+    generationStartedAt: String(item.generationStartedAt || ""),
+    generationCompletedAt: String(item.generationCompletedAt || ""),
+    generationDurationMs: String(item.generationDurationMs || ""),
+  };
+
+  if (isServerImageProxyUrl(imageUrl)) {
+    normalized.imageUrl = imageUrl;
+  }
+  if (isServerImageProxyUrl(thumbnailUrl)) {
+    normalized.thumbnailUrl = thumbnailUrl;
+  } else if (normalized.imageUrl) {
+    normalized.thumbnailUrl = normalized.imageUrl;
+  }
+
+  return normalized;
+}
+
+function readBrowserImageCacheIndex() {
+  try {
+    const raw = window.localStorage.getItem(BROWSER_IMAGE_CACHE_INDEX_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.map(normalizeBrowserCachedGalleryItem).filter(Boolean)
+      : [];
+  } catch (_error) {
+    return [];
+  }
+}
+
+function writeBrowserImageCacheIndex(items) {
+  try {
+    window.localStorage.setItem(
+      BROWSER_IMAGE_CACHE_INDEX_KEY,
+      JSON.stringify(items.map(normalizeBrowserCachedGalleryItem).filter(Boolean)),
+    );
+  } catch (_error) {
+    // Ignore storage quota or privacy-mode failures; IndexedDB still keeps images for this session.
+  }
+}
+
+function openBrowserImageCacheDB() {
+  if (!window.indexedDB) {
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(BROWSER_IMAGE_CACHE_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore(BROWSER_IMAGE_CACHE_STORE_NAME, { keyPath: "filename" });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("IndexedDB open failed"));
+  });
+}
+
+async function withBrowserImageCacheStore(mode, operation) {
+  const db = await openBrowserImageCacheDB();
+  if (!db) {
+    return null;
+  }
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(BROWSER_IMAGE_CACHE_STORE_NAME, mode);
+    const store = transaction.objectStore(BROWSER_IMAGE_CACHE_STORE_NAME);
+    let operationResult = null;
+    transaction.oncomplete = () => {
+      db.close();
+      resolve(operationResult);
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error || new Error("IndexedDB transaction failed"));
+    };
+    operationResult = operation(store);
+  });
+}
+
+async function putBrowserCachedImageData(filename, dataUrl) {
+  await withBrowserImageCacheStore("readwrite", (store) => {
+    store.put({ filename, dataUrl, updatedAt: nowIso() });
+  });
+}
+
+async function getBrowserCachedImageData(filename) {
+  return withBrowserImageCacheStore("readonly", (store) => {
+    const request = store.get(filename);
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result?.dataUrl || "");
+      request.onerror = () => reject(request.error || new Error("IndexedDB read failed"));
+    });
+  });
+}
+
+async function deleteBrowserCachedImageData(filename) {
+  await withBrowserImageCacheStore("readwrite", (store) => {
+    store.delete(filename);
+  });
+}
+
+async function cacheBrowserGalleryItem(item) {
+  const cachedItem = normalizeBrowserCachedGalleryItem(item);
+  const imageUrl = getImageUrl(item);
+  const hasServerImageUrl = isServerImageProxyUrl(imageUrl);
+  const hasDataUrl = isCacheableBrowserImageUrl(imageUrl);
+  if (!cachedItem || (!hasDataUrl && !hasServerImageUrl)) {
+    return;
+  }
+
+  const writeIndex = () => {
+    const nextIndex = [
+      cachedItem,
+      ...readBrowserImageCacheIndex().filter((entry) => entry.filename !== cachedItem.filename),
+    ];
+    writeBrowserImageCacheIndex(nextIndex);
+  };
+
+  try {
+    if (hasServerImageUrl) {
+      writeIndex();
+    }
+    const dataUrl = hasDataUrl ? imageUrl : await fetchServerImageAsDataUrl(imageUrl);
+    await putBrowserCachedImageData(cachedItem.filename, dataUrl);
+    writeIndex();
+    await navigator.storage?.persist?.();
+  } catch (error) {
+    console.warn("cache generated image in browser failed", cachedItem.filename, error);
+  }
+}
+
+async function readBrowserCachedGalleryItems() {
+  const entries = readBrowserImageCacheIndex();
+  const restoredItems = [];
+  const missingFilenames = new Set();
+
+  for (const entry of entries) {
+    try {
+      const dataUrl = await getBrowserCachedImageData(entry.filename);
+      const fallbackImageUrl = isServerImageProxyUrl(entry.imageUrl) ? entry.imageUrl : "";
+      const fallbackThumbnailUrl = isServerImageProxyUrl(entry.thumbnailUrl) ? entry.thumbnailUrl : fallbackImageUrl;
+      if (!isCacheableBrowserImageUrl(dataUrl)) {
+        if (fallbackImageUrl) {
+          restoredItems.push({
+            ...entry,
+            imageUrl: fallbackImageUrl,
+            thumbnailUrl: fallbackThumbnailUrl,
+          });
+        } else {
+          missingFilenames.add(entry.filename);
+        }
+        continue;
+      }
+
+      restoredItems.push({
+        ...entry,
+        imageUrl: dataUrl,
+        thumbnailUrl: dataUrl,
+      });
+    } catch (_error) {
+      missingFilenames.add(entry.filename);
+    }
+  }
+
+  if (missingFilenames.size > 0) {
+    writeBrowserImageCacheIndex(entries.filter((entry) => !missingFilenames.has(entry.filename)));
+  }
+
+  return restoredItems;
+}
+
+async function deleteBrowserCachedGalleryItem(filename) {
+  const normalizedFilename = String(filename || "").trim();
+  if (!normalizedFilename) {
+    return;
+  }
+
+  writeBrowserImageCacheIndex(readBrowserImageCacheIndex().filter((entry) => entry.filename !== normalizedFilename));
+  try {
+    await deleteBrowserCachedImageData(normalizedFilename);
+  } catch (_error) {
+    // The in-page gallery has already been updated; stale browser data can be ignored.
+  }
+}
+
+async function clearBrowserImageCache() {
+  window.localStorage.removeItem(BROWSER_IMAGE_CACHE_INDEX_KEY);
+  try {
+    await withBrowserImageCacheStore("readwrite", (store) => {
+      store.clear();
+    });
+  } catch (_error) {
+    // Ignore unavailable IndexedDB or privacy-mode failures.
+  }
+}
+
+function mergeServerAndBrowserGalleryItems(serverItems, browserItems) {
+  const mergedByFilename = new Map();
+
+  for (const item of browserItems) {
+    if (item?.filename) {
+      mergedByFilename.set(item.filename, item);
+    }
+  }
+
+  for (const item of serverItems) {
+    if (!item?.filename) {
+      continue;
+    }
+    const cachedItem = mergedByFilename.get(item.filename);
+    mergedByFilename.set(item.filename, {
+      ...cachedItem,
+      ...item,
+      imageUrl: item.imageUrl || cachedItem?.imageUrl || "",
+      thumbnailUrl: item.thumbnailUrl || cachedItem?.thumbnailUrl || "",
+    });
+  }
+
+  return [...mergedByFilename.values()];
+}
+
 function getDisplayId(item) {
   const raw = String(item?.id || "");
   if (!raw) {
@@ -503,14 +851,34 @@ function normalizeActivityEntry(entry) {
     size: formatCompactSizeLabel(entry?.size),
     status: ["active", "done", "error", "pending"].includes(entry?.status) ? entry.status : "active",
     at: String(entry?.at || ""),
+    orderAt: String(entry?.orderAt || entry?.at || ""),
   };
+}
+
+function normalizePersistedActivityEntry(entry) {
+  const normalized = normalizeActivityEntry(entry);
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.status === "active") {
+    return {
+      ...normalized,
+      title: GENERATION_TASK_STATUS_LABELS.error,
+      detail: "上次页面关闭前生成未完成，请重新生成",
+      status: "error",
+    };
+  }
+
+  return normalized;
 }
 
 function readGenerationActivityFeed() {
   try {
     const raw = window.localStorage.getItem(GENERATION_ACTIVITY_STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.map(normalizeActivityEntry).filter(Boolean).slice(0, 12) : [];
+    const entries = Array.isArray(parsed) ? parsed.map(normalizePersistedActivityEntry).filter(Boolean) : [];
+    return sortGenerationActivityFeed(entries).slice(0, 12);
   } catch (_error) {
     return [];
   }
@@ -705,6 +1073,9 @@ function getViewFromHash() {
   if (window.location.hash === "#gallery") {
     return "gallery";
   }
+  if (window.location.hash === "#ppt-record") {
+    return "ppt-record";
+  }
   if (window.location.hash === "#ppt") {
     return "ppt";
   }
@@ -712,7 +1083,8 @@ function getViewFromHash() {
 }
 
 function syncHash(view) {
-  const nextHash = view === "gallery" ? "#gallery" : view === "ppt" ? "#ppt" : "#studio";
+  const nextHash =
+    view === "gallery" ? "#gallery" : view === "ppt-record" ? "#ppt-record" : view === "ppt" ? "#ppt" : "#studio";
   if (window.location.hash !== nextHash) {
     window.history.replaceState(null, "", nextHash);
   }
@@ -728,6 +1100,90 @@ function getOrCreateClientSessionId() {
   const next = `studio-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   window.localStorage.setItem(storageKey, next);
   return next;
+}
+
+function maskBrowserApiKey(apiKey) {
+  if (!apiKey) {
+    return "";
+  }
+
+  if (apiKey.length <= 8) {
+    return `${apiKey.slice(0, 2)}***`;
+  }
+
+  return `${apiKey.slice(0, 4)}***${apiKey.slice(-4)}`;
+}
+
+function normalizeBrowserPrivateConfig(source = {}) {
+  const baseUrl = String(source.baseUrl || "https://api.openai.com/v1").trim();
+  const apiKey = String(source.apiKey || "").trim();
+  const responsesModel = String(source.responsesModel || "gpt-5.5").trim();
+
+  return {
+    baseUrl: baseUrl || "https://api.openai.com/v1",
+    apiKey,
+    responsesModel: responsesModel || "gpt-5.5",
+  };
+}
+
+function readBrowserPrivateConfig() {
+  try {
+    const raw = window.localStorage.getItem(BROWSER_CONFIG_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    return normalizeBrowserPrivateConfig(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function toPublicBrowserConfig(privateConfig, baseConfig = {}) {
+  const normalized = normalizeBrowserPrivateConfig(privateConfig);
+  return {
+    ...baseConfig,
+    baseUrl: normalized.baseUrl,
+    apiKeyConfigured: Boolean(normalized.apiKey),
+    apiKeyMask: maskBrowserApiKey(normalized.apiKey),
+    responsesModel: normalized.responsesModel,
+  };
+}
+
+function saveBrowserPrivateConfig(payload) {
+  const current = readBrowserPrivateConfig() || normalizeBrowserPrivateConfig();
+  const next = normalizeBrowserPrivateConfig({
+    ...current,
+    baseUrl: payload.baseUrl,
+    apiKey: payload.apiKey ? payload.apiKey : current.apiKey,
+    responsesModel: payload.responsesModel,
+  });
+
+  window.localStorage.setItem(BROWSER_CONFIG_STORAGE_KEY, JSON.stringify(next));
+  return next;
+}
+
+function appendBrowserConfigToFormData(formData) {
+  const browserConfig = readBrowserPrivateConfig();
+  if (!browserConfig) {
+    return formData;
+  }
+
+  formData.set("baseUrl", browserConfig.baseUrl);
+  formData.set("apiKey", browserConfig.apiKey);
+  formData.set("responsesModel", browserConfig.responsesModel);
+  return formData;
+}
+
+function getBrowserPrivateConfigRequestPayload() {
+  const browserConfig = readBrowserPrivateConfig();
+  return browserConfig
+    ? {
+        baseUrl: browserConfig.baseUrl,
+        apiKey: browserConfig.apiKey,
+        responsesModel: browserConfig.responsesModel,
+      }
+    : {};
 }
 
 function compactErrorMessage(message, fallbackLabel = "请求失败") {
@@ -778,7 +1234,7 @@ function syncConnectionState() {
   }
 
   if (state.config?.apiKeyConfigured) {
-    setConnectionState("ready", "本地已就绪");
+    setConnectionState("ready", "API 已就绪");
     return;
   }
 
@@ -1257,7 +1713,7 @@ function renderOutputFormatOptions() {
 }
 
 function renderSizeOptions() {
-  const ratioValue = refs.ratioInput.value || "4:5";
+  const ratioValue = refs.ratioInput.value || DEFAULT_UI_RATIO;
   const currentValue = normalizeGenerationSize(ratioValue, refs.sizeInput.value || "auto");
   refs.sizeInput.innerHTML = "";
 
@@ -1452,7 +1908,7 @@ function scheduleGalleryScrollSync() {
 }
 
 function getSelectedGenerationSize() {
-  return normalizeGenerationSize(refs.ratioInput.value || "4:5", refs.sizeInput.value || "auto");
+  return normalizeGenerationSize(refs.ratioInput.value || DEFAULT_UI_RATIO, refs.sizeInput.value || "auto");
 }
 
 function scrollGalleryBy(direction) {
@@ -1618,7 +2074,7 @@ function renderRatioGrid() {
 
 function syncConfigUi(config) {
   refs.baseUrlInput.value = config.baseUrl || "";
-  refs.responsesModelInput.value = config.responsesModel || "gpt-5.4";
+  refs.responsesModelInput.value = config.responsesModel || "gpt-5.5";
   refs.savedKeyMask.textContent = config.apiKeyConfigured ? `已保存 ${config.apiKeyMask || ""}` : "未保存";
   refs.configStatus.textContent = config.apiKeyConfigured ? "配置已保存" : "配置未保存";
   state.aspectRatios = config.aspectRatios || [];
@@ -1634,7 +2090,7 @@ function syncConfigUi(config) {
   state.reasoningEfforts = [...(config.reasoningEfforts || DEFAULT_REASONING_EFFORTS)];
 
   if (!refs.ratioInput.value || !getRatioOption(refs.ratioInput.value)) {
-    refs.ratioInput.value = "4:5";
+    refs.ratioInput.value = DEFAULT_UI_RATIO;
   }
 
   renderRatioGrid();
@@ -1761,28 +2217,15 @@ function recordActivity({ key, title, detail, ratio, size, status, at }) {
   const nextRatio = formatCompactRatioLabel(ratio);
   const nextSize = formatCompactSizeLabel(size);
   const existing = state.activityFeed.find((item) => item.key === key);
-
-  if (existing) {
-    existing.title = title;
-    existing.detail = detail;
-    existing.ratio = nextRatio || existing.ratio || "";
-    existing.size = nextSize || existing.size || "";
-    existing.status = status;
-    existing.at = nextAt;
-  } else {
-    state.activityFeed.unshift({
-      key,
-      title,
-      detail,
-      ratio: nextRatio,
-      size: nextSize,
-      status,
-      at: nextAt,
-    });
-  }
-
-  state.activityFeed.sort((left, right) => String(right.at).localeCompare(String(left.at)));
-  state.activityFeed = state.activityFeed.slice(0, 12);
+  state.activityFeed = upsertGenerationActivityEntry(state.activityFeed, {
+    key,
+    title,
+    detail,
+    ratio: nextRatio || existing?.ratio || "",
+    size: nextSize || existing?.size || "",
+    status,
+    at: nextAt,
+  });
   writeGenerationActivityFeed();
 }
 
@@ -2472,7 +2915,52 @@ function getVisibleGalleryItems(overrides = {}) {
   return filterGalleryItems(state.gallery, getGalleryFilterSnapshot(overrides));
 }
 
-function renderGalleryFilters(visibleItems, sections) {
+function getGallerySectionItemCount(sections) {
+  return sections.reduce((total, section) => total + section.items.length, 0);
+}
+
+function getSearchGalleryPagination(sections) {
+  return {
+    page: 0,
+    pageSize: sections.length || 1,
+    totalPages: 1,
+    totalSections: sections.length,
+    startSection: sections.length === 0 ? 0 : 1,
+    endSection: sections.length,
+    hasPrevious: false,
+    hasNext: false,
+    sections,
+  };
+}
+
+function renderGalleryPagination(pagination, shouldPaginateHistory) {
+  if (
+    !refs.galleryPagination ||
+    !refs.galleryPreviousPageButton ||
+    !refs.galleryNextPageButton ||
+    !refs.galleryPageStatus
+  ) {
+    return;
+  }
+
+  const isHidden = !shouldPaginateHistory || pagination.totalPages <= 1;
+  refs.galleryPagination.classList.toggle("hidden", isHidden);
+  refs.galleryPreviousPageButton.disabled = !pagination.hasPrevious;
+  refs.galleryNextPageButton.disabled = !pagination.hasNext;
+  refs.galleryPageStatus.textContent = `第 ${pagination.page + 1} / ${pagination.totalPages} 页`;
+}
+
+function resetGalleryHistoryPage() {
+  state.galleryHistoryPage = 0;
+}
+
+function setGalleryHistoryPage(page) {
+  state.galleryHistoryPage = Math.max(0, Number(page) || 0);
+  renderGalleryView();
+  refs.galleryScrollRegion?.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderGalleryFilters(visibleItems, sections, pagination, shouldPaginateHistory) {
   const filters = getGalleryFilterSnapshot();
   const timeOptions = buildGalleryTimeFilterOptions(getVisibleGalleryItems({ window: "all" }));
   const sizeOptions = buildGallerySizeFilterOptions(getVisibleGalleryItems({ size: "all" }));
@@ -2504,6 +2992,7 @@ function renderGalleryFilters(visibleItems, sections) {
       if (option.value !== "all") {
         state.galleryControls.date = "";
       }
+      resetGalleryHistoryPage();
       renderGalleryView();
     });
     refs.galleryFilters.appendChild(button);
@@ -2518,6 +3007,17 @@ function renderGalleryFilters(visibleItems, sections) {
   }
 
   const prefix = summary ? `已按 ${summary} 筛选，` : "";
+  const displayedCount = getGallerySectionItemCount(sections);
+  if (!shouldPaginateHistory) {
+    refs.galleryHelperText.textContent = `${prefix}搜索模式仅显示命中的 ${visibleItems.length} / ${state.gallery.length} 张。`;
+    return;
+  }
+
+  if (pagination.totalPages > 1) {
+    refs.galleryHelperText.textContent = `${prefix}每页显示 5 天历史，第 ${pagination.page + 1} / ${pagination.totalPages} 页，当前 ${sections.length} 组、${displayedCount} / ${visibleItems.length} 张。`;
+    return;
+  }
+
   refs.galleryHelperText.textContent = `${prefix}按日期分组显示，当前共 ${sections.length} 组，显示 ${visibleItems.length} / ${state.gallery.length} 张。`;
 }
 
@@ -2564,21 +3064,31 @@ function createGallerySection(section) {
 function renderGalleryView() {
   const filters = getGalleryFilterSnapshot();
   const visibleItems = getVisibleGalleryItems();
-  const sections = buildGallerySections(visibleItems);
+  const allSections = buildGallerySections(visibleItems);
+  const shouldPaginateHistory = !filters.query;
+  const pagination = shouldPaginateHistory
+    ? paginateGallerySections(allSections, state.galleryHistoryPage)
+    : getSearchGalleryPagination(allSections);
+  if (shouldPaginateHistory && pagination.page !== state.galleryHistoryPage) {
+    state.galleryHistoryPage = pagination.page;
+  }
+  const sections = pagination.sections;
+  const displayedCount = getGallerySectionItemCount(sections);
 
   refs.gallerySections.innerHTML = "";
   refs.galleryCount.textContent =
-    visibleItems.length === state.gallery.length
+    displayedCount === state.gallery.length
       ? `${state.gallery.length} 张`
-      : `${visibleItems.length} / ${state.gallery.length} 张`;
+      : `${displayedCount} / ${state.gallery.length} 张`;
   refs.galleryEmpty.textContent =
     state.gallery.length === 0
       ? "还没有本地输出，先回到 Studio 生成一张图。"
       : hasActiveGalleryFilters(filters)
         ? "当前筛选没有命中结果，试试清空部分筛选。"
         : "当前还没有可展示的本地输出。";
-  refs.galleryEmpty.classList.toggle("hidden", visibleItems.length > 0);
-  renderGalleryFilters(visibleItems, sections);
+  refs.galleryEmpty.classList.toggle("hidden", displayedCount > 0);
+  renderGalleryPagination(pagination, shouldPaginateHistory);
+  renderGalleryFilters(visibleItems, sections, pagination, shouldPaginateHistory);
   renderGalleryColumnPresetButtons();
 
   sections.forEach((section) => {
@@ -2617,7 +3127,9 @@ function upsertGalleryItem(item) {
   const next = state.gallery.filter((entry) => entry.filename !== hydratedItem.filename);
   next.unshift(hydratedItem);
   state.gallery = sortGalleryItemsByCreatedAtDesc(next);
+  resetGalleryHistoryPage();
   syncGalleryMetadataCache(state.gallery);
+  void cacheBrowserGalleryItem(hydratedItem);
 }
 
 function createPromptTemplateId() {
@@ -2893,6 +3405,57 @@ async function consumeSse(body, onEvent) {
       await onEvent(parsed.eventName, JSON.parse(parsed.data));
     }
   }
+}
+
+function recordFinalImageChunk(finalImageChunks, payload = {}) {
+  const filename = String(payload.filename || "").trim();
+  const index = Number(payload.index);
+  const total = Number(payload.total);
+  const chunk = String(payload.chunk || "");
+  const mimeType = String(payload.mimeType || "image/png");
+  if (!filename || !Number.isInteger(index) || !Number.isInteger(total) || total <= 0 || index < 0 || index >= total || !chunk) {
+    return "";
+  }
+
+  const existing = finalImageChunks.get(filename) || {
+    chunks: new Array(total).fill(""),
+    received: 0,
+    total,
+    mimeType,
+    dataUrl: "",
+  };
+
+  if (!existing.chunks[index]) {
+    existing.chunks[index] = chunk;
+    existing.received += 1;
+  }
+
+  if (existing.received === existing.total && !existing.dataUrl) {
+    existing.dataUrl = `data:${existing.mimeType};base64,${existing.chunks.join("")}`;
+  }
+
+  finalImageChunks.set(filename, existing);
+  return existing.dataUrl;
+}
+
+function attachChunkedImageToSavedItem(item, finalImageChunks) {
+  if (!item || getImageUrl(item)) {
+    return item;
+  }
+
+  const entry =
+    finalImageChunks.get(String(item.filename || "")) ||
+    [...finalImageChunks.values()].find((candidate) => candidate.dataUrl);
+
+  if (!entry?.dataUrl) {
+    return item;
+  }
+
+  return {
+    ...item,
+    imageUrl: entry.dataUrl,
+    thumbnailUrl: entry.dataUrl,
+  };
 }
 
 function setPptFeedback(message = "", kind = "") {
@@ -3195,6 +3758,7 @@ async function requestPptSlideEditStream() {
   formData.set("reasoningEffort", refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh");
   formData.set("sourceSlideImage", await sourceResponse.blob(), `slide-${slideNumber}-source.png`);
   formData.set("annotatedSlideImage", await buildAnnotatedPptSlideBlob(), `slide-${slideNumber}-annotated.png`);
+  appendBrowserConfigToFormData(formData);
 
   const response = await fetch("/api/ppt/slide/edit", {
     method: "POST",
@@ -3242,11 +3806,13 @@ function buildPptFormData() {
   formData.set("transitionSpeed", refs.pptTransitionSpeedInput.value);
   formData.set("autoAdvanceSeconds", refs.pptAutoAdvanceInput.value);
   formData.set("reasoningEffort", refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh");
+  appendBrowserConfigToFormData(formData);
   return formData;
 }
 
 function buildPptCompletionRequest(slideNumbers) {
   return {
+    ...getBrowserPrivateConfigRequestPayload(),
     deckId: state.ppt.deckId,
     outline: state.ppt.outline,
     existingSlides: getCompletedPptSlides(),
@@ -3448,6 +4014,7 @@ async function loadPptDecks() {
   const payload = await response.json();
   state.ppt.decks = Array.isArray(payload) ? payload : [];
   renderPptView();
+  renderPptRecordView();
 }
 
 function createPptSlideCard(slide) {
@@ -3517,34 +4084,80 @@ function renderPptSlides() {
   });
 }
 
+function getPptDeckPageCount(deck) {
+  return Number(deck?.pageCount) || Number(deck?.slides?.length) || 0;
+}
+
+function getPptDeckSourceLabel(deck) {
+  return deck?.recordSource === "folder" ? "文件夹历史" : "生成记录";
+}
+
+function formatPptDeckMeta(deck) {
+  const pageCount = getPptDeckPageCount(deck);
+  const parts = [pageCount > 0 ? `${pageCount} 页` : "PPTX", formatTime(deck?.createdAt), getPptDeckSourceLabel(deck)];
+  if (deck?.fileSize) {
+    parts.push(formatFileSize(deck.fileSize));
+  }
+  return parts.filter(Boolean).join(" · ");
+}
+
+function createPptDeckRecordItem(deck, variant = "history") {
+  const item = document.createElement("article");
+  item.className = variant === "record" ? "ppt-record-card" : "ppt-history-item";
+
+  const title = document.createElement("strong");
+  title.textContent = deck.title || "未命名演示";
+  item.appendChild(title);
+
+  const meta = document.createElement("span");
+  meta.textContent = formatPptDeckMeta(deck);
+  item.appendChild(meta);
+
+  if (variant === "record") {
+    const path = document.createElement("p");
+    path.textContent = deck.pptxFilename || deck.pptxRelativePath || "PPTX 文件";
+    item.appendChild(path);
+
+    const source = document.createElement("span");
+    source.className = "ppt-record-source";
+    source.textContent = getPptDeckSourceLabel(deck);
+    item.appendChild(source);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = variant === "record" ? "ppt-record-card-actions" : "ppt-history-actions";
+  const link = document.createElement("a");
+  link.className = "toolbar-button";
+  link.href = deck.pptxUrl || "#";
+  link.download = deck.pptxFilename || "";
+  link.textContent = "下载 PPTX";
+  if (!deck.pptxUrl) {
+    link.classList.add("disabled");
+    link.setAttribute("aria-disabled", "true");
+  }
+  actions.appendChild(link);
+  item.appendChild(actions);
+
+  return item;
+}
+
 function renderPptHistory() {
   refs.pptDeckCount.textContent = `${state.ppt.decks.length} 套`;
   refs.pptHistoryEmpty.classList.toggle("hidden", state.ppt.decks.length > 0);
   refs.pptHistoryList.innerHTML = "";
 
   state.ppt.decks.forEach((deck) => {
-    const item = document.createElement("article");
-    item.className = "ppt-history-item";
+    refs.pptHistoryList.appendChild(createPptDeckRecordItem(deck));
+  });
+}
 
-    const title = document.createElement("strong");
-    title.textContent = deck.title || "未命名演示";
-    item.appendChild(title);
+function renderPptRecordView() {
+  refs.pptRecordCount.textContent = `${state.ppt.decks.length} 个`;
+  refs.pptRecordEmpty.classList.toggle("hidden", state.ppt.decks.length > 0);
+  refs.pptRecordList.innerHTML = "";
 
-    const meta = document.createElement("span");
-    meta.textContent = `${deck.pageCount || deck.slides?.length || 0} 页 · ${formatTime(deck.createdAt)}`;
-    item.appendChild(meta);
-
-    const actions = document.createElement("div");
-    actions.className = "ppt-history-actions";
-    const link = document.createElement("a");
-    link.className = "toolbar-button";
-    link.href = deck.pptxUrl || "#";
-    link.download = deck.pptxFilename || "";
-    link.textContent = "下载 PPTX";
-    actions.appendChild(link);
-    item.appendChild(actions);
-
-    refs.pptHistoryList.appendChild(item);
+  state.ppt.decks.forEach((deck) => {
+    refs.pptRecordList.appendChild(createPptDeckRecordItem(deck, "record"));
   });
 }
 
@@ -3575,10 +4188,11 @@ function renderPptView() {
 
   renderPptSlides();
   renderPptHistory();
+  renderPptRecordView();
 }
 
 function createJob() {
-  const ratioOption = getRatioOption(refs.ratioInput.value || "4:5");
+  const ratioOption = getRatioOption(refs.ratioInput.value || DEFAULT_UI_RATIO);
   const referenceFiles = state.referenceFiles.map((item) => item.file);
   const referenceImageNames = referenceFiles.map((file) => file.name);
   const sizeSetting = getSelectedGenerationSize();
@@ -3588,8 +4202,8 @@ function createJob() {
     id: `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: nowIso(),
     prompt: refs.promptInput.value.trim(),
-    ratio: ratioOption?.value || "4:5",
-    ratioLabel: ratioOption?.label || "标准 4:5",
+    ratio: ratioOption?.value || DEFAULT_UI_RATIO,
+    ratioLabel: ratioOption?.label || DEFAULT_UI_RATIO_LABEL,
     sizeSetting,
     size,
     quality: state.config?.defaults?.quality || "high",
@@ -3682,12 +4296,22 @@ async function requestGenerationStream(job) {
 }
 
 async function loadConfig() {
-  const response = await fetch("/api/config");
-  if (!response.ok) {
+  let serverConfig = null;
+  try {
+    const response = await fetch("/api/config");
+    if (response.ok) {
+      serverConfig = await response.json();
+    }
+  } catch (_error) {
+    serverConfig = null;
+  }
+
+  const browserConfig = readBrowserPrivateConfig();
+  if (!serverConfig && !browserConfig) {
     throw new Error("读取配置失败");
   }
 
-  state.config = await response.json();
+  state.config = browserConfig ? toPublicBrowserConfig(browserConfig, serverConfig || {}) : serverConfig;
   syncConfigUi(state.config);
 }
 
@@ -3698,7 +4322,10 @@ async function loadGallery() {
   }
 
   const payload = await response.json();
-  const sortedItems = sortGalleryItemsByCreatedAtDesc(Array.isArray(payload) ? payload : []);
+  const browserCachedItems = await readBrowserCachedGalleryItems();
+  const sortedItems = sortGalleryItemsByCreatedAtDesc(
+    mergeServerAndBrowserGalleryItems(Array.isArray(payload) ? payload : [], browserCachedItems),
+  );
   const hydratedGallery = hydrateGalleryItems(sortedItems);
   state.gallery = sortGalleryItemsByCreatedAtDesc(hydratedGallery.items);
   renderAll();
@@ -3830,24 +4457,13 @@ async function saveConfig(event) {
   const payload = {
     baseUrl: refs.baseUrlInput.value.trim(),
     apiKey: refs.apiKeyInput.value.trim(),
-    responsesModel: refs.responsesModelInput.value.trim() || "gpt-5.4",
+    responsesModel: refs.responsesModelInput.value.trim() || "gpt-5.5",
   };
 
-  const response = await fetch("/api/config", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    throw new Error("保存配置失败");
-  }
-
-  state.config = await response.json();
+  const browserConfig = saveBrowserPrivateConfig(payload);
+  state.config = toPublicBrowserConfig(browserConfig, state.config || {});
   refs.apiKeyInput.value = "";
-  refs.configFeedback.textContent = "配置已保存到本机 .local/config.json。";
+  refs.configFeedback.textContent = "配置已保存到当前浏览器，本项目不会把 API Key 写入源码或 Cloudflare 环境变量。";
   syncConfigUi(state.config);
 }
 
@@ -3888,6 +4504,7 @@ async function deleteGalleryItem(item) {
 
   state.gallery = state.gallery.filter((entry) => entry.filename !== item.filename);
   forgetGalleryMetadata(item.filename);
+  await deleteBrowserCachedGalleryItem(item.filename);
 
   if (state.selectedPreviewKey === makeGalleryPreviewKey(item.filename)) {
     state.selectedPreviewKey = "";
@@ -3929,6 +4546,7 @@ async function clearHistory() {
   state.gallery = [];
   state.galleryMetadataCache = {};
   writeGalleryMetadataCache(state.galleryMetadataCache);
+  await clearBrowserImageCache();
   state.selectedPreviewKey = "";
   closeLightbox();
   renderAll();
@@ -3943,6 +4561,7 @@ function buildGenerationFormData(job) {
   formData.set("format", job.format);
   formData.set("reasoningEffort", job.reasoningEffort);
   formData.set("clientSessionId", state.clientSessionId);
+  appendBrowserConfigToFormData(formData);
 
   job.referenceFiles.forEach((file) => {
     formData.append("referenceImages", file);
@@ -4065,6 +4684,9 @@ function scheduleGenerationQueue() {
 async function runGeneration(job) {
   job.started = true;
   job.isRunning = true;
+  const finalImageChunks = new Map();
+  let terminalEventReceived = false;
+  let queuedForPolling = false;
   try {
     const response = await requestGenerationStream(job);
     if (!response) {
@@ -4104,7 +4726,22 @@ async function runGeneration(job) {
         return;
       }
 
+      if (eventName === "final_image_chunk") {
+        const dataUrl = recordFinalImageChunk(finalImageChunks, payload);
+        updateJob(job.id, {
+          previewUrl: dataUrl || job.previewUrl,
+          statusText: dataUrl ? "最终图已接收，正在写入浏览器缓存" : "正在接收最终图数据",
+        });
+        if (dataUrl) {
+          handleActivityFinal(job.id);
+        }
+        renderAll();
+        return;
+      }
+
       if (eventName === "saved") {
+        terminalEventReceived = true;
+        payload.item = attachChunkedImageToSavedItem(payload.item, finalImageChunks);
         if (payload.item) {
           upsertGalleryItem(payload.item);
           state.selectedPreviewKey = makeGalleryPreviewKey(payload.item.filename);
@@ -4115,7 +4752,22 @@ async function runGeneration(job) {
         return;
       }
 
+      if (eventName === "queued") {
+        queuedForPolling = true;
+        const task = payload.task || {};
+        updateJob(job.id, {
+          status: "running",
+          statusStage: task.statusStage || "queued",
+          statusText: task.statusText || "已提交到服务器队列，等待后台生成",
+        });
+        handleActivityStatus(job.id, "queued", task.statusText || "已提交到服务器队列，等待后台生成");
+        scheduleGenerationTaskPolling();
+        renderAll();
+        return;
+      }
+
       if (eventName === "error") {
+        terminalEventReceived = true;
         const message = compactErrorMessage(payload.message, "生成请求失败");
         handleActivityFailure(job.id, message);
         showError(message);
@@ -4123,6 +4775,13 @@ async function runGeneration(job) {
         renderAll();
       }
     });
+    if (!terminalEventReceived && !queuedForPolling) {
+      const message = "生成连接已中断，未收到完成事件。请稍后重试，或降低分辨率。";
+      handleActivityFailure(job.id, message);
+      showError(message);
+      removeJob(job.id);
+      renderAll();
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     handleActivityFailure(job.id, message);
@@ -4132,7 +4791,10 @@ async function runGeneration(job) {
   } finally {
     const currentJob = state.jobs.find((entry) => entry.id === job.id);
     if (currentJob) {
-      currentJob.isRunning = false;
+      currentJob.isRunning = queuedForPolling;
+      if (queuedForPolling) {
+        currentJob.status = "running";
+      }
     }
     updateGenerateButton();
     scheduleGenerationQueue();
@@ -4209,6 +4871,9 @@ function bindEvents() {
   refs.pptCompleteMissingButton.addEventListener("click", completeMissingPptSlides);
   refs.pptRefreshHistoryButton.addEventListener("click", () => {
     loadPptDecks().catch((error) => setPptFeedback(error.message, "error"));
+  });
+  refs.pptRecordRefreshButton.addEventListener("click", () => {
+    loadPptDecks().catch((error) => showError(error.message));
   });
   refs.pptSourceModeInputs.forEach((input) => {
     input.addEventListener("change", () => {
@@ -4340,6 +5005,7 @@ function bindEvents() {
   });
   refs.gallerySearchInput.addEventListener("input", (event) => {
     state.galleryControls.query = event.target.value;
+    resetGalleryHistoryPage();
     renderGalleryView();
   });
   refs.galleryDateInput.addEventListener("input", (event) => {
@@ -4347,20 +5013,30 @@ function bindEvents() {
     if (event.target.value) {
       state.galleryControls.window = "all";
     }
+    resetGalleryHistoryPage();
     renderGalleryView();
   });
   refs.gallerySizeFilterInput.addEventListener("change", (event) => {
     state.galleryControls.size = event.target.value;
+    resetGalleryHistoryPage();
     renderGalleryView();
   });
   refs.galleryReferenceFilterInput.addEventListener("change", (event) => {
     state.galleryControls.reference = event.target.value;
+    resetGalleryHistoryPage();
     renderGalleryView();
   });
   refs.galleryResetFiltersButton.addEventListener("click", () => {
     state.galleryControls = { ...DEFAULT_GALLERY_CONTROLS };
+    resetGalleryHistoryPage();
     renderGalleryView();
     refs.gallerySearchInput.focus();
+  });
+  refs.galleryPreviousPageButton.addEventListener("click", () => {
+    setGalleryHistoryPage(state.galleryHistoryPage - 1);
+  });
+  refs.galleryNextPageButton.addEventListener("click", () => {
+    setGalleryHistoryPage(state.galleryHistoryPage + 1);
   });
   refs.focusGalleryButton?.addEventListener("click", () => {
     setActiveView("gallery");

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import * as galleryOrganizer from "../lib/gallery-organizer.mjs";
 import {
   buildGalleryReferenceFilterOptions,
   buildGallerySections,
@@ -241,5 +242,39 @@ test("gallery organizer groups visible items into dated sections", () => {
         filenames: ["week.jpeg"],
       },
     ],
+  );
+});
+
+test("gallery organizer paginates waterfall history by five dated sections", () => {
+  assert.equal(typeof galleryOrganizer.paginateGallerySections, "function");
+
+  const datedFixtures = Array.from({ length: 7 }, (_, index) => {
+    const day = 25 - index;
+    return {
+      filename: `history-${day}.jpeg`,
+      createdAt: `2026-04-${String(day).padStart(2, "0")}T08:00:00.000Z`,
+      prompt: `历史记录 ${day}`,
+    };
+  });
+  const sections = buildGallerySections(datedFixtures, referenceNow);
+
+  const firstPage = galleryOrganizer.paginateGallerySections(sections, 0);
+  assert.equal(firstPage.page, 0);
+  assert.equal(firstPage.pageSize, 5);
+  assert.equal(firstPage.totalPages, 2);
+  assert.equal(firstPage.hasPrevious, false);
+  assert.equal(firstPage.hasNext, true);
+  assert.deepEqual(
+    firstPage.sections.map((section) => section.key),
+    ["2026-04-25", "2026-04-24", "2026-04-23", "2026-04-22", "2026-04-21"],
+  );
+
+  const secondPage = galleryOrganizer.paginateGallerySections(sections, 1);
+  assert.equal(secondPage.page, 1);
+  assert.equal(secondPage.hasPrevious, true);
+  assert.equal(secondPage.hasNext, false);
+  assert.deepEqual(
+    secondPage.sections.map((section) => section.key),
+    ["2026-04-20", "2026-04-19"],
   );
 });

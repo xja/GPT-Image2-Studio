@@ -202,6 +202,23 @@ function getClientSessionIdFromRequest(request, url) {
   return resolved || "global-default-session";
 }
 
+function mergeRequestPrivateConfig(formData, fallbackConfig) {
+  const requestApiKey = String(formData.get("apiKey") || "").trim();
+  if (!requestApiKey) {
+    return fallbackConfig;
+  }
+
+  const requestBaseUrl = String(formData.get("baseUrl") || "").trim();
+  const requestModel = String(formData.get("responsesModel") || "").trim();
+
+  return {
+    ...fallbackConfig,
+    baseUrl: requestBaseUrl || fallbackConfig.baseUrl,
+    apiKey: requestApiKey,
+    responsesModel: requestModel || fallbackConfig.responsesModel,
+  };
+}
+
 function claimSessionTaskSlot(sessionId, taskId) {
   const activeTasks = activeTasksBySession.get(sessionId) || new Set();
   if (activeTasks.size >= MAX_PARALLEL_TASKS_PER_SESSION) {
@@ -279,7 +296,11 @@ async function handlePromptAgentHistoryGet(response) {
 
 async function handleOpenOutput(response) {
   const todayOutputDir = join(outputDir, formatDateFolder(new Date()));
-  await mkdir(todayOutputDir, { recursive: true });
+  await Promise.all([
+    mkdir(todayOutputDir, { recursive: true }),
+    mkdir(join(todayOutputDir, "image"), { recursive: true }),
+    mkdir(join(todayOutputDir, "ppt"), { recursive: true }),
+  ]);
   openDirectory(todayOutputDir);
   sendJson(response, 200, {
     ok: true,
@@ -463,7 +484,7 @@ async function generateAndSavePptSlide({
   });
 
   let finalBase64 = "";
-  await requestImageGeneration({
+  const generationResult = await requestImageGeneration({
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
     prompt: slidePrompt.prompt,
@@ -487,6 +508,7 @@ async function generateAndSavePptSlide({
       }
     },
   });
+  const savedSize = generationResult.effectiveSize || PPT_SLIDE_SIZE;
 
   if (!finalBase64) {
     const error = new Error("上游响应结束，但没有拿到最终 PPT 页面图片。");
@@ -512,7 +534,7 @@ async function generateAndSavePptSlide({
       imageModel: "gpt-image-2",
       ratio: "16:9",
       ratioLabel: "PPT 16:9",
-      size: PPT_SLIDE_SIZE,
+      size: savedSize,
       quality: config.defaults?.quality || "high",
       format: PPT_SLIDE_FORMAT,
       reasoningEffort,
@@ -539,7 +561,7 @@ async function saveCompletedPptDeck({ deckId, outline, slides, createdAt, source
   const sortedSlides = [...slides].sort((left, right) => left.slideNumber - right.slideNumber);
   const titlePart = normalizePptFilenamePart(outline.title) || "PPT演示";
   const pptxFilename = `${titlePart}-${deckId.slice(-8)}.pptx`;
-  const pptxRelativePath = normalizePptRelativePath(`${formatDateFolder(createdAt)}/${pptxFilename}`);
+  const pptxRelativePath = normalizePptRelativePath(`${formatDateFolder(createdAt)}/ppt/${pptxFilename}`);
   const pptxAbsolutePath = resolveOutputAssetPath(pptxRelativePath);
 
   await exportPptxDeck({
@@ -961,6 +983,9 @@ function buildSavedItem({
   format,
   referenceImages,
   reasoningEffort,
+  generationStartedAt,
+  generationCompletedAt,
+  generationDurationMs,
 }) {
   const imageUrl = buildPublicAssetUrl("/output", relativePath || filename, createdAt);
 
@@ -985,6 +1010,9 @@ function buildSavedItem({
     quality,
     format,
     reasoningEffort,
+    generationStartedAt,
+    generationCompletedAt,
+    generationDurationMs,
   };
 }
 
@@ -1058,7 +1086,7 @@ async function handleGenerate(request, response) {
       return;
     }
 
-    const config = await configStore.readPrivateConfig();
+    const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
     if (!config.apiKey) {
       generationTaskStore.failTask(clientSessionId, taskId, {
         errorMessage: "当前未保存 API Key，请先在配置中保存。",
@@ -1095,6 +1123,8 @@ async function handleGenerate(request, response) {
     const finalQuality = config.defaults?.quality || "high";
     const finalFormat = normalizeOutputFormat(requestedFormatInput || config.defaults?.format || "png");
     let finalBase64 = "";
+    const generationStartedAt = new Date().toISOString();
+    const generationStartedAtMs = Date.now();
 
     generationTaskStore.updateTask(clientSessionId, taskId, {
       ratio: ratioOption.value,
@@ -1110,7 +1140,7 @@ async function handleGenerate(request, response) {
       reasoningEffort,
     });
 
-    await requestImageGeneration({
+    const generationResult = await requestImageGeneration({
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
       prompt: finalPrompt,
@@ -1159,6 +1189,9 @@ async function handleGenerate(request, response) {
         }
       },
     });
+    const generationCompletedAt = new Date().toISOString();
+    const generationDurationMs = Math.max(0, Date.now() - generationStartedAtMs);
+    const savedSize = generationResult.effectiveSize || finalSize;
 
     if (!finalBase64) {
       throw new Error("上游响应结束，但没有拿到最终图片。");
@@ -1193,13 +1226,16 @@ async function handleGenerate(request, response) {
         imageModel: "gpt-image-2",
         ratio: ratioOption.value,
         ratioLabel: ratioOption.label,
-        size: finalSize,
+        size: savedSize,
         quality: finalQuality,
         format: finalFormat,
         hasReferenceImage: referenceImages.length > 0,
         referenceImageNames: referenceImages.map((image) => image.filename),
         referenceImageName: referenceImages[0]?.filename || "",
         reasoningEffort,
+        generationStartedAt,
+        generationCompletedAt,
+        generationDurationMs,
       },
     });
 
@@ -1212,17 +1248,24 @@ async function handleGenerate(request, response) {
       baseUrl: config.baseUrl,
       responsesModel: config.responsesModel,
       ratioOption,
-      size: finalSize,
+      size: savedSize,
       quality: finalQuality,
       format: finalFormat,
       referenceImages,
       reasoningEffort,
+      generationStartedAt,
+      generationCompletedAt,
+      generationDurationMs,
     });
 
     generationTaskStore.completeTask(clientSessionId, taskId, {
       filename,
       absolutePath: saved.absolutePath,
       relativePath: saved.relativePath,
+      size: savedSize,
+      generationStartedAt,
+      generationCompletedAt,
+      generationDurationMs,
       item,
     });
 
@@ -1231,6 +1274,7 @@ async function handleGenerate(request, response) {
       absolutePath: saved.absolutePath,
       ratio: ratioOption.value,
       ratioLabel: ratioOption.label,
+      size: savedSize,
       item,
     });
 

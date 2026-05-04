@@ -309,6 +309,213 @@ test("requestImageGeneration falls back to non-streaming when SSE completes with
   assert.equal(result.fallbackUsed, true);
 });
 
+test("requestImageGeneration falls back to non-streaming when streaming is blocked upstream", async () => {
+  const requests = [];
+
+  const result = await requestImageGeneration({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    prompt: "Create a poster image",
+    size: "1024x1536",
+    quality: "high",
+    responsesModel: "gpt-5.4",
+    async fetchImpl(_url, init) {
+      const body = JSON.parse(init.body);
+      requests.push(body);
+
+      if (requests.length === 1) {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "stream_forbidden",
+              message: "Streaming requests are forbidden from this edge.",
+            },
+          }),
+          { status: 403 },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          output: [{ type: "image_generation_call", result: "bm9uc3RyZWFtLWZpbmFs" }],
+        }),
+        { status: 200 },
+      );
+    },
+  });
+
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].stream, true);
+  assert.equal(requests[1].stream, false);
+  assert.equal(result.finalImageBase64, "bm9uc3RyZWFtLWZpbmFs");
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.streamFallbackUsed, true);
+});
+
+test("requestImageGeneration emits keepalive status while waiting for upstream headers", async () => {
+  const events = [];
+
+  const result = await requestImageGeneration({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    prompt: "Create a slow image",
+    size: "1024x1536",
+    quality: "high",
+    responsesModel: "gpt-5.4",
+    statusHeartbeatMs: 1,
+    async fetchImpl() {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return new Response(
+        [
+          "event: response.output_item.done",
+          'data: {"item":{"type":"image_generation_call","result":"a2VlcGFsaXZlLWZpbmFs"}}',
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"),
+        {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        },
+      );
+    },
+    onEvent(event) {
+      events.push(event);
+    },
+  });
+
+  assert.equal(result.finalImageBase64, "a2VlcGFsaXZlLWZpbmFs");
+  assert.ok(
+    events.some((event) => event.type === "status" && event.stage === "waiting_upstream"),
+    "expected a waiting_upstream keepalive status event",
+  );
+});
+
+test("requestImageGeneration emits keepalive status while waiting for final stream events", async () => {
+  const events = [];
+  const encoder = new TextEncoder();
+
+  const result = await requestImageGeneration({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    prompt: "Create a slow streamed image",
+    size: "1024x1536",
+    quality: "high",
+    responsesModel: "gpt-5.4",
+    statusHeartbeatMs: 1,
+    async fetchImpl() {
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(
+                [
+                  "event: response.image_generation_call.partial_image",
+                  'data: {"partial_image_b64":"cGFydGlhbC1zdHJlYW0="}',
+                  "",
+                  "",
+                ].join("\n"),
+              ),
+            );
+            setTimeout(() => {
+              controller.enqueue(
+                encoder.encode(
+                  [
+                    "event: response.output_item.done",
+                    'data: {"item":{"type":"image_generation_call","result":"ZmluYWwtc3RyZWFt"}}',
+                    "",
+                    "data: [DONE]",
+                    "",
+                    "",
+                  ].join("\n"),
+                ),
+              );
+              controller.close();
+            }, 5);
+          },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        },
+      );
+    },
+    onEvent(event) {
+      events.push(event);
+    },
+  });
+
+  assert.equal(result.finalImageBase64, "ZmluYWwtc3RyZWFt");
+  assert.ok(
+    events.some((event) => event.type === "status" && event.stage === "waiting_final"),
+    "expected a waiting_final keepalive status event",
+  );
+});
+
+test("requestImageGeneration retries without streaming when the stream ends after a partial preview", async () => {
+  const events = [];
+  const requests = [];
+  const encoder = new TextEncoder();
+
+  const result = await requestImageGeneration({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    prompt: "Create a streamed image that may disconnect",
+    size: "1024x1536",
+    quality: "high",
+    responsesModel: "gpt-5.4",
+    async fetchImpl(_url, init) {
+      const body = JSON.parse(init.body);
+      requests.push(body);
+
+      if (requests.length === 1) {
+        return new Response(
+          new ReadableStream({
+            pull(controller) {
+              if (this.sentPartial) {
+                controller.error(new Error("socket terminated"));
+                return;
+              }
+
+              this.sentPartial = true;
+              controller.enqueue(
+                encoder.encode(
+                  [
+                    "event: response.image_generation_call.partial_image",
+                    'data: {"partial_image_b64":"cGFydGlhbC1iZWZvcmUtZXJyb3I="}',
+                    "",
+                    "",
+                  ].join("\n"),
+                ),
+              );
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          output: [{ type: "image_generation_call", result: "bm9uc3RyZWFtLWFmdGVyLWVycm9y" }],
+        }),
+        { status: 200 },
+      );
+    },
+    onEvent(event) {
+      events.push(event);
+    },
+  });
+
+  assert.deepEqual(requests.map((request) => request.stream), [true, false]);
+  assert.equal(result.finalImageBase64, "bm9uc3RyZWFtLWFmdGVyLWVycm9y");
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.streamFallbackUsed, true);
+  assert.ok(events.some((event) => event.type === "partial_image"));
+});
+
 test("requestImageGeneration returns compact upstream HTTP errors", async () => {
   await assert.rejects(
     () =>
@@ -334,4 +541,53 @@ test("requestImageGeneration returns compact upstream HTTP errors", async () => 
       message: "生成请求失败：HTTP 524，错误码 524",
     },
   );
+});
+
+test("requestImageGeneration retries invalid custom image sizes with a compatible size", async () => {
+  const requests = [];
+
+  const result = await requestImageGeneration({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    prompt: "Create an image of the major event poster",
+    size: "1536x864",
+    quality: "high",
+    responsesModel: "gpt-5.4",
+    async fetchImpl(_url, init) {
+      const body = JSON.parse(init.body);
+      requests.push(body.tools[0].size);
+
+      if (requests.length === 1) {
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: "Invalid value: '1536x864'. Supported values are: '1024x1024', '1536x1024', '1024x1536', and 'auto'.",
+              code: "invalid_value",
+              param: "tools[0].size",
+            },
+          }),
+          { status: 400 },
+        );
+      }
+
+      return new Response(
+        [
+          "event: response.output_item.done",
+          'data: {"item":{"type":"image_generation_call","result":"ZmFsbGJhY2s="}}',
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"),
+        {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        },
+      );
+    },
+  });
+
+  assert.deepEqual(requests, ["1536x864", "1536x1024"]);
+  assert.equal(result.finalImageBase64, "ZmFsbGJhY2s=");
+  assert.equal(result.sizeFallbackUsed, true);
+  assert.equal(result.effectiveSize, "1536x1024");
 });

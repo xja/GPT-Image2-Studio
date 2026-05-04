@@ -27,6 +27,7 @@ test("buildParameterText includes reasoning effort and multiple reference image 
       referenceImageNames: ["girl-a.jpeg", "girl-b.jpeg"],
       baseUrl: "https://api.openai.com/v1",
       absolutePath: "C:/output/demo.jpeg",
+      generationDurationMs: 1234,
     },
     {},
   );
@@ -35,6 +36,7 @@ test("buildParameterText includes reasoning effort and multiple reference image 
   assert.match(result, /画布：1024x1280/);
   assert.match(result, /图像模型：GPT Image 2.0/);
   assert.match(result, /推理强度：超高/);
+  assert.match(result, /图片生成耗时：1\.2 秒/);
   assert.match(result, /参考图：girl-a\.jpeg, girl-b\.jpeg/);
   assert.match(result, /中转：https:\/\/api\.openai\.com\/v1/);
   assert.match(result, /本地文件：C:\/output\/demo\.jpeg/);

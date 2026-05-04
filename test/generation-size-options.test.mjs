@@ -11,9 +11,9 @@ import {
 const EXPECTED_SIZE_OPTIONS = {
   "1:1": ["1024x1024", "1536x1536", "2048x2048", "2816x2816"],
   "5:4": ["1280x1024", "1920x1536", "2560x2048", "3120x2496"],
-  "9:16": ["720x1280", "1152x2048", "2016x3584", "2151x3824", "2160x3840"],
-  "21:9": ["1680x720", "1916x821", "2688x1152", "3360x1440", "3824x1639", "3832x1642", "3840x1646"],
-  "16:9": ["1280x720", "2048x1152", "3584x2016", "3824x2151", "3840x2160"],
+  "9:16": ["720x1280", "864x1536", "1152x2048", "2016x3584", "2151x3824", "2160x3840"],
+  "21:9": ["1680x720", "1916x821", "2688x1152", "3360x1440", "3584x1536", "3824x1639", "3832x1642", "3840x1646"],
+  "16:9": ["1280x720", "1536x864", "2048x1152", "3584x2016", "3824x2151", "3840x2160"],
   "4:3": ["1024x768", "1536x1152", "2048x1536", "3072x2304"],
   "3:2": ["1536x1024", "2304x1536", "3072x2048", "3456x2304"],
   "4:5": ["1024x1280", "1536x1920", "2048x2560", "2496x3120"],
@@ -34,6 +34,19 @@ const MAX_IMAGE_PIXELS = 8_294_400;
 test("size options match the configured ratio table", () => {
   for (const [ratio, sizes] of Object.entries(EXPECTED_SIZE_OPTIONS)) {
     assert.deepEqual(getGenerationSizeOptions(ratio).map((option) => option.value), ["auto", ...sizes]);
+  }
+});
+
+test("each configured ratio includes a resolution with one 1536px edge", () => {
+  for (const ratio of Object.keys(EXPECTED_SIZE_OPTIONS)) {
+    const sizes = getGenerationSizeOptions(ratio)
+      .map((option) => option.value)
+      .filter((value) => value !== "auto");
+
+    assert.ok(
+      sizes.some((size) => size.split("x").map(Number).includes(1536)),
+      `${ratio} should include a resolution with one 1536px edge`,
+    );
   }
 });
 

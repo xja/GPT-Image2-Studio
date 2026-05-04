@@ -92,6 +92,23 @@ test("studio layout mode keeps desktop structure when browser zoom only shrinks 
   );
 });
 
+test("studio layout mode honors mobile and Pad emulation viewport widths", () => {
+  assert.equal(
+    getStudioLayoutMode({
+      width: 390,
+      outerWidth: 1720,
+    }),
+    "mobile",
+  );
+  assert.equal(
+    getStudioLayoutMode({
+      width: 1024,
+      outerWidth: 1720,
+    }),
+    "tablet",
+  );
+});
+
 test("studio layout mode keeps narrow desktop gutters on medium windows", () => {
   assert.equal(
     getStudioLayoutMode({
@@ -114,6 +131,13 @@ test("studio layout mode collapses only when the actual window width is narrow",
     getStudioLayoutMode({
       width: 820,
       outerWidth: 820,
+    }),
+    "tablet",
+  );
+  assert.equal(
+    getStudioLayoutMode({
+      width: 1024,
+      outerWidth: 1024,
     }),
     "tablet",
   );

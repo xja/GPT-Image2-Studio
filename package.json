@@ -9,6 +9,7 @@
     "dev": "node server.mjs",
     "generate": "node generate-image.mjs",
     "help": "node generate-image.mjs --help",
+    "build:pages": "node scripts/build-cloudflare-pages.mjs",
     "build:installer": "node scripts/build-windows-installer.mjs",
     "test": "node --test ./test/*.test.mjs"
   },

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import JSZip from "jszip";
@@ -11,6 +11,7 @@ import { PPT_STYLE_PRESETS, normalizePptStylePreset } from "../lib/ppt-style-pre
 import {
   PPT_DYNAMIC_COMPONENT_PRESETS,
   PPT_TRANSITION_PRESETS,
+  buildPptTransitionXml,
   normalizePptDynamicComponentPreset,
   normalizePptTransitionPreset,
 } from "../lib/ppt-motion-presets.mjs";
@@ -58,7 +59,7 @@ test("PPT slide prompts include outline content, visual guidance, 16:9 and reada
   assert.match(prompts[0].prompt, /教育培训/);
 });
 
-test("PPT slide prompts can include advanced dynamic visual component guidance", () => {
+test("PPT slide prompts can include progressive disclosure layout guidance", () => {
   const prompts = buildSlideImagePrompts({
     outline: {
       title: "增长发布",
@@ -69,8 +70,9 @@ test("PPT slide prompts can include advanced dynamic visual component guidance",
   });
 
   assert.equal(prompts.length, 1);
-  assert.match(prompts[0].prompt, /高级动态组件/);
+  assert.match(prompts[0].prompt, /渐进式披露/);
   assert.match(prompts[0].prompt, /路径叙事/);
+  assert.doesNotMatch(prompts[0].prompt, /静态图片型幻灯片/);
   assert.match(prompts[0].prompt, /16:9/);
 });
 
@@ -87,9 +89,23 @@ test("PPT motion presets expose dynamic component and transition choices", () =>
   assert.ok(PPT_DYNAMIC_COMPONENT_PRESETS.some((preset) => preset.value === "data-pulse"));
   assert.equal(normalizePptDynamicComponentPreset("unknown").value, "smart");
 
-  assert.ok(PPT_TRANSITION_PRESETS.length >= 6);
+  assert.ok(PPT_TRANSITION_PRESETS.length >= 7);
+  assert.equal(PPT_TRANSITION_PRESETS[0].value, "smooth");
+  assert.equal(normalizePptTransitionPreset("").value, "smooth");
+  assert.equal(normalizePptTransitionPreset("unknown").value, "smooth");
+  assert.ok(PPT_TRANSITION_PRESETS.some((preset) => preset.value === "smooth"));
   assert.ok(PPT_TRANSITION_PRESETS.some((preset) => preset.value === "morph-flow"));
-  assert.equal(normalizePptTransitionPreset("unknown").value, "fade");
+});
+
+test("PPT smooth transition writes a Morph transition by default", () => {
+  const xml = buildPptTransitionXml({
+    transitionSpeed: "fast",
+    autoAdvanceSeconds: 2,
+  });
+
+  assert.match(xml, /<p:transition[^>]*spd="fast"[^>]*advClick="1"[^>]*advTm="2000"/);
+  assert.match(xml, /xmlns:p159="http:\/\/schemas\.microsoft\.com\/office\/powerpoint\/2015\/09\/main"/);
+  assert.match(xml, /<p159:morph\b[^>]*option="byObject"\/>/);
 });
 
 test("PPT slide edit prompts use the original slide, annotation and user instruction", () => {
@@ -157,6 +173,36 @@ test("PPTX export can embed slide transition timing", async () => {
   assert.match(slideXml, /<p:fade\/>/);
 });
 
+test("PPTX export expands dynamic presets into progressive reveal steps", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ppt-progressive-"));
+  const imagePath = join(dir, "slide.png");
+  const outputPath = join(dir, "deck.pptx");
+  await writeFile(imagePath, png1x1);
+
+  await exportPptxDeck({
+    outputPath,
+    title: "渐进披露测试",
+    motion: {
+      dynamicPreset: "data-pulse",
+      transitionPreset: "fade",
+      transitionSpeed: "fast",
+      autoAdvanceSeconds: 2,
+    },
+    slides: [{ title: "指标页", imagePath }],
+  });
+
+  const zip = await JSZip.loadAsync(await readFile(outputPath));
+  const slideFiles = Object.keys(zip.files)
+    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+    .sort((left, right) => Number(left.match(/slide(\d+)\.xml/)?.[1] || 0) - Number(right.match(/slide(\d+)\.xml/)?.[1] || 0));
+
+  assert.equal(slideFiles.length, 3);
+  const firstStepXml = await zip.file(slideFiles[0]).async("string");
+  const finalStepXml = await zip.file(slideFiles[2]).async("string");
+  assert.match(firstStepXml, /pptx-reveal-mask/);
+  assert.doesNotMatch(finalStepXml, /pptx-reveal-mask/);
+});
+
 test("PPT deck store writes manifests, reads newest first, and keeps output download URLs", async () => {
   const outputDir = await mkdtemp(join(tmpdir(), "ppt-store-"));
   const store = createPptDeckStore({ outputDir, publicBasePath: "/output" });
@@ -186,4 +232,35 @@ test("PPT deck store writes manifests, reads newest first, and keeps output down
 
   const raw = await readFile(join(outputDir, "json", "ppt-decks", "deck-new.json"), "utf8");
   assert.match(raw, /新演示/);
+});
+
+test("PPT deck store merges manifest records with PPTX files found in output folders", async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), "ppt-store-files-"));
+  const store = createPptDeckStore({ outputDir, publicBasePath: "/output" });
+
+  await mkdir(join(outputDir, "2026-04-29"), { recursive: true });
+  await mkdir(join(outputDir, "2026-04-30", "ppt"), { recursive: true });
+  await writeFile(join(outputDir, "2026-04-29", "manifested.pptx"), "manifested");
+  await writeFile(join(outputDir, "2026-04-30", "ppt", "folder-only.pptx"), "folder-only");
+
+  await store.saveManifest({
+    deckId: "deck-manifested",
+    title: "Manifested Deck",
+    pageCount: 3,
+    createdAt: "2026-04-29T10:00:00.000Z",
+    slides: [],
+    pptxRelativePath: "2026-04-29/manifested.pptx",
+    pptxFilename: "manifested.pptx",
+  });
+
+  const decks = await store.listManifests();
+  const manifestedRecords = decks.filter((deck) => deck.pptxRelativePath === "2026-04-29/manifested.pptx");
+  const folderOnly = decks.find((deck) => deck.pptxRelativePath === "2026-04-30/ppt/folder-only.pptx");
+
+  assert.equal(manifestedRecords.length, 1);
+  assert.equal(manifestedRecords[0].deckId, "deck-manifested");
+  assert.equal(manifestedRecords[0].recordSource, "manifest");
+  assert.equal(folderOnly?.title, "folder-only");
+  assert.equal(folderOnly?.recordSource, "folder");
+  assert.equal(folderOnly?.pptxUrl, "/output/2026-04-30/ppt/folder-only.pptx");
 });

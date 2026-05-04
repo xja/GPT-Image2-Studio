@@ -101,6 +101,17 @@ test("live feed shows a floating unread indicator without forcing scroll to newe
   assert.match(app, /refs\.timelineList\.addEventListener\("scroll", handleTimelineScroll/);
 });
 
+test("live feed keeps existing task order stable while activity text changes", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /\/app\.js\?v=20260504-async-queue-1/);
+  assert.match(app, /upsertGenerationActivityEntry/);
+  assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
+  assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
+  assert.doesNotMatch(app, /state\.activityFeed\.sort\(\(left, right\) => String\(right\.at\)/);
+});
+
 test("scrollable surfaces use subtle themed scrollbars instead of default browser chrome", async () => {
   const styles = await readFile(stylesPath, "utf8");
 
@@ -292,6 +303,29 @@ test("studio layout consumes density variables for wide-screen adaptation withou
   assert.match(styles, /html\[data-ui-layout="narrow-desktop"\] \.studio-grid\s*\{/);
 });
 
+test("studio entry defaults to square ratio", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /<input id="ratioInput" name="ratio" type="hidden" value="1:1" \/>/);
+  assert.match(app, /const DEFAULT_UI_RATIO = "1:1";/);
+  assert.doesNotMatch(app, /\|\| "4:5"/);
+});
+
+test("mobile and Pad studio layout keeps panels inside the viewport column", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+
+  assert.match(
+    styles,
+    /html\[data-ui-layout="stacked"\] \.studio-grid,\s*[\r\n]+html\[data-ui-layout="tablet"\] \.studio-grid,\s*[\r\n]+html\[data-ui-layout="mobile"\] \.studio-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\);/,
+  );
+  assert.match(
+    styles,
+    /html\[data-ui-layout="tablet"\] \.settings-panel,[\s\S]*html\[data-ui-layout="mobile"\] \.settings-form\s*\{[\s\S]*min-width:\s*0;[\s\S]*max-width:\s*100%;/,
+  );
+  assert.match(styles, /html\[data-ui-layout="tablet"\] \.app-shell,\s*[\r\n]+html\[data-ui-layout="mobile"\] \.app-shell\s*\{[\s\S]*width:\s*min\(calc\(100% - 12px\),\s*1680px\);/);
+});
+
 test("studio columns use synchronized desktop height so wide screens do not leave a dead zone under the workspace", async () => {
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
@@ -310,6 +344,72 @@ test("generation task refresh tolerates older servers without the task endpoint"
 
   assert.match(app, /if \(response\.status === 404\) \{[\s\S]*applyGenerationTaskSnapshots\(\[\], \{ render \}\);[\s\S]*return;/);
   assert.match(app, /throw new Error\("读取生成任务失败"\);/);
+});
+
+test("studio stores API settings in the browser and sends them with cloud generation requests", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /id="configFeedback"[\s\S]*API Key 只保存在当前浏览器/);
+  assert.match(app, /const BROWSER_CONFIG_STORAGE_KEY = "image-studio-browser-config-v1";/);
+  assert.match(app, /function readBrowserPrivateConfig\(\) \{/);
+  assert.match(app, /function appendBrowserConfigToFormData\(formData\) \{/);
+  assert.match(app, /function getBrowserPrivateConfigRequestPayload\(\) \{/);
+  assert.match(app, /window\.localStorage\.setItem\(BROWSER_CONFIG_STORAGE_KEY, JSON\.stringify/);
+  assert.match(app, /formData\.set\("baseUrl", browserConfig\.baseUrl\);/);
+  assert.match(app, /formData\.set\("apiKey", browserConfig\.apiKey\);/);
+  assert.match(app, /formData\.set\("responsesModel", browserConfig\.responsesModel\);/);
+  assert.match(app, /function buildPptFormData\(\) \{[\s\S]*appendBrowserConfigToFormData\(formData\);[\s\S]*return formData;/);
+  assert.match(app, /function buildPptCompletionRequest\(slideNumbers\) \{[\s\S]*\.\.\.getBrowserPrivateConfigRequestPayload\(\),/);
+});
+
+test("studio caches generated browser images for persistent preview and download", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /\/app\.js\?v=20260504-async-queue-1/);
+  assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
+  assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
+  assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
+  assert.match(app, /async function fetchServerImageAsDataUrl\(imageUrl\) \{/);
+  assert.match(app, /async function cacheBrowserGalleryItem\(item\) \{/);
+  assert.match(app, /await fetchServerImageAsDataUrl\(imageUrl\)/);
+  assert.match(app, /async function readBrowserCachedGalleryItems\(\) \{/);
+  assert.match(app, /function upsertGalleryItem\(item\) \{[\s\S]*void cacheBrowserGalleryItem\(hydratedItem\);/);
+  assert.match(app, /async function loadGallery\(\) \{[\s\S]*const browserCachedItems = await readBrowserCachedGalleryItems\(\);[\s\S]*state\.gallery = sortGalleryItemsByCreatedAtDesc/);
+  assert.match(app, /async function deleteGalleryItem\(item\) \{[\s\S]*await deleteBrowserCachedGalleryItem\(item\.filename\);/);
+  assert.match(app, /async function clearHistory\(\) \{[\s\S]*await clearBrowserImageCache\(\);/);
+});
+
+test("studio accepts server-stored Cloudflare image URLs before browser caching finishes", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /if \(isServerImageProxyUrl\(imageUrl\)\) \{/);
+  assert.match(app, /writeIndex\(\);[\s\S]*const dataUrl = hasDataUrl \? imageUrl : await fetchServerImageAsDataUrl\(imageUrl\);/);
+  assert.match(app, /const fallbackImageUrl = isServerImageProxyUrl\(entry\.imageUrl\) \? entry\.imageUrl : "";/);
+  assert.match(app, /payload\.item = attachChunkedImageToSavedItem\(payload\.item, finalImageChunks\);/);
+  assert.match(app, /upsertGalleryItem\(payload\.item\);/);
+});
+
+test("studio keeps queued Cloudflare jobs alive for task polling after the SSE response closes", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /let queuedForPolling = false;/);
+  assert.match(app, /if \(eventName === "queued"\) \{/);
+  assert.match(app, /scheduleGenerationTaskPolling\(\);/);
+  assert.match(app, /currentJob\.isRunning = queuedForPolling;/);
+  assert.match(app, /生成连接已中断，未收到完成事件/);
+});
+
+test("studio marks persisted active generation records as interrupted on reload", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /function normalizePersistedActivityEntry\(entry\) \{/);
+  assert.match(app, /if \(normalized\.status === "active"\) \{/);
+  assert.match(app, /title: GENERATION_TASK_STATUS_LABELS\.error,/);
+  assert.match(app, /detail: "上次页面关闭前生成未完成，请重新生成",/);
+  assert.match(app, /const entries = Array\.isArray\(parsed\) \? parsed\.map\(normalizePersistedActivityEntry\)\.filter\(Boolean\) : \[\];/);
+  assert.match(app, /return sortGenerationActivityFeed\(entries\)\.slice\(0, 12\);/);
 });
 
 test("studio keeps local port retry exhaustion out of the visible error feed", async () => {
@@ -333,6 +433,7 @@ test("prompt template list shows titles only and uses title clicks to apply prom
   assert.doesNotMatch(app, /prompt\.textContent = template\.prompt/);
   assert.match(styles, /\.prompt-template-title-button\s*\{[\s\S]*white-space:\s*nowrap;/);
   assert.match(styles, /\.prompt-template-row-actions\s*\{[\s\S]*display:\s*flex;/);
+  assert.match(styles, /\.prompt-template-row-actions \.mini-action\s*\{[\s\S]*width:\s*auto;[\s\S]*height:\s*24px;[\s\S]*white-space:\s*nowrap;/);
 });
 
 test("prompt template storage respects an intentionally empty saved list", async () => {
@@ -340,6 +441,27 @@ test("prompt template storage respects an intentionally empty saved list", async
 
   assert.match(app, /if \(raw === null\) \{[\s\S]*return DEFAULT_PROMPT_TEMPLATES\.map/);
   assert.match(app, /return Array\.isArray\(parsed\) \? parsed\.map\(normalizePromptTemplate\)\.filter\(Boolean\) : \[\];/);
+});
+
+test("default prompt templates cover ten daily life scenes", async () => {
+  const app = await readFile(appPath, "utf8");
+  const block = app.match(/const SURPRISE_PROMPTS = \[[\s\S]*?\];/)?.[0] || "";
+  const names = [...block.matchAll(/name: "([^"]+)"/g)].map((match) => match[1]);
+
+  assert.deepEqual(names, [
+    "清晨通勤",
+    "家庭早餐",
+    "居家阅读",
+    "厨房做饭",
+    "超市采购",
+    "午后办公",
+    "健身运动",
+    "朋友聚会",
+    "亲子手作",
+    "夜晚学习",
+  ]);
+  assert.match(app, /const PROMPT_TEMPLATE_STORAGE_KEY = "image-studio-prompt-templates-v2";/);
+  assert.doesNotMatch(block, /直播带货|国风服饰|数码产品/);
 });
 
 test("PPT view exposes source options, page count, progress, retry and PPTX download controls", async () => {
@@ -377,6 +499,37 @@ test("PPT view exposes source options, page count, progress, retry and PPTX down
   assert.match(app, /eventName === "slide_failed"/);
 });
 
+test("PPT record view sits after the waterfall gallery and renders all deck records", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /data-view-tab="gallery"[\s\S]*瀑布画廊[\s\S]*data-view-tab="ppt-record"[\s\S]*PPT记录/);
+  assert.match(html, /data-view-panel="gallery"[\s\S]*data-view-panel="ppt-record"/);
+  assert.match(html, /id="pptRecordCount"/);
+  assert.match(html, /id="pptRecordRefreshButton"/);
+  assert.match(html, /id="pptRecordList"/);
+  assert.match(styles, /\.ppt-record-view\s*\{/);
+  assert.match(styles, /\.ppt-record-list\s*\{/);
+  assert.match(app, /if \(window\.location\.hash === "#ppt-record"\)/);
+  assert.match(app, /function renderPptRecordView\(\) \{/);
+  assert.match(app, /refs\.pptRecordRefreshButton\.addEventListener\("click",/);
+  assert.match(app, /state\.ppt\.decks = Array\.isArray\(payload\) \? payload : \[\];[\s\S]*renderPptRecordView\(\);/);
+});
+
+test("waterfall gallery paginates history unless keyword search is active", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /id="galleryPagination"/);
+  assert.match(html, /id="galleryPreviousPageButton"[\s\S]*上一页/);
+  assert.match(html, /id="galleryNextPageButton"[\s\S]*下一页/);
+  assert.match(app, /paginateGallerySections/);
+  assert.match(app, /const shouldPaginateHistory = !filters\.query;/);
+  assert.match(app, /refs\.galleryPreviousPageButton\.addEventListener\("click"/);
+  assert.match(app, /refs\.galleryNextPageButton\.addEventListener\("click"/);
+});
+
 test("PPT view supports richer styles and direct slide annotation editing", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
@@ -411,6 +564,7 @@ test("PPT view exposes dynamic components and transition effect controls", async
   assert.match(html, /<option value="storyline">路径叙事<\/option>/);
   assert.match(html, /<option value="data-pulse">数据脉冲<\/option>/);
   assert.match(html, /id="pptTransitionPresetInput"/);
+  assert.match(html, /<select id="pptTransitionPresetInput" name="transitionPreset">\s*<option value="smooth">平滑<\/option>/);
   assert.match(html, /<option value="fade">淡入<\/option>/);
   assert.match(html, /<option value="morph-flow">流动切换<\/option>/);
   assert.match(html, /id="pptTransitionSpeedInput"/);

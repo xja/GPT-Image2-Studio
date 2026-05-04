@@ -39,7 +39,7 @@ test("gallery store writes images into dated folders and persists searchable met
   const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
   const outputDir = join(rootDir, "output");
   const indexPath = join(rootDir, ".local", "gallery-index.json");
-  const metadataDir = join(outputDir, "json", "2026-04-22");
+  const metadataDir = join(outputDir, "json", "2026-04-22", "image");
   await mkdir(outputDir, { recursive: true });
 
   await saveGeneratedAsset({
@@ -83,16 +83,19 @@ test("gallery store writes images into dated folders and persists searchable met
       ratio: "16:9",
       ratioLabel: "宽屏 16:9",
       reasoningEffort: "medium",
+      generationStartedAt: "2026-04-22T11:59:55.000Z",
+      generationCompletedAt: "2026-04-22T12:00:02.345Z",
+      generationDurationMs: 7345,
     },
   });
 
   await utimes(
-    join(outputDir, "2026-04-22", "older.jpeg"),
+    join(outputDir, "2026-04-22", "image", "older.jpeg"),
     new Date("2026-04-22T10:00:00.000Z"),
     new Date("2026-04-22T10:00:00.000Z"),
   );
   await utimes(
-    join(outputDir, "2026-04-22", "newer.png"),
+    join(outputDir, "2026-04-22", "image", "newer.png"),
     new Date("2026-04-22T12:00:00.000Z"),
     new Date("2026-04-22T12:00:00.000Z"),
   );
@@ -105,26 +108,30 @@ test("gallery store writes images into dated folders and persists searchable met
   const indexPayload = JSON.parse(await readFile(indexPath, "utf8"));
   const outputEntries = await readdir(outputDir, { withFileTypes: true });
   const datedEntries = await readdir(join(outputDir, "2026-04-22"));
+  const imageEntries = await readdir(join(outputDir, "2026-04-22", "image"));
   const metadataEntries = await readdir(metadataDir);
   const newerMetadata = JSON.parse(await readFile(join(metadataDir, "newer.json"), "utf8"));
 
   assert.equal(saved.filename, "newer.png");
+  assert.equal(saved.relativePath, "2026-04-22/image/newer.png");
   await access(indexPath);
   assert.deepEqual(outputEntries.map((entry) => entry.name).sort(), ["2026-04-22", "json"]);
   assert.equal(outputEntries[0].isDirectory(), true);
-  assert.deepEqual(datedEntries.sort(), ["newer.png", "older.jpeg"]);
+  assert.deepEqual(datedEntries.sort(), ["image"]);
+  assert.deepEqual(imageEntries.sort(), ["newer.png", "older.jpeg"]);
   assert.deepEqual(metadataEntries.sort(), ["newer.json", "older.json"]);
   assert.deepEqual(Object.keys(indexPayload).sort(), ["newer.png", "older.jpeg"]);
   assert.equal(newerMetadata.prompt, "newer prompt");
   assert.equal(newerMetadata.size, "1536x1024");
   assert.equal(newerMetadata.referenceImageName, "reference-a.png");
+  assert.equal(newerMetadata.generationDurationMs, "7345");
   assert.equal(items.length, 2);
   assert.equal(items[0].filename, "newer.png");
   assert.equal(items[0].prompt, "newer prompt");
-  assert.match(items[0].thumbnailUrl, /^\/output\/2026-04-22\/newer\.png\?/);
+  assert.match(items[0].thumbnailUrl, /^\/output\/2026-04-22\/image\/newer\.png\?/);
   assert.equal(items[0].hasReferenceImage, true);
   assert.deepEqual(items[0].referenceImageNames, ["reference-a.png", "reference-b.png"]);
-  assert.equal(items[0].absolutePath, join(outputDir, "2026-04-22", "newer.png"));
+  assert.equal(items[0].absolutePath, join(outputDir, "2026-04-22", "image", "newer.png"));
   assert.equal(items[0].imageUrl, items[0].thumbnailUrl);
   assert.equal(items[0].baseUrl, "https://api.openai.com/v1");
   assert.equal(items[0].responsesModel, "gpt-5.4");
@@ -134,6 +141,9 @@ test("gallery store writes images into dated folders and persists searchable met
   assert.equal(items[0].ratioLabel, "宽屏 16:9");
   assert.equal(items[0].referenceImageName, "reference-a.png");
   assert.equal(items[0].reasoningEffort, "medium");
+  assert.equal(items[0].generationDurationMs, "7345");
+  assert.equal(items[0].generationStartedAt, "2026-04-22T11:59:55.000Z");
+  assert.equal(items[0].generationCompletedAt, "2026-04-22T12:00:02.345Z");
   assert.equal(items[0].size, "1536x1024");
   assert.equal(items[1].filename, "older.jpeg");
 });
@@ -142,7 +152,7 @@ test("gallery store deletes the image file and removes the indexed metadata entr
   const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
   const outputDir = join(rootDir, "output");
   const indexPath = join(rootDir, ".local", "gallery-index.json");
-  const metadataPath = join(outputDir, "json", "2026-04-22", "deletable.json");
+  const metadataPath = join(outputDir, "json", "2026-04-22", "image", "deletable.json");
 
   await saveGeneratedAsset({
     outputDir,
@@ -168,7 +178,7 @@ test("gallery store deletes the image file and removes the indexed metadata entr
   });
 
   assert.equal(deleted.filename, "deletable.jpeg");
-  await assert.rejects(access(join(outputDir, "2026-04-22", "deletable.jpeg")));
+  await assert.rejects(access(join(outputDir, "2026-04-22", "image", "deletable.jpeg")));
   await assert.rejects(access(metadataPath));
   await assert.rejects(access(indexPath));
   assert.equal(items.length, 0);
@@ -222,8 +232,8 @@ test("gallery store lists dated output images even when both index and sidecar m
   const outputDir = join(rootDir, "output");
   const indexPath = join(rootDir, ".local", "gallery-index.json");
 
-  await mkdir(join(outputDir, "2026-04-27"), { recursive: true });
-  await writeFile(join(outputDir, "2026-04-27", "recovered.png"), Buffer.from("recovered-image"));
+  await mkdir(join(outputDir, "2026-04-27", "image"), { recursive: true });
+  await writeFile(join(outputDir, "2026-04-27", "image", "recovered.png"), Buffer.from("recovered-image"));
 
   const items = await listGalleryItems({
     outputDir,
@@ -233,17 +243,17 @@ test("gallery store lists dated output images even when both index and sidecar m
 
   assert.equal(items.length, 1);
   assert.equal(items[0].filename, "recovered.png");
-  assert.equal(items[0].relativePath, "2026-04-27/recovered.png");
-  assert.match(items[0].imageUrl, /^\/output\/2026-04-27\/recovered\.png\?/);
+  assert.equal(items[0].relativePath, "2026-04-27/image/recovered.png");
+  assert.match(items[0].imageUrl, /^\/output\/2026-04-27\/image\/recovered\.png\?/);
 });
 
 test("gallery store deletes orphaned dated output images without relying on index metadata", async () => {
   const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
   const outputDir = join(rootDir, "output");
   const indexPath = join(rootDir, ".local", "gallery-index.json");
-  const targetPath = join(outputDir, "2026-04-27", "orphan.png");
+  const targetPath = join(outputDir, "2026-04-27", "image", "orphan.png");
 
-  await mkdir(join(outputDir, "2026-04-27"), { recursive: true });
+  await mkdir(join(outputDir, "2026-04-27", "image"), { recursive: true });
   await writeFile(targetPath, Buffer.from("orphan-image"));
 
   const deleted = await deleteGeneratedAsset({
@@ -285,8 +295,8 @@ test("gallery store batch renames historical images and sidecars together", asyn
     publicBasePath: "/output",
   });
   const renamedFilename = "260426-护肤礼盒-154233-cdef.png";
-  const dateDir = join(outputDir, "2026-04-26");
-  const jsonDir = join(outputDir, "json", "2026-04-26");
+  const dateDir = join(outputDir, "2026-04-26", "image");
+  const jsonDir = join(outputDir, "json", "2026-04-26", "image");
   const indexPayload = JSON.parse(await readFile(indexPath, "utf8"));
 
   assert.equal(result.renamedCount, 1);
@@ -346,7 +356,7 @@ test("gallery store persists sparse sidecar metadata without freezing empty plac
     },
   });
 
-  const metadataPath = join(outputDir, "json", "2026-04-26", "sparse-sidecar.json");
+  const metadataPath = join(outputDir, "json", "2026-04-26", "image", "sparse-sidecar.json");
   const sidecarPayload = JSON.parse(await readFile(metadataPath, "utf8"));
   const indexPayload = JSON.parse(await readFile(indexPath, "utf8"));
 
@@ -401,7 +411,7 @@ test("gallery store repairs sparse metadata from a richer client-side payload", 
     indexPath,
     publicBasePath: "/output",
   });
-  const metadataPath = join(outputDir, "json", "2026-04-26", "repairable.json");
+  const metadataPath = join(outputDir, "json", "2026-04-26", "image", "repairable.json");
   const sidecarPayload = JSON.parse(await readFile(metadataPath, "utf8"));
   const indexPayload = JSON.parse(await readFile(indexPath, "utf8"));
 

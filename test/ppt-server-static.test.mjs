@@ -24,6 +24,7 @@ test("server exposes PPT generation, completion and deck history endpoints", asy
   assert.match(server, /formData\.get\("transitionPreset"\)/);
   assert.match(server, /buildSlideImagePrompts\(\{\s*outline,[\s\S]*dynamicPreset/);
   assert.match(server, /exportPptxDeck\(\{[\s\S]*motion:/);
+  assert.match(server, /\$\{formatDateFolder\(createdAt\)\}\/ppt\/\$\{pptxFilename\}/);
   assert.match(server, /"\.pptx": "application\/vnd\.openxmlformats-officedocument\.presentationml\.presentation"/);
 });
 
@@ -35,6 +36,16 @@ test("server marks PPT slide assets hidden from the waterfall gallery", async ()
   assert.match(server, /galleryVisible:\s*false/);
   assert.match(galleryStore, /galleryVisible/);
   assert.match(galleryStore, /if \(!normalizedMetadata\.galleryVisible\) \{/);
+});
+
+test("server persists the effective image size after an upstream fallback", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /const generationResult = await requestImageGeneration\(/);
+  assert.match(server, /const savedSize = generationResult\.effectiveSize \|\| finalSize;/);
+  assert.match(server, /generationTaskStore\.completeTask\([\s\S]*size:\s*savedSize/);
+  assert.match(server, /metadata:\s*\{[\s\S]*size:\s*savedSize/);
+  assert.match(server, /buildSavedItem\(\{[\s\S]*size:\s*savedSize/);
 });
 
 test("package declares pptxgenjs dependency for deck export", async () => {
