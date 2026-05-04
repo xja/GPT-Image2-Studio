@@ -141,6 +141,41 @@ test("Cloudflare generation uses browser-provided API settings without echoing t
   assert.doesNotMatch(text, /test-browser-key/);
 });
 
+test("Cloudflare generation reports the server image URL after best-effort R2 storage", async () => {
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("jobId", "job-cloudflare");
+  formData.set("prompt", "Create a large kitchen scene");
+  formData.set("ratio", "1:1");
+  formData.set("size", "2048x2048");
+  formData.set("format", "png");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl() {
+      return makeSseResponse();
+    },
+  });
+
+  const events = parseSseEvents(await response.text());
+  const savedIndex = events.findIndex((event) => event.eventName === "saved");
+  const serverImageIndex = events.findIndex((event) => event.eventName === "server_image");
+  const serverImageEvent = events[serverImageIndex];
+
+  assert.equal(response.status, 200);
+  assert.ok(savedIndex >= 0);
+  assert.ok(serverImageIndex > savedIndex);
+  assert.match(serverImageEvent.payload.item.imageUrl, /^\/api\/images\/images%2F/);
+  assert.equal(serverImageEvent.payload.item.thumbnailUrl, serverImageEvent.payload.item.imageUrl);
+  assert.equal(imageBucket.objects.size, 1);
+});
+
 test("Cloudflare generation still returns chunked browser image when R2 image storage fails", async () => {
   const originalWarn = console.warn;
   console.warn = () => {};

@@ -488,8 +488,28 @@ function getDisplayPrompt(item) {
   return "未命名输出";
 }
 
+function getServerImageUrl(item = {}) {
+  const imageUrl = String(item.serverImageUrl || item.imageUrl || "");
+  const thumbnailUrl = String(item.serverThumbnailUrl || item.thumbnailUrl || "");
+  if (isServerImageProxyUrl(imageUrl)) {
+    return imageUrl;
+  }
+  if (isServerImageProxyUrl(thumbnailUrl)) {
+    return thumbnailUrl;
+  }
+  return "";
+}
+
+function getServerThumbnailUrl(item = {}) {
+  const thumbnailUrl = String(item.serverThumbnailUrl || item.thumbnailUrl || "");
+  if (isServerImageProxyUrl(thumbnailUrl)) {
+    return thumbnailUrl;
+  }
+  return getServerImageUrl(item);
+}
+
 function getImageUrl(item) {
-  return item?.imageUrl || item?.thumbnailUrl || item?.previewUrl || "";
+  return item?.imageUrl || item?.thumbnailUrl || item?.previewUrl || item?.serverImageUrl || item?.serverThumbnailUrl || "";
 }
 
 function isCacheableBrowserImageUrl(url) {
@@ -545,8 +565,8 @@ function normalizeBrowserCachedGalleryItem(item = {}) {
     return null;
   }
 
-  const imageUrl = String(item.imageUrl || "");
-  const thumbnailUrl = String(item.thumbnailUrl || "");
+  const serverImageUrl = getServerImageUrl(item);
+  const serverThumbnailUrl = getServerThumbnailUrl(item);
   const normalized = {
     id: String(item.id || ""),
     filename,
@@ -569,11 +589,11 @@ function normalizeBrowserCachedGalleryItem(item = {}) {
     generationDurationMs: String(item.generationDurationMs || ""),
   };
 
-  if (isServerImageProxyUrl(imageUrl)) {
-    normalized.imageUrl = imageUrl;
+  if (serverImageUrl) {
+    normalized.imageUrl = serverImageUrl;
   }
-  if (isServerImageProxyUrl(thumbnailUrl)) {
-    normalized.thumbnailUrl = thumbnailUrl;
+  if (serverThumbnailUrl) {
+    normalized.thumbnailUrl = serverThumbnailUrl;
   } else if (normalized.imageUrl) {
     normalized.thumbnailUrl = normalized.imageUrl;
   }
@@ -665,7 +685,11 @@ async function deleteBrowserCachedImageData(filename) {
 
 async function cacheBrowserGalleryItem(item) {
   const cachedItem = normalizeBrowserCachedGalleryItem(item);
-  const imageUrl = getImageUrl(item);
+  const serverImageUrl = getServerImageUrl(item);
+  let imageUrl = getImageUrl(item);
+  if (!isCacheableBrowserImageUrl(imageUrl) && serverImageUrl) {
+    imageUrl = serverImageUrl;
+  }
   const hasServerImageUrl = isServerImageProxyUrl(imageUrl);
   const hasDataUrl = isCacheableBrowserImageUrl(imageUrl);
   if (!cachedItem || (!hasDataUrl && !hasServerImageUrl)) {
@@ -3526,10 +3550,8 @@ function attachChunkedImageToSavedItem(item, finalImageChunks) {
     return item;
   }
 
-  const imageUrl = String(item.imageUrl || "");
-  const thumbnailUrl = String(item.thumbnailUrl || "");
-  const serverImageUrl = isServerImageProxyUrl(imageUrl) ? imageUrl : "";
-  const serverThumbnailUrl = isServerImageProxyUrl(thumbnailUrl) ? thumbnailUrl : serverImageUrl;
+  const serverImageUrl = getServerImageUrl(item);
+  const serverThumbnailUrl = getServerThumbnailUrl(item) || serverImageUrl;
 
   return {
     ...item,
@@ -3538,6 +3560,39 @@ function attachChunkedImageToSavedItem(item, finalImageChunks) {
     imageUrl: entry.dataUrl,
     thumbnailUrl: entry.dataUrl,
   };
+}
+
+function applyServerImageToGalleryItem(item) {
+  const filename = String(item?.filename || "").trim();
+  const serverImageUrl = getServerImageUrl(item);
+  if (!filename || !serverImageUrl) {
+    return;
+  }
+
+  const serverThumbnailUrl = getServerThumbnailUrl(item) || serverImageUrl;
+  const current = state.gallery.find((entry) => entry.filename === filename) || {};
+  const browserImageUrl = isCacheableBrowserImageUrl(current.imageUrl)
+    ? current.imageUrl
+    : isCacheableBrowserImageUrl(current.thumbnailUrl)
+      ? current.thumbnailUrl
+      : "";
+  const browserThumbnailUrl = isCacheableBrowserImageUrl(current.thumbnailUrl) ? current.thumbnailUrl : browserImageUrl;
+  const mergedItem = mergeGalleryItemWithCachedMetadata(
+    {
+      ...current,
+      ...item,
+      imageUrl: browserImageUrl || serverImageUrl,
+      thumbnailUrl: browserThumbnailUrl || serverThumbnailUrl,
+      serverImageUrl,
+      serverThumbnailUrl,
+    },
+    state.galleryMetadataCache[filename],
+  );
+  const next = state.gallery.filter((entry) => entry.filename !== filename);
+  next.unshift(mergedItem);
+  state.gallery = sortGalleryItemsByCreatedAtDesc(next);
+  syncGalleryMetadataCache(state.gallery);
+  void cacheBrowserGalleryItem(mergedItem);
 }
 
 function setPptFeedback(message = "", kind = "") {
@@ -4817,6 +4872,11 @@ async function runGeneration(job) {
         });
         if (dataUrl) {
           handleActivityFinal(job.id);
+          await cacheBrowserGalleryItem({
+            filename: payload.filename,
+            imageUrl: dataUrl,
+            thumbnailUrl: dataUrl,
+          });
         }
         renderAll();
         return;
@@ -4831,6 +4891,12 @@ async function runGeneration(job) {
         }
         handleActivitySuccess(job.id);
         removeJob(job.id);
+        renderAll();
+        return;
+      }
+
+      if (eventName === "server_image") {
+        applyServerImageToGalleryItem(payload.item);
         renderAll();
         return;
       }

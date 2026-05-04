@@ -1040,9 +1040,6 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     size: savedSize,
     item,
   });
-  await writeSseEvent(writer, "complete", {
-    filename: item.filename,
-  });
 
   // R2 is a best-effort server-side convenience; browser delivery has already completed.
   try {
@@ -1057,9 +1054,17 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     item.thumbnailUrl = storedImage.imageUrl;
     item.storageKey = storedImage.storageKey;
     item.expiresAt = storedImage.expiresAt;
+    await writeSseEvent(writer, "server_image", {
+      filename: item.filename,
+      item,
+    });
   } catch (error) {
     console.warn("store generated image in R2 failed", error instanceof Error ? error.message : String(error));
   }
+
+  await writeSseEvent(writer, "complete", {
+    filename: item.filename,
+  });
 }
 
 function streamGenerate(request, options = {}) {
