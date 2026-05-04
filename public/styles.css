@@ -274,19 +274,6 @@ textarea::-webkit-scrollbar-corner {
   width: min(510px, calc(100% - 320px));
 }
 
-.nav-region-label {
-  display: inline-flex;
-  align-items: center;
-  min-height: 17px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 600;
-  line-height: 1;
-}
-
 .brand-mark {
   width: var(--brand-mark-size, 40px);
   height: var(--brand-mark-size, 40px);
@@ -364,14 +351,15 @@ textarea::-webkit-scrollbar-corner {
   gap: 4px;
   padding: 3px;
   border-radius: 18px;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--control-bg) 76%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 
 .global-nav-list {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: stretch;
   overflow: visible;
 }
@@ -431,10 +419,10 @@ textarea::-webkit-scrollbar-corner {
 }
 
 .view-tab.active {
-  background: var(--active-tab-bg, rgba(111, 124, 255, 0.12));
+  background: transparent;
   border-color: transparent;
   color: var(--text);
-  box-shadow: inset 0 -2px 0 var(--accent);
+  box-shadow: none;
 }
 
 .nav-tab-label {
@@ -535,7 +523,8 @@ textarea::-webkit-scrollbar-corner {
     opacity 160ms ease;
 }
 
-.mega-menu-link.large {
+.mega-menu-link.large,
+.mega-menu-action.large {
   font-size: 1.45rem;
   font-weight: 700;
   line-height: 1.08;
@@ -3249,7 +3238,7 @@ html[data-ui-layout="mobile"] .view-tabs {
 html[data-ui-layout="stacked"] .global-nav-list,
 html[data-ui-layout="tablet"] .global-nav-list,
 html[data-ui-layout="mobile"] .global-nav-list {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   overflow: visible;
 }
 

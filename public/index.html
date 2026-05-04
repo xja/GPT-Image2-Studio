@@ -21,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260504-api-check-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260505-nav-zone-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -40,7 +40,6 @@
         </div>
 
         <nav class="primary-nav global-nav" aria-label="全局导航">
-          <span class="nav-region-label">主区</span>
           <div class="view-tabs global-nav-list" role="tablist" aria-label="功能区导航">
             <div class="nav-item" data-nav-section="create">
               <button class="view-tab active" data-view-tab="studio" type="button">
@@ -52,18 +51,18 @@
                   <section class="mega-menu-column mega-menu-primary" aria-label="创作区">
                     <span class="mega-menu-kicker">创作区</span>
                     <a class="mega-menu-link large" href="#studio">Studio 生成台</a>
-                    <a class="mega-menu-link" href="#studio">提示词与参考图</a>
-                    <a class="mega-menu-link" href="#studio">参数与队列</a>
+                    <a class="mega-menu-link" href="#studio">提示词生成图片</a>
+                    <a class="mega-menu-link" href="#studio">参考图生成</a>
                   </section>
                   <section class="mega-menu-column" aria-label="创作工具">
-                    <span class="mega-menu-title">工具</span>
-                    <button class="mega-menu-action" type="button" data-nav-action="prompt-agent">图片转提示词</button>
-                    <a class="mega-menu-link" href="#gallery">查看生成结果</a>
+                    <span class="mega-menu-title">生成</span>
+                    <a class="mega-menu-link" href="#studio">参数与队列</a>
+                    <a class="mega-menu-link" href="#studio">比例与分辨率</a>
                   </section>
-                  <section class="mega-menu-column" aria-label="创作设置">
-                    <span class="mega-menu-title">设置</span>
-                    <button class="mega-menu-action" type="button" data-nav-action="config">配置 API</button>
-                    <button class="mega-menu-action" type="button" data-nav-action="theme">切换主题</button>
+                  <section class="mega-menu-column" aria-label="创作结果">
+                    <span class="mega-menu-title">结果</span>
+                    <a class="mega-menu-link" href="#gallery">查看生成结果</a>
+                    <a class="mega-menu-link" href="#studio">继续创作</a>
                   </section>
                 </div>
               </div>
@@ -84,12 +83,12 @@
                   <section class="mega-menu-column" aria-label="演示输出">
                     <span class="mega-menu-title">输出</span>
                     <a class="mega-menu-link" href="#ppt-record">PPT 记录</a>
-                    <a class="mega-menu-link" href="#gallery">生成画廊</a>
+                    <a class="mega-menu-link" href="#ppt">重试缺失页面</a>
                   </section>
                   <section class="mega-menu-column" aria-label="演示工具">
                     <span class="mega-menu-title">工具</span>
-                    <button class="mega-menu-action" type="button" data-nav-action="config">配置模型</button>
-                    <button class="mega-menu-action" type="button" data-nav-action="theme">切换主题</button>
+                    <a class="mega-menu-link" href="#ppt">编辑页面标注</a>
+                    <a class="mega-menu-link" href="#ppt">切换动效预设</a>
                   </section>
                 </div>
               </div>
@@ -109,13 +108,13 @@
                   </section>
                   <section class="mega-menu-column" aria-label="资产工具">
                     <span class="mega-menu-title">工具</span>
-                    <button class="mega-menu-action" type="button" data-nav-action="output">打开输出目录</button>
                     <button class="mega-menu-action" type="button" data-nav-action="prompt-agent">图片转提示词</button>
+                    <button class="mega-menu-action" type="button" data-nav-action="output">打开输出目录</button>
                   </section>
-                  <section class="mega-menu-column" aria-label="资产记录">
-                    <span class="mega-menu-title">记录</span>
-                    <a class="mega-menu-link" href="#ppt-record">PPT 记录</a>
-                    <a class="mega-menu-link" href="#ppt">PPT 演示</a>
+                  <section class="mega-menu-column" aria-label="资产管理">
+                    <span class="mega-menu-title">管理</span>
+                    <a class="mega-menu-link" href="#gallery">筛选生成历史</a>
+                    <a class="mega-menu-link" href="#gallery">按日期浏览</a>
                   </section>
                 </div>
               </div>
@@ -134,14 +133,38 @@
                     <a class="mega-menu-link" href="#ppt">继续编辑演示</a>
                   </section>
                   <section class="mega-menu-column" aria-label="记录出口">
-                    <span class="mega-menu-title">出口</span>
-                    <a class="mega-menu-link" href="#gallery">瀑布画廊</a>
-                    <button class="mega-menu-action" type="button" data-nav-action="output">打开输出目录</button>
+                    <span class="mega-menu-title">演示</span>
+                    <a class="mega-menu-link" href="#ppt">继续编辑演示</a>
+                    <a class="mega-menu-link" href="#ppt-record">下载历史 PPTX</a>
                   </section>
-                  <section class="mega-menu-column" aria-label="记录设置">
-                    <span class="mega-menu-title">设置</span>
-                    <button class="mega-menu-action" type="button" data-nav-action="config">配置</button>
-                    <button class="mega-menu-action" type="button" data-nav-action="theme">切换主题</button>
+                  <section class="mega-menu-column" aria-label="记录管理">
+                    <span class="mega-menu-title">管理</span>
+                    <a class="mega-menu-link" href="#ppt-record">查看生成批次</a>
+                    <a class="mega-menu-link" href="#ppt-record">按时间排序</a>
+                  </section>
+                </div>
+              </div>
+            </div>
+            <div class="nav-item" data-nav-section="settings">
+              <button class="view-tab" data-nav-action="config" type="button" aria-haspopup="true">
+                <span class="nav-tab-label">配置</span>
+                <span class="nav-tab-note">Settings</span>
+              </button>
+              <div class="nav-flyout mega-menu" data-nav-subzone="settings">
+                <div class="mega-menu-grid">
+                  <section class="mega-menu-column mega-menu-primary" aria-label="配置区">
+                    <span class="mega-menu-kicker">配置区</span>
+                    <button class="mega-menu-action large" type="button" data-nav-action="config">配置 API</button>
+                    <button class="mega-menu-action" type="button" data-nav-action="config">模型与密钥</button>
+                    <button class="mega-menu-action" type="button" data-nav-action="theme">主题颜色</button>
+                  </section>
+                  <section class="mega-menu-column" aria-label="主题设置">
+                    <span class="mega-menu-title">主题</span>
+                    <button class="mega-menu-action" type="button" data-nav-action="theme">切换明暗主题</button>
+                  </section>
+                  <section class="mega-menu-column" aria-label="配置状态">
+                    <span class="mega-menu-title">界面</span>
+                    <button class="mega-menu-action" type="button" data-nav-action="config">浏览器本地配置</button>
                   </section>
                 </div>
               </div>
