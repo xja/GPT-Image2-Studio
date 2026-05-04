@@ -27,11 +27,11 @@ import {
   getDefaultGenerationSize,
   getGenerationSizeOptions,
   normalizeGenerationSize,
-} from "/lib/generation-size-options.mjs?v=20260504-mobile-ui-adapt-2";
+} from "/lib/generation-size-options.mjs?v=20260504-vercel-static-lib-1";
 import {
   getOutputFormatOptions,
   normalizeOutputFormat,
-} from "/lib/output-format-options.mjs?v=20260428-output-format-1";
+} from "/lib/output-format-options.mjs?v=20260504-vercel-static-lib-1";
 import {
   getPreviewLoadingShellTheme,
   shouldReusePreviewLoadingShell,
@@ -44,12 +44,12 @@ import {
   cancelQueuedGenerationJob,
   isQueuedGenerationJob,
   selectNextQueuedGenerationJobs,
-} from "/lib/generation-queue.mjs?v=20260428-queue-cancel-1";
+} from "/lib/generation-queue.mjs?v=20260504-vercel-static-lib-1";
 import {
   sortGenerationActivityFeed,
   upsertGenerationActivityEntry,
-} from "/lib/generation-activity-feed.mjs?v=20260504-stable-activity-order-1";
-import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260504-mobile-ui-adapt-2";
+} from "/lib/generation-activity-feed.mjs?v=20260504-vercel-static-lib-1";
+import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260504-vercel-static-lib-1";
 
 const SURPRISE_PROMPTS = [
   {
@@ -129,6 +129,7 @@ const DEFAULT_UI_RATIO_LABEL = "方形 1:1";
 const GALLERY_METADATA_CACHE_KEY = "image-studio-gallery-metadata-cache-v2";
 const GENERATION_ACTIVITY_STORAGE_KEY = "image-studio-generation-activity-v1";
 const BROWSER_CONFIG_STORAGE_KEY = "image-studio-browser-config-v1";
+const THEME_STORAGE_KEY = "image-studio-ui-theme-v1";
 const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";
 const BROWSER_IMAGE_CACHE_DB_NAME = "image-studio-browser-image-cache-v1";
 const BROWSER_IMAGE_CACHE_STORE_NAME = "generated-images";
@@ -224,6 +225,7 @@ const state = {
   timelineHasRendered: false,
   timelineSignatures: new Map(),
   timelineUnreadCount: 0,
+  uiTheme: "dark",
   zoom: 1,
 };
 
@@ -390,6 +392,8 @@ const refs = {
   newPromptTemplateButton: document.querySelector("#newPromptTemplateButton"),
   settingsPanel: document.querySelector(".settings-panel"),
   sideColumn: document.querySelector(".side-column"),
+  themeToggleButton: document.querySelector("#themeToggleButton"),
+  themeToggleLabel: document.querySelector("#themeToggleLabel"),
   topbar: document.querySelector(".topbar"),
   timelineList: document.querySelector("#timelineList"),
   timelineNewCount: document.querySelector("#timelineNewCount"),
@@ -1067,6 +1071,45 @@ function getRatioOption(value) {
 
 function getVisibleRatios() {
   return [...state.aspectRatios];
+}
+
+function normalizeUiTheme(theme) {
+  return theme === "light" ? "light" : "dark";
+}
+
+function readUiTheme() {
+  try {
+    return normalizeUiTheme(window.localStorage.getItem(THEME_STORAGE_KEY) || document.documentElement.dataset.theme);
+  } catch {
+    return normalizeUiTheme(document.documentElement.dataset.theme);
+  }
+}
+
+function syncThemeToggle() {
+  if (!refs.themeToggleButton || !refs.themeToggleLabel) {
+    return;
+  }
+
+  const isLight = state.uiTheme === "light";
+  refs.themeToggleButton.setAttribute("aria-pressed", String(isLight));
+  refs.themeToggleButton.title = isLight ? "切换到深色主题" : "切换到白色主题";
+  refs.themeToggleLabel.textContent = isLight ? "深色主题" : "白色主题";
+}
+
+function setUiTheme(theme) {
+  const normalized = normalizeUiTheme(theme);
+  state.uiTheme = normalized;
+  document.documentElement.dataset.theme = normalized;
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, normalized);
+  } catch {
+    // Ignore storage restrictions; the current page can still switch theme.
+  }
+  syncThemeToggle();
+}
+
+function toggleUiTheme() {
+  setUiTheme(state.uiTheme === "light" ? "dark" : "light");
 }
 
 function getViewFromHash() {
@@ -2531,18 +2574,17 @@ function createPreviewMotionNode() {
   motion.className = "preview-loading-motion";
   motion.setAttribute("aria-hidden", "true");
 
-  [
-    "preview-loading-aura",
-    "preview-loading-morph preview-loading-morph-a",
-    "preview-loading-morph preview-loading-morph-b",
-    "preview-loading-trace",
-    "preview-loading-core-shell",
-    "preview-loading-core",
-  ].forEach((className) => {
-    const node = document.createElement("span");
-    node.className = className;
-    motion.appendChild(node);
-  });
+  const track = document.createElement("span");
+  track.className = "preview-loading-track";
+
+  const progress = document.createElement("span");
+  progress.className = "preview-loading-progress";
+  track.appendChild(progress);
+
+  const signal = document.createElement("span");
+  signal.className = "preview-loading-signal";
+
+  motion.append(track, signal);
 
   return motion;
 }
@@ -2601,6 +2643,11 @@ function createPreviewLoadingShellNodes() {
 }
 
 function syncPreviewLoadingSteps(container, steps) {
+  const signature = steps.map((step) => `${step.key}:${step.state}:${step.label}`).join("|");
+  if (container.dataset.stepsSignature === signature) {
+    return;
+  }
+
   container.replaceChildren();
   steps.forEach((step) => {
     const chip = document.createElement("span");
@@ -2608,6 +2655,7 @@ function syncPreviewLoadingSteps(container, steps) {
     chip.textContent = step.label;
     container.appendChild(chip);
   });
+  container.dataset.stepsSignature = signature;
 }
 
 function updatePreviewLoadingShell(nodes, placeholderState) {
@@ -2615,11 +2663,10 @@ function updatePreviewLoadingShell(nodes, placeholderState) {
   nodes.eyebrow.textContent = placeholderState.eyebrow;
   nodes.shell.dataset.stage = theme.stage;
   nodes.shell.dataset.jobs = String(placeholderState.activeJobCount);
-  nodes.shell.style.setProperty("--loading-morph-duration-a", theme.morphDurationA);
-  nodes.shell.style.setProperty("--loading-morph-duration-b", theme.morphDurationB);
-  nodes.shell.style.setProperty("--loading-pulse-duration", theme.pulseDuration);
-  nodes.shell.style.setProperty("--loading-drift-duration", theme.driftDuration);
-  nodes.shell.style.setProperty("--loading-motion-tilt", theme.motionTilt);
+  nodes.shell.style.setProperty("--loading-progress", theme.progress);
+  nodes.shell.style.setProperty("--loading-progress-position", theme.progressPosition);
+  nodes.shell.style.setProperty("--loading-sweep-duration", theme.sweepDuration);
+  nodes.shell.style.setProperty("--loading-signal-duration", theme.signalDuration);
   nodes.shell.style.setProperty("--loading-motion-scale", theme.motionScale);
   nodes.title.textContent = placeholderState.title;
   nodes.jobMetric.textContent = placeholderState.jobCountLabel;
@@ -3439,7 +3486,7 @@ function recordFinalImageChunk(finalImageChunks, payload = {}) {
 }
 
 function attachChunkedImageToSavedItem(item, finalImageChunks) {
-  if (!item || getImageUrl(item)) {
+  if (!item) {
     return item;
   }
 
@@ -3451,8 +3498,15 @@ function attachChunkedImageToSavedItem(item, finalImageChunks) {
     return item;
   }
 
+  const imageUrl = String(item.imageUrl || "");
+  const thumbnailUrl = String(item.thumbnailUrl || "");
+  const serverImageUrl = isServerImageProxyUrl(imageUrl) ? imageUrl : "";
+  const serverThumbnailUrl = isServerImageProxyUrl(thumbnailUrl) ? thumbnailUrl : serverImageUrl;
+
   return {
     ...item,
+    serverImageUrl,
+    serverThumbnailUrl,
     imageUrl: entry.dataUrl,
     thumbnailUrl: entry.dataUrl,
   };
@@ -4783,6 +4837,9 @@ async function runGeneration(job) {
       renderAll();
     }
   } catch (error) {
+    if (terminalEventReceived) {
+      return;
+    }
     const message = error instanceof Error ? error.message : String(error);
     handleActivityFailure(job.id, message);
     showError(message);
@@ -4840,6 +4897,27 @@ function handlePromptGenerationShortcut(event) {
   refs.generateButton.click();
 }
 
+function handleGlobalNavAction(action) {
+  if (action === "prompt-agent") {
+    setPromptAgentOpen(true);
+    return;
+  }
+
+  if (action === "config") {
+    setDrawerOpen(true);
+    return;
+  }
+
+  if (action === "theme") {
+    toggleUiTheme();
+    return;
+  }
+
+  if (action === "output") {
+    openOutputDirectory().catch((error) => showError(error.message));
+  }
+}
+
 function bindEvents() {
   refs.viewTabs.forEach((button) => {
     button.addEventListener("click", () => {
@@ -4847,10 +4925,17 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-nav-action]").forEach((button) => {
+    button.addEventListener("click", () => handleGlobalNavAction(button.dataset.navAction));
+  });
+
   window.addEventListener("hashchange", () => {
     setActiveView(getViewFromHash());
   });
 
+  refs.themeToggleButton.addEventListener("click", () => {
+    toggleUiTheme();
+  });
   refs.openConfigButton.addEventListener("click", () => setDrawerOpen(true));
   refs.closeConfigButton.addEventListener("click", () => setDrawerOpen(false));
   refs.closeConfigBackdrop.addEventListener("click", () => setDrawerOpen(false));
@@ -5136,6 +5221,8 @@ function bindEvents() {
 
 async function bootstrap() {
   state.clientSessionId = getOrCreateClientSessionId();
+  state.uiTheme = readUiTheme();
+  setUiTheme(state.uiTheme);
   state.activityFeed = readGenerationActivityFeed();
   state.galleryMetadataCache = readGalleryMetadataCache();
   state.promptTemplates = readPromptTemplates();

@@ -41,6 +41,7 @@ const SERVER_IMAGE_STORAGE_PREFIX = "images/";
 const GENERATION_TASK_STORAGE_PREFIX = "generation-tasks/";
 const GENERATION_REQUEST_STORAGE_PREFIX = "generation-requests/";
 const SERVER_IMAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
+const FINAL_IMAGE_CHUNK_SIZE = 48 * 1024;
 const SERVER_IMAGE_BUCKET_MISSING_MESSAGE = "服务器图片存储未配置 IMAGE_BUCKET";
 const GENERATION_QUEUE_MISSING_MESSAGE = "服务器异步生成队列未配置 GENERATION_QUEUE";
 const DEFAULT_CONFIG = {
@@ -352,6 +353,21 @@ async function storeFinalImage({ imageBucket, filename, createdAt, format, base6
     imageUrl: buildServerImageUrl(storageKey),
     expiresAt,
   };
+}
+
+async function writeFinalImageChunks(writer, { filename, base64, format }) {
+  const normalizedBase64 = normalizeBase64(base64);
+  const total = Math.max(1, Math.ceil(normalizedBase64.length / FINAL_IMAGE_CHUNK_SIZE));
+  const mimeType = toOutputFormatMimeType(format);
+  for (let index = 0; index < total; index += 1) {
+    await writeSseEvent(writer, "final_image_chunk", {
+      filename,
+      index,
+      total,
+      mimeType,
+      chunk: normalizedBase64.slice(index * FINAL_IMAGE_CHUNK_SIZE, (index + 1) * FINAL_IMAGE_CHUNK_SIZE),
+    });
+  }
 }
 
 function buildGalleryItem({
@@ -942,6 +958,7 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
   const finalSize = requestedSize === "auto" ? getDefaultGenerationSize(ratioOption.value) : requestedSize;
   const finalQuality = config.defaults.quality;
   const finalFormat = normalizeOutputFormat(requestedFormatInput || config.defaults.format);
+  const finalImageFilename = buildCloudFilename({ taskId, createdAt, format: finalFormat });
   let finalBase64 = "";
   const generationStartedAt = new Date().toISOString();
   const generationStartedAtMs = Date.now();
@@ -978,7 +995,16 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
         finalBase64 = event.base64;
         await writeSseEvent(writer, "status", {
           stage: "saving",
-          message: "已拿到最终图，正在写入服务器暂存",
+          message: "已拿到最终图，正在传回浏览器缓存",
+        });
+        await writeFinalImageChunks(writer, {
+          filename: finalImageFilename,
+          base64: event.base64,
+          format: finalFormat,
+        });
+        await writeSseEvent(writer, "status", {
+          stage: "saving",
+          message: "最终图已传回浏览器，正在写入服务器暂存",
         });
       }
     },
@@ -1007,18 +1033,6 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     generationCompletedAt,
     generationDurationMs,
   });
-  const storedImage = await storeFinalImage({
-    imageBucket,
-    filename: item.filename,
-    createdAt,
-    format: finalFormat,
-    base64: finalBase64,
-  });
-  item.imageUrl = storedImage.imageUrl;
-  item.thumbnailUrl = storedImage.imageUrl;
-  item.storageKey = storedImage.storageKey;
-  item.expiresAt = storedImage.expiresAt;
-
   await writeSseEvent(writer, "saved", {
     filename: item.filename,
     ratio: ratioOption.value,
@@ -1029,6 +1043,23 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
   await writeSseEvent(writer, "complete", {
     filename: item.filename,
   });
+
+  // R2 is a best-effort server-side convenience; browser delivery has already completed.
+  try {
+    const storedImage = await storeFinalImage({
+      imageBucket,
+      filename: item.filename,
+      createdAt,
+      format: finalFormat,
+      base64: finalBase64,
+    });
+    item.imageUrl = storedImage.imageUrl;
+    item.thumbnailUrl = storedImage.imageUrl;
+    item.storageKey = storedImage.storageKey;
+    item.expiresAt = storedImage.expiresAt;
+  } catch (error) {
+    console.warn("store generated image in R2 failed", error instanceof Error ? error.message : String(error));
+  }
 }
 
 function streamGenerate(request, options = {}) {
@@ -1551,7 +1582,7 @@ export async function handleApiRequest(request, options = {}) {
   }
 
   if (request.method === "POST" && url.pathname === "/api/generate") {
-    return streamGenerate(request, { fetchImpl, imageBucket, generationQueue });
+    return streamGenerate(request, { fetchImpl, imageBucket });
   }
 
   if (request.method === "GET" && url.pathname.startsWith(SERVER_IMAGE_ROUTE_PREFIX)) {

@@ -4,7 +4,7 @@ import { createReadStream } from "node:fs";
 import { mkdir, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
@@ -57,7 +57,7 @@ import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
 const rootDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(rootDir, "public");
 const libDir = join(rootDir, "lib");
-const outputDir = join(homedir(), "Pictures");
+const outputDir = process.env.VERCEL ? join(tmpdir(), "gpt-image2-studio-output") : join(homedir(), "Pictures");
 const configStore = createConfigStore({ rootDir });
 const promptAgentStore = createPromptAgentStore({ rootDir });
 const generationTaskStore = createGenerationTaskStore();
@@ -1378,6 +1378,25 @@ async function routeRequest(request, response) {
     }
   }
 
+  if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
+    return serveFile(response, join(publicDir, "index.html"));
+  }
+
+  if (request.method === "GET") {
+    const target = resolveSafeFile(publicDir, url.pathname);
+    if (!target) {
+      return sendText(response, 403, "Forbidden");
+    }
+
+    try {
+      return await serveFile(response, target);
+    } catch (error) {
+      if (!(error && typeof error === "object" && error.code === "ENOENT")) {
+        throw error;
+      }
+    }
+  }
+
   if (request.method === "GET" && url.pathname.startsWith("/lib/")) {
     const target = resolveSafeFile(libDir, url.pathname.slice("/lib".length));
     if (!target) {
@@ -1392,25 +1411,6 @@ async function routeRequest(request, response) {
       }
 
       throw error;
-    }
-  }
-
-  if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
-    return serveFile(response, join(publicDir, "index.html"));
-  }
-
-  if (request.method === "GET") {
-    const target = resolveSafeFile(publicDir, url.pathname);
-    if (target) {
-      try {
-        return await serveFile(response, target);
-      } catch (error) {
-        if (error && typeof error === "object" && error.code === "ENOENT") {
-          return sendText(response, 404, "Not found");
-        }
-
-        throw error;
-      }
     }
   }
 

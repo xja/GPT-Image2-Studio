@@ -4,13 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Image Studio</title>
+    <script>
+      (() => {
+        const themeKey = "image-studio-ui-theme-v1";
+        try {
+          const savedTheme = window.localStorage.getItem(themeKey);
+          document.documentElement.dataset.theme = savedTheme === "light" ? "light" : "dark";
+        } catch {
+          document.documentElement.dataset.theme = "dark";
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260504-mobile-ui-adapt-3" />
+    <link rel="stylesheet" href="/styles.css?v=20260504-api-check-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -28,19 +39,129 @@
           </div>
         </div>
 
-        <div class="view-tabs" role="tablist" aria-label="视图切换">
-          <button class="view-tab active" data-view-tab="studio" type="button">Studio</button>
-          <button class="view-tab" data-view-tab="ppt" type="button">PPT 演示</button>
-          <button class="view-tab" data-view-tab="gallery" type="button">瀑布画廊</button>
-          <button class="view-tab" data-view-tab="ppt-record" type="button">PPT记录</button>
-        </div>
+        <nav class="primary-nav global-nav" aria-label="全局导航">
+          <span class="nav-region-label">主区</span>
+          <div class="view-tabs global-nav-list" role="tablist" aria-label="功能区导航">
+            <div class="nav-item" data-nav-section="create">
+              <button class="view-tab active" data-view-tab="studio" type="button">
+                <span class="nav-tab-label">创作</span>
+                <span class="nav-tab-note">Studio</span>
+              </button>
+              <div class="nav-flyout mega-menu" data-nav-subzone="studio">
+                <div class="mega-menu-grid">
+                  <section class="mega-menu-column mega-menu-primary" aria-label="创作区">
+                    <span class="mega-menu-kicker">创作区</span>
+                    <a class="mega-menu-link large" href="#studio">Studio 生成台</a>
+                    <a class="mega-menu-link" href="#studio">提示词与参考图</a>
+                    <a class="mega-menu-link" href="#studio">参数与队列</a>
+                  </section>
+                  <section class="mega-menu-column" aria-label="创作工具">
+                    <span class="mega-menu-title">工具</span>
+                    <button class="mega-menu-action" type="button" data-nav-action="prompt-agent">图片转提示词</button>
+                    <a class="mega-menu-link" href="#gallery">查看生成结果</a>
+                  </section>
+                  <section class="mega-menu-column" aria-label="创作设置">
+                    <span class="mega-menu-title">设置</span>
+                    <button class="mega-menu-action" type="button" data-nav-action="config">配置 API</button>
+                    <button class="mega-menu-action" type="button" data-nav-action="theme">切换主题</button>
+                  </section>
+                </div>
+              </div>
+            </div>
+            <div class="nav-item" data-nav-section="present">
+              <button class="view-tab" data-view-tab="ppt" type="button">
+                <span class="nav-tab-label">演示</span>
+                <span class="nav-tab-note">PPT</span>
+              </button>
+              <div class="nav-flyout mega-menu" data-nav-subzone="ppt">
+                <div class="mega-menu-grid">
+                  <section class="mega-menu-column mega-menu-primary" aria-label="演示区">
+                    <span class="mega-menu-kicker">演示区</span>
+                    <a class="mega-menu-link large" href="#ppt">PPT 演示工作台</a>
+                    <a class="mega-menu-link" href="#ppt">大纲与页数</a>
+                    <a class="mega-menu-link" href="#ppt">动态组件</a>
+                  </section>
+                  <section class="mega-menu-column" aria-label="演示输出">
+                    <span class="mega-menu-title">输出</span>
+                    <a class="mega-menu-link" href="#ppt-record">PPT 记录</a>
+                    <a class="mega-menu-link" href="#gallery">生成画廊</a>
+                  </section>
+                  <section class="mega-menu-column" aria-label="演示工具">
+                    <span class="mega-menu-title">工具</span>
+                    <button class="mega-menu-action" type="button" data-nav-action="config">配置模型</button>
+                    <button class="mega-menu-action" type="button" data-nav-action="theme">切换主题</button>
+                  </section>
+                </div>
+              </div>
+            </div>
+            <div class="nav-item" data-nav-section="assets">
+              <button class="view-tab" data-view-tab="gallery" type="button">
+                <span class="nav-tab-label">资产</span>
+                <span class="nav-tab-note">Gallery</span>
+              </button>
+              <div class="nav-flyout mega-menu" data-nav-subzone="gallery">
+                <div class="mega-menu-grid">
+                  <section class="mega-menu-column mega-menu-primary" aria-label="资产区">
+                    <span class="mega-menu-kicker">资产区</span>
+                    <a class="mega-menu-link large" href="#gallery">瀑布画廊</a>
+                    <a class="mega-menu-link" href="#gallery">生成历史</a>
+                    <a class="mega-menu-link" href="#studio">继续创作</a>
+                  </section>
+                  <section class="mega-menu-column" aria-label="资产工具">
+                    <span class="mega-menu-title">工具</span>
+                    <button class="mega-menu-action" type="button" data-nav-action="output">打开输出目录</button>
+                    <button class="mega-menu-action" type="button" data-nav-action="prompt-agent">图片转提示词</button>
+                  </section>
+                  <section class="mega-menu-column" aria-label="资产记录">
+                    <span class="mega-menu-title">记录</span>
+                    <a class="mega-menu-link" href="#ppt-record">PPT 记录</a>
+                    <a class="mega-menu-link" href="#ppt">PPT 演示</a>
+                  </section>
+                </div>
+              </div>
+            </div>
+            <div class="nav-item" data-nav-section="records">
+              <button class="view-tab" data-view-tab="ppt-record" type="button">
+                <span class="nav-tab-label">记录</span>
+                <span class="nav-tab-note">Decks</span>
+              </button>
+              <div class="nav-flyout mega-menu" data-nav-subzone="ppt-record">
+                <div class="mega-menu-grid">
+                  <section class="mega-menu-column mega-menu-primary" aria-label="记录区">
+                    <span class="mega-menu-kicker">记录区</span>
+                    <a class="mega-menu-link large" href="#ppt-record">PPT 记录</a>
+                    <a class="mega-menu-link" href="#ppt-record">演示文稿历史</a>
+                    <a class="mega-menu-link" href="#ppt">继续编辑演示</a>
+                  </section>
+                  <section class="mega-menu-column" aria-label="记录出口">
+                    <span class="mega-menu-title">出口</span>
+                    <a class="mega-menu-link" href="#gallery">瀑布画廊</a>
+                    <button class="mega-menu-action" type="button" data-nav-action="output">打开输出目录</button>
+                  </section>
+                  <section class="mega-menu-column" aria-label="记录设置">
+                    <span class="mega-menu-title">设置</span>
+                    <button class="mega-menu-action" type="button" data-nav-action="config">配置</button>
+                    <button class="mega-menu-action" type="button" data-nav-action="theme">切换主题</button>
+                  </section>
+                </div>
+              </div>
+            </div>
+          </div>
+        </nav>
 
-        <div class="topbar-actions">
+        <div class="topbar-api-check" aria-label="API 检测">
           <div class="header-pill status-ready" id="connectionStatus" data-state="idle">
             <span class="status-dot"></span>
             <span id="connectionLabel">正在读取配置</span>
           </div>
+        </div>
+
+        <div class="topbar-ghost-actions" aria-hidden="true">
           <div class="header-pill" id="configStatus">配置未保存</div>
+          <button class="theme-toggle header-button" id="themeToggleButton" type="button" aria-pressed="false">
+            <span class="theme-toggle-icon" aria-hidden="true"></span>
+            <span id="themeToggleLabel">白色主题</span>
+          </button>
           <button class="header-button" id="openOutputButton" type="button">打开输出目录</button>
           <button class="header-button" id="openPromptAgentButton" type="button">图片转提示词</button>
           <button class="header-button strong" id="openConfigButton" type="button">配置</button>
@@ -769,6 +890,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260504-async-queue-1"></script>
+    <script type="module" src="/app.js?v=20260504-vercel-static-lib-1"></script>
   </body>
 </html>

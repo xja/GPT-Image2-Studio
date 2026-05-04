@@ -129,22 +129,69 @@ test("Cloudflare generation uses browser-provided API settings without echoing t
   assert.equal(seenRequests[0].body.model, "gpt-5.5");
   assert.match(text, /event: saved/);
   assert.doesNotMatch(text, /^event: final_image$/m);
-  assert.equal(chunkEvents.length, 0);
-  assert.match(imageUrl, /^\/api\/images\/images%2F\d{4}-\d{2}-\d{2}%2Fcloudflare-/);
-  assert.equal(savedEvent.payload.item.thumbnailUrl, imageUrl);
+  assert.ok(chunkEvents.length > 0);
+  assert.equal(chunkEvents.map((event) => event.payload.chunk).join(""), "ZmluYWw=");
+  assert.equal(imageUrl, "");
+  assert.equal(savedEvent.payload.item.thumbnailUrl, "");
   assert.equal(Number.isFinite(Number(savedEvent.payload.item.generationDurationMs)), true);
   assert.match(savedEvent.payload.item.generationStartedAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.match(savedEvent.payload.item.generationCompletedAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(imageBucket.objects.size, 1);
   assert.doesNotMatch(text, /data:image\/png;base64,ZmluYWw=/);
   assert.doesNotMatch(text, /test-browser-key/);
+});
 
-  const imageResponse = await handleApiRequest(new Request(`https://studio.example${imageUrl}`), {
-    imageBucket,
-  });
-  assert.equal(imageResponse.status, 200);
-  assert.equal(imageResponse.headers.get("Content-Type"), "image/png");
-  assert.equal(new TextDecoder().decode(await imageResponse.arrayBuffer()), "final");
+test("Cloudflare generation still returns chunked browser image when R2 image storage fails", async () => {
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  const imageBucket = makeImageBucket();
+  const originalPut = imageBucket.put;
+  imageBucket.put = async function put(key, value, options = {}) {
+    if (String(key).startsWith("images/")) {
+      throw new Error("R2 write failed");
+    }
+    return originalPut.call(this, key, value, options);
+  };
+  const formData = new FormData();
+  formData.set("jobId", "job-cloudflare");
+  formData.set("prompt", "Create a simple product poster");
+  formData.set("ratio", "4:5");
+  formData.set("size", "1024x1280");
+  formData.set("format", "png");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+
+  let response;
+  let text = "";
+  try {
+    response = await handleApiRequest(new Request("https://studio.example/api/generate", {
+      method: "POST",
+      body: formData,
+    }), {
+      imageBucket,
+      async fetchImpl() {
+        return makeSseResponse();
+      },
+    });
+    text = await response.text();
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  const events = parseSseEvents(text);
+  const chunkEvents = events.filter((event) => event.eventName === "final_image_chunk");
+  const savedEvent = events.find((event) => event.eventName === "saved");
+
+  assert.equal(response.status, 200);
+  assert.ok(chunkEvents.length > 0);
+  assert.equal(chunkEvents.map((event) => event.payload.chunk).join(""), "ZmluYWw=");
+  assert.ok(savedEvent);
+  assert.equal(savedEvent.payload.item.imageUrl, "");
+  assert.equal(savedEvent.payload.item.thumbnailUrl, "");
+  assert.equal(savedEvent.payload.item.storageError, undefined);
+  assert.doesNotMatch(text, /^event: error$/m);
+  assert.match(text, /event: complete/);
 });
 
 test("Cloudflare generation fails clearly when the R2 image bucket is not bound", async () => {
@@ -177,7 +224,7 @@ test("Cloudflare generation fails clearly when the R2 image bucket is not bound"
   assert.match(text, /IMAGE_BUCKET/);
 });
 
-test("Cloudflare async generation queues long jobs and exposes completed task snapshots", async () => {
+test("Cloudflare interactive generation streams chunks even when a queue binding exists", async () => {
   const seenRequests = [];
   const imageBucket = makeImageBucket();
   const generationQueue = makeGenerationQueue();
@@ -199,56 +246,27 @@ test("Cloudflare async generation queues long jobs and exposes completed task sn
   }), {
     imageBucket,
     generationQueue,
-    async fetchImpl() {
-      throw new Error("fetch should run in the queue consumer");
-    },
-  });
-  const text = await response.text();
-  const events = parseSseEvents(text);
-
-  assert.equal(response.status, 200);
-  assert.equal(generationQueue.messages.length, 1);
-  assert.equal(events.at(-1).eventName, "queued");
-  assert.doesNotMatch(text, /test-browser-key/);
-
-  await handleGenerationQueue({
-    messages: [
-      {
-        body: generationQueue.messages[0],
-        acked: false,
-        ack() {
-          this.acked = true;
-        },
-      },
-    ],
-  }, {
-    IMAGE_BUCKET: imageBucket,
-  }, {
     async fetchImpl(url, init) {
       seenRequests.push({
         url,
         auth: init.headers.Authorization,
         body: JSON.parse(init.body),
       });
-      return makeSseResponse("YXN5bmMtZmluYWw=");
+      return makeSseResponse("aW50ZXJhY3RpdmUtZmluYWw=");
     },
   });
+  const text = await response.text();
+  const events = parseSseEvents(text);
 
-  const tasksResponse = await handleApiRequest(new Request("https://studio.example/api/generation/tasks", {
-    headers: {
-      "x-client-session-id": "session-async",
-    },
-  }), {
-    imageBucket,
-  });
-  const tasks = await tasksResponse.json();
-
+  assert.equal(response.status, 200);
+  assert.equal(generationQueue.messages.length, 0);
   assert.equal(seenRequests.length, 1);
   assert.equal(seenRequests[0].auth, "Bearer test-browser-key");
-  assert.equal(tasks.length, 1);
-  assert.equal(tasks[0].status, "completed");
-  assert.match(tasks[0].item.imageUrl, /^\/api\/images\//);
-  assert.equal([...imageBucket.objects.keys()].some((key) => key.startsWith("generation-requests/")), false);
+  assert.ok(events.some((event) => event.eventName === "final_image_chunk"));
+  assert.ok(events.some((event) => event.eventName === "saved"));
+  assert.ok(events.some((event) => event.eventName === "complete"));
+  assert.equal(events.some((event) => event.eventName === "queued"), false);
+  assert.doesNotMatch(text, /test-browser-key/);
 });
 
 test("Cloudflare image proxy rejects invalid keys", async () => {

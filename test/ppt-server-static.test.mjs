@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const serverPath = new URL("../server.mjs", import.meta.url);
 const packagePath = new URL("../package.json", import.meta.url);
 const galleryStorePath = new URL("../lib/gallery-store.mjs", import.meta.url);
+const pptExportPath = new URL("../lib/ppt-export.mjs", import.meta.url);
 
 test("server exposes PPT generation, completion and deck history endpoints", async () => {
   const server = await readFile(serverPath, "utf8");
@@ -48,7 +49,34 @@ test("server persists the effective image size after an upstream fallback", asyn
   assert.match(server, /buildSavedItem\(\{[\s\S]*size:\s*savedSize/);
 });
 
+test("server uses tmp output storage on Vercel serverless runtime", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /tmpdir/);
+  assert.match(server, /process\.env\.VERCEL/);
+  assert.match(server, /join\(tmpdir\(\),\s*"gpt-image2-studio-output"\)/);
+  assert.doesNotMatch(server, /const outputDir = join\(homedir\(\), "Pictures"\);/);
+});
+
+test("server serves browser modules from public before Vercel-bundled lib files", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const publicRouteIndex = server.indexOf("const target = resolveSafeFile(publicDir, url.pathname);");
+  const bundledLibRouteIndex = server.indexOf('url.pathname.startsWith("/lib/")');
+
+  assert.ok(publicRouteIndex > -1);
+  assert.ok(bundledLibRouteIndex > -1);
+  assert.ok(publicRouteIndex < bundledLibRouteIndex);
+});
+
 test("package declares pptxgenjs dependency for deck export", async () => {
   const pkg = JSON.parse(await readFile(packagePath, "utf8"));
   assert.match(pkg.dependencies?.pptxgenjs || "", /\^4\.0\.1/);
+});
+
+test("PPT export loads pptxgenjs through CommonJS for Vercel runtime compatibility", async () => {
+  const pptExport = await readFile(pptExportPath, "utf8");
+
+  assert.match(pptExport, /createRequire/);
+  assert.match(pptExport, /require\("pptxgenjs"\)/);
+  assert.doesNotMatch(pptExport, /import\s+\w+\s+from\s+"pptxgenjs"/);
 });

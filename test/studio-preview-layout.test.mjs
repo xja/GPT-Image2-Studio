@@ -6,6 +6,24 @@ const indexPath = new URL("../public/index.html", import.meta.url);
 const stylesPath = new URL("../public/styles.css", import.meta.url);
 const appPath = new URL("../public/app.js", import.meta.url);
 
+test("browser-imported lib modules are copied into public for Vercel static serving", async () => {
+  const app = await readFile(appPath, "utf8");
+  const imports = [...app.matchAll(/from "\/lib\/([^"?]+)\.mjs(?:\?[^"]*)?"/g)].map((match) => match[1]);
+
+  assert.ok(imports.length > 0);
+  assert.equal(new Set(imports).size, imports.length);
+
+  for (const moduleName of imports) {
+    const moduleSource = await readFile(new URL(`../public/lib/${moduleName}.mjs`, import.meta.url), "utf8");
+    const sourceModule = await readFile(new URL(`../lib/${moduleName}.mjs`, import.meta.url), "utf8");
+    assert.equal(moduleSource, sourceModule);
+    assert.doesNotMatch(moduleSource, /\uFFFD/);
+  }
+
+  const sizeOptionsModule = await readFile(new URL("../public/lib/generation-size-options.mjs", import.meta.url), "utf8");
+  assert.match(sizeOptionsModule, /export function getGenerationSizeOptions/);
+});
+
 test("preview image uses contain sizing to fill the available canvas without clipping", async () => {
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
@@ -105,7 +123,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260504-async-queue-1/);
+  assert.match(html, /\/app\.js\?v=20260504-vercel-static-lib-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -173,6 +191,27 @@ test("studio rendering preserves the settings form scroll position during genera
   assert.match(app, /function syncStudioHeight\(\) \{[\s\S]*const settingsScrollTop = getSettingsFormScrollTop\(\);[\s\S]*restoreSettingsFormScrollTop\(settingsScrollTop\);[\s\S]*\}/);
 });
 
+test("generation loading shell uses light DOM and transform-only motion", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+  const loadingStart = styles.indexOf(".preview-loading-shell");
+  const loadingStyles = styles.slice(loadingStart, styles.indexOf(".preview-panel", loadingStart));
+
+  assert.match(app, /"preview-loading-progress"/);
+  assert.match(app, /"preview-loading-signal"/);
+  assert.doesNotMatch(app, /preview-loading-aura|preview-loading-morph|preview-loading-trace|preview-loading-core/);
+  assert.match(
+    loadingStyles,
+    /\.preview-loading-progress\s*\{[\s\S]*transform:\s*scaleX\(var\(--loading-progress,\s*0\.25\)\);[\s\S]*animation:\s*preview-loading-progress-sweep/,
+  );
+  assert.match(loadingStyles, /\.preview-loading-signal\s*\{[\s\S]*animation:\s*preview-loading-signal/);
+  assert.doesNotMatch(loadingStyles, /preview-loading-morph|preview-loading-aura|filter:\s*blur|mix-blend-mode/);
+  assert.match(
+    loadingStyles,
+    /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.preview-loading-progress,[\s\S]*\.preview-loading-signal[\s\S]*animation:\s*none;/,
+  );
+});
+
 test("studio panels start without redundant title blocks and merge parameters under ratio controls", async () => {
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
@@ -219,12 +258,14 @@ test("studio output format can be selected as png or jpg", async () => {
   assert.match(app, /formData\.set\("format", job\.format\);/);
 });
 
-test("prompt agent opens from the header without adding another view tab", async () => {
+test("prompt agent opens from global navigation without adding another view tab", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /<button class="header-button" id="openPromptAgentButton" type="button">图片转提示词<\/button>/);
+  assert.match(html, /data-nav-action="prompt-agent"[\s\S]*图片转提示词/);
+  assert.match(html, /<div class="topbar-ghost-actions" aria-hidden="true">[\s\S]*id="openPromptAgentButton"/);
+  assert.match(styles, /\.topbar-ghost-actions\s*\{[\s\S]*display:\s*none;/);
   assert.match(html, /<aside class="prompt-agent-modal hidden" id="promptAgentModal"/);
   assert.match(html, /id="promptAgentHistoryList"/);
   assert.doesNotMatch(html, /data-view-tab="prompt-agent"/);
@@ -232,6 +273,56 @@ test("prompt agent opens from the header without adding another view tab", async
   assert.match(app, /fetch\("\/api\/prompt-agent\/analyze"/);
   assert.match(app, /refs\.promptInput\.value = promptText;/);
   assert.match(app, /loadPromptAgentHistory/);
+});
+
+test("top navigation groups functions into an Apple-style global mega menu", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /<nav class="primary-nav global-nav" aria-label="全局导航">/);
+  assert.match(html, /<span class="nav-region-label">主区<\/span>/);
+  assert.match(html, /<div class="view-tabs global-nav-list" role="tablist" aria-label="功能区导航">/);
+  assert.match(html, /data-nav-section="create"[\s\S]*data-view-tab="studio"[\s\S]*<span class="nav-tab-label">创作<\/span>[\s\S]*<span class="nav-tab-note">Studio<\/span>/);
+  assert.match(html, /data-nav-section="present"[\s\S]*data-view-tab="ppt"[\s\S]*<span class="nav-tab-label">演示<\/span>[\s\S]*<span class="nav-tab-note">PPT<\/span>/);
+  assert.match(html, /data-nav-section="assets"[\s\S]*data-view-tab="gallery"[\s\S]*<span class="nav-tab-label">资产<\/span>[\s\S]*<span class="nav-tab-note">Gallery<\/span>/);
+  assert.match(html, /data-nav-section="records"[\s\S]*data-view-tab="ppt-record"[\s\S]*<span class="nav-tab-label">记录<\/span>[\s\S]*<span class="nav-tab-note">Decks<\/span>/);
+  assert.match(html, /<div class="nav-flyout mega-menu" data-nav-subzone="studio">[\s\S]*<span class="mega-menu-kicker">创作区<\/span>[\s\S]*<a class="mega-menu-link large" href="#studio">Studio 生成台<\/a>/);
+  assert.match(html, /data-nav-action="prompt-agent"[\s\S]*图片转提示词/);
+  assert.match(html, /data-nav-action="theme"[\s\S]*切换主题/);
+  assert.match(html, /data-nav-action="output"[\s\S]*打开输出目录/);
+  assert.doesNotMatch(html, /<div class="topbar-actions" aria-label="状态与工具">/);
+  assert.match(html, /<div class="topbar-api-check" aria-label="API 检测">[\s\S]*id="connectionStatus"[\s\S]*id="connectionLabel"[\s\S]*<\/div>/);
+  assert.match(html, /<div class="topbar-ghost-actions" aria-hidden="true">[\s\S]*id="configStatus"[\s\S]*id="themeToggleButton"[\s\S]*id="openOutputButton"[\s\S]*id="openPromptAgentButton"[\s\S]*id="openConfigButton"/);
+  assert.doesNotMatch(html, /nav-switch-panel|nav-switch-list|nav-switch-link|小区 · 界面切换/);
+  assert.match(styles, /\.topbar\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(0,\s*1fr\);/);
+  assert.match(styles, /\.global-nav\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*50%;[\s\S]*transform:\s*translateX\(-50%\);/);
+  assert.match(styles, /\.topbar-api-check\s*\{[\s\S]*position:\s*absolute;[\s\S]*top:\s*14px;[\s\S]*right:\s*14px;/);
+  assert.match(styles, /--flyout-bg:\s*rgba\(8,\s*13,\s*26,\s*0\.96\);[\s\S]*--flyout-text:\s*var\(--text\);/);
+  assert.match(styles, /html\[data-theme="light"\]\s*\{[\s\S]*--flyout-bg:\s*rgba\(251,\s*251,\s*253,\s*0\.96\);[\s\S]*--flyout-text:\s*var\(--text\);/);
+  assert.match(styles, /\.nav-flyout\.mega-menu\s*\{[\s\S]*width:\s*min\(680px,\s*calc\(100vw - 32px\)\);[\s\S]*padding:\s*24px;/);
+  assert.match(styles, /\.mega-menu-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(170px,\s*1\.35fr\)\s+repeat\(2,\s*minmax\(120px,\s*1fr\)\);/);
+  assert.match(styles, /\.mega-menu-link\.large\s*\{[\s\S]*font-size:\s*1\.45rem;[\s\S]*font-weight:\s*700;/);
+  assert.match(styles, /\.global-nav-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);[\s\S]*overflow:\s*visible;/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.global-nav-list\s*\{[\s\S]*overflow:\s*visible;/);
+  assert.match(styles, /\.nav-item:hover \.nav-flyout,\s*[\r\n]+\s*\.nav-item:focus-within \.nav-flyout\s*\{[\s\S]*opacity:\s*1;[\s\S]*visibility:\s*visible;[\s\S]*pointer-events:\s*auto;/);
+  assert.match(app, /function handleGlobalNavAction\(action\) \{/);
+  assert.match(app, /document\.querySelectorAll\("\[data-nav-action\]"\)\.forEach/);
+});
+
+test("theme toggle persists dark and white themes", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /image-studio-ui-theme-v1/);
+  assert.match(html, /<button class="theme-toggle header-button" id="themeToggleButton" type="button" aria-pressed="false">/);
+  assert.match(html, /<span id="themeToggleLabel">白色主题<\/span>/);
+  assert.match(styles, /html\[data-theme="light"\]\s*\{[\s\S]*--bg:\s*#f5f5f7;[\s\S]*--text:\s*#1d1d1f;/);
+  assert.match(styles, /html\[data-theme="light"\] body\s*\{[\s\S]*background:\s*linear-gradient\(180deg,\s*#f5f5f7 0%,\s*#ffffff 100%\);/);
+  assert.match(app, /const THEME_STORAGE_KEY = "image-studio-ui-theme-v1";/);
+  assert.match(app, /function setUiTheme\(theme\) \{[\s\S]*document\.documentElement\.dataset\.theme = normalized;[\s\S]*window\.localStorage\.setItem\(THEME_STORAGE_KEY,\s*normalized\);/);
+  assert.match(app, /refs\.themeToggleButton\.addEventListener\("click",\s*\(\) => \{/);
 });
 
 test("prompt agent preview marks uploaded images as zoomable and animates analysis", async () => {
@@ -315,6 +406,7 @@ test("studio entry defaults to square ratio", async () => {
 test("mobile and Pad studio layout keeps panels inside the viewport column", async () => {
   const styles = await readFile(stylesPath, "utf8");
 
+  assert.match(styles, /html,\s*[\r\n]+body\s*\{[\s\S]*overflow-x:\s*clip;/);
   assert.match(
     styles,
     /html\[data-ui-layout="stacked"\] \.studio-grid,\s*[\r\n]+html\[data-ui-layout="tablet"\] \.studio-grid,\s*[\r\n]+html\[data-ui-layout="mobile"\] \.studio-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\);/,
@@ -367,7 +459,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260504-async-queue-1/);
+  assert.match(html, /\/app\.js\?v=20260504-vercel-static-lib-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
