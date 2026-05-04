@@ -474,8 +474,7 @@ textarea::-webkit-scrollbar-corner {
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.nav-item:hover .nav-flyout,
-.nav-item:focus-within .nav-flyout {
+.nav-item.is-nav-open .nav-flyout {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -556,6 +555,26 @@ textarea::-webkit-scrollbar-corner {
   border-radius: 13px;
   background: color-mix(in srgb, var(--control-bg) 82%, transparent);
   backdrop-filter: blur(18px);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.topbar-api-check .header-pill:hover,
+.topbar-api-check .header-pill:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: color-mix(in srgb, var(--control-bg-hover) 86%, transparent);
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.topbar-api-check .header-pill:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 54%, transparent);
+  outline-offset: 3px;
 }
 
 .header-pill,
@@ -3263,12 +3282,9 @@ html[data-ui-layout="mobile"] .nav-flyout.mega-menu {
   transform: translate(0, -6px);
 }
 
-html[data-ui-layout="stacked"] .nav-item:hover .nav-flyout,
-html[data-ui-layout="stacked"] .nav-item:focus-within .nav-flyout,
-html[data-ui-layout="tablet"] .nav-item:hover .nav-flyout,
-html[data-ui-layout="tablet"] .nav-item:focus-within .nav-flyout,
-html[data-ui-layout="mobile"] .nav-item:hover .nav-flyout,
-html[data-ui-layout="mobile"] .nav-item:focus-within .nav-flyout {
+html[data-ui-layout="stacked"] .nav-item.is-nav-open .nav-flyout,
+html[data-ui-layout="tablet"] .nav-item.is-nav-open .nav-flyout,
+html[data-ui-layout="mobile"] .nav-item.is-nav-open .nav-flyout {
   transform: translate(0, 0);
 }
 
@@ -3573,14 +3589,17 @@ html[data-ui-layout="mobile"] .prompt-template-head {
 .ppt-source-option {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
   min-height: 42px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid rgba(132, 147, 255, 0.22);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.045);
   color: var(--muted);
+  font-size: 0.88rem;
   font-weight: 700;
+  line-height: 1.2;
 }
 
 .ppt-source-option:has(input:checked) {
@@ -3590,9 +3609,16 @@ html[data-ui-layout="mobile"] .prompt-template-head {
 }
 
 .ppt-source-option input {
+  flex: 0 0 auto;
   width: 16px;
   height: 16px;
   accent-color: #7c83ff;
+}
+
+.ppt-source-option span {
+  min-width: 0;
+  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .ppt-dropzone {

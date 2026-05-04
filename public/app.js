@@ -269,6 +269,8 @@ const refs = {
   galleryView: document.querySelector(".gallery-view"),
   generateButton: document.querySelector("#generateButton"),
   generateForm: document.querySelector("#generateForm"),
+  globalNav: document.querySelector(".global-nav"),
+  globalNavItems: [...document.querySelectorAll("[data-nav-section]")],
   lightbox: document.querySelector("#lightbox"),
   lightboxAmbient: document.querySelector("#lightboxAmbient"),
   lightboxBackdrop: document.querySelector("#lightboxBackdrop"),
@@ -1507,6 +1509,32 @@ function getPromptAgentJsonText(item = state.promptAgent.result) {
   }
 
   return JSON.stringify(item.json, null, 2);
+}
+
+function getPromptAgentTemplateId(item) {
+  const rawId = String(item?.id || item?.createdAt || item?.filename || "latest").trim();
+  const safeId = rawId.replace(/[^a-zA-Z0-9_-]/g, "-") || "latest";
+  return `prompt-agent-${safeId}`;
+}
+
+function savePromptAgentResultAsTemplate(item) {
+  const prompt = getPromptAgentJsonText(item);
+  if (!prompt) {
+    return;
+  }
+
+  const template = {
+    id: getPromptAgentTemplateId(item),
+    name: item.json?.title || item.filename || "图片 JSON 提示词",
+    prompt,
+  };
+  state.promptTemplates = [
+    template,
+    ...state.promptTemplates.filter((entry) => entry.id !== template.id),
+  ];
+  state.selectedPromptTemplateId = template.id;
+  writePromptTemplates();
+  renderPromptTemplates();
 }
 
 function renderPromptAgentPreview() {
@@ -4676,6 +4704,7 @@ async function analyzePromptAgentImage() {
       payload.item,
       ...state.promptAgent.history.filter((item) => item.id !== payload.item.id),
     ];
+    savePromptAgentResultAsTemplate(payload.item);
     setPromptAgentFeedback("已生成 JSON 提示词。", "success");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -4897,6 +4926,55 @@ function handlePromptGenerationShortcut(event) {
   refs.generateButton.click();
 }
 
+function setActiveGlobalNavItem(item) {
+  refs.globalNavItems.forEach((navItem) => {
+    const isOpen = navItem === item;
+    navItem.classList.toggle("is-nav-open", isOpen);
+
+    const button = navItem.querySelector(".view-tab");
+    if (button) {
+      button.setAttribute("aria-expanded", String(isOpen));
+    }
+
+    const flyout = navItem.querySelector(".nav-flyout");
+    if (flyout) {
+      flyout.setAttribute("aria-hidden", String(!isOpen));
+    }
+  });
+}
+
+function bindGlobalNavEvents() {
+  refs.globalNavItems.forEach((item) => {
+    const button = item.querySelector(".view-tab");
+    if (!button) {
+      return;
+    }
+
+    button.addEventListener("pointerenter", () => setActiveGlobalNavItem(item));
+    button.addEventListener("mouseenter", () => setActiveGlobalNavItem(item));
+    button.addEventListener("focus", () => setActiveGlobalNavItem(item));
+    button.addEventListener("click", () => setActiveGlobalNavItem(item));
+  });
+
+  refs.globalNav?.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (event.target instanceof Element && event.target.closest(".global-nav")) {
+      return;
+    }
+
+    setActiveGlobalNavItem(null);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      setActiveGlobalNavItem(null);
+    }
+  });
+}
+
 function handleGlobalNavAction(action) {
   if (action === "prompt-agent") {
     setPromptAgentOpen(true);
@@ -4919,6 +4997,8 @@ function handleGlobalNavAction(action) {
 }
 
 function bindEvents() {
+  bindGlobalNavEvents();
+
   refs.viewTabs.forEach((button) => {
     button.addEventListener("click", () => {
       setActiveView(button.dataset.viewTab);
@@ -4936,6 +5016,7 @@ function bindEvents() {
   refs.themeToggleButton.addEventListener("click", () => {
     toggleUiTheme();
   });
+  refs.connectionStatus.addEventListener("click", () => setDrawerOpen(true));
   refs.openConfigButton.addEventListener("click", () => setDrawerOpen(true));
   refs.closeConfigButton.addEventListener("click", () => setDrawerOpen(false));
   refs.closeConfigBackdrop.addEventListener("click", () => setDrawerOpen(false));

@@ -123,7 +123,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260504-vercel-static-lib-1/);
+  assert.match(html, /\/app\.js\?v=20260505-api-status-config-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -308,13 +308,14 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.match(settingsMenu, /data-nav-action="theme"[\s\S]*主题颜色/);
   assert.doesNotMatch(settingsMenu, /data-view-tab=/);
   assert.doesNotMatch(html, /<div class="topbar-actions" aria-label="状态与工具">/);
-  assert.match(html, /<div class="topbar-api-check" aria-label="API 检测">[\s\S]*id="connectionStatus"[\s\S]*id="connectionLabel"[\s\S]*<\/div>/);
+  assert.match(html, /<div class="topbar-api-check" aria-label="API 检测">[\s\S]*<button class="header-pill status-ready" id="connectionStatus" data-state="idle" type="button" aria-label="打开 API 配置">[\s\S]*id="connectionLabel"[\s\S]*<\/button>/);
   assert.match(html, /<div class="topbar-ghost-actions" aria-hidden="true">[\s\S]*id="configStatus"[\s\S]*id="themeToggleButton"[\s\S]*id="openOutputButton"[\s\S]*id="openPromptAgentButton"[\s\S]*id="openConfigButton"/);
   assert.doesNotMatch(html, /nav-switch-panel|nav-switch-list|nav-switch-link|小区 · 界面切换/);
   assert.match(styles, /\.topbar\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(0,\s*1fr\);/);
   assert.match(styles, /\.global-nav\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*50%;[\s\S]*transform:\s*translateX\(-50%\);/);
   assert.match(styles, /\.view-tabs\s*\{[\s\S]*border-color:\s*transparent;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;/);
   assert.match(styles, /\.topbar-api-check\s*\{[\s\S]*position:\s*absolute;[\s\S]*top:\s*14px;[\s\S]*right:\s*14px;/);
+  assert.match(styles, /\.topbar-api-check \.header-pill:hover,\s*[\r\n]+\s*\.topbar-api-check \.header-pill:focus-visible\s*\{[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent\)\s*48%,\s*var\(--border\)\);/);
   assert.match(styles, /--flyout-bg:\s*rgba\(8,\s*13,\s*26,\s*0\.96\);[\s\S]*--flyout-text:\s*var\(--text\);/);
   assert.match(styles, /html\[data-theme="light"\]\s*\{[\s\S]*--flyout-bg:\s*rgba\(251,\s*251,\s*253,\s*0\.96\);[\s\S]*--flyout-text:\s*var\(--text\);/);
   assert.match(styles, /\.nav-flyout\.mega-menu\s*\{[\s\S]*width:\s*min\(680px,\s*calc\(100vw - 32px\)\);[\s\S]*padding:\s*24px;/);
@@ -322,8 +323,15 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.match(styles, /\.mega-menu-link\.large,\s*[\r\n]+\s*\.mega-menu-action\.large\s*\{[\s\S]*font-size:\s*1\.45rem;[\s\S]*font-weight:\s*700;/);
   assert.match(styles, /\.global-nav-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\);[\s\S]*overflow:\s*visible;/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.global-nav-list\s*\{[\s\S]*overflow:\s*visible;/);
-  assert.match(styles, /\.nav-item:hover \.nav-flyout,\s*[\r\n]+\s*\.nav-item:focus-within \.nav-flyout\s*\{[\s\S]*opacity:\s*1;[\s\S]*visibility:\s*visible;[\s\S]*pointer-events:\s*auto;/);
+  assert.doesNotMatch(styles, /\.nav-item:hover \.nav-flyout/);
+  assert.doesNotMatch(styles, /\.nav-item:focus-within \.nav-flyout/);
+  assert.match(styles, /\.nav-item\.is-nav-open \.nav-flyout\s*\{[\s\S]*opacity:\s*1;[\s\S]*visibility:\s*visible;[\s\S]*pointer-events:\s*auto;/);
   assert.match(app, /function handleGlobalNavAction\(action\) \{/);
+  assert.match(app, /refs\.connectionStatus\.addEventListener\("click",\s*\(\) => setDrawerOpen\(true\)\);/);
+  assert.match(app, /globalNavItems:\s*\[\.\.\.document\.querySelectorAll\("\[data-nav-section\]"\)\]/);
+  assert.match(app, /function setActiveGlobalNavItem\(item\) \{[\s\S]*refs\.globalNavItems\.forEach\(\(navItem\) => \{[\s\S]*const isOpen = navItem === item;[\s\S]*navItem\.classList\.toggle\("is-nav-open",\s*isOpen\);/);
+  assert.match(app, /button\.addEventListener\("pointerenter",\s*\(\) => setActiveGlobalNavItem\(item\)\);/);
+  assert.match(app, /button\.addEventListener\("focus",\s*\(\) => setActiveGlobalNavItem\(item\)\);/);
   assert.match(app, /document\.querySelectorAll\("\[data-nav-action\]"\)\.forEach/);
 });
 
@@ -376,6 +384,17 @@ test("prompt agent long-term history keeps prompts collapsed behind title rows",
   assert.match(styles, /\.prompt-agent-history-title-button\s*\{[\s\S]*white-space:\s*nowrap;/);
   assert.match(styles, /\.prompt-agent-history-expand-button\s*\{[\s\S]*justify-self:\s*end;/);
   assert.match(styles, /\.prompt-agent-history-detail\.hidden\s*\{[\s\S]*display:\s*none;/);
+});
+
+test("prompt agent analysis also keeps JSON prompts in prompt templates", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /function getPromptAgentTemplateId\(item\) \{/);
+  assert.match(app, /function savePromptAgentResultAsTemplate\(item\) \{[\s\S]*const prompt = getPromptAgentJsonText\(item\);/);
+  assert.match(app, /id:\s*getPromptAgentTemplateId\(item\),[\s\S]*name:\s*item\.json\?\.title \|\| item\.filename \|\| "图片 JSON 提示词",[\s\S]*prompt,/);
+  assert.match(app, /state\.promptTemplates = \[[\s\S]*template,[\s\S]*\.\.\.state\.promptTemplates\.filter\(\(entry\) => entry\.id !== template\.id\),[\s\S]*\];/);
+  assert.match(app, /writePromptTemplates\(\);[\s\S]*renderPromptTemplates\(\);/);
+  assert.match(app, /savePromptAgentResultAsTemplate\(payload\.item\);/);
 });
 
 test("studio error surfaces compact long upstream HTTP failures before rendering", async () => {
@@ -476,7 +495,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260504-vercel-static-lib-1/);
+  assert.match(html, /\/app\.js\?v=20260505-api-status-config-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);

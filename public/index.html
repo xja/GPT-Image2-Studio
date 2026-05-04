@@ -21,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260505-nav-zone-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260505-api-status-config-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -173,10 +173,10 @@
         </nav>
 
         <div class="topbar-api-check" aria-label="API 检测">
-          <div class="header-pill status-ready" id="connectionStatus" data-state="idle">
+          <button class="header-pill status-ready" id="connectionStatus" data-state="idle" type="button" aria-label="打开 API 配置">
             <span class="status-dot"></span>
             <span id="connectionLabel">正在读取配置</span>
-          </div>
+          </button>
         </div>
 
         <div class="topbar-ghost-actions" aria-hidden="true">
@@ -913,6 +913,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260504-vercel-static-lib-1"></script>
+    <script type="module" src="/app.js?v=20260505-api-status-config-1"></script>
   </body>
 </html>
