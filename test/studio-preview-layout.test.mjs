@@ -123,7 +123,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260506-task-cache-preserve-3/);
+  assert.match(html, /\/app\.js\?v=20260506-reference-compress-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -199,6 +199,21 @@ test("reference thumbnails render three per row and open a local preview viewer"
   assert.match(app, /function openReferencePreview\(referenceId\) \{/);
   assert.match(app, /refs\.referencePreviewImage\.src = item\.previewUrl;/);
   assert.match(app, /refs\.referenceGrid\.addEventListener\("click",[\s\S]*target\.closest\("\[data-reference-preview-id\]"\)/);
+});
+
+test("reference images are compressed before generation uploads", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /const GENERATION_REFERENCE_IMAGE_COMPRESS_THRESHOLD_BYTES = 900 \* 1024;/);
+  assert.match(app, /const GENERATION_REFERENCE_IMAGE_MAX_EDGE = 1024;/);
+  assert.match(app, /async function prepareGenerationReferenceImageFile\(file\) \{/);
+  assert.match(app, /new File\(\[blob\], makeGenerationReferenceImageName\(file\.name\)/);
+  assert.match(app, /function startReferenceGenerationCompression\(item\) \{/);
+  assert.match(app, /item\.generationFilePromise = prepareGenerationReferenceImageFile\(item\.file\)/);
+  assert.match(app, /function getGenerationReferenceFile\(item\) \{/);
+  assert.match(app, /const referenceFiles = state\.referenceFiles\.map\(getGenerationReferenceFile\);/);
+  assert.match(app, /await ensureReferenceGenerationFilesReady\(\);[\s\S]*const job = createJob\(\);/);
+  assert.match(app, /job\.referenceFiles\.forEach\(\(file\) => \{[\s\S]*formData\.append\("referenceImages", file\);/);
 });
 
 test("prompt field can start generation with Ctrl+Enter", async () => {
@@ -598,7 +613,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260506-task-cache-preserve-3/);
+  assert.match(html, /\/app\.js\?v=20260506-reference-compress-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);

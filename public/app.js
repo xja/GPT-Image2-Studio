@@ -136,6 +136,9 @@ const BROWSER_IMAGE_CACHE_STORE_NAME = "generated-images";
 const PROMPT_ANALYSIS_IMAGE_MAX_EDGE = 1024;
 const PROMPT_ANALYSIS_IMAGE_COMPRESS_THRESHOLD_BYTES = 900 * 1024;
 const PROMPT_ANALYSIS_IMAGE_JPEG_QUALITY = 0.82;
+const GENERATION_REFERENCE_IMAGE_MAX_EDGE = 1024;
+const GENERATION_REFERENCE_IMAGE_COMPRESS_THRESHOLD_BYTES = 900 * 1024;
+const GENERATION_REFERENCE_IMAGE_JPEG_QUALITY = 0.82;
 const GENERATION_TASK_POLL_INTERVAL_MS = 2500;
 const GENERATION_TASK_STATUS_LABELS = {
   running: "生成中",
@@ -231,6 +234,7 @@ const state = {
     result: null,
     running: false,
   },
+  referenceCompressionRunning: false,
   referenceFiles: [],
   referencePreviewItem: null,
   selectedPromptTemplateId: "",
@@ -497,6 +501,12 @@ function makePromptAnalysisImageName(filename) {
   return `${base}-analysis.jpg`;
 }
 
+function makeGenerationReferenceImageName(filename) {
+  const raw = String(filename || "reference-image").trim();
+  const base = raw.replace(/\.[^.]+$/, "") || "reference-image";
+  return `${base}-reference.jpg`;
+}
+
 async function preparePromptAnalysisImageFile(file) {
   if (
     !file ||
@@ -539,6 +549,61 @@ async function preparePromptAnalysisImageFile(file) {
     }
 
     return new File([blob], makePromptAnalysisImageName(file.name), {
+      type: "image/jpeg",
+      lastModified: file.lastModified || Date.now(),
+    });
+  } catch {
+    return file;
+  } finally {
+    if (bitmap && typeof bitmap.close === "function") {
+      bitmap.close();
+    }
+  }
+}
+
+async function prepareGenerationReferenceImageFile(file) {
+  if (
+    !file ||
+    typeof file !== "object" ||
+    !String(file.type || "").startsWith("image/") ||
+    Number(file.size || 0) <= GENERATION_REFERENCE_IMAGE_COMPRESS_THRESHOLD_BYTES ||
+    typeof createImageBitmap !== "function"
+  ) {
+    return file;
+  }
+
+  let bitmap = null;
+  try {
+    bitmap = await createImageBitmap(file);
+    const maxEdge = Math.max(bitmap.width, bitmap.height);
+    const scale = Math.min(1, GENERATION_REFERENCE_IMAGE_MAX_EDGE / maxEdge);
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return file;
+    }
+
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(bitmap, 0, 0, width, height);
+
+    const blob = await canvasToBlob(
+      canvas,
+      "image/jpeg",
+      GENERATION_REFERENCE_IMAGE_JPEG_QUALITY,
+    );
+    if (!blob || blob.size <= 0 || blob.size >= file.size) {
+      return file;
+    }
+
+    return new File([blob], makeGenerationReferenceImageName(file.name), {
       type: "image/jpeg",
       lastModified: file.lastModified || Date.now(),
     });
@@ -1675,9 +1740,10 @@ function updateGenerateButton() {
   const queuedCount = getQueuedJobCount();
   const maxQueuedCount = getMaxQueuedJobCount();
   const maxParallelCount = getMaxParallelJobCount();
-  refs.generateButton.disabled = queuedCount >= maxQueuedCount;
+  const preparingReference = state.referenceCompressionRunning || hasPendingReferenceGenerationFiles();
+  refs.generateButton.disabled = preparingReference || queuedCount >= maxQueuedCount;
   refs.generateButton.textContent =
-    queuedCount > 0 ? `队列 ${queuedCount}/${maxQueuedCount}` : "开始生成";
+    preparingReference ? "处理参考图..." : queuedCount > 0 ? `队列 ${queuedCount}/${maxQueuedCount}` : "开始生成";
   refs.liveCount.textContent = `${runningCount} / ${maxParallelCount}`;
 }
 
@@ -1886,6 +1952,57 @@ function revokeReferencePreview(item) {
   }
 }
 
+function getGenerationReferenceFile(item) {
+  return item?.generationFile || item?.file;
+}
+
+function hasPendingReferenceGenerationFiles() {
+  return state.referenceFiles.some((item) => item.generationFilePromise);
+}
+
+function startReferenceGenerationCompression(item) {
+  if (!item?.file) {
+    return null;
+  }
+
+  item.generationFile = item.file;
+  item.generationCompressed = false;
+  item.generationFilePromise = prepareGenerationReferenceImageFile(item.file)
+    .then((preparedFile) => {
+      item.generationFile = preparedFile || item.file;
+      item.generationCompressed = Boolean(preparedFile && preparedFile !== item.file);
+      return item.generationFile;
+    })
+    .catch(() => {
+      item.generationFile = item.file;
+      item.generationCompressed = false;
+      return item.file;
+    })
+    .finally(() => {
+      item.generationFilePromise = null;
+      updateGenerateButton();
+    });
+
+  updateGenerateButton();
+  return item.generationFilePromise;
+}
+
+async function ensureReferenceGenerationFilesReady() {
+  const pending = state.referenceFiles.map((item) => item.generationFilePromise).filter(Boolean);
+  if (pending.length === 0) {
+    return;
+  }
+
+  state.referenceCompressionRunning = true;
+  updateGenerateButton();
+  try {
+    await Promise.allSettled(pending);
+  } finally {
+    state.referenceCompressionRunning = false;
+    updateGenerateButton();
+  }
+}
+
 function resetReferenceFiles() {
   closeReferencePreview();
   state.referenceFiles.forEach(revokeReferencePreview);
@@ -1893,6 +2010,7 @@ function resetReferenceFiles() {
   refs.referenceInput.value = "";
   markReferenceAnalysisDirty();
   renderReferenceGrid();
+  updateGenerateButton();
 }
 
 function openReferencePreview(referenceId) {
@@ -1923,6 +2041,7 @@ function removeReferenceFile(referenceId) {
   state.referenceFiles = state.referenceFiles.filter((item) => item.id !== referenceId);
   markReferenceAnalysisDirty();
   renderReferenceGrid();
+  updateGenerateButton();
 }
 
 function applyReferenceFiles(fileList) {
@@ -1946,12 +2065,17 @@ function applyReferenceFiles(fileList) {
       continue;
     }
 
-    next.push({
+    const referenceItem = {
       id: `ref-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       fingerprint,
       file,
+      generationFile: file,
+      generationFilePromise: null,
+      generationCompressed: false,
       previewUrl: URL.createObjectURL(file),
-    });
+    };
+    startReferenceGenerationCompression(referenceItem);
+    next.push(referenceItem);
     fingerprints.add(fingerprint);
   }
 
@@ -1959,6 +2083,7 @@ function applyReferenceFiles(fileList) {
   refs.referenceInput.value = "";
   markReferenceAnalysisDirty();
   renderReferenceGrid();
+  updateGenerateButton();
 
   if (overflowed) {
     showError(`参考图最多支持 ${state.limits.maxReferenceImages} 张。`);
@@ -4875,8 +5000,8 @@ function renderPptView() {
 
 function createJob() {
   const ratioOption = getRatioOption(refs.ratioInput.value || DEFAULT_UI_RATIO);
-  const referenceFiles = state.referenceFiles.map((item) => item.file);
-  const referenceImageNames = referenceFiles.map((file) => file.name);
+  const referenceFiles = state.referenceFiles.map(getGenerationReferenceFile);
+  const referenceImageNames = state.referenceFiles.map((item) => item.file.name);
   const sizeSetting = getSelectedGenerationSize();
   const size = sizeSetting === "auto" ? ratioOption?.baseSize || getDefaultGenerationSize(ratioOption?.value) : sizeSetting;
 
@@ -5574,7 +5699,7 @@ async function runGeneration(job) {
   }
 }
 
-function startGeneration(event) {
+async function startGeneration(event) {
   event.preventDefault();
   clearError();
 
@@ -5589,6 +5714,8 @@ function startGeneration(event) {
     showError(`同一会话最多排队 ${getMaxQueuedJobCount()} 个生成任务。`);
     return;
   }
+
+  await ensureReferenceGenerationFilesReady();
 
   const job = createJob();
   state.jobs.unshift(job);
