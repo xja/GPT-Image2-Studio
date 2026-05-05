@@ -643,6 +643,106 @@ async function fetchServerImageAsDataUrl(imageUrl) {
   return readBlobAsDataUrl(blob);
 }
 
+function dataUrlToBlob(dataUrl) {
+  const [header, base64 = ""] = String(dataUrl || "").split(",", 2);
+  const mimeType = header.match(/^data:([^;]+);base64$/i)?.[1] || "application/octet-stream";
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
+
+function imageElementToBlob(imageElement) {
+  if (!imageElement?.complete || !imageElement.naturalWidth || !imageElement.naturalHeight) {
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = imageElement.naturalWidth;
+      canvas.height = imageElement.naturalHeight;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        resolve(null);
+        return;
+      }
+
+      context.drawImage(imageElement, 0, 0);
+      canvas.toBlob((blob) => resolve(blob?.type?.startsWith("image/") ? blob : null), "image/png");
+    } catch (_error) {
+      resolve(null);
+    }
+  });
+}
+
+async function resolveDownloadImageBlob(item, imageElement) {
+  const elementUrl = imageElement?.currentSrc || imageElement?.src || "";
+  const imageUrl = getImageUrl(item) || elementUrl;
+  if (isCacheableBrowserImageUrl(imageUrl)) {
+    return dataUrlToBlob(imageUrl);
+  }
+  if (isCacheableBrowserImageUrl(elementUrl)) {
+    return dataUrlToBlob(elementUrl);
+  }
+
+  if (item?.filename) {
+    try {
+      const cachedDataUrl = await getBrowserCachedImageData(item.filename);
+      if (isCacheableBrowserImageUrl(cachedDataUrl)) {
+        return dataUrlToBlob(cachedDataUrl);
+      }
+    } catch (_error) {
+      // Keep download available through the rendered image or server URL when IndexedDB is unavailable.
+    }
+  }
+
+  if (imageUrl) {
+    try {
+      const response = await fetch(imageUrl, {
+        credentials: "same-origin",
+        cache: "force-cache",
+      });
+      if (response.ok) {
+        const blob = await response.blob();
+        if (blob.type.startsWith("image/")) {
+          return blob;
+        }
+      }
+    } catch (_error) {
+      // Fall through to the rendered image fallback.
+    }
+  }
+
+  const renderedBlob = await imageElementToBlob(imageElement);
+  if (renderedBlob) {
+    return renderedBlob;
+  }
+
+  throw new Error("无法读取当前图片，请刷新页面后重试。");
+}
+
+function triggerBrowserImageDownload(blob, filename) {
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename || "preview.png";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+async function downloadGalleryItem(item, imageElement) {
+  if (!item && !imageElement) {
+    return;
+  }
+  const blob = await resolveDownloadImageBlob(item, imageElement);
+  triggerBrowserImageDownload(blob, item.filename || "preview.png");
+}
+
 function normalizeBrowserCachedGalleryItem(item = {}) {
   const filename = String(item.filename || "").trim();
   if (!filename) {
@@ -1958,9 +2058,8 @@ function createReferenceAnalysisCard(option, index) {
 }
 
 function renderReferenceAnalysis() {
-  const hasReferenceFiles = state.referenceFiles.length > 0;
-  refs.referenceAnalyzeButton.disabled = state.referenceAnalysis.running || !hasReferenceFiles;
-  refs.referenceAnalyzeButton.textContent = state.referenceAnalysis.running ? "分析中..." : "分析参考图";
+  refs.referenceAnalyzeButton.disabled = state.referenceAnalysis.running;
+  refs.referenceAnalyzeButton.textContent = state.referenceAnalysis.running ? "分析中..." : "融图分析";
 
   const item = state.referenceAnalysis.result;
   refs.referenceAnalysisPanel.classList.toggle("hidden", !item?.json);
@@ -3174,7 +3273,11 @@ function createRecentOutputItem(item) {
   download.download = item.filename;
   download.textContent = "↓";
   download.addEventListener("click", (event) => {
+    event.preventDefault();
     event.stopPropagation();
+    downloadGalleryItem(item, image).catch((error) => {
+      showError(error.message);
+    });
   });
   actions.appendChild(download);
 
@@ -5201,7 +5304,7 @@ async function analyzePromptAgentImage() {
 async function analyzeReferenceImages() {
   clearError();
   if (state.referenceFiles.length === 0) {
-    setReferenceAnalysisFeedback("请先上传参考图。", "error");
+    setReferenceAnalysisFeedback("图形分析需要上传参考图。", "error");
     return;
   }
 
@@ -5245,12 +5348,9 @@ function applyReferenceAnalysisPrompt(index) {
     return;
   }
 
-  const currentPrompt = refs.promptInput.value.trim();
-  refs.promptInput.value = currentPrompt && !currentPrompt.includes(promptText)
-    ? `${currentPrompt}\n\n${promptText}`
-    : promptText;
+  refs.promptInput.value = promptText;
   updatePromptCounter();
-  setReferenceAnalysisFeedback("已应用到主提示词。", "success");
+  setReferenceAnalysisFeedback("已覆盖当前提示词。", "success");
   refs.promptInput.focus();
 }
 
@@ -5828,6 +5928,13 @@ function bindEvents() {
       openLightbox(item);
     }
   });
+  refs.previewDownloadButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    const item = getCurrentPreviewItem();
+    downloadGalleryItem(item, refs.previewImage).catch((error) => {
+      showError(error.message);
+    });
+  });
   refs.previewDeleteButton.addEventListener("click", () => {
     const item = getCurrentPreviewItem();
     if (!item?.filename) {
@@ -5853,6 +5960,12 @@ function bindEvents() {
     }
 
     deleteGalleryItem(state.lightboxItem).catch((error) => showError(error.message));
+  });
+  refs.lightboxDownload.addEventListener("click", (event) => {
+    event.preventDefault();
+    downloadGalleryItem(state.lightboxItem, refs.lightboxImage).catch((error) => {
+      showError(error.message);
+    });
   });
   refs.copyPromptButton.addEventListener("click", () => {
     copyLightboxPrompt().catch((error) => {

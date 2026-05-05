@@ -25,7 +25,13 @@ test("server exposes PPT generation, completion and deck history endpoints", asy
   assert.match(server, /formData\.get\("transitionPreset"\)/);
   assert.match(server, /buildSlideImagePrompts\(\{\s*outline,[\s\S]*dynamicPreset/);
   assert.match(server, /exportPptxDeck\(\{[\s\S]*motion:/);
-  assert.match(server, /\$\{formatDateFolder\(createdAt\)\}\/ppt\/\$\{pptxFilename\}/);
+  assert.match(server, /function buildPptDeckRelativeDir/);
+  assert.match(server, /function resolvePptDeckRelativeDir/);
+  assert.match(server, /extractPptDeckRelativeDirFromSlides\(slides\) \|\| buildPptDeckRelativeDir/);
+  assert.match(server, /\$\{monthFolder\}\/\$\{dateFolder\}\/\$\{dateFolder\}-ppt\/\$\{deckFolderName\}/);
+  assert.match(server, /migrateOutputDirectoryMonths\(\{ outputDir \}\)/);
+  assert.match(server, /relativeDir:\s*pptDeckRelativeDir/);
+  assert.match(server, /const pptxRelativePath = normalizePptRelativePath\(`\$\{pptDeckRelativeDir\}\/\$\{pptxFilename\}`\)/);
   assert.match(server, /"\.pptx": "application\/vnd\.openxmlformats-officedocument\.presentationml\.presentation"/);
 });
 

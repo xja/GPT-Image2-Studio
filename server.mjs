@@ -28,6 +28,7 @@ import {
   buildPublicAssetUrl,
   deleteGeneratedAsset,
   formatDateFolder,
+  formatMonthFolder,
   listGalleryItems,
   repairGeneratedAssetMetadata,
   saveGeneratedAsset,
@@ -53,6 +54,7 @@ import {
   normalizePptCompletionRequest,
 } from "./lib/ppt-completion.mjs";
 import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
+import { migrateOutputDirectoryMonths } from "./lib/output-directory-migration.mjs";
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(rootDir, "public");
@@ -296,11 +298,14 @@ async function handlePromptAgentHistoryGet(response) {
 }
 
 async function handleOpenOutput(response) {
-  const todayOutputDir = join(outputDir, formatDateFolder(new Date()));
+  const now = new Date();
+  const todayMonthFolder = formatMonthFolder(now);
+  const todayDateFolder = formatDateFolder(now);
+  const todayOutputDir = join(outputDir, todayMonthFolder, todayDateFolder);
   await Promise.all([
     mkdir(todayOutputDir, { recursive: true }),
-    mkdir(join(todayOutputDir, "image"), { recursive: true }),
-    mkdir(join(todayOutputDir, "ppt"), { recursive: true }),
+    mkdir(join(todayOutputDir, `${todayDateFolder}-image`), { recursive: true }),
+    mkdir(join(todayOutputDir, `${todayDateFolder}-ppt`), { recursive: true }),
   ]);
   openDirectory(todayOutputDir);
   sendJson(response, 200, {
@@ -445,6 +450,33 @@ function normalizePptFilenamePart(value) {
     .slice(0, 32);
 }
 
+function buildPptDeckFolderName({ outline, deckId }) {
+  const titlePart = normalizePptFilenamePart(outline.title) || "PPT演示";
+  return `${titlePart}-${deckId.slice(-8)}`;
+}
+
+function buildPptDeckRelativeDir({ outline, deckId, createdAt }) {
+  const monthFolder = formatMonthFolder(createdAt);
+  const dateFolder = formatDateFolder(createdAt);
+  const deckFolderName = buildPptDeckFolderName({ outline, deckId });
+  return normalizePptRelativePath(`${monthFolder}/${dateFolder}/${dateFolder}-ppt/${deckFolderName}`);
+}
+
+function extractPptDeckRelativeDirFromSlides(slides = []) {
+  for (const slide of slides) {
+    const segments = normalizePptRelativePath(slide?.relativePath).split("/").filter(Boolean);
+    const pptSegmentIndex = segments.findIndex((segment) => /^\d{4}-\d{2}-\d{2}-ppt$/.test(segment));
+    if (pptSegmentIndex >= 1 && pptSegmentIndex + 1 < segments.length) {
+      return segments.slice(0, pptSegmentIndex + 2).join("/");
+    }
+  }
+  return "";
+}
+
+function resolvePptDeckRelativeDir({ outline, deckId, createdAt, slides = [] }) {
+  return extractPptDeckRelativeDirFromSlides(slides) || buildPptDeckRelativeDir({ outline, deckId, createdAt });
+}
+
 async function toPptSourceDocuments(files) {
   const validFiles = files.filter(
     (file) => file && typeof file === "object" && typeof file.arrayBuffer === "function" && file.size > 0,
@@ -477,6 +509,7 @@ async function generateAndSavePptSlide({
   createdAt,
   config,
   reasoningEffort,
+  pptDeckRelativeDir,
   referenceImages = [],
 }) {
   writeSseEvent(response, "slide_started", {
@@ -525,6 +558,7 @@ async function generateAndSavePptSlide({
   });
   const saved = await saveGeneratedAsset({
     outputDir,
+    relativeDir: pptDeckRelativeDir,
     filename,
     imageBuffer: Buffer.from(normalizeBase64(finalBase64), "base64"),
     metadata: {
@@ -558,11 +592,20 @@ async function generateAndSavePptSlide({
   };
 }
 
-async function saveCompletedPptDeck({ deckId, outline, slides, createdAt, sources = {}, config, reasoningEffort, motion = {} }) {
+async function saveCompletedPptDeck({
+  deckId,
+  outline,
+  slides,
+  createdAt,
+  sources = {},
+  config,
+  reasoningEffort,
+  motion = {},
+  pptDeckRelativeDir = buildPptDeckRelativeDir({ outline, deckId, createdAt }),
+}) {
   const sortedSlides = [...slides].sort((left, right) => left.slideNumber - right.slideNumber);
-  const titlePart = normalizePptFilenamePart(outline.title) || "PPT演示";
-  const pptxFilename = `${titlePart}-${deckId.slice(-8)}.pptx`;
-  const pptxRelativePath = normalizePptRelativePath(`${formatDateFolder(createdAt)}/ppt/${pptxFilename}`);
+  const pptxFilename = `${buildPptDeckFolderName({ outline, deckId })}.pptx`;
+  const pptxRelativePath = normalizePptRelativePath(`${pptDeckRelativeDir}/${pptxFilename}`);
   const pptxAbsolutePath = resolveOutputAssetPath(pptxRelativePath);
 
   await exportPptxDeck({
@@ -662,6 +705,7 @@ async function handlePptGenerate(request, response) {
 
     writeSseEvent(response, "outline", { deckId, outline });
 
+    const pptDeckRelativeDir = buildPptDeckRelativeDir({ deckId, outline, createdAt });
     const slidePrompts = buildSlideImagePrompts({ outline, theme: stylePreset, dynamicPreset: motion.dynamicPreset });
     const slides = [];
     for (const slidePrompt of slidePrompts) {
@@ -674,6 +718,7 @@ async function handlePptGenerate(request, response) {
           createdAt,
           config,
           reasoningEffort,
+          pptDeckRelativeDir,
         });
         slides.push(slide);
         writeSseEvent(response, "slide_saved", { slide });
@@ -698,6 +743,7 @@ async function handlePptGenerate(request, response) {
       config,
       reasoningEffort,
       motion,
+      pptDeckRelativeDir,
     });
 
     writeSseEvent(response, "deck_saved", { deck });
@@ -745,6 +791,12 @@ async function handlePptComplete(request, response) {
     const deckId = completion.deckId || `ppt-deck-${randomUUID()}`;
     const createdAt = new Date().toISOString();
     const existingSlides = await Promise.all(completion.existingSlides.map(hydrateExistingPptSlide));
+    const pptDeckRelativeDir = resolvePptDeckRelativeDir({
+      deckId,
+      outline: completion.outline,
+      createdAt,
+      slides: existingSlides,
+    });
     const slidePrompts = buildSlideImagePrompts({
       outline: completion.outline,
       theme: completion.theme,
@@ -764,6 +816,7 @@ async function handlePptComplete(request, response) {
           createdAt,
           config,
           reasoningEffort,
+          pptDeckRelativeDir,
         });
         generatedSlides.push(slide);
         writeSseEvent(response, "slide_saved", { slide });
@@ -793,6 +846,7 @@ async function handlePptComplete(request, response) {
         config,
         reasoningEffort,
         motion,
+        pptDeckRelativeDir,
       });
       writeSseEvent(response, "deck_saved", { deck });
     }
@@ -853,6 +907,12 @@ async function handlePptSlideEdit(request, response) {
     const deckId = completion.deckId || `ppt-deck-${randomUUID()}`;
     const createdAt = new Date().toISOString();
     const existingHydratedSlides = await Promise.all(completion.existingSlides.map(hydrateExistingPptSlide));
+    const pptDeckRelativeDir = resolvePptDeckRelativeDir({
+      deckId,
+      outline: completion.outline,
+      createdAt,
+      slides: existingHydratedSlides,
+    });
     const slide = completion.outline.slides.find((entry) => Number(entry.slideNumber) === slideNumber);
     if (!slide) {
       throw new Error("未找到要编辑的 PPT 页面。");
@@ -878,6 +938,7 @@ async function handlePptSlideEdit(request, response) {
       createdAt,
       config,
       reasoningEffort,
+      pptDeckRelativeDir,
       referenceImages,
     });
 
@@ -900,6 +961,7 @@ async function handlePptSlideEdit(request, response) {
         config,
         reasoningEffort,
         motion,
+        pptDeckRelativeDir,
       });
       writeSseEvent(response, "deck_saved", { deck });
     }
@@ -1430,6 +1492,7 @@ async function routeRequest(request, response) {
 }
 
 await mkdir(outputDir, { recursive: true });
+await migrateOutputDirectoryMonths({ outputDir });
 
 const server = createServer(async (request, response) => {
   try {
@@ -1447,8 +1510,9 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, () => {
+  const now = new Date();
   console.log(`Responses Image Studio 正在运行: http://localhost:${port}`);
   console.log(`输出根目录: ${outputDir}`);
-  console.log(`当前输出目录: ${join(outputDir, formatDateFolder(new Date()))}`);
+  console.log(`当前输出目录: ${join(outputDir, formatMonthFolder(now), formatDateFolder(now))}`);
   console.log(`配置文件: ${configStore.configPath}`);
 });

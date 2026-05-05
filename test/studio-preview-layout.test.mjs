@@ -464,7 +464,8 @@ test("studio reference images can be manually analyzed into orchestration prompt
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /id="referenceAnalyzeButton"[\s\S]*分析参考图/);
+  assert.match(html, /id="referenceAnalyzeButton"[\s\S]*融图分析/);
+  assert.doesNotMatch(html, /id="referenceAnalyzeButton"[^>]*disabled/);
   assert.match(html, /id="referenceAnalysisPanel"[\s\S]*编排提示词/);
   assert.match(html, /id="referenceAnalysisList"/);
   assert.match(styles, /\.reference-analysis-panel\s*\{/);
@@ -479,10 +480,24 @@ test("studio reference images can be manually analyzed into orchestration prompt
   assert.match(app, /fetch\("\/api\/prompt-agent\/analyze"/);
   assert.match(app, /button\.dataset\.referenceAnalysisPromptIndex = String\(index\);/);
   assert.match(app, /function applyReferenceAnalysisPrompt\(index\) \{/);
+  assert.match(app, /refs\.referenceAnalyzeButton\.disabled = state\.referenceAnalysis\.running;/);
+  assert.match(app, /refs\.referenceAnalyzeButton\.textContent = state\.referenceAnalysis\.running \? "分析中\.\.\." : "融图分析";/);
+  assert.match(app, /setReferenceAnalysisFeedback\("图形分析需要上传参考图。", "error"\);/);
   assert.match(app, /refs\.referenceDropzone\.addEventListener\("dragover",[\s\S]*event\.preventDefault\(\);[\s\S]*classList\.add\("dragover"\);/);
   assert.match(app, /refs\.referenceDropzone\.addEventListener\("drop",[\s\S]*event\.preventDefault\(\);[\s\S]*applyReferenceFiles\(event\.dataTransfer\?\.files\);/);
   const applyReferenceFilesBody = app.match(/function applyReferenceFiles\(fileList\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.doesNotMatch(applyReferenceFilesBody, /analyzeReferenceImages\(\)/);
+});
+
+test("direct prompt applications replace the current Studio prompt", async () => {
+  const app = await readFile(appPath, "utf8");
+  const referenceApplyBody =
+    app.match(/function applyReferenceAnalysisPrompt\(index\) \{[\s\S]*?\r?\n\}\r?\n\r?\nfunction mapPromptAgentPrompt/)?.[0] || "";
+
+  assert.match(app, /function applyPromptTemplate\(templateId = ""\) \{[\s\S]*refs\.promptInput\.value = prompt;[\s\S]*updatePromptCounter\(\);/);
+  assert.match(referenceApplyBody, /refs\.promptInput\.value = promptText;[\s\S]*updatePromptCounter\(\);/);
+  assert.doesNotMatch(referenceApplyBody, /currentPrompt|includes\(promptText\)|`\\$\\{currentPrompt\\}\\n\\n\\$\\{promptText\\}`/);
+  assert.match(app, /function mapPromptAgentPrompt\(itemId\) \{[\s\S]*refs\.promptInput\.value = promptText;[\s\S]*updatePromptCounter\(\);/);
 });
 
 test("studio error surfaces compact long upstream HTTP failures before rendering", async () => {
@@ -599,6 +614,16 @@ test("studio caches generated browser images for persistent preview and download
   assert.match(app, /async function loadGallery\(\) \{[\s\S]*const browserCachedItems = await readBrowserCachedGalleryItems\(\);[\s\S]*state\.gallery = sortGalleryItemsByCreatedAtDesc/);
   assert.match(app, /async function deleteGalleryItem\(item\) \{[\s\S]*await deleteBrowserCachedGalleryItem\(item\.filename\);/);
   assert.match(app, /async function clearHistory\(\) \{[\s\S]*await clearBrowserImageCache\(\);/);
+  assert.match(app, /function dataUrlToBlob\(dataUrl\) \{/);
+  assert.match(app, /function imageElementToBlob\(imageElement\) \{/);
+  assert.match(app, /async function resolveDownloadImageBlob\(item, imageElement\) \{/);
+  assert.match(app, /const renderedBlob = await imageElementToBlob\(imageElement\);[\s\S]*if \(renderedBlob\) \{[\s\S]*return renderedBlob;/);
+  assert.match(app, /function triggerBrowserImageDownload\(blob, filename\) \{/);
+  assert.match(app, /window\.setTimeout\(\(\) => URL\.revokeObjectURL\(objectUrl\), 1000\);/);
+  assert.match(app, /async function downloadGalleryItem\(item, imageElement\) \{/);
+  assert.match(app, /refs\.previewDownloadButton\.addEventListener\("click", \(event\) => \{[\s\S]*downloadGalleryItem\(item, refs\.previewImage\)/);
+  assert.match(app, /refs\.lightboxDownload\.addEventListener\("click", \(event\) => \{[\s\S]*downloadGalleryItem\(state\.lightboxItem, refs\.lightboxImage\)/);
+  assert.match(app, /download\.addEventListener\("click", \(event\) => \{[\s\S]*downloadGalleryItem\(item, image\)/);
 });
 
 test("studio accepts server-stored Cloudflare image URLs before browser caching finishes", async () => {
