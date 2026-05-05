@@ -123,7 +123,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260506-vercel-browser-cache-preferred-1/);
+  assert.match(html, /\/app\.js\?v=20260506-vercel-final-image-cache-2/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -598,7 +598,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260506-vercel-browser-cache-preferred-1/);
+  assert.match(html, /\/app\.js\?v=20260506-vercel-final-image-cache-2/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
