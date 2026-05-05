@@ -21,6 +21,7 @@ import {
 } from "./lib/ppt-completion.mjs";
 import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
 import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
+import { requestPromptAgentAnalysis } from "./lib/prompt-agent.mjs";
 import {
   DEFAULT_BASE_URL,
   DEFAULT_REASONING_EFFORT,
@@ -100,6 +101,59 @@ function buildPublicConfig() {
     reasoningEfforts: [...REASONING_EFFORT_OPTIONS],
     aspectRatios: getAspectRatioOptions(),
   };
+}
+
+async function handlePromptAgentAnalyze(request, fetchImpl) {
+  const formData = await request.formData();
+  const rawImages = [
+    ...formData.getAll("image"),
+    ...formData.getAll("promptAgentImage"),
+    ...formData.getAll("referenceImages"),
+    ...formData.getAll("referenceImage"),
+  ];
+  const images = await toReferenceImages(rawImages);
+
+  if (images.length === 0) {
+    return jsonResponse({ message: "请先上传一张图片。" }, 400);
+  }
+
+  if (images.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+    return jsonResponse({ message: "仅支持图片文件。" }, 400);
+  }
+
+  if (images.length > MAX_REFERENCE_IMAGES) {
+    return jsonResponse({ message: `参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。` }, 400);
+  }
+
+  const config = normalizePrivateConfig(formData);
+  const reasoningEffort = normalizeReasoningEffort(
+    formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+  );
+  const mode = String(formData.get("mode") || "").trim();
+  const json = await requestPromptAgentAnalysis({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    image: images[0],
+    images,
+    mode,
+    responsesModel: config.responsesModel,
+    reasoningEffort,
+    fetchImpl,
+  });
+
+  return jsonResponse({
+    ok: true,
+    item: {
+      id: `prompt-json-${crypto.randomUUID()}`,
+      createdAt: new Date().toISOString(),
+      filename: images.map((image) => image.filename).filter(Boolean).join(" + "),
+      imageMimeType: images.map((image) => image.mimeType).filter(Boolean).join(", "),
+      imageSize: 0,
+      responsesModel: config.responsesModel,
+      reasoningEffort,
+      json,
+    },
+  });
 }
 
 function normalizeReasoningEffort(value, fallback = DEFAULT_REASONING_EFFORT) {
@@ -1619,7 +1673,7 @@ export async function handleApiRequest(request, options = {}) {
   }
 
   if (request.method === "POST" && url.pathname === "/api/prompt-agent/analyze") {
-    return unsupportedFeature("Cloudflare 部署版暂不支持图片转提示词历史保存。");
+    return handlePromptAgentAnalyze(request, fetchImpl);
   }
 
   if (url.pathname.startsWith("/api/")) {

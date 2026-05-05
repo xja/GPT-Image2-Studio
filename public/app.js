@@ -219,6 +219,11 @@ const state = {
   },
   promptTemplates: [],
   reasoningEfforts: [...DEFAULT_REASONING_EFFORTS],
+  referenceAnalysis: {
+    dirty: false,
+    result: null,
+    running: false,
+  },
   referenceFiles: [],
   selectedPromptTemplateId: "",
   selectedPreviewKey: "",
@@ -380,6 +385,12 @@ const refs = {
   recentEmpty: document.querySelector("#recentEmpty"),
   recentList: document.querySelector("#recentList"),
   referenceCount: document.querySelector("#referenceCount"),
+  referenceAnalysisFeedback: document.querySelector("#referenceAnalysisFeedback"),
+  referenceAnalysisList: document.querySelector("#referenceAnalysisList"),
+  referenceAnalysisMeta: document.querySelector("#referenceAnalysisMeta"),
+  referenceAnalysisPanel: document.querySelector("#referenceAnalysisPanel"),
+  referenceAnalysisSummary: document.querySelector("#referenceAnalysisSummary"),
+  referenceAnalyzeButton: document.querySelector("#referenceAnalyzeButton"),
   referenceDropzone: document.querySelector("#referenceDropzone"),
   referenceGrid: document.querySelector("#referenceGrid"),
   referenceInput: document.querySelector("#referenceInput"),
@@ -1524,7 +1535,7 @@ function getPromptAgentItem(itemId) {
 }
 
 function getPromptAgentPrompt(item) {
-  return String(item?.json?.prompt || "").trim();
+  return String(item?.json?.prompt || item?.json?.prompts?.[0]?.prompt || "").trim();
 }
 
 function getPromptAgentJsonText(item = state.promptAgent.result) {
@@ -1702,6 +1713,7 @@ function resetReferenceFiles() {
   state.referenceFiles.forEach(revokeReferencePreview);
   state.referenceFiles = [];
   refs.referenceInput.value = "";
+  markReferenceAnalysisDirty();
   renderReferenceGrid();
 }
 
@@ -1709,6 +1721,7 @@ function removeReferenceFile(referenceId) {
   const target = state.referenceFiles.find((item) => item.id === referenceId);
   revokeReferencePreview(target);
   state.referenceFiles = state.referenceFiles.filter((item) => item.id !== referenceId);
+  markReferenceAnalysisDirty();
   renderReferenceGrid();
 }
 
@@ -1744,6 +1757,7 @@ function applyReferenceFiles(fileList) {
 
   state.referenceFiles = next;
   refs.referenceInput.value = "";
+  markReferenceAnalysisDirty();
   renderReferenceGrid();
 
   if (overflowed) {
@@ -1773,6 +1787,118 @@ function renderReferenceGrid() {
     card.appendChild(remove);
     refs.referenceGrid.appendChild(card);
   });
+  renderReferenceAnalysis();
+}
+
+function getReferenceAnalysisPrompts(item = state.referenceAnalysis.result) {
+  const prompts = Array.isArray(item?.json?.prompts)
+    ? item.json.prompts
+        .map((entry) => ({
+          title: String(entry?.title || "编排提示词").trim(),
+          intent: String(entry?.intent || "").trim(),
+          prompt: String(entry?.prompt || "").trim(),
+        }))
+        .filter((entry) => entry.prompt)
+        .slice(0, 3)
+    : [];
+  const fallbackPrompt = getPromptAgentPrompt(item);
+
+  return prompts.length > 0
+    ? prompts
+    : fallbackPrompt
+      ? [
+          {
+            title: item?.json?.title || "编排提示词",
+            intent: "",
+            prompt: fallbackPrompt,
+          },
+        ]
+      : [];
+}
+
+function setReferenceAnalysisFeedback(message, kind = "") {
+  refs.referenceAnalysisFeedback.textContent = message ? compactErrorMessage(message, "参考图分析失败") : "";
+  refs.referenceAnalysisFeedback.dataset.state = kind;
+}
+
+function markReferenceAnalysisDirty() {
+  if (state.referenceAnalysis.result) {
+    state.referenceAnalysis.dirty = true;
+    setReferenceAnalysisFeedback("参考图已变化，请重新分析。", "busy");
+  } else {
+    setReferenceAnalysisFeedback("", "");
+  }
+}
+
+function createReferenceAnalysisCard(option, index) {
+  const card = document.createElement("article");
+  card.className = "reference-analysis-card";
+
+  const title = document.createElement("strong");
+  title.textContent = option.title || `编排提示词 ${index + 1}`;
+
+  const intent = document.createElement("span");
+  intent.textContent = option.intent || "可直接应用到主提示词";
+
+  const prompt = document.createElement("p");
+  prompt.textContent = option.prompt;
+
+  const button = document.createElement("button");
+  button.className = "inline-button";
+  button.type = "button";
+  button.dataset.referenceAnalysisPromptIndex = String(index);
+  button.textContent = "应用";
+
+  card.append(title, intent, prompt, button);
+  return card;
+}
+
+function renderReferenceAnalysis() {
+  const hasReferenceFiles = state.referenceFiles.length > 0;
+  refs.referenceAnalyzeButton.disabled = state.referenceAnalysis.running || !hasReferenceFiles;
+  refs.referenceAnalyzeButton.textContent = state.referenceAnalysis.running ? "分析中..." : "分析参考图";
+
+  const item = state.referenceAnalysis.result;
+  refs.referenceAnalysisPanel.classList.toggle("hidden", !item?.json);
+  refs.referenceAnalysisList.replaceChildren();
+
+  if (!item?.json) {
+    refs.referenceAnalysisSummary.textContent = "--";
+    refs.referenceAnalysisMeta.textContent = "--";
+    return;
+  }
+
+  const json = item.json;
+  const prompts = getReferenceAnalysisPrompts(item);
+  const roles = Array.isArray(json.image_roles) ? json.image_roles.filter(Boolean) : [];
+  const risks = Array.isArray(json.risks) ? json.risks.filter(Boolean) : [];
+
+  refs.referenceAnalysisSummary.textContent = json.summary || json.relationship || json.title || "已生成编排提示词";
+  refs.referenceAnalysisMeta.textContent = [
+    json.relationship,
+    roles.length ? `${roles.length} 个参考角色` : "",
+    state.referenceAnalysis.dirty ? "参考图已变化" : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  roles.slice(0, 6).forEach((role) => {
+    const rolePill = document.createElement("span");
+    rolePill.className = "reference-analysis-role";
+    rolePill.textContent = role;
+    refs.referenceAnalysisList.append(rolePill);
+  });
+
+  prompts.forEach((option, index) => {
+    refs.referenceAnalysisList.append(createReferenceAnalysisCard(option, index));
+  });
+
+  if (risks.length > 0) {
+    const risk = document.createElement("p");
+    risk.className = "reference-analysis-risk";
+    risk.textContent = risks.join("；");
+    refs.referenceAnalysisList.append(risk);
+  }
 }
 
 function renderReasoningOptions() {
@@ -4730,6 +4856,21 @@ function buildPromptAgentFormData() {
     "reasoningEffort",
     refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
   );
+  appendBrowserConfigToFormData(formData);
+  return formData;
+}
+
+function buildReferenceAnalysisFormData() {
+  const formData = new FormData();
+  formData.set("mode", "reference-orchestration");
+  formData.set(
+    "reasoningEffort",
+    refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
+  );
+  state.referenceFiles.forEach((item) => {
+    formData.append("referenceImages", item.file);
+  });
+  appendBrowserConfigToFormData(formData);
   return formData;
 }
 
@@ -4769,6 +4910,62 @@ async function analyzePromptAgentImage() {
     state.promptAgent.running = false;
     renderPromptAgent();
   }
+}
+
+async function analyzeReferenceImages() {
+  clearError();
+  if (state.referenceFiles.length === 0) {
+    setReferenceAnalysisFeedback("请先上传参考图。", "error");
+    return;
+  }
+
+  state.referenceAnalysis.running = true;
+  setReferenceAnalysisFeedback("正在分析参考图关系...", "busy");
+  renderReferenceAnalysis();
+
+  try {
+    const response = await fetch("/api/prompt-agent/analyze", {
+      method: "POST",
+      body: buildReferenceAnalysisFormData(),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.message || "参考图分析失败。");
+    }
+
+    state.referenceAnalysis.result = payload.item;
+    state.referenceAnalysis.dirty = false;
+    state.promptAgent.history = [
+      payload.item,
+      ...state.promptAgent.history.filter((item) => item.id !== payload.item.id),
+    ];
+    const promptCount = getReferenceAnalysisPrompts(payload.item).length;
+    setReferenceAnalysisFeedback(`已生成 ${promptCount || 1} 条编排提示词。`, "success");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setReferenceAnalysisFeedback(message, "error");
+    showError(message);
+  } finally {
+    state.referenceAnalysis.running = false;
+    renderReferenceAnalysis();
+  }
+}
+
+function applyReferenceAnalysisPrompt(index) {
+  const option = getReferenceAnalysisPrompts()[Number(index)];
+  const promptText = String(option?.prompt || "").trim();
+  if (!promptText) {
+    setReferenceAnalysisFeedback("这条结果没有可应用的提示词。", "error");
+    return;
+  }
+
+  const currentPrompt = refs.promptInput.value.trim();
+  refs.promptInput.value = currentPrompt && !currentPrompt.includes(promptText)
+    ? `${currentPrompt}\n\n${promptText}`
+    : promptText;
+  updatePromptCounter();
+  setReferenceAnalysisFeedback("已应用到主提示词。", "success");
+  refs.promptInput.focus();
 }
 
 function mapPromptAgentPrompt(itemId) {
@@ -5175,6 +5372,19 @@ function bindEvents() {
     event.preventDefault();
     refs.referenceDropzone.classList.remove("dragover");
     applyReferenceFiles(event.dataTransfer?.files);
+  });
+  refs.referenceAnalyzeButton.addEventListener("click", () => {
+    analyzeReferenceImages().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      setReferenceAnalysisFeedback(message, "error");
+      showError(message);
+    });
+  });
+  refs.referenceAnalysisList.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-reference-analysis-prompt-index]");
+    if (target) {
+      applyReferenceAnalysisPrompt(target.dataset.referenceAnalysisPromptIndex);
+    }
   });
   refs.promptAgentImageInput.addEventListener("change", (event) => {
     applyPromptAgentFile(event.target.files);

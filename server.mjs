@@ -918,6 +918,8 @@ async function handlePromptAgentAnalyze(request, response) {
   const rawImages = [
     ...formData.getAll("image"),
     ...formData.getAll("promptAgentImage"),
+    ...formData.getAll("referenceImages"),
+    ...formData.getAll("referenceImage"),
   ];
   const images = await toReferenceImages(rawImages);
 
@@ -927,14 +929,19 @@ async function handlePromptAgentAnalyze(request, response) {
     });
   }
 
-  const image = images[0];
-  if (!image.mimeType.startsWith("image/")) {
+  if (images.some((image) => !image.mimeType.startsWith("image/"))) {
     return sendJson(response, 400, {
       message: "仅支持图片文件。",
     });
   }
 
-  const config = await configStore.readPrivateConfig();
+  if (images.length > MAX_REFERENCE_IMAGES) {
+    return sendJson(response, 400, {
+      message: `参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`,
+    });
+  }
+
+  const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
   if (!config.apiKey) {
     return sendJson(response, 400, {
       message: "当前未保存 API Key，请先在配置中保存。",
@@ -944,20 +951,24 @@ async function handlePromptAgentAnalyze(request, response) {
   const reasoningEffort = normalizeReasoningEffort(
     formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
   );
+  const mode = String(formData.get("mode") || "").trim();
   const createdAt = new Date().toISOString();
   const json = await requestPromptAgentAnalysis({
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
-    image,
+    image: images[0],
+    images,
+    mode,
     responsesModel: config.responsesModel,
     reasoningEffort,
   });
+  const filenames = images.map((image) => image.filename).filter(Boolean);
   const item = await promptAgentStore.append({
     id: `prompt-json-${randomUUID()}`,
     createdAt,
-    filename: image.filename,
-    imageMimeType: image.mimeType,
-    imageSize: image.buffer.length,
+    filename: filenames.join(" + "),
+    imageMimeType: images.map((image) => image.mimeType).filter(Boolean).join(", "),
+    imageSize: images.reduce((total, image) => total + image.buffer.length, 0),
     responsesModel: config.responsesModel,
     reasoningEffort,
     json,

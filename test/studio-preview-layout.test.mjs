@@ -123,7 +123,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260505-browser-image-cache-1/);
+  assert.match(html, /\/app\.js\?v=20260505-reference-orchestration-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -397,6 +397,28 @@ test("prompt agent analysis also keeps JSON prompts in prompt templates", async 
   assert.match(app, /savePromptAgentResultAsTemplate\(payload\.item\);/);
 });
 
+test("studio reference images can be manually analyzed into orchestration prompts", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /id="referenceAnalyzeButton"[\s\S]*分析参考图/);
+  assert.match(html, /id="referenceAnalysisPanel"[\s\S]*编排提示词/);
+  assert.match(html, /id="referenceAnalysisList"/);
+  assert.match(styles, /\.reference-analysis-panel\s*\{/);
+  assert.match(styles, /\.reference-analysis-card\s*\{/);
+  assert.match(app, /referenceAnalysis:\s*\{/);
+  assert.match(app, /function buildReferenceAnalysisFormData\(\) \{/);
+  assert.match(app, /formData\.set\("mode", "reference-orchestration"\);/);
+  assert.match(app, /formData\.append\("referenceImages", item\.file\);/);
+  assert.match(app, /appendBrowserConfigToFormData\(formData\);/);
+  assert.match(app, /fetch\("\/api\/prompt-agent\/analyze"/);
+  assert.match(app, /button\.dataset\.referenceAnalysisPromptIndex = String\(index\);/);
+  assert.match(app, /function applyReferenceAnalysisPrompt\(index\) \{/);
+  const applyReferenceFilesBody = app.match(/function applyReferenceFiles\(fileList\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(applyReferenceFilesBody, /analyzeReferenceImages\(\)/);
+});
+
 test("studio error surfaces compact long upstream HTTP failures before rendering", async () => {
   const app = await readFile(appPath, "utf8");
 
@@ -495,7 +517,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260505-browser-image-cache-1/);
+  assert.match(html, /\/app\.js\?v=20260505-reference-orchestration-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);

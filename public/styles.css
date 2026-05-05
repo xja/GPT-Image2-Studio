@@ -977,6 +977,99 @@ textarea {
   justify-self: center;
 }
 
+.reference-analysis-actions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.reference-analysis-button {
+  min-height: 34px;
+}
+
+.reference-analysis-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(112, 226, 162, 0.2);
+  background:
+    linear-gradient(180deg, rgba(112, 226, 162, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.025);
+}
+
+.reference-analysis-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.reference-analysis-head div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.reference-analysis-head span,
+.reference-analysis-head small,
+.reference-analysis-card span,
+.reference-analysis-risk {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.reference-analysis-head strong {
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.reference-analysis-list {
+  display: grid;
+  gap: 8px;
+}
+
+.reference-analysis-role {
+  width: fit-content;
+  max-width: 100%;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(145, 159, 255, 0.22);
+  background: rgba(145, 159, 255, 0.08);
+  overflow-wrap: anywhere;
+}
+
+.reference-analysis-card {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.reference-analysis-card strong {
+  color: var(--text);
+}
+
+.reference-analysis-card p,
+.reference-analysis-risk {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.reference-analysis-card p {
+  color: var(--text);
+}
+
+.reference-analysis-card .inline-button {
+  justify-self: start;
+}
+
 .parameter-settings .advanced-content {
   border-radius: 14px;
   border: 1px solid var(--border);

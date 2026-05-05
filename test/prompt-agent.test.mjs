@@ -46,6 +46,97 @@ test("prompt agent request analyzes an uploaded image without invoking image gen
   assert.ok(requestBody.text.format.schema.required.includes("prompt"));
 });
 
+test("prompt agent request can orchestrate multiple reference images into scene prompts", () => {
+  const images = [
+    {
+      filename: "person.png",
+      mimeType: "image/png",
+      base64: "cGVyc29u",
+    },
+    {
+      filename: "pants.png",
+      mimeType: "image/png",
+      base64: "cGFudHM=",
+    },
+  ];
+
+  const input = buildPromptAgentInput({
+    images,
+    mode: "reference-orchestration",
+  });
+  const requestBody = createPromptAgentRequestBody({
+    images,
+    mode: "reference-orchestration",
+    responsesModel: "gpt-5.4",
+    reasoningEffort: "high",
+  });
+
+  assert.match(input[0].content[0].text, /参考图编排/);
+  assert.match(input[0].content[0].text, /1\s*到\s*3|1-3/);
+  assert.match(input[0].content[0].text, /人物.*服装|主体.*背景|关系/);
+  assert.deepEqual(input[0].content.slice(1), [
+    {
+      type: "input_image",
+      image_url: "data:image/png;base64,cGVyc29u",
+    },
+    {
+      type: "input_image",
+      image_url: "data:image/png;base64,cGFudHM=",
+    },
+  ]);
+  assert.equal(requestBody.text.format.name, "reference_orchestration_prompt_json");
+  assert.equal("tools" in requestBody, false);
+  assert.ok(requestBody.text.format.schema.required.includes("prompts"));
+});
+
+test("prompt agent normalizes reference orchestration output to one to three prompts", () => {
+  const result = extractPromptAgentJson({
+    output: [
+      {
+        content: [
+          {
+            type: "output_text",
+            text: JSON.stringify({
+              title: "穿搭街拍编排",
+              summary: "识别为女性主体与裤装参考图的穿搭关系。",
+              image_roles: ["图 1：女性主体", "图 2：裤装"],
+              relationship: "人物穿搭",
+              prompts: [
+                {
+                  title: "通勤街拍",
+                  intent: "让女性主体穿上参考裤装并置于城市街头。",
+                  prompt: "让参考女性主体穿上参考裤装，站在城市街头，自然侧身回望，柔和日光，时尚街拍质感。",
+                },
+                {
+                  title: "室内 Lookbook",
+                  intent: "强调裤装版型与人物姿态。",
+                  prompt: "让参考女性主体穿上参考裤装，在简洁摄影棚中站姿展示，干净背景，柔和棚拍光。",
+                },
+                {
+                  title: "咖啡店场景",
+                  intent: "将穿搭放入生活化环境。",
+                  prompt: "让参考女性主体穿上参考裤装，坐在咖啡店窗边，轻松自然姿态，午后暖光。",
+                },
+                {
+                  title: "多余结果",
+                  intent: "不应保留第四条。",
+                  prompt: "这条不应该被保留。",
+                },
+              ],
+              risks: ["服装尺码需要生成模型自行适配"],
+            }),
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(result.prompt, "让参考女性主体穿上参考裤装，站在城市街头，自然侧身回望，柔和日光，时尚街拍质感。");
+  assert.equal(result.prompts.length, 3);
+  assert.deepEqual(result.image_roles, ["图 1：女性主体", "图 2：裤装"]);
+  assert.equal(result.relationship, "人物穿搭");
+});
+
 test("prompt agent can parse streamed Responses text into JSON prompt data", async () => {
   const chunks = [
     [

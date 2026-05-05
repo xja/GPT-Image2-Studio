@@ -21,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260505-api-status-config-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260505-reference-orchestration-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -281,6 +281,22 @@
                   </label>
 
                   <div class="reference-grid hidden" id="referenceGrid"></div>
+                  <div class="reference-analysis-actions">
+                    <button class="inline-button reference-analysis-button" id="referenceAnalyzeButton" type="button" disabled>
+                      分析参考图
+                    </button>
+                    <p class="prompt-agent-feedback" id="referenceAnalysisFeedback"></p>
+                  </div>
+                  <div class="reference-analysis-panel hidden" id="referenceAnalysisPanel">
+                    <div class="reference-analysis-head">
+                      <div>
+                        <span>编排提示词</span>
+                        <strong id="referenceAnalysisSummary">--</strong>
+                      </div>
+                      <small id="referenceAnalysisMeta">--</small>
+                    </div>
+                    <div class="reference-analysis-list" id="referenceAnalysisList"></div>
+                  </div>
                 </div>
               </form>
 
@@ -913,6 +929,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260505-browser-image-cache-1"></script>
+    <script type="module" src="/app.js?v=20260505-reference-orchestration-1"></script>
   </body>
 </html>

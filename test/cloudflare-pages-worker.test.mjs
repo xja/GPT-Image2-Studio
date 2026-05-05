@@ -141,6 +141,78 @@ test("Cloudflare generation uses browser-provided API settings without echoing t
   assert.doesNotMatch(text, /test-browser-key/);
 });
 
+test("Cloudflare prompt agent analyzes browser reference images without generation tools", async () => {
+  const seenRequests = [];
+  const formData = new FormData();
+  formData.set("mode", "reference-orchestration");
+  formData.set("reasoningEffort", "high");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("referenceImages", new File(["person"], "person.png", { type: "image/png" }));
+  formData.append("referenceImages", new File(["pants"], "pants.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(
+    new Request("https://studio.example/api/prompt-agent/analyze", {
+      method: "POST",
+      body: formData,
+    }),
+    {
+      async fetchImpl(url, init) {
+        seenRequests.push({
+          url,
+          auth: init.headers.Authorization,
+          body: JSON.parse(init.body),
+        });
+        return new Response(
+          [
+            "event: response.output_text.done",
+            `data: {"type":"response.output_text.done","text":${JSON.stringify(
+              JSON.stringify({
+                title: "穿搭编排",
+                summary: "人物主体与裤装参考图的穿搭关系。",
+                image_roles: ["图 1：人物主体", "图 2：裤装"],
+                relationship: "人物穿搭",
+                prompts: [
+                  {
+                    title: "街拍穿搭",
+                    intent: "让人物穿上参考裤装。",
+                    prompt: "让参考人物穿上参考裤装，站在城市街头，自然回望，柔和日光，时尚街拍质感。",
+                  },
+                ],
+                risks: [],
+              }),
+            )}}`,
+            "",
+            "",
+            "data: [DONE]",
+            "",
+            "",
+          ].join("\n"),
+          {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          },
+        );
+      },
+    },
+  );
+
+  const payload = await response.json();
+  const inputImages = seenRequests[0].body.input[0].content.filter((item) => item.type === "input_image");
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(seenRequests[0].url, "https://example.test/v1/responses");
+  assert.equal(seenRequests[0].auth, "Bearer test-browser-key");
+  assert.equal(seenRequests[0].body.text.format.name, "reference_orchestration_prompt_json");
+  assert.equal("tools" in seenRequests[0].body, false);
+  assert.equal(inputImages.length, 2);
+  assert.equal(payload.item.json.prompts.length, 1);
+  assert.equal(payload.item.json.prompt, "让参考人物穿上参考裤装，站在城市街头，自然回望，柔和日光，时尚街拍质感。");
+  assert.doesNotMatch(JSON.stringify(payload), /test-browser-key/);
+});
+
 test("Cloudflare generation reports the server image URL after best-effort R2 storage", async () => {
   const imageBucket = makeImageBucket();
   const formData = new FormData();
