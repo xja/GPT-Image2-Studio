@@ -3558,8 +3558,37 @@ function renderAll() {
   restoreSettingsFormScrollTop(settingsScrollTop);
 }
 
+function mergeGalleryItemWithExistingBrowserImage(item) {
+  const filename = String(item?.filename || "").trim();
+  if (!filename) {
+    return item;
+  }
+
+  const current = state.gallery.find((entry) => entry.filename === filename);
+  const browserImageUrl = isCacheableBrowserImageUrl(current?.imageUrl)
+    ? current.imageUrl
+    : isCacheableBrowserImageUrl(current?.thumbnailUrl)
+      ? current.thumbnailUrl
+      : "";
+  if (!browserImageUrl) {
+    return item;
+  }
+
+  const browserThumbnailUrl = isCacheableBrowserImageUrl(current?.thumbnailUrl) ? current.thumbnailUrl : browserImageUrl;
+  const serverImageUrl = getServerImageUrl(item) || getServerImageUrl(current);
+  const serverThumbnailUrl = getServerThumbnailUrl(item) || getServerThumbnailUrl(current) || serverImageUrl;
+  return {
+    ...item,
+    serverImageUrl,
+    serverThumbnailUrl,
+    imageUrl: browserImageUrl,
+    thumbnailUrl: browserThumbnailUrl,
+  };
+}
+
 function upsertGalleryItem(item) {
-  const hydratedItem = mergeGalleryItemWithCachedMetadata(item, state.galleryMetadataCache[item?.filename]);
+  const imageMergedItem = mergeGalleryItemWithExistingBrowserImage(item);
+  const hydratedItem = mergeGalleryItemWithCachedMetadata(imageMergedItem, state.galleryMetadataCache[item?.filename]);
   const next = state.gallery.filter((entry) => entry.filename !== hydratedItem.filename);
   next.unshift(hydratedItem);
   state.gallery = sortGalleryItemsByCreatedAtDesc(next);
