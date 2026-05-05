@@ -58,6 +58,14 @@ test("server uses tmp output storage on Vercel serverless runtime", async () => 
   assert.doesNotMatch(server, /const outputDir = join\(homedir\(\), "Pictures"\);/);
 });
 
+test("server keeps local data stores writable on Vercel serverless runtime", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /const localDataRootDir = process\.env\.VERCEL \? join\(tmpdir\(\), "gpt-image2-studio-local"\) : rootDir;/);
+  assert.match(server, /createConfigStore\(\{ rootDir: localDataRootDir \}\)/);
+  assert.match(server, /createPromptAgentStore\(\{ rootDir: localDataRootDir \}\)/);
+});
+
 test("server serves browser modules from public before Vercel-bundled lib files", async () => {
   const server = await readFile(serverPath, "utf8");
   const publicRouteIndex = server.indexOf("const target = resolveSafeFile(publicDir, url.pathname);");

@@ -3704,7 +3704,7 @@ function recordFinalImageChunk(finalImageChunks, payload = {}) {
   return existing.dataUrl;
 }
 
-function attachChunkedImageToSavedItem(item, finalImageChunks) {
+function attachChunkedImageToSavedItem(item, finalImageChunks, fallbackDataUrl = "") {
   if (!item) {
     return item;
   }
@@ -3713,7 +3713,8 @@ function attachChunkedImageToSavedItem(item, finalImageChunks) {
     finalImageChunks.get(String(item.filename || "")) ||
     [...finalImageChunks.values()].find((candidate) => candidate.dataUrl);
 
-  if (!entry?.dataUrl) {
+  const dataUrl = entry?.dataUrl || (isCacheableBrowserImageUrl(fallbackDataUrl) ? fallbackDataUrl : "");
+  if (!dataUrl) {
     return item;
   }
 
@@ -3724,8 +3725,8 @@ function attachChunkedImageToSavedItem(item, finalImageChunks) {
     ...item,
     serverImageUrl,
     serverThumbnailUrl,
-    imageUrl: entry.dataUrl,
-    thumbnailUrl: entry.dataUrl,
+    imageUrl: dataUrl,
+    thumbnailUrl: dataUrl,
   };
 }
 
@@ -5300,7 +5301,7 @@ async function runGeneration(job) {
 
       if (eventName === "saved") {
         terminalEventReceived = true;
-        payload.item = attachChunkedImageToSavedItem(payload.item, finalImageChunks);
+        payload.item = attachChunkedImageToSavedItem(payload.item, finalImageChunks, job.previewUrl);
         if (payload.item) {
           upsertGalleryItem(payload.item);
           state.selectedPreviewKey = makeGalleryPreviewKey(payload.item.filename);

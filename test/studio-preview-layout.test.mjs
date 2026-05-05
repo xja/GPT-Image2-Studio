@@ -123,7 +123,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260505-reference-analysis-image-field-1/);
+  assert.match(html, /\/app\.js\?v=20260505-vercel-final-image-cache-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -568,7 +568,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260505-reference-analysis-image-field-1/);
+  assert.match(html, /\/app\.js\?v=20260505-vercel-final-image-cache-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -576,6 +576,9 @@ test("studio caches generated browser images for persistent preview and download
   assert.match(app, /async function cacheBrowserGalleryItem\(item\) \{/);
   assert.match(app, /await fetchServerImageAsDataUrl\(imageUrl\)/);
   assert.match(app, /if \(eventName === "final_image_chunk"\) \{[\s\S]*await cacheBrowserGalleryItem\(\{\s*filename: payload\.filename,[\s\S]*imageUrl: dataUrl,[\s\S]*thumbnailUrl: dataUrl,[\s\S]*\}\);/);
+  assert.match(app, /function attachChunkedImageToSavedItem\(item, finalImageChunks, fallbackDataUrl = ""\) \{/);
+  assert.match(app, /const dataUrl = entry\?\.dataUrl \|\| \(isCacheableBrowserImageUrl\(fallbackDataUrl\) \? fallbackDataUrl : ""\);/);
+  assert.match(app, /payload\.item = attachChunkedImageToSavedItem\(payload\.item, finalImageChunks, job\.previewUrl\);/);
   assert.match(app, /async function readBrowserCachedGalleryItems\(\) \{/);
   assert.match(app, /function upsertGalleryItem\(item\) \{[\s\S]*void cacheBrowserGalleryItem\(hydratedItem\);/);
   assert.match(app, /async function loadGallery\(\) \{[\s\S]*const browserCachedItems = await readBrowserCachedGalleryItems\(\);[\s\S]*state\.gallery = sortGalleryItemsByCreatedAtDesc/);
@@ -590,7 +593,7 @@ test("studio accepts server-stored Cloudflare image URLs before browser caching 
   assert.match(app, /const serverImageUrl = getServerImageUrl\(item\);/);
   assert.match(app, /writeIndex\(\);[\s\S]*const dataUrl = hasDataUrl \? imageUrl : await fetchServerImageAsDataUrl\(imageUrl\);/);
   assert.match(app, /const fallbackImageUrl = isServerImageProxyUrl\(entry\.imageUrl\) \? entry\.imageUrl : "";/);
-  assert.match(app, /payload\.item = attachChunkedImageToSavedItem\(payload\.item, finalImageChunks\);/);
+  assert.match(app, /payload\.item = attachChunkedImageToSavedItem\(payload\.item, finalImageChunks, job\.previewUrl\);/);
   assert.match(app, /function applyServerImageToGalleryItem\(item\) \{/);
   assert.match(app, /const browserImageUrl = isCacheableBrowserImageUrl\(current\.imageUrl\)[\s\S]*\? current\.imageUrl[\s\S]*: isCacheableBrowserImageUrl\(current\.thumbnailUrl\)[\s\S]*\? current\.thumbnailUrl[\s\S]*: "";/);
   assert.match(app, /imageUrl: browserImageUrl \|\| serverImageUrl,/);
