@@ -133,6 +133,9 @@ const THEME_STORAGE_KEY = "image-studio-ui-theme-v1";
 const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";
 const BROWSER_IMAGE_CACHE_DB_NAME = "image-studio-browser-image-cache-v1";
 const BROWSER_IMAGE_CACHE_STORE_NAME = "generated-images";
+const PROMPT_ANALYSIS_IMAGE_MAX_EDGE = 1024;
+const PROMPT_ANALYSIS_IMAGE_COMPRESS_THRESHOLD_BYTES = 900 * 1024;
+const PROMPT_ANALYSIS_IMAGE_JPEG_QUALITY = 0.82;
 const GENERATION_TASK_POLL_INTERVAL_MS = 2500;
 const GENERATION_TASK_STATUS_LABELS = {
   running: "生成中",
@@ -486,6 +489,66 @@ function wait(milliseconds) {
 
 function buildReferenceFingerprint(file) {
   return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function makePromptAnalysisImageName(filename) {
+  const raw = String(filename || "reference-image").trim();
+  const base = raw.replace(/\.[^.]+$/, "") || "reference-image";
+  return `${base}-analysis.jpg`;
+}
+
+async function preparePromptAnalysisImageFile(file) {
+  if (
+    !file ||
+    typeof file !== "object" ||
+    !String(file.type || "").startsWith("image/") ||
+    Number(file.size || 0) <= PROMPT_ANALYSIS_IMAGE_COMPRESS_THRESHOLD_BYTES
+  ) {
+    return file;
+  }
+
+  let bitmap = null;
+  try {
+    bitmap = await createImageBitmap(file);
+    const maxEdge = Math.max(bitmap.width, bitmap.height);
+    const scale = Math.min(1, PROMPT_ANALYSIS_IMAGE_MAX_EDGE / maxEdge);
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return file;
+    }
+
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(bitmap, 0, 0, width, height);
+
+    const blob = await canvasToBlob(
+      canvas,
+      "image/jpeg",
+      PROMPT_ANALYSIS_IMAGE_JPEG_QUALITY,
+    );
+    if (!blob || blob.size <= 0 || blob.size >= file.size) {
+      return file;
+    }
+
+    return new File([blob], makePromptAnalysisImageName(file.name), {
+      type: "image/jpeg",
+      lastModified: file.lastModified || Date.now(),
+    });
+  } catch {
+    return file;
+  } finally {
+    if (bitmap && typeof bitmap.close === "function") {
+      bitmap.close();
+    }
+  }
 }
 
 function makeJobPreviewKey(jobId) {
@@ -4010,7 +4073,7 @@ function clearPptEditCanvas() {
   setPptEditFeedback("");
 }
 
-async function canvasToBlob(canvas, type = "image/png") {
+async function canvasToBlob(canvas, type = "image/png", quality) {
   return await new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) {
@@ -4018,7 +4081,7 @@ async function canvasToBlob(canvas, type = "image/png") {
       } else {
         reject(new Error("无法导出标注图片。"));
       }
-    }, type);
+    }, type, quality);
   });
 }
 
@@ -5069,9 +5132,9 @@ function applyPromptAgentFile(fileList) {
   renderPromptAgent();
 }
 
-function buildPromptAgentFormData() {
+async function buildPromptAgentFormData() {
   const formData = new FormData();
-  formData.set("image", state.promptAgent.file);
+  formData.set("image", await preparePromptAnalysisImageFile(state.promptAgent.file));
   formData.set(
     "reasoningEffort",
     refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
@@ -5080,15 +5143,18 @@ function buildPromptAgentFormData() {
   return formData;
 }
 
-function buildReferenceAnalysisFormData() {
+async function buildReferenceAnalysisFormData() {
   const formData = new FormData();
   formData.set("mode", "reference-orchestration");
   formData.set(
     "reasoningEffort",
     refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
   );
-  state.referenceFiles.forEach((item) => {
-    formData.append("image", item.file);
+  const analysisFiles = await Promise.all(
+    state.referenceFiles.map((item) => preparePromptAnalysisImageFile(item.file)),
+  );
+  analysisFiles.forEach((file) => {
+    formData.append("image", file);
   });
   appendBrowserConfigToFormData(formData);
   return formData;
@@ -5108,7 +5174,7 @@ async function analyzePromptAgentImage() {
   try {
     const response = await fetch("/api/prompt-agent/analyze", {
       method: "POST",
-      body: buildPromptAgentFormData(),
+      body: await buildPromptAgentFormData(),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -5146,7 +5212,7 @@ async function analyzeReferenceImages() {
   try {
     const response = await fetch("/api/prompt-agent/analyze", {
       method: "POST",
-      body: buildReferenceAnalysisFormData(),
+      body: await buildReferenceAnalysisFormData(),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {

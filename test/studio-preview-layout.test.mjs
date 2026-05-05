@@ -123,7 +123,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260505-vercel-final-image-cache-1/);
+  assert.match(html, /\/app\.js\?v=20260505-vercel-reference-analysis-upload-2/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -446,6 +446,19 @@ test("prompt agent analysis also keeps JSON prompts in prompt templates", async 
   assert.match(app, /savePromptAgentResultAsTemplate\(payload\.item\);/);
 });
 
+test("prompt image analysis compresses large browser uploads before posting to Vercel", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /PROMPT_ANALYSIS_IMAGE_MAX_EDGE = 1024/);
+  assert.match(app, /PROMPT_ANALYSIS_IMAGE_COMPRESS_THRESHOLD_BYTES = 900 \* 1024/);
+  assert.match(app, /async function preparePromptAnalysisImageFile\(file\) \{/);
+  assert.match(app, /createImageBitmap\(file\)/);
+  assert.match(app, /canvasToBlob\([\s\S]*"image\/jpeg"[\s\S]*PROMPT_ANALYSIS_IMAGE_JPEG_QUALITY/);
+  assert.match(app, /new File\(\[blob\], makePromptAnalysisImageName\(file\.name\)/);
+  assert.match(app, /formData\.set\("image", await preparePromptAnalysisImageFile\(state\.promptAgent\.file\)\);/);
+  assert.match(app, /body: await buildPromptAgentFormData\(\),/);
+});
+
 test("studio reference images can be manually analyzed into orchestration prompts", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
@@ -457,10 +470,12 @@ test("studio reference images can be manually analyzed into orchestration prompt
   assert.match(styles, /\.reference-analysis-panel\s*\{/);
   assert.match(styles, /\.reference-analysis-card\s*\{/);
   assert.match(app, /referenceAnalysis:\s*\{/);
-  assert.match(app, /function buildReferenceAnalysisFormData\(\) \{/);
+  assert.match(app, /async function buildReferenceAnalysisFormData\(\) \{/);
   assert.match(app, /formData\.set\("mode", "reference-orchestration"\);/);
-  assert.match(app, /formData\.append\("image", item\.file\);/);
+  assert.match(app, /preparePromptAnalysisImageFile\(item\.file\)/);
+  assert.match(app, /formData\.append\("image", file\);/);
   assert.match(app, /appendBrowserConfigToFormData\(formData\);/);
+  assert.match(app, /body: await buildReferenceAnalysisFormData\(\),/);
   assert.match(app, /fetch\("\/api\/prompt-agent\/analyze"/);
   assert.match(app, /button\.dataset\.referenceAnalysisPromptIndex = String\(index\);/);
   assert.match(app, /function applyReferenceAnalysisPrompt\(index\) \{/);
@@ -568,7 +583,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260505-vercel-final-image-cache-1/);
+  assert.match(html, /\/app\.js\?v=20260505-vercel-reference-analysis-upload-2/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
