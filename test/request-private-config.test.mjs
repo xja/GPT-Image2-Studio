@@ -13,14 +13,14 @@ test("request private config uses browser-provided API settings when a key is pr
     },
   };
   const fields = {
-    baseUrl: "https://api.asxs.top/v1",
+    baseUrl: "https://example.test/v1",
     apiKey: "browser-key",
     responsesModel: "gpt-5.5",
   };
 
   const config = mergeRequestPrivateConfig(fields, fallback);
 
-  assert.equal(config.baseUrl, "https://api.asxs.top/v1");
+  assert.equal(config.baseUrl, "https://example.test/v1");
   assert.equal(config.apiKey, "browser-key");
   assert.equal(config.responsesModel, "gpt-5.5");
   assert.deepEqual(config.defaults, fallback.defaults);
