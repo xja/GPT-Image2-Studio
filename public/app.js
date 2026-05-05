@@ -980,11 +980,15 @@ function mergeServerAndBrowserGalleryItems(serverItems, browserItems) {
       continue;
     }
     const cachedItem = mergedByFilename.get(item.filename);
+    const cachedImageUrl = isCacheableBrowserImageUrl(cachedItem?.imageUrl) ? cachedItem.imageUrl : "";
+    const cachedThumbnailUrl = isCacheableBrowserImageUrl(cachedItem?.thumbnailUrl)
+      ? cachedItem.thumbnailUrl
+      : cachedImageUrl;
     mergedByFilename.set(item.filename, {
       ...cachedItem,
       ...item,
-      imageUrl: item.imageUrl || cachedItem?.imageUrl || "",
-      thumbnailUrl: item.thumbnailUrl || cachedItem?.thumbnailUrl || "",
+      imageUrl: cachedImageUrl || item.imageUrl || cachedItem?.imageUrl || "",
+      thumbnailUrl: cachedThumbnailUrl || item.thumbnailUrl || cachedItem?.thumbnailUrl || cachedImageUrl || "",
     });
   }
 

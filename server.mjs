@@ -34,6 +34,7 @@ import {
   saveGeneratedAsset,
 } from "./lib/gallery-store.mjs";
 import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
+import { mergeRequestPrivateConfig } from "./lib/request-private-config.mjs";
 import { createGenerationTaskStore } from "./lib/generation-task-store.mjs";
 import {
   DEFAULT_REASONING_EFFORT,
@@ -203,23 +204,6 @@ function getClientSessionIdFromRequest(request, url) {
   const queryValue = url.searchParams.get("clientSessionId");
   const resolved = String(headerValue || queryValue || "").trim();
   return resolved || "global-default-session";
-}
-
-function mergeRequestPrivateConfig(formData, fallbackConfig) {
-  const requestApiKey = String(formData.get("apiKey") || "").trim();
-  if (!requestApiKey) {
-    return fallbackConfig;
-  }
-
-  const requestBaseUrl = String(formData.get("baseUrl") || "").trim();
-  const requestModel = String(formData.get("responsesModel") || "").trim();
-
-  return {
-    ...fallbackConfig,
-    baseUrl: requestBaseUrl || fallbackConfig.baseUrl,
-    apiKey: requestApiKey,
-    responsesModel: requestModel || fallbackConfig.responsesModel,
-  };
 }
 
 function claimSessionTaskSlot(sessionId, taskId) {
@@ -679,7 +663,7 @@ async function handlePptGenerate(request, response) {
       transitionSpeed: formData.get("transitionSpeed"),
       autoAdvanceSeconds: formData.get("autoAdvanceSeconds"),
     });
-    const config = await configStore.readPrivateConfig();
+    const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
     const reasoningEffort = normalizeReasoningEffort(
       formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
     );
@@ -779,7 +763,7 @@ async function handlePptComplete(request, response) {
       slideNumbers: payload.slideNumbers,
       theme: payload.stylePreset || payload.theme,
     });
-    const config = await configStore.readPrivateConfig();
+    const config = mergeRequestPrivateConfig(payload, await configStore.readPrivateConfig());
     const reasoningEffort = normalizeReasoningEffort(
       payload.reasoningEffort || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
     );
@@ -895,7 +879,7 @@ async function handlePptSlideEdit(request, response) {
       slideNumbers: [slideNumber],
       theme: stylePreset,
     });
-    const config = await configStore.readPrivateConfig();
+    const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
     const reasoningEffort = normalizeReasoningEffort(
       formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
     );
