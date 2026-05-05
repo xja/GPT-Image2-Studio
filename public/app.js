@@ -5410,6 +5410,7 @@ async function runGeneration(job) {
   job.started = true;
   job.isRunning = true;
   const finalImageChunks = new Map();
+  let finalImageDataUrl = "";
   let terminalEventReceived = false;
   let queuedForPolling = false;
   try {
@@ -5442,6 +5443,7 @@ async function runGeneration(job) {
       }
 
       if (eventName === "final_image") {
+        finalImageDataUrl = isCacheableBrowserImageUrl(payload.dataUrl) ? payload.dataUrl : "";
         updateJob(job.id, {
           previewUrl: payload.dataUrl,
           statusText: "已拿到最终图像，正在写入本地",
@@ -5453,6 +5455,9 @@ async function runGeneration(job) {
 
       if (eventName === "final_image_chunk") {
         const dataUrl = recordFinalImageChunk(finalImageChunks, payload);
+        if (dataUrl) {
+          finalImageDataUrl = dataUrl;
+        }
         updateJob(job.id, {
           previewUrl: dataUrl || job.previewUrl,
           statusText: dataUrl ? "最终图已接收，正在写入浏览器缓存" : "正在接收最终图数据",
@@ -5471,7 +5476,7 @@ async function runGeneration(job) {
 
       if (eventName === "saved") {
         terminalEventReceived = true;
-        payload.item = attachChunkedImageToSavedItem(payload.item, finalImageChunks, job.previewUrl);
+        payload.item = attachChunkedImageToSavedItem(payload.item, finalImageChunks, finalImageDataUrl || job.previewUrl);
         if (payload.item) {
           upsertGalleryItem(payload.item);
           state.selectedPreviewKey = makeGalleryPreviewKey(payload.item.filename);

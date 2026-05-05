@@ -608,7 +608,13 @@ test("studio caches generated browser images for persistent preview and download
   assert.match(app, /if \(eventName === "final_image_chunk"\) \{[\s\S]*await cacheBrowserGalleryItem\(\{\s*filename: payload\.filename,[\s\S]*imageUrl: dataUrl,[\s\S]*thumbnailUrl: dataUrl,[\s\S]*\}\);/);
   assert.match(app, /function attachChunkedImageToSavedItem\(item, finalImageChunks, fallbackDataUrl = ""\) \{/);
   assert.match(app, /const dataUrl = entry\?\.dataUrl \|\| \(isCacheableBrowserImageUrl\(fallbackDataUrl\) \? fallbackDataUrl : ""\);/);
-  assert.match(app, /payload\.item = attachChunkedImageToSavedItem\(payload\.item, finalImageChunks, job\.previewUrl\);/);
+  assert.match(app, /let finalImageDataUrl = "";/);
+  assert.match(app, /if \(eventName === "final_image"\) \{[\s\S]*finalImageDataUrl = isCacheableBrowserImageUrl\(payload\.dataUrl\) \? payload\.dataUrl : "";/);
+  assert.match(app, /if \(dataUrl\) \{[\s\S]*finalImageDataUrl = dataUrl;[\s\S]*handleActivityFinal\(job\.id\);/);
+  assert.match(
+    app,
+    /payload\.item = attachChunkedImageToSavedItem\(payload\.item, finalImageChunks, finalImageDataUrl \|\| job\.previewUrl\);/,
+  );
   assert.match(app, /const cachedImageUrl = isCacheableBrowserImageUrl\(cachedItem\?\.imageUrl\) \? cachedItem\.imageUrl : "";/);
   assert.match(app, /imageUrl: cachedImageUrl \|\| item\.imageUrl \|\| cachedItem\?\.imageUrl \|\| "",/);
   assert.match(
@@ -639,7 +645,10 @@ test("studio accepts server-stored Cloudflare image URLs before browser caching 
   assert.match(app, /const serverImageUrl = getServerImageUrl\(item\);/);
   assert.match(app, /writeIndex\(\);[\s\S]*const dataUrl = hasDataUrl \? imageUrl : await fetchServerImageAsDataUrl\(imageUrl\);/);
   assert.match(app, /const fallbackImageUrl = isServerImageProxyUrl\(entry\.imageUrl\) \? entry\.imageUrl : "";/);
-  assert.match(app, /payload\.item = attachChunkedImageToSavedItem\(payload\.item, finalImageChunks, job\.previewUrl\);/);
+  assert.match(
+    app,
+    /payload\.item = attachChunkedImageToSavedItem\(payload\.item, finalImageChunks, finalImageDataUrl \|\| job\.previewUrl\);/,
+  );
   assert.match(app, /function applyServerImageToGalleryItem\(item\) \{/);
   assert.match(app, /const browserImageUrl = isCacheableBrowserImageUrl\(current\.imageUrl\)[\s\S]*\? current\.imageUrl[\s\S]*: isCacheableBrowserImageUrl\(current\.thumbnailUrl\)[\s\S]*\? current\.thumbnailUrl[\s\S]*: "";/);
   assert.match(app, /imageUrl: browserImageUrl \|\| serverImageUrl,/);
