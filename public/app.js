@@ -216,6 +216,10 @@ const state = {
     sourceMode: "upload",
     statusText: "等待生成",
     currentSlideNumber: 0,
+    recordDetail: {
+      deckKey: "",
+      slideNumber: 0,
+    },
   },
   promptTemplates: [],
   reasoningEfforts: [...DEFAULT_REASONING_EFFORTS],
@@ -225,6 +229,7 @@ const state = {
     running: false,
   },
   referenceFiles: [],
+  referencePreviewItem: null,
   selectedPromptTemplateId: "",
   selectedPreviewKey: "",
   timelineHasRendered: false,
@@ -357,6 +362,7 @@ const refs = {
   pptPageCountInput: document.querySelector("#pptPageCountInput"),
   pptProgressBar: document.querySelector("#pptProgressBar"),
   pptRecordCount: document.querySelector("#pptRecordCount"),
+  pptRecordDetail: document.querySelector("#pptRecordDetail"),
   pptRecordEmpty: document.querySelector("#pptRecordEmpty"),
   pptRecordList: document.querySelector("#pptRecordList"),
   pptRecordRefreshButton: document.querySelector("#pptRecordRefreshButton"),
@@ -394,6 +400,10 @@ const refs = {
   referenceDropzone: document.querySelector("#referenceDropzone"),
   referenceGrid: document.querySelector("#referenceGrid"),
   referenceInput: document.querySelector("#referenceInput"),
+  referencePreviewBackdrop: document.querySelector("#referencePreviewBackdrop"),
+  referencePreviewClose: document.querySelector("#referencePreviewClose"),
+  referencePreviewImage: document.querySelector("#referencePreviewImage"),
+  referencePreviewViewer: document.querySelector("#referencePreviewViewer"),
   refreshGalleryButton: document.querySelector("#refreshGalleryButton"),
   responsesModelInput: document.querySelector("#responsesModelInput"),
   savedKeyMask: document.querySelector("#savedKeyMask"),
@@ -1710,6 +1720,7 @@ function revokeReferencePreview(item) {
 }
 
 function resetReferenceFiles() {
+  closeReferencePreview();
   state.referenceFiles.forEach(revokeReferencePreview);
   state.referenceFiles = [];
   refs.referenceInput.value = "";
@@ -1717,8 +1728,30 @@ function resetReferenceFiles() {
   renderReferenceGrid();
 }
 
+function openReferencePreview(referenceId) {
+  const item = state.referenceFiles.find((entry) => entry.id === referenceId);
+  if (!item?.previewUrl) {
+    return;
+  }
+
+  state.referencePreviewItem = item;
+  refs.referencePreviewImage.src = item.previewUrl;
+  refs.referencePreviewViewer.classList.add("open");
+  refs.referencePreviewViewer.setAttribute("aria-hidden", "false");
+}
+
+function closeReferencePreview() {
+  state.referencePreviewItem = null;
+  refs.referencePreviewViewer.classList.remove("open");
+  refs.referencePreviewViewer.setAttribute("aria-hidden", "true");
+  refs.referencePreviewImage.removeAttribute("src");
+}
+
 function removeReferenceFile(referenceId) {
   const target = state.referenceFiles.find((item) => item.id === referenceId);
+  if (state.referencePreviewItem?.id === referenceId) {
+    closeReferencePreview();
+  }
   revokeReferencePreview(target);
   state.referenceFiles = state.referenceFiles.filter((item) => item.id !== referenceId);
   markReferenceAnalysisDirty();
@@ -1774,15 +1807,23 @@ function renderReferenceGrid() {
     const card = document.createElement("div");
     card.className = "reference-card";
 
+    const previewButton = document.createElement("button");
+    previewButton.type = "button";
+    previewButton.className = "reference-preview-button";
+    previewButton.dataset.referencePreviewId = item.id;
+    previewButton.setAttribute("aria-label", "放大查看参考图");
+
     const image = document.createElement("img");
     image.src = item.previewUrl;
     image.alt = "参考图预览";
-    card.appendChild(image);
+    previewButton.appendChild(image);
+    card.appendChild(previewButton);
 
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "reference-remove";
-    remove.textContent = "移除";
+    remove.textContent = "x";
+    remove.setAttribute("aria-label", "移除参考图");
     remove.addEventListener("click", () => removeReferenceFile(item.id));
     card.appendChild(remove);
     refs.referenceGrid.appendChild(card);
@@ -4351,6 +4392,46 @@ function getPptDeckPageCount(deck) {
   return Number(deck?.pageCount) || Number(deck?.slides?.length) || 0;
 }
 
+function getPptDeckRecordKey(deck) {
+  return String(deck?.deckId || deck?.pptxRelativePath || deck?.pptxUrl || deck?.pptxFilename || "");
+}
+
+function getPptRecordByKey(recordKey) {
+  return state.ppt.decks.find((deck) => getPptDeckRecordKey(deck) === recordKey) || null;
+}
+
+function getPptSlideImageUrl(slide) {
+  return slide?.imageUrl || slide?.thumbnailUrl || slide?.previewUrl || "";
+}
+
+function getPptDeckPreviewSlides(deck) {
+  return Array.isArray(deck?.slides) ? deck.slides.filter((slide) => getPptSlideImageUrl(slide)) : [];
+}
+
+function selectPptRecord(recordKey) {
+  const deck = getPptRecordByKey(recordKey);
+  if (!deck) {
+    return;
+  }
+
+  const slides = getPptDeckPreviewSlides(deck);
+  state.ppt.recordDetail.deckKey = recordKey;
+  state.ppt.recordDetail.slideNumber = Number(slides[0]?.slideNumber) || 0;
+  renderPptRecordView();
+  refs.pptRecordDetail.focus({ preventScroll: true });
+}
+
+function selectPptRecordSlide(slideNumber) {
+  state.ppt.recordDetail.slideNumber = Number(slideNumber) || 0;
+  renderPptRecordView();
+}
+
+function clearPptRecordSelection() {
+  state.ppt.recordDetail.deckKey = "";
+  state.ppt.recordDetail.slideNumber = 0;
+  renderPptRecordView();
+}
+
 function getPptDeckSourceLabel(deck) {
   return deck?.recordSource === "folder" ? "文件夹历史" : "生成记录";
 }
@@ -4367,6 +4448,14 @@ function formatPptDeckMeta(deck) {
 function createPptDeckRecordItem(deck, variant = "history") {
   const item = document.createElement("article");
   item.className = variant === "record" ? "ppt-record-card" : "ppt-history-item";
+  const recordKey = getPptDeckRecordKey(deck);
+
+  if (variant === "record") {
+    item.dataset.pptRecordKey = getPptDeckRecordKey(deck);
+    item.tabIndex = 0;
+    item.setAttribute("aria-label", `查看 ${deck.title || "PPT 记录"} 预览`);
+    item.classList.toggle("is-selected", state.ppt.recordDetail.deckKey === recordKey);
+  }
 
   const title = document.createElement("strong");
   title.textContent = deck.title || "未命名演示";
@@ -4389,6 +4478,14 @@ function createPptDeckRecordItem(deck, variant = "history") {
 
   const actions = document.createElement("div");
   actions.className = variant === "record" ? "ppt-record-card-actions" : "ppt-history-actions";
+  if (variant === "record") {
+    const previewButton = document.createElement("button");
+    previewButton.type = "button";
+    previewButton.className = "toolbar-button";
+    previewButton.textContent = "预览";
+    actions.appendChild(previewButton);
+  }
+
   const link = document.createElement("a");
   link.className = "toolbar-button";
   link.href = deck.pptxUrl || "#";
@@ -4414,14 +4511,136 @@ function renderPptHistory() {
   });
 }
 
+function renderPptRecordDetail(deck) {
+  refs.pptRecordDetail.innerHTML = "";
+
+  if (!deck) {
+    refs.pptRecordDetail.classList.add("is-empty");
+    const empty = document.createElement("div");
+    empty.className = "ppt-record-detail-empty";
+
+    const title = document.createElement("strong");
+    title.textContent = "选择一条 PPT 记录";
+    empty.appendChild(title);
+
+    const copy = document.createElement("p");
+    copy.textContent = "点击左侧记录后，这里会显示该 PPT 的页面图片和下载信息。";
+    empty.appendChild(copy);
+
+    refs.pptRecordDetail.appendChild(empty);
+    return;
+  }
+
+  refs.pptRecordDetail.classList.remove("is-empty");
+
+  const slides = getPptDeckPreviewSlides(deck);
+  const selectedSlide =
+    slides.find((slide) => Number(slide.slideNumber) === Number(state.ppt.recordDetail.slideNumber)) || slides[0] || null;
+  if (selectedSlide) {
+    state.ppt.recordDetail.slideNumber = Number(selectedSlide.slideNumber) || 0;
+  }
+
+  const header = document.createElement("div");
+  header.className = "ppt-record-detail-head";
+
+  const summary = document.createElement("div");
+  summary.className = "ppt-record-detail-summary";
+
+  const title = document.createElement("strong");
+  title.textContent = deck.title || "未命名演示";
+  summary.appendChild(title);
+
+  const meta = document.createElement("span");
+  meta.textContent = formatPptDeckMeta(deck);
+  summary.appendChild(meta);
+  header.appendChild(summary);
+
+  const actions = document.createElement("div");
+  actions.className = "ppt-record-detail-actions";
+
+  const backButton = document.createElement("button");
+  backButton.type = "button";
+  backButton.className = "toolbar-button";
+  backButton.dataset.pptRecordBack = "true";
+  backButton.textContent = "返回记录";
+  actions.appendChild(backButton);
+
+  const link = document.createElement("a");
+  link.className = "toolbar-button";
+  link.href = deck.pptxUrl || "#";
+  link.download = deck.pptxFilename || "";
+  link.textContent = "下载 PPTX";
+  if (!deck.pptxUrl) {
+    link.classList.add("disabled");
+    link.setAttribute("aria-disabled", "true");
+  }
+  actions.appendChild(link);
+  header.appendChild(actions);
+  refs.pptRecordDetail.appendChild(header);
+
+  const previewStage = document.createElement("div");
+  previewStage.className = "ppt-record-preview-stage";
+
+  if (selectedSlide) {
+    const previewImage = document.createElement("img");
+    previewImage.src = getPptSlideImageUrl(selectedSlide);
+    previewImage.alt = selectedSlide.title || `${deck.title || "PPT"} 第 ${selectedSlide.slideNumber} 页`;
+    previewStage.appendChild(previewImage);
+  } else {
+    const empty = document.createElement("div");
+    empty.className = "ppt-record-detail-empty";
+    const emptyTitle = document.createElement("strong");
+    emptyTitle.textContent = "没有可预览的页面图片";
+    empty.appendChild(emptyTitle);
+    const emptyCopy = document.createElement("p");
+    emptyCopy.textContent = "这条历史记录只包含 PPTX 文件，仍可直接下载查看。";
+    empty.appendChild(emptyCopy);
+    previewStage.appendChild(empty);
+  }
+
+  refs.pptRecordDetail.appendChild(previewStage);
+
+  const strip = document.createElement("div");
+  strip.className = "ppt-record-slide-strip";
+  slides.forEach((slide) => {
+    const slideButton = document.createElement("button");
+    slideButton.type = "button";
+    slideButton.className = "ppt-record-slide-button";
+    slideButton.dataset.pptRecordSlide = String(slide.slideNumber);
+    slideButton.classList.toggle("is-selected", Number(slide.slideNumber) === Number(state.ppt.recordDetail.slideNumber));
+    slideButton.setAttribute("aria-label", `预览第 ${slide.slideNumber} 页`);
+
+    const thumb = document.createElement("img");
+    thumb.src = getPptSlideImageUrl(slide);
+    thumb.alt = slide.title || `第 ${slide.slideNumber} 页`;
+    slideButton.appendChild(thumb);
+
+    const label = document.createElement("span");
+    label.textContent = `${slide.slideNumber}. ${slide.title || "页面"}`;
+    slideButton.appendChild(label);
+
+    strip.appendChild(slideButton);
+  });
+  refs.pptRecordDetail.appendChild(strip);
+}
+
 function renderPptRecordView() {
   refs.pptRecordCount.textContent = `${state.ppt.decks.length} 个`;
   refs.pptRecordEmpty.classList.toggle("hidden", state.ppt.decks.length > 0);
   refs.pptRecordList.innerHTML = "";
 
+  let selectedDeck = getPptRecordByKey(state.ppt.recordDetail.deckKey);
+  if (!selectedDeck) {
+    state.ppt.recordDetail.deckKey = "";
+    state.ppt.recordDetail.slideNumber = 0;
+    selectedDeck = null;
+  }
+
   state.ppt.decks.forEach((deck) => {
     refs.pptRecordList.appendChild(createPptDeckRecordItem(deck, "record"));
   });
+
+  renderPptRecordDetail(selectedDeck);
 }
 
 function renderPptView() {
@@ -4868,7 +5087,7 @@ function buildReferenceAnalysisFormData() {
     refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
   );
   state.referenceFiles.forEach((item) => {
-    formData.append("referenceImages", item.file);
+    formData.append("image", item.file);
   });
   appendBrowserConfigToFormData(formData);
   return formData;
@@ -5304,6 +5523,46 @@ function bindEvents() {
   refs.pptRecordRefreshButton.addEventListener("click", () => {
     loadPptDecks().catch((error) => showError(error.message));
   });
+  refs.pptRecordList.addEventListener("click", (event) => {
+    if (event.target.closest("a")) {
+      return;
+    }
+
+    const target = event.target.closest("[data-ppt-record-key]");
+    if (!target) {
+      return;
+    }
+
+    selectPptRecord(target.dataset.pptRecordKey);
+  });
+  refs.pptRecordList.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    if (event.target.closest("a,button")) {
+      return;
+    }
+
+    const target = event.target.closest("[data-ppt-record-key]");
+    if (!target) {
+      return;
+    }
+
+    event.preventDefault();
+    selectPptRecord(target.dataset.pptRecordKey);
+  });
+  refs.pptRecordDetail.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-ppt-record-slide]");
+    if (target) {
+      selectPptRecordSlide(target.dataset.pptRecordSlide);
+      return;
+    }
+
+    if (event.target.closest("[data-ppt-record-back]")) {
+      clearPptRecordSelection();
+    }
+  });
   refs.pptSourceModeInputs.forEach((input) => {
     input.addEventListener("change", () => {
       setPptSourceMode(input.value);
@@ -5361,6 +5620,14 @@ function bindEvents() {
   refs.referenceInput.addEventListener("change", (event) => {
     applyReferenceFiles(event.target.files);
   });
+  refs.referenceGrid.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-reference-preview-id]");
+    if (!target) {
+      return;
+    }
+
+    openReferencePreview(target.dataset.referencePreviewId);
+  });
   refs.referenceDropzone.addEventListener("dragover", (event) => {
     event.preventDefault();
     refs.referenceDropzone.classList.add("dragover");
@@ -5373,6 +5640,8 @@ function bindEvents() {
     refs.referenceDropzone.classList.remove("dragover");
     applyReferenceFiles(event.dataTransfer?.files);
   });
+  refs.referencePreviewBackdrop.addEventListener("click", closeReferencePreview);
+  refs.referencePreviewClose.addEventListener("click", closeReferencePreview);
   refs.referenceAnalyzeButton.addEventListener("click", () => {
     analyzeReferenceImages().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -5546,6 +5815,11 @@ function bindEvents() {
 
       if (refs.promptAgentImageViewer.classList.contains("open")) {
         closePromptAgentImageViewer();
+        return;
+      }
+
+      if (refs.referencePreviewViewer.classList.contains("open")) {
+        closeReferencePreview();
         return;
       }
 

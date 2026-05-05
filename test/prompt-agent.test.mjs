@@ -32,6 +32,10 @@ test("prompt agent request analyzes an uploaded image without invoking image gen
   assert.match(input[0].content[0].text, /JSON/);
   assert.match(input[0].content[0].text, /反推|逆向|复刻/);
   assert.deepEqual(input[0].content[1], {
+    type: "input_text",
+    text: "待分析图片 1：sample.png。请按此序号分析这张图片的角色、内容和可融合元素。",
+  });
+  assert.deepEqual(input[0].content[2], {
     type: "input_image",
     image_url: "data:image/png;base64,ZmFrZQ==",
   });
@@ -76,8 +80,16 @@ test("prompt agent request can orchestrate multiple reference images into scene 
   assert.match(input[0].content[0].text, /人物.*服装|主体.*背景|关系/);
   assert.deepEqual(input[0].content.slice(1), [
     {
+      type: "input_text",
+      text: "参考图 1：person.png。请按此序号分析这张图片的角色、内容和可融合元素。",
+    },
+    {
       type: "input_image",
       image_url: "data:image/png;base64,cGVyc29u",
+    },
+    {
+      type: "input_text",
+      text: "参考图 2：pants.png。请按此序号分析这张图片的角色、内容和可融合元素。",
     },
     {
       type: "input_image",
@@ -87,6 +99,47 @@ test("prompt agent request can orchestrate multiple reference images into scene 
   assert.equal(requestBody.text.format.name, "reference_orchestration_prompt_json");
   assert.equal("tools" in requestBody, false);
   assert.ok(requestBody.text.format.schema.required.includes("prompts"));
+});
+
+test("prompt agent labels every reference image so the model can compare all images", () => {
+  const images = [
+    {
+      filename: "kitchen-scene.png",
+      mimeType: "image/png",
+      base64: "a2l0Y2hlbg==",
+    },
+    {
+      filename: "zip-hoodie.jpg",
+      mimeType: "image/jpeg",
+      base64: "aG9vZGll",
+    },
+  ];
+
+  const input = buildPromptAgentInput({
+    images,
+    mode: "reference-orchestration",
+  });
+
+  assert.match(input[0].content[0].text, /覆盖所有参考图/);
+  assert.match(input[0].content[0].text, /不要只分析第一张/);
+  assert.deepEqual(input[0].content.slice(1), [
+    {
+      type: "input_text",
+      text: "参考图 1：kitchen-scene.png。请按此序号分析这张图片的角色、内容和可融合元素。",
+    },
+    {
+      type: "input_image",
+      image_url: "data:image/png;base64,a2l0Y2hlbg==",
+    },
+    {
+      type: "input_text",
+      text: "参考图 2：zip-hoodie.jpg。请按此序号分析这张图片的角色、内容和可融合元素。",
+    },
+    {
+      type: "input_image",
+      image_url: "data:image/jpeg;base64,aG9vZGll",
+    },
+  ]);
 });
 
 test("prompt agent normalizes reference orchestration output to one to three prompts", () => {

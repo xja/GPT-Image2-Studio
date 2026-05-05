@@ -944,37 +944,78 @@ textarea {
 
 .reference-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
 .reference-card {
+  position: relative;
   display: grid;
   justify-items: center;
   align-content: center;
-  gap: 10px;
-  min-height: 122px;
-  padding: 12px 8px;
+  gap: 8px;
+  min-height: 116px;
+  padding: 10px 6px;
   border-radius: 14px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.02);
 }
 
-.reference-card img {
+.reference-preview-button {
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(145, 159, 255, 0.24);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: zoom-in;
+  overflow: hidden;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.reference-preview-button:hover,
+.reference-preview-button:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(145, 159, 255, 0.5);
+  background: rgba(111, 124, 255, 0.12);
+}
+
+.reference-preview-button img {
   width: 72px;
   height: 72px;
-  border-radius: 12px;
+  border-radius: 10px;
   object-fit: cover;
 }
 
 .reference-remove {
-  min-height: 28px;
-  padding: 0 10px;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
   border-radius: 999px;
-  border-color: var(--border);
-  color: var(--muted);
-  font-size: 0.74rem;
-  justify-self: center;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(7, 10, 20, 0.74);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.84rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.reference-remove:hover,
+.reference-remove:focus-visible {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
 }
 
 .reference-analysis-actions {
@@ -3021,7 +3062,8 @@ textarea {
   font-weight: 600;
 }
 
-#promptAgentImageViewerImage {
+#promptAgentImageViewerImage,
+#referencePreviewImage {
   min-width: 0;
   min-height: 0;
   max-width: 100%;
@@ -3482,7 +3524,7 @@ html[data-ui-layout="tablet"] .ratio-grid {
 
 html[data-ui-layout="tablet"] .reference-grid,
 html[data-ui-layout="mobile"] .reference-grid {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 html[data-ui-layout="tablet"] .preview-toolbar,
@@ -3919,11 +3961,23 @@ html[data-ui-layout="mobile"] .prompt-template-head {
   flex-wrap: wrap;
 }
 
+.ppt-record-browser {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  gap: 14px;
+  overflow: hidden;
+}
+
 .ppt-record-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: 1fr;
   align-content: start;
   gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .ppt-record-card {
@@ -3937,6 +3991,21 @@ html[data-ui-layout="mobile"] .prompt-template-head {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.032)),
     rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.ppt-record-card:hover,
+.ppt-record-card:focus-visible,
+.ppt-record-card.is-selected {
+  transform: translateY(-1px);
+  border-color: rgba(132, 147, 255, 0.42);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.042)),
+    rgba(111, 124, 255, 0.08);
 }
 
 .ppt-record-card p {
@@ -3963,6 +4032,135 @@ html[data-ui-layout="mobile"] .prompt-template-head {
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 2px;
+}
+
+.ppt-record-detail {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid rgba(132, 147, 255, 0.16);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.022)),
+    rgba(255, 255, 255, 0.035);
+}
+
+.ppt-record-detail.is-empty {
+  place-items: center;
+  grid-template-rows: 1fr;
+}
+
+.ppt-record-detail-head,
+.ppt-record-detail-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ppt-record-detail-head {
+  justify-content: space-between;
+}
+
+.ppt-record-detail-summary {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.ppt-record-detail-summary strong,
+.ppt-record-detail-empty strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.ppt-record-detail-summary span,
+.ppt-record-detail-empty p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.ppt-record-preview-stage {
+  min-height: 280px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(132, 147, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(4, 7, 16, 0.42);
+  aspect-ratio: 16 / 9;
+}
+
+.ppt-record-preview-stage img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+
+.ppt-record-detail-empty {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  max-width: 320px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.ppt-record-slide-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+  gap: 10px;
+}
+
+.ppt-record-slide-button {
+  min-width: 0;
+  min-height: 44px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(132, 147, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.ppt-record-slide-button:hover,
+.ppt-record-slide-button:focus-visible,
+.ppt-record-slide-button.is-selected {
+  transform: translateY(-1px);
+  border-color: rgba(132, 147, 255, 0.48);
+  background: rgba(111, 124, 255, 0.12);
+}
+
+.ppt-record-slide-button img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 6px;
+  background: rgba(4, 7, 16, 0.5);
+}
+
+.ppt-record-slide-button span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ppt-edit-modal {
@@ -4077,6 +4275,13 @@ html[data-ui-layout="mobile"] .ppt-record-panel {
   overflow: visible;
 }
 
+html[data-ui-layout="stacked"] .ppt-record-browser,
+html[data-ui-layout="tablet"] .ppt-record-browser,
+html[data-ui-layout="mobile"] .ppt-record-browser {
+  grid-template-columns: 1fr;
+  overflow: visible;
+}
+
 html[data-ui-layout="stacked"] .ppt-settings-panel,
 html[data-ui-layout="stacked"] .ppt-result-panel,
 html[data-ui-layout="stacked"] .ppt-history-panel,
@@ -4104,8 +4309,11 @@ html[data-ui-layout="mobile"] .ppt-history-list {
 }
 
 html[data-ui-layout="stacked"] .ppt-record-list,
+html[data-ui-layout="stacked"] .ppt-record-detail,
 html[data-ui-layout="tablet"] .ppt-record-list,
-html[data-ui-layout="mobile"] .ppt-record-list {
+html[data-ui-layout="tablet"] .ppt-record-detail,
+html[data-ui-layout="mobile"] .ppt-record-list,
+html[data-ui-layout="mobile"] .ppt-record-detail {
   overflow: visible;
 }
 

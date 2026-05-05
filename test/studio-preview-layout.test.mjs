@@ -123,7 +123,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260505-reference-orchestration-1/);
+  assert.match(html, /\/app\.js\?v=20260505-reference-analysis-image-field-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -151,16 +151,17 @@ test("config drawer opens with a wider panel for form editing", async () => {
   assert.match(styles, /\.drawer-panel\s*\{[\s\S]*width:\s*min\(468px,\s*100vw\);/);
 });
 
-test("generate action appears above the prompt field", async () => {
+test("reference upload appears above prompt and generate action below prompt", async () => {
   const html = await readFile(indexPath, "utf8");
 
   assert.match(
     html,
-    /<form id="generateForm" class="settings-form">[\s\S]*<button[\s\S]*class="generate-button"[\s\S]*id="generateButton"[\s\S]*type="submit"[\s\S]*>[\s\S]*开始生成[\s\S]*<\/button>[\s\S]*<span>提示词<\/span>/,
+    /<form id="generateForm" class="settings-form">[\s\S]*<div class="field-group reference-field-group">[\s\S]*id="referenceDropzone"[\s\S]*<\/div>[\s\S]*id="promptInput"[\s\S]*<button[\s\S]*class="generate-button"[\s\S]*id="generateButton"[\s\S]*type="submit"/,
   );
   assert.doesNotMatch(html, /class="generate-note"/);
   assert.doesNotMatch(html, /支持最多 20 个任务排队/);
-  assert.doesNotMatch(html, /<div class="reference-grid hidden" id="referenceGrid"><\/div>[\s\S]*<button class="generate-button" id="generateButton"/);
+  assert.doesNotMatch(html, /id="generateButton"[\s\S]*id="promptInput"/);
+  assert.doesNotMatch(html, /id="promptInput"[\s\S]*id="referenceDropzone"/);
 });
 
 test("reference preview cards do not render uploaded filenames", async () => {
@@ -170,6 +171,34 @@ test("reference preview cards do not render uploaded filenames", async () => {
   assert.doesNotMatch(app, /name\.textContent\s*=\s*item\.file\.name/);
   assert.doesNotMatch(app, /reference-card-meta/);
   assert.doesNotMatch(styles, /\.reference-card-meta/);
+});
+
+test("reference thumbnail remove control is a top-right x button", async () => {
+  const app = await readFile(appPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+
+  assert.match(app, /remove\.className = "reference-remove";[\s\S]*remove\.textContent = "x";/);
+  assert.match(app, /remove\.setAttribute\("aria-label", "移除参考图"\);/);
+  assert.match(styles, /\.reference-card\s*\{[\s\S]*position:\s*relative;/);
+  assert.match(
+    styles,
+    /\.reference-remove\s*\{[\s\S]*position:\s*absolute;[\s\S]*top:\s*6px;[\s\S]*right:\s*6px;[\s\S]*width:\s*24px;[\s\S]*height:\s*24px;/,
+  );
+  assert.doesNotMatch(app, /remove\.textContent = "移除";/);
+});
+
+test("reference thumbnails render three per row and open a local preview viewer", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /id="referencePreviewViewer"[\s\S]*id="referencePreviewImage"/);
+  assert.match(styles, /\.reference-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
+  assert.match(styles, /\.reference-preview-button\s*\{/);
+  assert.match(app, /referencePreviewItem:\s*null/);
+  assert.match(app, /function openReferencePreview\(referenceId\) \{/);
+  assert.match(app, /refs\.referencePreviewImage\.src = item\.previewUrl;/);
+  assert.match(app, /refs\.referenceGrid\.addEventListener\("click",[\s\S]*target\.closest\("\[data-reference-preview-id\]"\)/);
 });
 
 test("prompt field can start generation with Ctrl+Enter", async () => {
@@ -335,6 +364,26 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.match(app, /document\.querySelectorAll\("\[data-nav-action\]"\)\.forEach/);
 });
 
+test("PPT record cards open a deck preview detail with slide thumbnails", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /id="pptRecordList"[\s\S]*id="pptRecordDetail"/);
+  assert.match(styles, /\.ppt-record-browser\s*\{/);
+  assert.match(styles, /\.ppt-record-detail\s*\{/);
+  assert.match(styles, /\.ppt-record-preview-stage\s*\{/);
+  assert.match(styles, /\.ppt-record-slide-strip\s*\{/);
+  assert.match(app, /recordDetail:\s*\{[\s\S]*deckKey:\s*""[\s\S]*slideNumber:\s*0[\s\S]*\}/);
+  assert.match(app, /function getPptDeckRecordKey\(deck\) \{/);
+  assert.match(app, /function selectPptRecord\(recordKey\) \{/);
+  assert.match(app, /function renderPptRecordDetail\(deck\) \{/);
+  assert.match(app, /item\.dataset\.pptRecordKey = getPptDeckRecordKey\(deck\);/);
+  assert.match(app, /refs\.pptRecordList\.addEventListener\("click",[\s\S]*target\.closest\("\[data-ppt-record-key\]"\)/);
+  assert.match(app, /refs\.pptRecordDetail\.addEventListener\("click",[\s\S]*target\.closest\("\[data-ppt-record-slide\]"\)/);
+  assert.match(app, /previewImage\.src = getPptSlideImageUrl\(selectedSlide\);/);
+});
+
 test("theme toggle persists dark and white themes", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
@@ -410,11 +459,13 @@ test("studio reference images can be manually analyzed into orchestration prompt
   assert.match(app, /referenceAnalysis:\s*\{/);
   assert.match(app, /function buildReferenceAnalysisFormData\(\) \{/);
   assert.match(app, /formData\.set\("mode", "reference-orchestration"\);/);
-  assert.match(app, /formData\.append\("referenceImages", item\.file\);/);
+  assert.match(app, /formData\.append\("image", item\.file\);/);
   assert.match(app, /appendBrowserConfigToFormData\(formData\);/);
   assert.match(app, /fetch\("\/api\/prompt-agent\/analyze"/);
   assert.match(app, /button\.dataset\.referenceAnalysisPromptIndex = String\(index\);/);
   assert.match(app, /function applyReferenceAnalysisPrompt\(index\) \{/);
+  assert.match(app, /refs\.referenceDropzone\.addEventListener\("dragover",[\s\S]*event\.preventDefault\(\);[\s\S]*classList\.add\("dragover"\);/);
+  assert.match(app, /refs\.referenceDropzone\.addEventListener\("drop",[\s\S]*event\.preventDefault\(\);[\s\S]*applyReferenceFiles\(event\.dataTransfer\?\.files\);/);
   const applyReferenceFilesBody = app.match(/function applyReferenceFiles\(fileList\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.doesNotMatch(applyReferenceFilesBody, /analyzeReferenceImages\(\)/);
 });
@@ -517,7 +568,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260505-reference-orchestration-1/);
+  assert.match(html, /\/app\.js\?v=20260505-reference-analysis-image-field-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);

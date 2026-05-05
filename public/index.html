@@ -21,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260505-reference-orchestration-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260505-reference-analysis-image-field-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -196,15 +196,41 @@
           <div class="studio-grid">
             <section class="studio-panel settings-panel">
               <form id="generateForm" class="settings-form">
-                <button
-                  class="generate-button"
-                  id="generateButton"
-                  type="submit"
-                  title="开始生成（Ctrl+Enter）"
-                  aria-keyshortcuts="Control+Enter"
-                >
-                  开始生成
-                </button>
+                <div class="field-group reference-field-group">
+                  <div class="field-heading">
+                    <div>
+                      <span>参考图</span>
+                      <small>Reference（可选，最多 6 张）</small>
+                    </div>
+                    <small id="referenceCount">0 / 6</small>
+                  </div>
+
+                  <label class="reference-dropzone" id="referenceDropzone">
+                    <input id="referenceInput" name="referenceImages" type="file" accept="image/*" multiple />
+                    <div class="reference-icon" aria-hidden="true"></div>
+                    <strong>拖入图片或点击上传</strong>
+                    <span>支持 JPG / PNG，建议尺寸至少 1024px</span>
+                    <em>上传参考图</em>
+                  </label>
+
+                  <div class="reference-grid hidden" id="referenceGrid"></div>
+                  <div class="reference-analysis-actions">
+                    <button class="inline-button reference-analysis-button" id="referenceAnalyzeButton" type="button" disabled>
+                      分析参考图
+                    </button>
+                    <p class="prompt-agent-feedback" id="referenceAnalysisFeedback"></p>
+                  </div>
+                  <div class="reference-analysis-panel hidden" id="referenceAnalysisPanel">
+                    <div class="reference-analysis-head">
+                      <div>
+                        <span>编排提示词</span>
+                        <strong id="referenceAnalysisSummary">--</strong>
+                      </div>
+                      <small id="referenceAnalysisMeta">--</small>
+                    </div>
+                    <div class="reference-analysis-list" id="referenceAnalysisList"></div>
+                  </div>
+                </div>
 
                 <div class="field-group">
                   <div class="field-heading with-action">
@@ -226,6 +252,16 @@
                     <span class="field-counter"><span id="promptCounter">0</span> / 1000</span>
                   </label>
                 </div>
+
+                <button
+                  class="generate-button"
+                  id="generateButton"
+                  type="submit"
+                  title="开始生成（Ctrl+Enter）"
+                  aria-keyshortcuts="Control+Enter"
+                >
+                  开始生成
+                </button>
 
                 <div class="field-group parameter-settings">
                   <div class="field-heading">
@@ -260,42 +296,6 @@
                         <strong>High</strong>
                       </div>
                     </div>
-                  </div>
-                </div>
-
-                <div class="field-group">
-                  <div class="field-heading">
-                    <div>
-                      <span>参考图</span>
-                      <small>Reference（可选，最多 6 张）</small>
-                    </div>
-                    <small id="referenceCount">0 / 6</small>
-                  </div>
-
-                  <label class="reference-dropzone" id="referenceDropzone">
-                    <input id="referenceInput" name="referenceImages" type="file" accept="image/*" multiple />
-                    <div class="reference-icon" aria-hidden="true"></div>
-                    <strong>拖入图片或点击上传</strong>
-                    <span>支持 JPG / PNG，建议尺寸至少 1024px</span>
-                    <em>上传参考图</em>
-                  </label>
-
-                  <div class="reference-grid hidden" id="referenceGrid"></div>
-                  <div class="reference-analysis-actions">
-                    <button class="inline-button reference-analysis-button" id="referenceAnalyzeButton" type="button" disabled>
-                      分析参考图
-                    </button>
-                    <p class="prompt-agent-feedback" id="referenceAnalysisFeedback"></p>
-                  </div>
-                  <div class="reference-analysis-panel hidden" id="referenceAnalysisPanel">
-                    <div class="reference-analysis-head">
-                      <div>
-                        <span>编排提示词</span>
-                        <strong id="referenceAnalysisSummary">--</strong>
-                      </div>
-                      <small id="referenceAnalysisMeta">--</small>
-                    </div>
-                    <div class="reference-analysis-list" id="referenceAnalysisList"></div>
                   </div>
                 </div>
               </form>
@@ -685,7 +685,10 @@
               </div>
             </div>
             <div class="ppt-record-empty" id="pptRecordEmpty">还没有找到 PPT 文件。</div>
-            <div class="ppt-record-list" id="pptRecordList"></div>
+            <div class="ppt-record-browser">
+              <div class="ppt-record-list" id="pptRecordList"></div>
+              <article class="ppt-record-detail" id="pptRecordDetail" aria-live="polite" tabindex="-1"></article>
+            </div>
           </section>
         </section>
       </main>
@@ -820,6 +823,22 @@
       </div>
     </aside>
 
+    <aside class="prompt-agent-image-viewer reference-preview-viewer" id="referencePreviewViewer" aria-hidden="true">
+      <button
+        class="prompt-agent-image-viewer-backdrop reference-preview-backdrop"
+        id="referencePreviewBackdrop"
+        type="button"
+        aria-label="关闭参考图放大预览"
+      ></button>
+      <div class="prompt-agent-image-viewer-dialog reference-preview-dialog" role="dialog" aria-modal="true" aria-label="参考图放大预览">
+        <div class="prompt-agent-image-viewer-head">
+          <span>参考图预览</span>
+          <button class="header-button" id="referencePreviewClose" type="button">关闭</button>
+        </div>
+        <img id="referencePreviewImage" alt="参考图放大预览" />
+      </div>
+    </aside>
+
     <aside class="config-drawer" id="configDrawer" aria-hidden="true">
       <div class="drawer-backdrop" id="closeConfigBackdrop"></div>
       <div class="drawer-panel">
@@ -929,6 +948,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260505-reference-orchestration-1"></script>
+    <script type="module" src="/app.js?v=20260505-reference-analysis-image-field-1"></script>
   </body>
 </html>
