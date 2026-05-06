@@ -32,7 +32,7 @@ test("preview image uses contain sizing to fill the available canvas without cli
     styles,
     /#previewImage\s*\{[\s\S]*width:\s*auto;[\s\S]*height:\s*auto;[\s\S]*max-width:\s*100%;[\s\S]*max-height:\s*100%;/,
   );
-  assert.doesNotMatch(styles, /#previewImage\s*\{[\s\S]*object-fit:\s*contain;/);
+  assert.doesNotMatch(styles, /#previewImage\s*\{[^}]*object-fit:\s*contain;/);
   assert.match(app, /refs\.previewImage\.style\.transform = `scale\(\$\{state\.zoom\}\)`;/);
 });
 
@@ -40,8 +40,14 @@ test("lightbox detail image can be clicked to magnify inside the detail view", a
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(styles, /#lightboxImage\s*\{[\s\S]*cursor:\s*zoom-in;/);
+  assert.match(styles, /#lightboxImage\s*\{[\s\S]*object-fit:\s*contain;[\s\S]*cursor:\s*zoom-in;/);
+  assert.match(styles, /\.lightbox-media-stage\s*\{[^}]*overflow:\s*hidden;/);
+  assert.match(styles, /\.lightbox-media-stage\.is-zoomed\s*\{[^}]*overflow:\s*auto;/);
   assert.match(styles, /#lightboxImage\.is-zoomed\s*\{[\s\S]*cursor:\s*zoom-out;/);
+  assert.match(
+    styles,
+    /html\[data-ui-layout="tablet"\]\s+\.lightbox-fields,\s*[\r\n]+\s*html\[data-ui-layout="mobile"\]\s+\.lightbox-fields\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\);/,
+  );
   assert.match(app, /refs\.lightboxImage\.addEventListener\("click",[\s\S]*state\.lightboxZoomed = !state\.lightboxZoomed;/);
   assert.match(app, /refs\.lightboxImage\.classList\.toggle\("is-zoomed",\s*state\.lightboxZoomed\)/);
 });
@@ -76,7 +82,7 @@ test("filmstrip thumbnails stay square, fill the available rail, and keep labels
   assert.match(styles, /\.filmstrip\s*\{[\s\S]*width:\s*100%;[\s\S]*max-width:\s*100%;/);
   assert.match(styles, /\.filmstrip\s*\{[\s\S]*grid-auto-columns:\s*92px;[\s\S]*justify-content:\s*start;/);
   assert.match(styles, /\.filmstrip-item\s*\{[\s\S]*justify-items:\s*center;/);
-  assert.match(styles, /\.filmstrip-item span\s*\{[\s\S]*font-size:\s*12px;[\s\S]*line-height:\s*14px;[\s\S]*white-space:\s*nowrap;/);
+  assert.match(styles, /\.filmstrip-item span\s*\{[\s\S]*font-size:\s*var\(--type-subtitle-size\);[\s\S]*line-height:\s*14px;[\s\S]*white-space:\s*nowrap;/);
   assert.match(styles, /\.filmstrip-item img\s*\{[\s\S]*object-fit:\s*cover;/);
   assert.match(app, /function formatFilmstripSizeLabel\(item\) \{[\s\S]*return formatCompactSizeLabel\(item\?\.size\);/);
   assert.match(app, /label: formatFilmstripSizeLabel\(job\) \|\| job\.statusText \|\| formatClock\(job\.createdAt\)/);
@@ -123,7 +129,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260506-creation-reference-compress-1/);
+  assert.match(html, /\/app\.js\?v=20260506-creation-layout-fix-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -366,7 +372,8 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.match(styles, /html\[data-theme="light"\]\s*\{[\s\S]*--flyout-bg:\s*rgba\(251,\s*251,\s*253,\s*0\.96\);[\s\S]*--flyout-text:\s*var\(--text\);/);
   assert.match(styles, /\.nav-flyout\.mega-menu\s*\{[\s\S]*width:\s*min\(680px,\s*calc\(100vw - 32px\)\);[\s\S]*padding:\s*24px;/);
   assert.match(styles, /\.mega-menu-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(170px,\s*1\.35fr\)\s+repeat\(2,\s*minmax\(120px,\s*1fr\)\);/);
-  assert.match(styles, /\.mega-menu-link\.large,\s*[\r\n]+\s*\.mega-menu-action\.large\s*\{[\s\S]*font-size:\s*1\.45rem;[\s\S]*font-weight:\s*700;/);
+  assert.match(styles, /\.mega-menu-link,\s*[\r\n]+\s*\.mega-menu-action\s*\{[\s\S]*font-size:\s*var\(--type-small-title-size\);[\s\S]*font-weight:\s*600;/);
+  assert.doesNotMatch(styles, /\.mega-menu-link\.large,\s*[\r\n]+\s*\.mega-menu-action\.large\s*\{/);
   assert.match(styles, /\.global-nav-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);[\s\S]*overflow:\s*visible;/);
   assert.match(styles, /html\[data-ui-layout="stacked"\] \.global-nav-list,[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.global-nav-list\s*\{[\s\S]*overflow:\s*visible;/);
@@ -498,7 +505,7 @@ test("studio reference images can be manually analyzed into orchestration prompt
   assert.match(styles, /\.reference-analysis-actions\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto;/);
   assert.match(styles, /\.reference-analysis-panel\s*\{/);
   assert.match(styles, /\.reference-analysis-card\s*\{/);
-  assert.match(styles, /\.reference-analysis-card p\s*\{[\s\S]*font-size:\s*0\.86rem;/);
+  assert.match(styles, /\.reference-analysis-card p\s*\{[\s\S]*font-size:\s*var\(--type-body-size\);/);
   assert.match(styles, /\.reference-analysis-roles\s*\{/);
   assert.match(styles, /\.reference-analysis-role\s*\{[\s\S]*width:\s*auto;/);
   assert.match(styles, /\.reference-analysis-toggle\s*\{/);
@@ -638,7 +645,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260506-creation-reference-compress-1/);
+  assert.match(html, /\/app\.js\?v=20260506-creation-layout-fix-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -940,7 +947,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260506-creation-reference-compress-1/);
+  assert.match(html, /app\.js\?v=20260506-creation-layout-fix-1/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
@@ -955,10 +962,17 @@ test("creation mode exposes record detail and item repair actions", async () => 
   assert.match(html, /id="creationRecordDetail"/);
 
   assert.match(styles, /\.creation-record-detail\s*\{/);
+  assert.match(styles, /\.creation-record-detail span\s*\{[\s\S]*overflow-wrap:\s*anywhere;/);
   assert.match(styles, /\.creation-card-actions\s*\{/);
   assert.match(styles, /\.creation-card-path\s*\{/);
-  assert.match(styles, /\.creation-card-editor\s*\{/);
+  assert.match(styles, /\.creation-card\s*\{[\s\S]*position:\s*relative;[\s\S]*isolation:\s*isolate;/);
+  assert.match(styles, /\.creation-card-media\s*\{[\s\S]*aspect-ratio:\s*1\s*\/\s*1;/);
+  assert.match(styles, /\.creation-card-editor\s*\{[\s\S]*position:\s*fixed;[\s\S]*right:\s*24px;[\s\S]*bottom:\s*24px;[\s\S]*z-index:\s*75;[\s\S]*width:\s*min\(520px,\s*calc\(100vw - 32px\)\);/);
+  assert.match(styles, /\.creation-card-editor-head\s*\{/);
+  assert.match(styles, /\.creation-card-editor-close\s*\{/);
   assert.match(styles, /\.creation-card-editor textarea\s*\{/);
+  assert.match(styles, /html\[data-ui-layout="tablet"\]\s+\.creation-card-editor\s*\{[\s\S]*width:\s*min\(360px,\s*calc\(100vw - 28px\)\);/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\]\s+\.creation-card-editor\s*\{[\s\S]*inset:\s*auto 12px 12px 12px;/);
 
   assert.match(app, /creationRepairFailedButton: document\.querySelector\("#creationRepairFailedButton"\)/);
   assert.match(app, /creationRecordDetail: document\.querySelector\("#creationRecordDetail"\)/);
@@ -971,17 +985,21 @@ test("creation mode exposes record detail and item repair actions", async () => 
   assert.match(app, /referenceImageRoles: buildCreationReferenceRolePayload\(\),/);
   assert.match(app, /function getCreationItemDraftKey\(setId, itemId\) \{/);
   assert.match(app, /function toggleCreationItemEditor\(itemId\) \{/);
+  assert.match(app, /state\.creation\.editingItemId = state\.creation\.editingItemId === itemId \? "" : itemId;/);
+  assert.match(app, /function closeCreationItemEditor\(itemId = state\.creation\.editingItemId\) \{/);
   assert.match(app, /function saveCreationItemDraft\(itemId, promptOverride\) \{/);
   assert.match(app, /fetch\("\/api\/creation\/repair"/);
   assert.match(app, /formData\.set\("promptOverride", promptOverride\);/);
   assert.match(app, /button\.dataset\.creationRetryItemId = item\.itemId;/);
   assert.match(app, /editButton\.dataset\.creationEditItemId = item\.itemId;/);
+  assert.match(app, /closeButton\.dataset\.creationClosePromptEditor = item\.itemId;/);
   assert.match(app, /saveButton\.dataset\.creationSavePromptItemId = item\.itemId;/);
   assert.match(app, /textarea\.dataset\.creationPromptEditor = item\.itemId;/);
   assert.match(app, /path\.className = "creation-card-path";/);
   assert.match(app, /path\.textContent = item\.relativePath \|\| item\.error \|\| "";/);
   assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationRetryItemId/);
   assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationEditItemId/);
+  assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationClosePromptEditor/);
   assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationSavePromptItemId/);
   assert.match(app, /refs\.creationRepairFailedButton\.addEventListener\("click"/);
 });

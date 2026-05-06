@@ -5398,6 +5398,15 @@ function toggleCreationItemEditor(itemId) {
   renderCreationView();
 }
 
+function closeCreationItemEditor(itemId = state.creation.editingItemId) {
+  if (!itemId || state.creation.editingItemId !== itemId) {
+    return;
+  }
+
+  state.creation.editingItemId = "";
+  renderCreationView();
+}
+
 function saveCreationItemDraft(itemId, promptOverride) {
   const currentSet = getCreationCurrentSet();
   if (!currentSet || !itemId) {
@@ -5587,6 +5596,24 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
   if (showActions && state.creation.editingItemId === item.itemId) {
     const editor = document.createElement("div");
     editor.className = "creation-card-editor";
+    editor.setAttribute("role", "dialog");
+    editor.setAttribute("aria-label", "微调提示词");
+
+    const editorHead = document.createElement("div");
+    editorHead.className = "creation-card-editor-head";
+
+    const editorTitle = document.createElement("strong");
+    editorTitle.textContent = "微调提示词";
+    editorHead.appendChild(editorTitle);
+
+    const closeButton = document.createElement("button");
+    closeButton.className = "creation-card-editor-close";
+    closeButton.type = "button";
+    closeButton.dataset.creationClosePromptEditor = item.itemId;
+    closeButton.textContent = "x";
+    closeButton.setAttribute("aria-label", "关闭微调浮窗");
+    editorHead.appendChild(closeButton);
+    editor.appendChild(editorHead);
 
     const textarea = document.createElement("textarea");
     textarea.dataset.creationPromptEditor = item.itemId;
@@ -8059,6 +8086,12 @@ function bindEvents() {
     const editButton = event.target.closest("[data-creation-edit-item-id]");
     if (editButton) {
       toggleCreationItemEditor(editButton.dataset.creationEditItemId);
+      return;
+    }
+
+    const closeButton = event.target.closest("[data-creation-close-prompt-editor]");
+    if (closeButton) {
+      closeCreationItemEditor(closeButton.dataset.creationClosePromptEditor);
       return;
     }
 
