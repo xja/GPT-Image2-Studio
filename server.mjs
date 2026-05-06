@@ -43,7 +43,7 @@ import {
   MAX_REFERENCE_IMAGES,
   REASONING_EFFORT_OPTIONS,
 } from "./lib/studio-constants.mjs";
-import { requestPromptAgentAnalysis } from "./lib/prompt-agent.mjs";
+import { CREATION_REFERENCE_ANALYSIS_MODE, requestPromptAgentAnalysis } from "./lib/prompt-agent.mjs";
 import { createPromptAgentStore } from "./lib/prompt-agent-store.mjs";
 import { generatePptDeckOutline } from "./lib/ppt-deck-workflow.mjs";
 import { buildSlideEditPrompt, buildSlideImagePrompts } from "./lib/ppt-slide-prompts.mjs";
@@ -56,6 +56,14 @@ import {
 } from "./lib/ppt-completion.mjs";
 import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
 import { migrateOutputDirectoryMonths } from "./lib/output-directory-migration.mjs";
+import {
+  applyCreationPlanOverrides,
+  buildCreationPlan,
+  normalizeCreationReferenceAnalysis,
+  normalizeCreationReferenceRoles,
+} from "./lib/creation-planner.mjs";
+import { applyCreationRepairOverrides, selectCreationRepairItems } from "./lib/creation-repair.mjs";
+import { buildCreationRelativeDir, createCreationSetStore } from "./lib/creation-store.mjs";
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(rootDir, "public");
@@ -66,6 +74,7 @@ const configStore = createConfigStore({ rootDir: localDataRootDir });
 const promptAgentStore = createPromptAgentStore({ rootDir: localDataRootDir });
 const generationTaskStore = createGenerationTaskStore();
 const pptDeckStore = createPptDeckStore({ outputDir, publicBasePath: "/output" });
+const creationSetStore = createCreationSetStore({ outputDir, publicBasePath: "/output" });
 const port = Number(process.env.PORT || 3600);
 const activeTasksBySession = new Map();
 const PPT_SOURCE_EXTENSIONS = new Set([".pdf", ".docx", ".pptx", ".txt", ".md", ".csv"]);
@@ -162,6 +171,26 @@ function resolveSafeFile(baseDir, requestPath) {
   const normalizedBase = resolve(baseDir);
 
   if (!target.startsWith(normalizedBase)) {
+    return null;
+  }
+
+  return target;
+}
+
+function resolveSafeOutputSubdirectory(relativeDirValue) {
+  const relativeDir = String(relativeDirValue || "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter(Boolean)
+    .join("/");
+  if (!relativeDir) {
+    return null;
+  }
+
+  const normalizedBase = resolve(outputDir);
+  const target = resolve(normalizedBase, relativeDir);
+  const backToBase = relative(normalizedBase, target);
+  if (backToBase.startsWith("..") || isAbsolute(backToBase)) {
     return null;
   }
 
@@ -290,6 +319,7 @@ async function handleOpenOutput(response) {
     mkdir(todayOutputDir, { recursive: true }),
     mkdir(join(todayOutputDir, `${todayDateFolder}-image`), { recursive: true }),
     mkdir(join(todayOutputDir, `${todayDateFolder}-ppt`), { recursive: true }),
+    mkdir(join(todayOutputDir, `${todayDateFolder}-creation`), { recursive: true }),
   ]);
   openDirectory(todayOutputDir);
   sendJson(response, 200, {
@@ -1074,6 +1104,858 @@ function buildSavedItem({
   };
 }
 
+function updateCreationItems(items, itemId, patch = {}) {
+  return items.map((item) => (item.itemId === itemId ? { ...item, ...patch } : item));
+}
+
+function getCreationSetStatus(items) {
+  const completedCount = items.filter((item) => item.status === "completed").length;
+  const failedCount = items.filter((item) => item.status === "failed").length;
+
+  if (completedCount === items.length) {
+    return "completed";
+  }
+
+  if (failedCount === items.length) {
+    return "failed";
+  }
+
+  if (failedCount > 0) {
+    return "partial_failed";
+  }
+
+  return "generating";
+}
+
+function buildCreationSetManifest({
+  setId,
+  plan,
+  createdAt,
+  updatedAt,
+  status,
+  relativeDir,
+  items,
+  referenceImageNames = [],
+  referenceImageRoles = [],
+}) {
+  return {
+    setId,
+    productName: plan.productName,
+    productDescription: plan.productDescription,
+    sellingPoints: plan.sellingPoints,
+    targetLanguage: plan.targetLanguage,
+    targetLanguageLabel: plan.targetLanguageLabel,
+    imageCount: plan.imageCount,
+    scenario: plan.scenario,
+    scenarioLabel: plan.scenarioLabel,
+    selectedRoles: plan.selectedRoles || items.map((item) => item.role).filter(Boolean),
+    referenceImageNames,
+    referenceImageRoles: plan.referenceImageRoles || referenceImageRoles,
+    createdAt,
+    updatedAt: updatedAt || createdAt,
+    status,
+    relativeDir,
+    items,
+  };
+}
+
+function buildCreationImageFilename({ item, createdAt, setId, format }) {
+  const filenameToken = item.filenameToken || item.role || item.itemId || "creation";
+  const baseName = createTimestampedFilename({
+    format,
+    prompt: `${item.title} ${item.prompt}`,
+    createdAt,
+    idSource: `${setId}-${item.itemId}`,
+  });
+  return `${String(item.slotIndex).padStart(2, "0")}-${filenameToken}-${baseName}`;
+}
+
+async function handleCreationSetsGet(response) {
+  sendJson(response, 200, await creationSetStore.listManifests());
+}
+
+async function handleCreationSetFolderOpen(request, response) {
+  const payload = await readJsonBody(request);
+  const setId = String(payload.setId || "").trim();
+  if (!setId) {
+    return sendJson(response, 400, {
+      message: "缺少套图记录 ID。",
+    });
+  }
+
+  try {
+    const set = await creationSetStore.readManifest(setId);
+    if (!set.relativeDir) {
+      return sendJson(response, 404, {
+        message: "这套记录没有 creation 文件夹路径。",
+      });
+    }
+
+    const targetDir = resolveSafeOutputSubdirectory(set.relativeDir);
+    if (!targetDir) {
+      return sendJson(response, 400, {
+        message: "套图文件夹路径无效。",
+      });
+    }
+
+    const targetStat = await stat(targetDir);
+    if (!targetStat.isDirectory()) {
+      return sendJson(response, 404, {
+        message: "套图文件夹不存在。",
+      });
+    }
+
+    openDirectory(targetDir);
+    return sendJson(response, 200, {
+      ok: true,
+      setId,
+      directory: targetDir,
+    });
+  } catch (error) {
+    if (error && typeof error === "object" && error.code === "ENOENT") {
+      return sendJson(response, 404, {
+        message: "套图文件夹不存在。",
+      });
+    }
+
+    throw error;
+  }
+}
+
+async function handleCreationReferenceAnalyze(request, response) {
+  const formData = await readFormDataBody(request);
+  const referenceImages = await toReferenceImages([
+    ...formData.getAll("referenceImages"),
+    ...formData.getAll("referenceImage"),
+  ]);
+
+  if (referenceImages.length === 0) {
+    return sendJson(response, 400, {
+      message: "请先上传套图参考图。",
+    });
+  }
+
+  if (referenceImages.length > MAX_REFERENCE_IMAGES) {
+    return sendJson(response, 400, {
+      message: `参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`,
+    });
+  }
+
+  if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+    return sendJson(response, 400, {
+      message: "仅支持图片参考文件。",
+    });
+  }
+
+  const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
+  if (!config.apiKey) {
+    return sendJson(response, 400, {
+      message: "当前未保存 API Key，请先在配置中保存。",
+    });
+  }
+
+  const reasoningEffort = normalizeReasoningEffort(
+    formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+  );
+  const json = await requestPromptAgentAnalysis({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    image: referenceImages[0],
+    images: referenceImages,
+    mode: CREATION_REFERENCE_ANALYSIS_MODE,
+    responsesModel: config.responsesModel,
+    reasoningEffort,
+  });
+  const analysis = normalizeCreationReferenceAnalysis(
+    json,
+    referenceImages.map((image) => image.filename).filter(Boolean),
+  );
+
+  return sendJson(response, 200, {
+    ok: true,
+    analysis,
+  });
+}
+
+async function handleCreationPlan(request, response) {
+  try {
+    const formData = await readFormDataBody(request);
+    const referenceImageRoles = normalizeCreationReferenceRoles(formData.get("referenceImageRoles"));
+    let plan = buildCreationPlan({
+      productName: formData.get("productName"),
+      productDescription: formData.get("productDescription"),
+      sellingPoints: formData.get("sellingPoints"),
+      targetLanguage: formData.get("targetLanguage"),
+      imageCount: formData.get("imageCount"),
+      scenario: formData.get("scenario"),
+      selectedRoles: formData.get("selectedRoles"),
+      referenceImageRoles,
+    });
+    plan = applyCreationPlanOverrides(plan, formData.get("planOverrides"));
+
+    return sendJson(response, 200, {
+      ok: true,
+      plan,
+    });
+  } catch (error) {
+    return sendJson(response, 400, {
+      message: compactErrorMessage(error instanceof Error ? error.message : String(error), "套图计划生成失败"),
+    });
+  }
+}
+
+async function handleCreationGenerate(request, response) {
+  response.writeHead(200, {
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "Content-Type": "text/event-stream; charset=utf-8",
+  });
+
+  let setId = "";
+  let items = [];
+  let plan = null;
+  let creationRelativeDir = "";
+  let createdAt = new Date().toISOString();
+  let referenceImages = [];
+  let referenceImageNames = [];
+  let referenceImageRoles = [];
+
+  try {
+    const formData = await readFormDataBody(request);
+    setId = `creation-set-${randomUUID()}`;
+    createdAt = new Date().toISOString();
+    referenceImages = await toReferenceImages([
+      ...formData.getAll("referenceImages"),
+      ...formData.getAll("referenceImage"),
+    ]);
+    if (referenceImages.length > MAX_REFERENCE_IMAGES) {
+      throw new Error(`参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`);
+    }
+    if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+      throw new Error("仅支持图片参考文件。");
+    }
+    referenceImageNames = referenceImages.map((image) => image.filename).filter(Boolean);
+    referenceImageRoles = normalizeCreationReferenceRoles(formData.get("referenceImageRoles"));
+    plan = buildCreationPlan({
+      productName: formData.get("productName"),
+      productDescription: formData.get("productDescription"),
+      sellingPoints: formData.get("sellingPoints"),
+      targetLanguage: formData.get("targetLanguage"),
+      imageCount: formData.get("imageCount"),
+      scenario: formData.get("scenario"),
+      selectedRoles: formData.get("selectedRoles"),
+      referenceImageRoles,
+    });
+    plan = applyCreationPlanOverrides(plan, formData.get("planOverrides"));
+
+    const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
+    if (!config.apiKey) {
+      writeSseEvent(response, "error", {
+        message: "当前未保存 API Key，请先在配置中保存。",
+      });
+      return;
+    }
+
+    const clientSessionId = getClientSessionId(request, formData);
+    const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || "1:1"));
+    const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
+    const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
+    if (requestedSize !== requestedSizeInput && requestedSizeInput !== "") {
+      throw new Error(`当前比例 ${ratioOption.value} 不支持分辨率 ${requestedSizeInput}`);
+    }
+
+    const finalSize = requestedSize === "auto" ? getDefaultGenerationSize(ratioOption.value) : requestedSize;
+    const finalQuality = config.defaults?.quality || "high";
+    const finalFormat = normalizeOutputFormat(String(formData.get("format") || config.defaults?.format || "png"));
+    const reasoningEffort = normalizeReasoningEffort(
+      formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    );
+
+    creationRelativeDir = buildCreationRelativeDir({
+      createdAt,
+      productName: plan.productName || plan.productDescription,
+      setId,
+    });
+    items = plan.items.map((item) => ({
+      ...item,
+      status: "queued",
+      filename: "",
+      relativePath: "",
+      imageUrl: "",
+      thumbnailUrl: "",
+      error: "",
+    }));
+
+    let setManifest = await creationSetStore.saveManifest(
+      buildCreationSetManifest({
+        setId,
+        plan,
+        createdAt,
+        status: "generating",
+        relativeDir: creationRelativeDir,
+        items,
+        referenceImageNames,
+      }),
+    );
+
+    writeSseEvent(response, "set_started", { set: setManifest });
+    writeSseEvent(response, "plan", { setId, items });
+
+    for (const item of plan.items) {
+      const taskId = `${setId}-${item.itemId}`;
+      const generationStartedAt = new Date().toISOString();
+      const generationStartedAtMs = Date.now();
+      let finalBase64 = "";
+      let slotClaimed = false;
+
+      try {
+        if (!claimSessionTaskSlot(clientSessionId, taskId)) {
+          throw new Error(`同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
+        }
+        slotClaimed = true;
+        items = updateCreationItems(items, item.itemId, {
+          status: "generating",
+          generationStartedAt,
+        });
+        writeSseEvent(response, "item_started", { setId, itemId: item.itemId, role: item.role });
+
+        const finalPrompt = appendRatioHintToPrompt(item.prompt, ratioOption);
+        const generationResult = await requestImageGeneration({
+          baseUrl: config.baseUrl,
+          apiKey: config.apiKey,
+          prompt: finalPrompt,
+          referenceImages,
+          size: finalSize,
+          quality: finalQuality,
+          format: toApiOutputFormat(finalFormat),
+          responsesModel: config.responsesModel,
+          reasoningEffort,
+          async onEvent(event) {
+            if (event.type === "status") {
+              writeSseEvent(response, "item_status", {
+                setId,
+                itemId: item.itemId,
+                stage: event.stage,
+                message: event.message,
+              });
+            }
+
+            if (event.type === "partial_image") {
+              writeSseEvent(response, "item_partial_image", {
+                setId,
+                itemId: item.itemId,
+                dataUrl: event.dataUrl,
+              });
+            }
+
+            if (event.type === "final_image") {
+              finalBase64 = event.base64;
+              writeSseEvent(response, "item_final_image", {
+                setId,
+                itemId: item.itemId,
+                dataUrl: `data:${toOutputFormatMimeType(finalFormat)};base64,${normalizeBase64(event.base64)}`,
+              });
+            }
+          },
+        });
+
+        finalBase64 = finalBase64 || generationResult.finalImageBase64;
+        if (!finalBase64) {
+          throw new Error("上游响应结束，但没有拿到最终图片。");
+        }
+
+        const generationCompletedAt = new Date().toISOString();
+        const generationDurationMs = Math.max(0, Date.now() - generationStartedAtMs);
+        const savedSize = generationResult.effectiveSize || finalSize;
+        const filename = buildCreationImageFilename({
+          item,
+          createdAt,
+          setId,
+          format: finalFormat,
+        });
+        const saved = await saveGeneratedAsset({
+          outputDir,
+          relativeDir: creationRelativeDir,
+          filename,
+          imageBuffer: Buffer.from(normalizeBase64(finalBase64), "base64"),
+          metadata: {
+            prompt: item.prompt,
+            createdAt,
+            baseUrl: config.baseUrl,
+            responsesModel: config.responsesModel,
+            imageModel: "gpt-image-2",
+            ratio: ratioOption.value,
+            ratioLabel: ratioOption.label,
+            size: savedSize,
+            quality: finalQuality,
+            format: finalFormat,
+            reasoningEffort,
+            generationStartedAt,
+            generationCompletedAt,
+            generationDurationMs,
+            assetKind: "creation-image",
+            creationSetId: setId,
+            creationItemId: item.itemId,
+            creationRole: item.role,
+            targetLanguage: plan.targetLanguage,
+            creationScenario: plan.scenario,
+            creationImageCount: plan.imageCount,
+            hasReferenceImage: referenceImages.length > 0,
+            referenceImageNames,
+            referenceImageName: referenceImageNames[0] || "",
+            referenceImageRoles,
+            galleryVisible: false,
+          },
+        });
+        const imageUrl = buildPublicAssetUrl("/output", saved.relativePath, saved.createdAt);
+
+        items = updateCreationItems(items, item.itemId, {
+          status: "completed",
+          filename,
+          relativePath: saved.relativePath,
+          imageUrl,
+          thumbnailUrl: imageUrl,
+          generationStartedAt,
+          generationCompletedAt,
+          generationDurationMs,
+        });
+        setManifest = await creationSetStore.saveManifest(
+          buildCreationSetManifest({
+            setId,
+            plan,
+            createdAt,
+            updatedAt: generationCompletedAt,
+            status: getCreationSetStatus(items),
+            relativeDir: creationRelativeDir,
+            items,
+            referenceImageNames,
+          }),
+        );
+
+        writeSseEvent(response, "item_saved", {
+          setId,
+          item: setManifest.items.find((entry) => entry.itemId === item.itemId),
+          set: setManifest,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        items = updateCreationItems(items, item.itemId, {
+          status: "failed",
+          error: message,
+        });
+        setManifest = await creationSetStore.saveManifest(
+          buildCreationSetManifest({
+            setId,
+            plan,
+            createdAt,
+            updatedAt: new Date().toISOString(),
+            status: getCreationSetStatus(items),
+            relativeDir: creationRelativeDir,
+            items,
+            referenceImageNames,
+          }),
+        );
+        writeSseEvent(response, "item_failed", {
+          setId,
+          itemId: item.itemId,
+          message,
+          set: setManifest,
+        });
+      } finally {
+        if (slotClaimed) {
+          releaseSessionTaskSlot(clientSessionId, taskId);
+        }
+      }
+    }
+
+    const finalSet = await creationSetStore.saveManifest(
+      buildCreationSetManifest({
+        setId,
+        plan,
+        createdAt,
+        updatedAt: new Date().toISOString(),
+        status: getCreationSetStatus(items),
+        relativeDir: creationRelativeDir,
+        items,
+        referenceImageNames,
+      }),
+    );
+
+    writeSseEvent(response, "complete", { set: finalSet });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (setId && plan) {
+      await creationSetStore.saveManifest(
+        buildCreationSetManifest({
+          setId,
+          plan,
+          createdAt,
+          updatedAt: new Date().toISOString(),
+          status: getCreationSetStatus(items),
+          relativeDir: creationRelativeDir,
+          items,
+          referenceImageNames,
+        }),
+      );
+    }
+    writeSseEvent(response, "error", { message });
+  } finally {
+    if (!response.destroyed && !response.writableEnded) {
+      response.end();
+    }
+  }
+}
+
+async function handleCreationRepair(request, response) {
+  response.writeHead(200, {
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "Content-Type": "text/event-stream; charset=utf-8",
+  });
+
+  let setId = "";
+  let existingSet = null;
+  let items = [];
+  let repairPlan = null;
+  let referenceImageNames = [];
+  let referenceImageRoles = [];
+
+  try {
+    const formData = await readFormDataBody(request);
+    setId = String(formData.get("setId") || "").trim();
+    if (!setId) {
+      throw new Error("缺少套图记录 ID。");
+    }
+
+    existingSet = await creationSetStore.readManifest(setId);
+    items = Array.isArray(existingSet.items) ? existingSet.items : [];
+    const referenceImages = await toReferenceImages([
+      ...formData.getAll("referenceImages"),
+      ...formData.getAll("referenceImage"),
+    ]);
+    if (referenceImages.length > MAX_REFERENCE_IMAGES) {
+      throw new Error(`参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`);
+    }
+    if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+      throw new Error("仅支持图片参考文件。");
+    }
+    referenceImageNames =
+      referenceImages.length > 0
+        ? referenceImages.map((image) => image.filename).filter(Boolean)
+        : existingSet.referenceImageNames || [];
+    {
+      const submittedReferenceImageRoles = normalizeCreationReferenceRoles(formData.get("referenceImageRoles"));
+      referenceImageRoles =
+        submittedReferenceImageRoles.length > 0 ? submittedReferenceImageRoles : existingSet.referenceImageRoles || [];
+    }
+
+    const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
+    if (!config.apiKey) {
+      writeSseEvent(response, "error", {
+        message: "当前未保存 API Key，请先在配置中保存。",
+      });
+      return;
+    }
+
+    const repairItemId = formData.get("itemId");
+    const promptOverride = formData.get("promptOverride");
+    const marketingCopyOverride = formData.get("marketingCopyOverride");
+    const repairItems = selectCreationRepairItems(existingSet, {
+      itemId: repairItemId,
+      scope: formData.get("scope"),
+    }).map((item) =>
+      repairItemId
+        ? applyCreationRepairOverrides(item, {
+            promptOverride,
+            marketingCopyOverride,
+          })
+        : item,
+    );
+    if (repairItems.length === 0) {
+      writeSseEvent(response, "error", {
+        message: "没有需要补图或重生成的套图项。",
+      });
+      return;
+    }
+
+    repairPlan = {
+      productName: existingSet.productName,
+      productDescription: existingSet.productDescription,
+      sellingPoints: existingSet.sellingPoints,
+      targetLanguage: existingSet.targetLanguage,
+      targetLanguageLabel: existingSet.targetLanguageLabel,
+      imageCount: existingSet.imageCount,
+      scenario: existingSet.scenario,
+      scenarioLabel: existingSet.scenarioLabel,
+      referenceImageRoles,
+    };
+
+    const clientSessionId = getClientSessionId(request, formData);
+    const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || "1:1"));
+    const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
+    const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
+    if (requestedSize !== requestedSizeInput && requestedSizeInput !== "") {
+      throw new Error(`当前比例 ${ratioOption.value} 不支持分辨率 ${requestedSizeInput}`);
+    }
+
+    const finalSize = requestedSize === "auto" ? getDefaultGenerationSize(ratioOption.value) : requestedSize;
+    const finalQuality = config.defaults?.quality || "high";
+    const finalFormat = normalizeOutputFormat(String(formData.get("format") || config.defaults?.format || "png"));
+    const reasoningEffort = normalizeReasoningEffort(
+      formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    );
+    const relativeDir =
+      existingSet.relativeDir ||
+      buildCreationRelativeDir({
+        createdAt: existingSet.createdAt,
+        productName: existingSet.productName || existingSet.productDescription,
+        setId,
+      });
+
+    items = repairItems.reduce(
+      (nextItems, item) =>
+        updateCreationItems(nextItems, item.itemId, {
+          prompt: item.prompt,
+          marketingCopy: item.marketingCopy,
+          status: "queued",
+          error: "",
+        }),
+      items,
+    );
+    let setManifest = await creationSetStore.saveManifest(
+      buildCreationSetManifest({
+        setId,
+        plan: repairPlan,
+        createdAt: existingSet.createdAt,
+        updatedAt: new Date().toISOString(),
+        status: getCreationSetStatus(items),
+        relativeDir,
+        items,
+        referenceImageNames,
+      }),
+    );
+
+    writeSseEvent(response, "repair_started", {
+      set: setManifest,
+      itemIds: repairItems.map((item) => item.itemId),
+    });
+
+    for (const item of repairItems) {
+      const repairItem = item;
+      const taskId = `${setId}-repair-${item.itemId}`;
+      const generationStartedAt = new Date().toISOString();
+      const generationStartedAtMs = Date.now();
+      let finalBase64 = "";
+      let slotClaimed = false;
+
+      try {
+        if (!claimSessionTaskSlot(clientSessionId, taskId)) {
+          throw new Error(`同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
+        }
+        slotClaimed = true;
+        items = updateCreationItems(items, item.itemId, {
+          prompt: repairItem.prompt,
+          marketingCopy: repairItem.marketingCopy,
+          status: "generating",
+          generationStartedAt,
+          error: "",
+        });
+        writeSseEvent(response, "item_started", { setId, itemId: item.itemId, role: repairItem.role });
+
+        const finalPrompt = appendRatioHintToPrompt(repairItem.prompt, ratioOption);
+        const generationResult = await requestImageGeneration({
+          baseUrl: config.baseUrl,
+          apiKey: config.apiKey,
+          prompt: finalPrompt,
+          referenceImages,
+          size: finalSize,
+          quality: finalQuality,
+          format: toApiOutputFormat(finalFormat),
+          responsesModel: config.responsesModel,
+          reasoningEffort,
+          async onEvent(event) {
+            if (event.type === "status") {
+              writeSseEvent(response, "item_status", {
+                setId,
+                itemId: item.itemId,
+                stage: event.stage,
+                message: event.message,
+              });
+            }
+
+            if (event.type === "partial_image") {
+              writeSseEvent(response, "item_partial_image", {
+                setId,
+                itemId: item.itemId,
+                dataUrl: event.dataUrl,
+              });
+            }
+
+            if (event.type === "final_image") {
+              finalBase64 = event.base64;
+              writeSseEvent(response, "item_final_image", {
+                setId,
+                itemId: item.itemId,
+                dataUrl: `data:${toOutputFormatMimeType(finalFormat)};base64,${normalizeBase64(event.base64)}`,
+              });
+            }
+          },
+        });
+
+        finalBase64 = finalBase64 || generationResult.finalImageBase64;
+        if (!finalBase64) {
+          throw new Error("上游响应结束，但没有拿到最终图片。");
+        }
+
+        const generationCompletedAt = new Date().toISOString();
+        const generationDurationMs = Math.max(0, Date.now() - generationStartedAtMs);
+        const savedSize = generationResult.effectiveSize || finalSize;
+        const filenameOptions = {
+          filename: item.filename || buildCreationImageFilename({
+            item,
+            createdAt: generationCompletedAt,
+            setId,
+            format: finalFormat,
+          }),
+        };
+        const filename = filenameOptions.filename;
+        const saved = await saveGeneratedAsset({
+          outputDir,
+          relativeDir,
+          filename,
+          imageBuffer: Buffer.from(normalizeBase64(finalBase64), "base64"),
+          metadata: {
+            prompt: repairItem.prompt,
+            createdAt: generationCompletedAt,
+            baseUrl: config.baseUrl,
+            responsesModel: config.responsesModel,
+            imageModel: "gpt-image-2",
+            ratio: ratioOption.value,
+            ratioLabel: ratioOption.label,
+            size: savedSize,
+            quality: finalQuality,
+            format: finalFormat,
+            reasoningEffort,
+            generationStartedAt,
+            generationCompletedAt,
+            generationDurationMs,
+            assetKind: "creation-image",
+            creationSetId: setId,
+            creationItemId: item.itemId,
+            creationRole: repairItem.role,
+            creationRepairOf: item.itemId,
+            targetLanguage: existingSet.targetLanguage,
+            creationScenario: existingSet.scenario,
+            creationImageCount: existingSet.imageCount,
+            hasReferenceImage: referenceImages.length > 0,
+            referenceImageNames,
+            referenceImageName: referenceImageNames[0] || "",
+            referenceImageRoles,
+            galleryVisible: false,
+          },
+        });
+        const imageUrl = buildPublicAssetUrl("/output", saved.relativePath, saved.createdAt);
+
+        items = updateCreationItems(items, item.itemId, {
+          prompt: repairItem.prompt,
+          marketingCopy: repairItem.marketingCopy,
+          status: "completed",
+          filename,
+          relativePath: saved.relativePath,
+          imageUrl,
+          thumbnailUrl: imageUrl,
+          generationStartedAt,
+          generationCompletedAt,
+          generationDurationMs,
+          error: "",
+        });
+        setManifest = await creationSetStore.saveManifest(
+          buildCreationSetManifest({
+            setId,
+            plan: repairPlan,
+            createdAt: existingSet.createdAt,
+            updatedAt: generationCompletedAt,
+            status: getCreationSetStatus(items),
+            relativeDir,
+            items,
+            referenceImageNames,
+          }),
+        );
+
+        writeSseEvent(response, "item_saved", {
+          setId,
+          item: setManifest.items.find((entry) => entry.itemId === item.itemId),
+          set: setManifest,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        items = updateCreationItems(items, item.itemId, {
+          status: "failed",
+          error: message,
+        });
+        setManifest = await creationSetStore.saveManifest(
+          buildCreationSetManifest({
+            setId,
+            plan: repairPlan,
+            createdAt: existingSet.createdAt,
+            updatedAt: new Date().toISOString(),
+            status: getCreationSetStatus(items),
+            relativeDir,
+            items,
+            referenceImageNames,
+          }),
+        );
+        writeSseEvent(response, "item_failed", {
+          setId,
+          itemId: item.itemId,
+          message,
+          set: setManifest,
+        });
+      } finally {
+        if (slotClaimed) {
+          releaseSessionTaskSlot(clientSessionId, taskId);
+        }
+      }
+    }
+
+    const finalSet = await creationSetStore.saveManifest(
+      buildCreationSetManifest({
+        setId,
+        plan: repairPlan,
+        createdAt: existingSet.createdAt,
+        updatedAt: new Date().toISOString(),
+        status: getCreationSetStatus(items),
+        relativeDir,
+        items,
+        referenceImageNames,
+      }),
+    );
+
+    writeSseEvent(response, "complete", { set: finalSet });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (setId && existingSet && repairPlan) {
+      await creationSetStore.saveManifest(
+        buildCreationSetManifest({
+          setId,
+          plan: repairPlan,
+          createdAt: existingSet.createdAt,
+          updatedAt: new Date().toISOString(),
+          status: getCreationSetStatus(items),
+          relativeDir: existingSet.relativeDir,
+          items,
+          referenceImageNames,
+        }),
+      );
+    }
+    writeSseEvent(response, "error", { message });
+  } finally {
+    if (!response.destroyed && !response.writableEnded) {
+      response.end();
+    }
+  }
+}
+
 async function handleGenerate(request, response) {
   const fallbackTaskId = randomUUID();
   let taskId = fallbackTaskId;
@@ -1379,6 +2261,22 @@ async function routeRequest(request, response) {
     return handlePptDecksGet(response);
   }
 
+  if (request.method === "GET" && url.pathname === "/api/creation/sets") {
+    return handleCreationSetsGet(response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/creation/sets/open-folder") {
+    return handleCreationSetFolderOpen(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/creation/reference/analyze") {
+    return handleCreationReferenceAnalyze(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/creation/plan") {
+    return handleCreationPlan(request, response);
+  }
+
   if (request.method === "GET" && url.pathname === "/api/generation/tasks") {
     return handleGenerationTasksGet(request, response, url);
   }
@@ -1405,6 +2303,14 @@ async function routeRequest(request, response) {
 
   if (request.method === "POST" && url.pathname === "/api/generate") {
     return handleGenerate(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/creation/generate") {
+    return handleCreationGenerate(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/creation/repair") {
+    return handleCreationRepair(request, response);
   }
 
   if (request.method === "POST" && url.pathname === "/api/ppt/generate") {

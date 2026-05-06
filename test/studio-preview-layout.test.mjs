@@ -123,7 +123,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260506-reference-compress-1/);
+  assert.match(html, /\/app\.js\?v=20260506-creation-reference-restore-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -259,6 +259,7 @@ test("generation loading shell uses light DOM and transform-only motion", async 
 test("studio panels start without redundant title blocks and merge parameters under ratio controls", async () => {
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
+  const promptParameterSettings = html.match(/<div class="field-group parameter-settings">[\s\S]*?(?=<\/form>)/)?.[0] || "";
 
   assert.match(html, /<div class="field-group parameter-settings">[\s\S]*<span>参数设置<\/span>[\s\S]*<small>Parameters<\/small>[\s\S]*<div class="ratio-grid" id="ratioGrid"><\/div>[\s\S]*<div class="advanced-content">/);
   assert.match(html, /<div class="field-group parameter-settings">[\s\S]*<label class="compact-field">[\s\S]*<span>推理强度<\/span>[\s\S]*<label class="compact-field">[\s\S]*<span>分辨率<\/span>[\s\S]*<label class="compact-field">[\s\S]*<span>输出格式<\/span>/);
@@ -267,7 +268,7 @@ test("studio panels start without redundant title blocks and merge parameters un
   assert.doesNotMatch(html, /<p>质量：/);
   assert.doesNotMatch(html, /<details class="advanced-box"/);
   assert.doesNotMatch(html, /<summary>高级选项/);
-  assert.doesNotMatch(html, />\s*比例\s*</);
+  assert.doesNotMatch(promptParameterSettings, />\s*比例\s*</);
   assert.doesNotMatch(html, /<h2>生成设置<\/h2>/);
   assert.doesNotMatch(html, /<h2>生成结果<\/h2>/);
   assert.doesNotMatch(html, /外层模型：/);
@@ -323,10 +324,8 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
-  const createMenu = html.match(/data-nav-section="create"[\s\S]*?(?=<div class="nav-item" data-nav-section="present")/)?.[0] || "";
-  const presentMenu = html.match(/data-nav-section="present"[\s\S]*?(?=<div class="nav-item" data-nav-section="assets")/)?.[0] || "";
-  const assetsMenu = html.match(/data-nav-section="assets"[\s\S]*?(?=<div class="nav-item" data-nav-section="records")/)?.[0] || "";
-  const recordsMenu = html.match(/data-nav-section="records"[\s\S]*?(?=<div class="nav-item" data-nav-section="settings")/)?.[0] || "";
+  const createMenu = html.match(/data-nav-section="create"[\s\S]*?(?=<div class="nav-item" data-nav-section="assets")/)?.[0] || "";
+  const assetsMenu = html.match(/data-nav-section="assets"[\s\S]*?(?=<div class="nav-item" data-nav-section="settings")/)?.[0] || "";
   const settingsMenu = html.match(/data-nav-section="settings"[\s\S]*?(?=<\/div>\s*<\/nav>)/)?.[0] || "";
 
   assert.match(html, /<nav class="primary-nav global-nav" aria-label="全局导航">/);
@@ -334,22 +333,25 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.doesNotMatch(html, />主区</);
   assert.match(html, /<div class="view-tabs global-nav-list" role="tablist" aria-label="功能区导航">/);
   assert.match(html, /data-nav-section="create"[\s\S]*data-view-tab="studio"[\s\S]*<span class="nav-tab-label">创作<\/span>[\s\S]*<span class="nav-tab-note">Studio<\/span>/);
-  assert.match(html, /data-nav-section="present"[\s\S]*data-view-tab="ppt"[\s\S]*<span class="nav-tab-label">演示<\/span>[\s\S]*<span class="nav-tab-note">PPT<\/span>/);
+  assert.doesNotMatch(html, /data-nav-section="present"/);
+  assert.doesNotMatch(html, /data-view-tab="ppt"/);
   assert.match(html, /data-nav-section="assets"[\s\S]*data-view-tab="gallery"[\s\S]*<span class="nav-tab-label">资产<\/span>[\s\S]*<span class="nav-tab-note">Gallery<\/span>/);
-  assert.match(html, /data-nav-section="records"[\s\S]*data-view-tab="ppt-record"[\s\S]*<span class="nav-tab-label">记录<\/span>[\s\S]*<span class="nav-tab-note">Decks<\/span>/);
+  assert.doesNotMatch(html, /data-nav-section="records"/);
+  assert.doesNotMatch(html, /data-view-tab="ppt-record"/);
   assert.match(html, /data-nav-section="settings"[\s\S]*data-nav-action="config"[\s\S]*<span class="nav-tab-label">配置<\/span>[\s\S]*<span class="nav-tab-note">Settings<\/span>/);
-  assert.match(html, /<div class="nav-flyout mega-menu" data-nav-subzone="studio">[\s\S]*<span class="mega-menu-kicker">创作区<\/span>[\s\S]*<a class="mega-menu-link large" href="#studio">Studio 生成台<\/a>/);
-  assert.match(createMenu, /提示词生成图片/);
-  assert.doesNotMatch(createMenu, /data-nav-action="config"|data-nav-action="theme"|data-nav-action="output"|data-nav-action="prompt-agent"/);
-  assert.match(presentMenu, /PPT 演示工作台/);
-  assert.doesNotMatch(presentMenu, /data-nav-action="config"|data-nav-action="theme"|data-nav-action="output"|data-nav-action="prompt-agent"|瀑布画廊/);
-  assert.match(assetsMenu, /data-nav-action="prompt-agent"[\s\S]*图片转提示词/);
+  assert.match(createMenu, /href="#studio"[\s\S]*提示词生图/);
+  assert.match(createMenu, /href="#creation"[\s\S]*套图模式/);
+  assert.match(createMenu, /href="#ppt"[\s\S]*PPT生成/);
+  assert.match(createMenu, /data-nav-action="prompt-agent"[\s\S]*图片转提示词/);
+  assert.doesNotMatch(createMenu, /data-nav-action="config"|data-nav-action="theme"|data-nav-action="output"|瀑布画廊|套图记录|PPT记录|参数与队列|比例与分辨率|查看生成结果|继续创作/);
   assert.match(assetsMenu, /data-nav-action="output"[\s\S]*打开输出目录/);
-  assert.doesNotMatch(assetsMenu, /data-nav-action="config"|data-nav-action="theme"|PPT 演示|PPT 记录/);
-  assert.match(recordsMenu, /PPT 记录/);
-  assert.doesNotMatch(recordsMenu, /data-nav-action="config"|data-nav-action="theme"|data-nav-action="output"|data-nav-action="prompt-agent"|瀑布画廊/);
+  assert.match(assetsMenu, /href="#gallery"[\s\S]*瀑布画廊/);
+  assert.match(assetsMenu, /href="#creation-record"[\s\S]*套图记录/);
+  assert.match(assetsMenu, /href="#ppt-record"[\s\S]*PPT记录/);
+  assert.doesNotMatch(assetsMenu, /data-nav-action="config"|data-nav-action="theme"|data-nav-action="prompt-agent"|href="#studio"|href="#creation"|href="#ppt"|>画廊<\/a>|按日期浏览|筛选生成历史/);
   assert.match(settingsMenu, /data-nav-action="config"[\s\S]*配置 API/);
   assert.match(settingsMenu, /data-nav-action="theme"[\s\S]*主题颜色/);
+  assert.doesNotMatch(settingsMenu, /模型与密钥|浏览器本地配置|切换明暗主题|data-nav-action="output"|data-nav-action="prompt-agent"/);
   assert.doesNotMatch(settingsMenu, /data-view-tab=/);
   assert.doesNotMatch(html, /<div class="topbar-actions" aria-label="状态与工具">/);
   assert.match(html, /<div class="topbar-api-check" aria-label="API 检测">[\s\S]*<button class="header-pill status-ready" id="connectionStatus" data-state="idle" type="button" aria-label="打开 API 配置">[\s\S]*id="connectionLabel"[\s\S]*<\/button>/);
@@ -365,12 +367,14 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.match(styles, /\.nav-flyout\.mega-menu\s*\{[\s\S]*width:\s*min\(680px,\s*calc\(100vw - 32px\)\);[\s\S]*padding:\s*24px;/);
   assert.match(styles, /\.mega-menu-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(170px,\s*1\.35fr\)\s+repeat\(2,\s*minmax\(120px,\s*1fr\)\);/);
   assert.match(styles, /\.mega-menu-link\.large,\s*[\r\n]+\s*\.mega-menu-action\.large\s*\{[\s\S]*font-size:\s*1\.45rem;[\s\S]*font-weight:\s*700;/);
-  assert.match(styles, /\.global-nav-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\);[\s\S]*overflow:\s*visible;/);
+  assert.match(styles, /\.global-nav-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);[\s\S]*overflow:\s*visible;/);
+  assert.match(styles, /html\[data-ui-layout="stacked"\] \.global-nav-list,[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.global-nav-list\s*\{[\s\S]*overflow:\s*visible;/);
   assert.doesNotMatch(styles, /\.nav-item:hover \.nav-flyout/);
   assert.doesNotMatch(styles, /\.nav-item:focus-within \.nav-flyout/);
   assert.match(styles, /\.nav-item\.is-nav-open \.nav-flyout\s*\{[\s\S]*opacity:\s*1;[\s\S]*visibility:\s*visible;[\s\S]*pointer-events:\s*auto;/);
   assert.match(app, /function handleGlobalNavAction\(action\) \{/);
+  assert.match(app, /const activeTabView = CREATE_VIEW_IDS\.has\(view\) \? "studio" : ASSET_VIEW_IDS\.has\(view\) \? "gallery" : view;/);
   assert.match(app, /refs\.connectionStatus\.addEventListener\("click",\s*\(\) => setDrawerOpen\(true\)\);/);
   assert.match(app, /globalNavItems:\s*\[\.\.\.document\.querySelectorAll\("\[data-nav-section\]"\)\]/);
   assert.match(app, /function setActiveGlobalNavItem\(item\) \{[\s\S]*refs\.globalNavItems\.forEach\(\(navItem\) => \{[\s\S]*const isOpen = navItem === item;[\s\S]*navItem\.classList\.toggle\("is-nav-open",\s*isOpen\);/);
@@ -483,9 +487,29 @@ test("studio reference images can be manually analyzed into orchestration prompt
   assert.doesNotMatch(html, /id="referenceAnalyzeButton"[^>]*disabled/);
   assert.match(html, /id="referenceAnalysisPanel"[\s\S]*编排提示词/);
   assert.match(html, /id="referenceAnalysisList"/);
+  const referenceAnalysisActionsBlock =
+    html.match(/<div class="reference-analysis-actions">[\s\S]*?<div class="reference-analysis-panel/)?.[0] || "";
+  const referenceAnalysisPanelHeadBlock =
+    html.match(/<div class="reference-analysis-panel[\s\S]*?<div class="reference-analysis-list/)?.[0] || "";
+  assert.match(referenceAnalysisActionsBlock, /id="referenceAnalysisToggleButton"/);
+  assert.doesNotMatch(referenceAnalysisPanelHeadBlock, /id="referenceAnalysisToggleButton"/);
+  assert.match(html, /aria-controls="referenceAnalysisList"/);
+  assert.match(html, /id="referenceAnalysisToggleButton"[\s\S]*class="reference-analysis-toggle hidden"/);
+  assert.match(styles, /\.reference-analysis-actions\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto;/);
   assert.match(styles, /\.reference-analysis-panel\s*\{/);
   assert.match(styles, /\.reference-analysis-card\s*\{/);
+  assert.match(styles, /\.reference-analysis-card p\s*\{[\s\S]*font-size:\s*0\.86rem;/);
+  assert.match(styles, /\.reference-analysis-roles\s*\{/);
+  assert.match(styles, /\.reference-analysis-role\s*\{[\s\S]*width:\s*auto;/);
+  assert.match(styles, /\.reference-analysis-toggle\s*\{/);
+  assert.match(styles, /\.reference-analysis-list\.hidden\s*\{/);
   assert.match(app, /referenceAnalysis:\s*\{/);
+  assert.match(app, /collapsed:\s*false/);
+  assert.match(app, /referenceAnalysisToggleButton:\s*document\.querySelector\("#referenceAnalysisToggleButton"\),/);
+  assert.match(app, /function toggleReferenceAnalysisPanel\(\) \{/);
+  assert.match(app, /refs\.referenceAnalysisList\.classList\.toggle\("hidden", state\.referenceAnalysis\.collapsed\);/);
+  assert.match(app, /refs\.referenceAnalysisToggleButton\.textContent = state\.referenceAnalysis\.collapsed \? "展开提示词" : "折叠提示词";/);
+  assert.match(app, /roleGroup\.className = "reference-analysis-roles";/);
   assert.match(app, /async function buildReferenceAnalysisFormData\(\) \{/);
   assert.match(app, /formData\.set\("mode", "reference-orchestration"\);/);
   assert.match(app, /preparePromptAnalysisImageFile\(item\.file\)/);
@@ -497,6 +521,7 @@ test("studio reference images can be manually analyzed into orchestration prompt
   assert.match(app, /function applyReferenceAnalysisPrompt\(index\) \{/);
   assert.match(app, /refs\.referenceAnalyzeButton\.disabled = state\.referenceAnalysis\.running;/);
   assert.match(app, /refs\.referenceAnalyzeButton\.textContent = state\.referenceAnalysis\.running \? "分析中\.\.\." : "融图分析";/);
+  assert.match(app, /refs\.referenceAnalysisToggleButton\.addEventListener\("click", toggleReferenceAnalysisPanel\);/);
   assert.match(app, /setReferenceAnalysisFeedback\("图形分析需要上传参考图。", "error"\);/);
   assert.match(app, /refs\.referenceDropzone\.addEventListener\("dragover",[\s\S]*event\.preventDefault\(\);[\s\S]*classList\.add\("dragover"\);/);
   assert.match(app, /refs\.referenceDropzone\.addEventListener\("drop",[\s\S]*event\.preventDefault\(\);[\s\S]*applyReferenceFiles\(event\.dataTransfer\?\.files\);/);
@@ -613,7 +638,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260506-reference-compress-1/);
+  assert.match(html, /\/app\.js\?v=20260506-creation-reference-restore-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -752,7 +777,8 @@ test("PPT view exposes source options, page count, progress, retry and PPTX down
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /data-view-tab="ppt"[\s\S]*PPT 演示/);
+  assert.doesNotMatch(html, /data-view-tab="ppt"/);
+  assert.match(html, /data-nav-section="create"[\s\S]*href="#ppt"[\s\S]*PPT生成/);
   assert.match(html, /data-view-panel="ppt"/);
   assert.match(html, /id="pptSourceModeUpload"[\s\S]*上传文档/);
   assert.match(html, /id="pptSourceModeText"[\s\S]*输入文本/);
@@ -782,22 +808,272 @@ test("PPT view exposes source options, page count, progress, retry and PPTX down
   assert.match(app, /eventName === "slide_failed"/);
 });
 
-test("PPT record view sits after the waterfall gallery and renders all deck records", async () => {
+test("creation mode is a separate studio tab with isolated state and routes", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+  const creationPanel = html.match(/data-view-panel="creation"[\s\S]*?(?=<section class="view-panel ppt-view)/)?.[0] || "";
+
+  assert.match(html, /href="#studio"[\s\S]*提示词模式/);
+  assert.match(html, /href="#creation"[\s\S]*套图模式/);
+  assert.match(html, /data-view-panel="creation"/);
+  assert.match(html, /id="creationForm"/);
+  assert.match(html, /id="creationTargetLanguageInput"/);
+  assert.match(html, /id="creationGenerateButton"/);
+  assert.match(html, /id="creationPlanButton"/);
+  assert.match(html, /id="creationPlanMeta"/);
+  assert.doesNotMatch(creationPanel, /id="creationSetList"|id="creationHistoryCount"|creation-history-block/);
+
+  assert.match(styles, /\.studio-mode-tabs\s*\{/);
+  assert.match(styles, /\.creation-workspace\s*\{/);
+  assert.match(styles, /\.creation-result-grid\s*\{/);
+  assert.match(styles, /\.creation-plan-actions\s*\{/);
+
+  assert.match(app, /creation:\s*\{/);
+  assert.match(app, /planning:\s*false/);
+  assert.match(app, /if \(window\.location\.hash === "#creation"\)/);
+  assert.match(app, /view === "creation" \? "#creation"/);
+  assert.match(app, /fetch\("\/api\/creation\/plan"/);
+  assert.match(app, /fetch\("\/api\/creation\/generate"/);
+  assert.match(app, /fetch\("\/api\/creation\/sets"/);
+  assert.match(app, /creationPlanButton: document\.querySelector\("#creationPlanButton"\)/);
+  assert.match(app, /creationPlanMeta: document\.querySelector\("#creationPlanMeta"\)/);
+  assert.match(app, /creationProductNameInput: document\.querySelector\("#creationProductNameInput"\)/);
+  assert.doesNotMatch(app, /creation[\s\S]{0,400}PROMPT_TEMPLATE_STORAGE_KEY/);
+});
+
+test("creation mode has independent references count and scenario controls", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /data-view-tab="gallery"[\s\S]*瀑布画廊[\s\S]*data-view-tab="ppt-record"[\s\S]*PPT记录/);
-  assert.match(html, /data-view-panel="gallery"[\s\S]*data-view-panel="ppt-record"/);
+  assert.match(html, /id="creationReferenceDropzone"/);
+  assert.match(html, /id="creationReferenceInput"[\s\S]*name="creationReferenceImages"/);
+  assert.match(html, /id="creationReferenceGrid"/);
+  assert.match(html, /id="creationReferenceAnalyzeButton"[\s\S]*智能识别/);
+  assert.match(html, /id="creationReferenceApplyAnalysisButton"[\s\S]*应用建议/);
+  assert.match(html, /id="creationReferenceAnalysisFeedback"/);
+  assert.match(html, /id="creationReferenceAnalysisPanel"/);
+  assert.match(html, /id="creationReferenceAnalysisList"/);
+  assert.match(html, /id="creationImageCountInput"[\s\S]*<option value="8">8/);
+  assert.match(html, /id="creationImageCountInput"[\s\S]*<option value="12">12/);
+  assert.match(html, /id="creationScenarioInput"[\s\S]*value="social-seeding"/);
+  assert.match(html, /id="creationScenarioInput"[\s\S]*value="livestream"/);
+  assert.match(html, /id="creationScenarioInput"[\s\S]*value="gift-guide"/);
+  assert.match(html, /<div class="creation-control-row creation-option-grid">[\s\S]*id="creationImageCountInput"[\s\S]*id="creationScenarioInput"[\s\S]*id="creationTargetLanguageInput"[\s\S]*id="creationOutputFormatInput"[\s\S]*id="creationRatioInput"[\s\S]*id="creationSizeInput"/);
+  assert.match(html, /<select id="creationRatioInput" name="ratio">[\s\S]*<option value="1:1">1:1<\/option>[\s\S]*<\/select>/);
+  assert.match(html, /<select id="creationSizeInput" name="size">[\s\S]*<option value="auto">自动<\/option>[\s\S]*<\/select>/);
+  assert.match(html, /id="creationScenarioHint"/);
+  assert.match(html, /id="creationRolePicker"/);
+  assert.match(html, /id="creationRoleGrid"/);
+  assert.match(html, /id="creationRoleCount"/);
+  assert.match(html, /id="creationRoleHint"/);
+
+  assert.match(styles, /\.creation-reference-grid\s*\{/);
+  assert.match(styles, /\.creation-reference-role\s*\{/);
+  assert.match(styles, /\.creation-reference-analysis-panel\s*\{/);
+  assert.match(styles, /\.creation-reference-note\s*\{/);
+  assert.match(styles, /\.creation-option-grid\s*\{\s*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.creation-option-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\);/);
+  assert.match(styles, /\.creation-scenario-hint\s*\{/);
+  assert.match(styles, /\.creation-role-picker\s*\{/);
+  assert.match(styles, /\.creation-role-grid\s*\{/);
+  assert.match(styles, /\.creation-role-option\s*\{/);
+  assert.match(styles, /\.creation-card-brief\s*\{/);
+
+  assert.match(app, /creationReferenceFiles:\s*\[\]/);
+  assert.match(app, /creationReferenceAnalysis:\s*\{/);
+  assert.match(app, /creationReferenceAnalyzeButton: document\.querySelector\("#creationReferenceAnalyzeButton"\)/);
+  assert.match(app, /creationReferenceApplyAnalysisButton: document\.querySelector\("#creationReferenceApplyAnalysisButton"\)/);
+  assert.match(app, /creationReferenceAnalysisList: document\.querySelector\("#creationReferenceAnalysisList"\)/);
+  assert.match(app, /creationReferenceAnalysisPanel: document\.querySelector\("#creationReferenceAnalysisPanel"\)/);
+  assert.match(app, /creationReferenceInput: document\.querySelector\("#creationReferenceInput"\)/);
+  assert.match(app, /creationScenarioHint: document\.querySelector\("#creationScenarioHint"\)/);
+  assert.match(app, /creationRoleGrid: document\.querySelector\("#creationRoleGrid"\)/);
+  assert.match(app, /creationRoleCount: document\.querySelector\("#creationRoleCount"\)/);
+  assert.match(app, /creationRoleHint: document\.querySelector\("#creationRoleHint"\)/);
+  assert.match(app, /creationSelectedRoles:\s*\[\]/);
+  assert.match(app, /const CREATION_REFERENCE_ROLE_OPTIONS = \[/);
+  assert.match(app, /const CREATION_SCENARIO_HINTS = \{/);
+  assert.match(app, /const CREATION_SCENARIO_ROLE_PRESETS = \{/);
+  assert.match(app, /material-closeup/);
+  assert.match(app, /usage-steps/);
+  assert.match(app, /review-qa/);
+  assert.match(app, /brief\.className = "creation-card-brief";/);
+  assert.match(app, /refs\.creationScenarioHint\.textContent = CREATION_SCENARIO_HINTS/);
+  assert.match(app, /function getCreationScenarioRolePreset\(/);
+  assert.match(app, /function getCreationSelectedRoles\(\) \{/);
+  assert.match(app, /function syncCreationSelectedRolesToCount\(\) \{/);
+  assert.match(app, /function syncCreationSelectedRolesToScenario\(\) \{/);
+  assert.match(app, /function renderCreationRatioOptions\(\) \{/);
+  assert.match(app, /function renderCreationSizeOptions\(\) \{/);
+  assert.match(app, /function renderCreationRolePicker\(\) \{/);
+  assert.match(app, /function applyCreationReferenceFiles\(fileList\) \{/);
+  assert.match(app, /function buildCreationReferenceAnalysisFormData\(\) \{/);
+  assert.match(app, /function analyzeCreationReferenceImages\(\) \{/);
+  assert.match(app, /function applyCreationReferenceAnalysis\(analysis\) \{/);
+  assert.match(app, /function applyCreationReferenceAnalysisRecommendations\(\) \{/);
+  assert.match(app, /state\.creationReferenceAnalysis\.applied = false;/);
+  assert.match(app, /state\.creationReferenceAnalysis\.applied = true;/);
+  assert.match(app, /function renderCreationReferenceAnalysis\(\) \{/);
+  assert.match(app, /function updateCreationReferenceRole\(referenceId, role\) \{/);
+  assert.match(app, /function buildCreationReferenceRolePayload\(\) \{/);
+  assert.match(app, /function buildCreationPlanPreviewFormData\(\) \{/);
+  assert.match(app, /function getCreationPlanOverrides\(\) \{/);
+  assert.match(app, /function canEditCreationItem\(/);
+  assert.match(app, /function previewCreationPlan\(\) \{/);
+  assert.match(app, /function resetCreationDraftPreview\(\) \{/);
+  assert.match(app, /formData\.append\("referenceImages", item\.file\)/);
+  assert.match(app, /formData\.set\("referenceImageRoles", JSON\.stringify\(buildCreationReferenceRolePayload\(\)\)\)/);
+  assert.match(app, /formData\.set\("planOverrides", JSON\.stringify\(getCreationPlanOverrides\(\)\)\)/);
+  assert.match(app, /fetch\("\/api\/creation\/reference\/analyze"/);
+  assert.match(app, /fetch\("\/api\/creation\/plan"/);
+  assert.match(app, /formData\.set\("selectedRoles", JSON\.stringify\(getCreationSelectedRoles\(\)\)\)/);
+  assert.match(app, /roleSelect\.dataset\.creationReferenceRoleId = item\.id;/);
+  assert.match(app, /formData\.set\("imageCount", String\(selectedRoles\.length \|\| getCreationSelectedImageCount\(\)\)\)/);
+  assert.match(app, /formData\.set\("scenario", refs\.creationScenarioInput\.value\)/);
+  assert.match(app, /refs\.creationImageCountInput\.addEventListener\("change", syncCreationSelectedRolesToCount\)/);
+  assert.match(app, /refs\.creationRoleGrid\.addEventListener\("change"/);
+  assert.match(app, /refs\.creationScenarioInput\.addEventListener\("change", syncCreationSelectedRolesToScenario\)/);
+  assert.match(app, /refs\.creationRatioInput\.addEventListener\("change", renderCreationSizeOptions\)/);
+  assert.match(app, /refs\.creationPlanButton\.addEventListener\("click"/);
+  assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
+  assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
+  assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
+  assert.match(html, /app\.js\?v=20260506-creation-reference-restore-1/);
+  assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
+  assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
+  assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
+});
+
+test("creation mode exposes record detail and item repair actions", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /id="creationRepairFailedButton"[\s\S]*补齐未完成项/);
+  assert.match(html, /id="creationRecordDetail"/);
+
+  assert.match(styles, /\.creation-record-detail\s*\{/);
+  assert.match(styles, /\.creation-card-actions\s*\{/);
+  assert.match(styles, /\.creation-card-path\s*\{/);
+  assert.match(styles, /\.creation-card-editor\s*\{/);
+  assert.match(styles, /\.creation-card-editor textarea\s*\{/);
+
+  assert.match(app, /creationRepairFailedButton: document\.querySelector\("#creationRepairFailedButton"\)/);
+  assert.match(app, /creationRecordDetail: document\.querySelector\("#creationRecordDetail"\)/);
+  assert.match(app, /function formatCreationReferenceRoleSummary\(referenceImageRoles = \[\]\) \{/);
+  assert.match(app, /function getCreationRepairReferenceRolePayload\(set = getCreationCurrentSet\(\)\) \{/);
+  assert.match(app, /function renderCreationRecordDetail\(set\) \{/);
+  assert.match(app, /renderCreationRecordDetail\(set\)[\s\S]*formatCreationReferenceRoleSummary\(set\.referenceImageRoles\)/);
+  assert.match(app, /function repairCreationItems\(/);
+  assert.match(app, /formData\.set\("referenceImageRoles", JSON\.stringify\(getCreationRepairReferenceRolePayload\(currentSet\)\)\);/);
+  assert.match(app, /referenceImageRoles: buildCreationReferenceRolePayload\(\),/);
+  assert.match(app, /function getCreationItemDraftKey\(setId, itemId\) \{/);
+  assert.match(app, /function toggleCreationItemEditor\(itemId\) \{/);
+  assert.match(app, /function saveCreationItemDraft\(itemId, promptOverride\) \{/);
+  assert.match(app, /fetch\("\/api\/creation\/repair"/);
+  assert.match(app, /formData\.set\("promptOverride", promptOverride\);/);
+  assert.match(app, /button\.dataset\.creationRetryItemId = item\.itemId;/);
+  assert.match(app, /editButton\.dataset\.creationEditItemId = item\.itemId;/);
+  assert.match(app, /saveButton\.dataset\.creationSavePromptItemId = item\.itemId;/);
+  assert.match(app, /textarea\.dataset\.creationPromptEditor = item\.itemId;/);
+  assert.match(app, /path\.className = "creation-card-path";/);
+  assert.match(app, /path\.textContent = item\.relativePath \|\| item\.error \|\| "";/);
+  assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationRetryItemId/);
+  assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationEditItemId/);
+  assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationSavePromptItemId/);
+  assert.match(app, /refs\.creationRepairFailedButton\.addEventListener\("click"/);
+});
+
+test("creation record reuse tracks reference images that need reupload", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /id="creationReferenceRestoreList"/);
+  assert.match(styles, /\.creation-reference-restore-list\s*\{/);
+  assert.match(styles, /\.creation-reference-restore-item\.is-missing/);
+  assert.match(styles, /\.creation-reference-restore-item\.is-uploaded/);
+  assert.match(app, /creationReferenceRestoreQueue:\s*\[\]/);
+  assert.match(app, /function buildCreationReferenceRestoreQueue\(set = \{\}\) \{/);
+  assert.match(app, /function findCreationReferenceRestoreEntryForFile\(file, restoreQueue = state\.creationReferenceRestoreQueue\) \{/);
+  assert.match(app, /function renderCreationReferenceRestoreList\(\) \{/);
+  assert.match(app, /state\.creationReferenceRestoreQueue = buildCreationReferenceRestoreQueue\(normalized\);/);
+  assert.match(app, /restoreEntryId:\s*restoreEntry\?\.id \|\| ""/);
+  assert.match(app, /restoredFromRecordFilename:\s*restoreEntry\?\.filename \|\| ""/);
+  assert.match(app, /role:\s*restoreEntry\?\.role \|\| "product"/);
+  assert.match(app, /note:\s*restoreEntry\?\.note \|\| ""/);
+  assert.match(app, /markCreationReferenceRestoreEntryMissing\(target\?\.restoreEntryId\)/);
+  assert.match(app, /renderCreationReferenceRestoreList\(\);/);
+  assert.match(app, /if \(state\.creationReferenceRestoreQueue\.length > 0\) \{[\s\S]*return \[\];/);
+});
+
+test("asset record views include PPT records and Creation set records", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /data-nav-section="assets"[\s\S]*href="#gallery"[\s\S]*瀑布画廊[\s\S]*href="#creation-record"[\s\S]*套图记录[\s\S]*href="#ppt-record"[\s\S]*PPT记录/);
+  assert.match(html, /data-view-panel="gallery"[\s\S]*data-view-panel="creation-record"[\s\S]*data-view-panel="ppt-record"/);
   assert.match(html, /id="pptRecordCount"/);
   assert.match(html, /id="pptRecordRefreshButton"/);
   assert.match(html, /id="pptRecordList"/);
+  assert.match(html, /id="creationRecordCount"/);
+  assert.match(html, /id="creationRecordSearchInput"/);
+  assert.match(html, /id="creationRecordReuseButton"/);
+  assert.match(html, /id="creationRecordOpenFolderButton"/);
+  assert.match(html, /id="creationRecordCopyPathsButton"/);
+  assert.match(html, /id="creationRecordRefreshButton"/);
+  assert.match(html, /id="creationRecordActionFeedback"/);
+  assert.match(html, /id="creationRecordSetList"/);
+  assert.match(html, /id="creationRecordArchiveDetail"/);
+  assert.match(html, /id="creationRecordResultGrid"/);
+  assert.doesNotMatch(html, /data-nav-section="records"/);
   assert.match(styles, /\.ppt-record-view\s*\{/);
   assert.match(styles, /\.ppt-record-list\s*\{/);
+  assert.match(styles, /\.creation-record-view\s*\{/);
+  assert.match(styles, /\.creation-record-search\s*\{/);
+  assert.match(styles, /\.creation-record-feedback\s*\{/);
+  assert.match(styles, /\.creation-record-browser\s*\{/);
+  assert.match(styles, /\.creation-record-result-grid\s*\{/);
   assert.match(app, /if \(window\.location\.hash === "#ppt-record"\)/);
+  assert.match(app, /if \(window\.location\.hash === "#creation-record"\)/);
   assert.match(app, /function renderPptRecordView\(\) \{/);
+  assert.match(app, /function renderCreationRecordView\(\) \{/);
+  assert.match(app, /function renderCreationRecordSetList\(\) \{/);
+  assert.match(app, /function filterCreationRecordSets\(\) \{/);
+  assert.match(app, /renderCreationRecordArchiveDetail\(set\)[\s\S]*formatCreationReferenceRoleSummary\(set\.referenceImageRoles\)/);
+  assert.match(app, /function applyCreationSetToForm\(set\) \{/);
+  assert.match(app, /function reuseCreationRecordSet\(\) \{/);
+  assert.match(app, /function setCreationRecordFeedback\(message = "", kind = ""\) \{/);
+  assert.match(app, /async function writeTextToClipboard\(text\) \{/);
+  assert.match(app, /function getCreationRecordImagePaths\(set\) \{/);
+  assert.match(app, /async function copyCreationRecordPaths\(\) \{/);
+  assert.match(app, /async function openCreationRecordFolder\(\) \{/);
+  assert.match(app, /navigator\.clipboard\.writeText/);
+  assert.match(app, /document\.execCommand\("copy"\)/);
+  assert.match(app, /await writeTextToClipboard\(text\)/);
+  assert.match(app, /fetch\("\/api\/creation\/sets\/open-folder"/);
   assert.match(app, /refs\.pptRecordRefreshButton\.addEventListener\("click",/);
+  assert.match(app, /refs\.creationRecordSearchInput\.addEventListener\("input",/);
+  assert.match(app, /refs\.creationRecordReuseButton\.addEventListener\("click",/);
+  assert.match(app, /refs\.creationRecordOpenFolderButton\.addEventListener\("click",/);
+  assert.match(app, /refs\.creationRecordCopyPathsButton\.addEventListener\("click",/);
+  assert.match(app, /refs\.creationRecordRefreshButton\.addEventListener\("click",/);
+  assert.match(app, /refs\.creationRecordSetList\.addEventListener\("click",[\s\S]*target\.closest\("\[data-creation-record-set-id\]"\)/);
   assert.match(app, /state\.ppt\.decks = Array\.isArray\(payload\) \? payload : \[\];[\s\S]*renderPptRecordView\(\);/);
+  assert.match(app, /state\.creation\.sets = nextSets;[\s\S]*renderCreationRecordView\(\);/);
+  assert.match(app, /applyCreationSetToForm\(selectedSet\);[\s\S]*state\.creation\.currentSet = normalizeCreationSetForView\(selectedSet\);[\s\S]*setActiveView\("creation"\);/);
+  assert.match(app, /refs\.creationProductNameInput\.value = normalized\.productName \|\| "";/);
+  assert.match(app, /refs\.creationProductDescriptionInput\.value = normalized\.productDescription \|\| "";/);
+  assert.match(app, /refs\.creationSellingPointsInput\.value = normalized\.sellingPoints\.join\("\\n"\);/);
+  assert.match(app, /setCreationSelectValue\(refs\.creationTargetLanguageInput, normalized\.targetLanguage, "zh-CN"\);/);
+  assert.match(app, /setCreationSelectValue\(refs\.creationScenarioInput, normalized\.scenario, "standard"\);/);
+  assert.match(app, /state\.creationSelectedRoles = normalizedRoles\.length > 0 \? normalizedRoles : getCreationRoleIdsForCount\(normalized\.imageCount\);/);
+  assert.match(app, /state\.creationReferenceFiles = \[\];/);
+  assert.match(app, /state\.creationReferenceAnalysis = createEmptyCreationReferenceAnalysisState\(\);/);
+  assert.doesNotMatch(app, /state\.creation\.currentSet = selectedSet \? normalizeCreationSetForView\(selectedSet\) : null;/);
 });
 
 test("waterfall gallery paginates history unless keyword search is active", async () => {

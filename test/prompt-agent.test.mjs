@@ -101,6 +101,55 @@ test("prompt agent request can orchestrate multiple reference images into scene 
   assert.ok(requestBody.text.format.schema.required.includes("prompts"));
 });
 
+test("prompt agent request can identify ecommerce creation reference roles", () => {
+  const images = [
+    {
+      filename: "front.png",
+      mimeType: "image/png",
+      base64: "ZnJvbnQ=",
+    },
+    {
+      filename: "texture.png",
+      mimeType: "image/png",
+      base64: "dGV4dHVyZQ==",
+    },
+  ];
+
+  const input = buildPromptAgentInput({
+    images,
+    mode: "creation-reference-analysis",
+  });
+  const requestBody = createPromptAgentRequestBody({
+    images,
+    mode: "creation-reference-analysis",
+    responsesModel: "gpt-5.4",
+    reasoningEffort: "high",
+  });
+
+  assert.match(input[0].content[0].text, /套图参考图识别/);
+  assert.match(input[0].content[0].text, /商品主体|包装清单|材质细节/);
+  assert.deepEqual(input[0].content.slice(1), [
+    {
+      type: "input_text",
+      text: "套图参考图 1：front.png。请按此序号分析这张图片的角色、内容和可融合元素。",
+    },
+    {
+      type: "input_image",
+      image_url: "data:image/png;base64,ZnJvbnQ=",
+    },
+    {
+      type: "input_text",
+      text: "套图参考图 2：texture.png。请按此序号分析这张图片的角色、内容和可融合元素。",
+    },
+    {
+      type: "input_image",
+      image_url: "data:image/png;base64,dGV4dHVyZQ==",
+    },
+  ]);
+  assert.equal(requestBody.text.format.name, "creation_reference_analysis_json");
+  assert.ok(requestBody.text.format.schema.required.includes("reference_roles"));
+});
+
 test("prompt agent labels every reference image so the model can compare all images", () => {
   const images = [
     {

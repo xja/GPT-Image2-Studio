@@ -21,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260505-reference-analysis-image-field-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260506-creation-reference-restore-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -50,45 +50,13 @@
                 <div class="mega-menu-grid">
                   <section class="mega-menu-column mega-menu-primary" aria-label="创作区">
                     <span class="mega-menu-kicker">创作区</span>
-                    <a class="mega-menu-link large" href="#studio">Studio 生成台</a>
-                    <a class="mega-menu-link" href="#studio">提示词生成图片</a>
-                    <a class="mega-menu-link" href="#studio">参考图生成</a>
+                    <a class="mega-menu-link large" href="#studio">提示词生图</a>
+                    <a class="mega-menu-link" href="#creation">套图模式</a>
+                    <a class="mega-menu-link" href="#ppt">PPT生成</a>
                   </section>
                   <section class="mega-menu-column" aria-label="创作工具">
-                    <span class="mega-menu-title">生成</span>
-                    <a class="mega-menu-link" href="#studio">参数与队列</a>
-                    <a class="mega-menu-link" href="#studio">比例与分辨率</a>
-                  </section>
-                  <section class="mega-menu-column" aria-label="创作结果">
-                    <span class="mega-menu-title">结果</span>
-                    <a class="mega-menu-link" href="#gallery">查看生成结果</a>
-                    <a class="mega-menu-link" href="#studio">继续创作</a>
-                  </section>
-                </div>
-              </div>
-            </div>
-            <div class="nav-item" data-nav-section="present">
-              <button class="view-tab" data-view-tab="ppt" type="button">
-                <span class="nav-tab-label">演示</span>
-                <span class="nav-tab-note">PPT</span>
-              </button>
-              <div class="nav-flyout mega-menu" data-nav-subzone="ppt">
-                <div class="mega-menu-grid">
-                  <section class="mega-menu-column mega-menu-primary" aria-label="演示区">
-                    <span class="mega-menu-kicker">演示区</span>
-                    <a class="mega-menu-link large" href="#ppt">PPT 演示工作台</a>
-                    <a class="mega-menu-link" href="#ppt">大纲与页数</a>
-                    <a class="mega-menu-link" href="#ppt">动态组件</a>
-                  </section>
-                  <section class="mega-menu-column" aria-label="演示输出">
-                    <span class="mega-menu-title">输出</span>
-                    <a class="mega-menu-link" href="#ppt-record">PPT 记录</a>
-                    <a class="mega-menu-link" href="#ppt">重试缺失页面</a>
-                  </section>
-                  <section class="mega-menu-column" aria-label="演示工具">
                     <span class="mega-menu-title">工具</span>
-                    <a class="mega-menu-link" href="#ppt">编辑页面标注</a>
-                    <a class="mega-menu-link" href="#ppt">切换动效预设</a>
+                    <button class="mega-menu-action large" type="button" data-nav-action="prompt-agent">图片转提示词</button>
                   </section>
                 </div>
               </div>
@@ -103,44 +71,12 @@
                   <section class="mega-menu-column mega-menu-primary" aria-label="资产区">
                     <span class="mega-menu-kicker">资产区</span>
                     <a class="mega-menu-link large" href="#gallery">瀑布画廊</a>
-                    <a class="mega-menu-link" href="#gallery">生成历史</a>
-                    <a class="mega-menu-link" href="#studio">继续创作</a>
+                    <a class="mega-menu-link" href="#creation-record">套图记录</a>
+                    <a class="mega-menu-link" href="#ppt-record">PPT记录</a>
                   </section>
                   <section class="mega-menu-column" aria-label="资产工具">
                     <span class="mega-menu-title">工具</span>
-                    <button class="mega-menu-action" type="button" data-nav-action="prompt-agent">图片转提示词</button>
-                    <button class="mega-menu-action" type="button" data-nav-action="output">打开输出目录</button>
-                  </section>
-                  <section class="mega-menu-column" aria-label="资产管理">
-                    <span class="mega-menu-title">管理</span>
-                    <a class="mega-menu-link" href="#gallery">筛选生成历史</a>
-                    <a class="mega-menu-link" href="#gallery">按日期浏览</a>
-                  </section>
-                </div>
-              </div>
-            </div>
-            <div class="nav-item" data-nav-section="records">
-              <button class="view-tab" data-view-tab="ppt-record" type="button">
-                <span class="nav-tab-label">记录</span>
-                <span class="nav-tab-note">Decks</span>
-              </button>
-              <div class="nav-flyout mega-menu" data-nav-subzone="ppt-record">
-                <div class="mega-menu-grid">
-                  <section class="mega-menu-column mega-menu-primary" aria-label="记录区">
-                    <span class="mega-menu-kicker">记录区</span>
-                    <a class="mega-menu-link large" href="#ppt-record">PPT 记录</a>
-                    <a class="mega-menu-link" href="#ppt-record">演示文稿历史</a>
-                    <a class="mega-menu-link" href="#ppt">继续编辑演示</a>
-                  </section>
-                  <section class="mega-menu-column" aria-label="记录出口">
-                    <span class="mega-menu-title">演示</span>
-                    <a class="mega-menu-link" href="#ppt">继续编辑演示</a>
-                    <a class="mega-menu-link" href="#ppt-record">下载历史 PPTX</a>
-                  </section>
-                  <section class="mega-menu-column" aria-label="记录管理">
-                    <span class="mega-menu-title">管理</span>
-                    <a class="mega-menu-link" href="#ppt-record">查看生成批次</a>
-                    <a class="mega-menu-link" href="#ppt-record">按时间排序</a>
+                    <button class="mega-menu-action large" type="button" data-nav-action="output">打开输出目录</button>
                   </section>
                 </div>
               </div>
@@ -155,16 +91,7 @@
                   <section class="mega-menu-column mega-menu-primary" aria-label="配置区">
                     <span class="mega-menu-kicker">配置区</span>
                     <button class="mega-menu-action large" type="button" data-nav-action="config">配置 API</button>
-                    <button class="mega-menu-action" type="button" data-nav-action="config">模型与密钥</button>
                     <button class="mega-menu-action" type="button" data-nav-action="theme">主题颜色</button>
-                  </section>
-                  <section class="mega-menu-column" aria-label="主题设置">
-                    <span class="mega-menu-title">主题</span>
-                    <button class="mega-menu-action" type="button" data-nav-action="theme">切换明暗主题</button>
-                  </section>
-                  <section class="mega-menu-column" aria-label="配置状态">
-                    <span class="mega-menu-title">界面</span>
-                    <button class="mega-menu-action" type="button" data-nav-action="config">浏览器本地配置</button>
                   </section>
                 </div>
               </div>
@@ -193,6 +120,10 @@
 
       <main class="view-root">
         <section class="view-panel studio-view" data-view-panel="studio">
+          <nav class="studio-mode-tabs" aria-label="创作模式">
+            <a class="studio-mode-tab active" href="#studio">提示词模式</a>
+            <a class="studio-mode-tab" href="#creation">套图模式</a>
+          </nav>
           <div class="studio-grid">
             <section class="studio-panel settings-panel">
               <form id="generateForm" class="settings-form">
@@ -219,6 +150,15 @@
                       融图分析
                     </button>
                     <p class="prompt-agent-feedback" id="referenceAnalysisFeedback"></p>
+                    <button
+                      id="referenceAnalysisToggleButton"
+                      class="reference-analysis-toggle hidden"
+                      type="button"
+                      aria-controls="referenceAnalysisList"
+                      aria-expanded="false"
+                    >
+                      折叠提示词
+                    </button>
                   </div>
                   <div class="reference-analysis-panel hidden" id="referenceAnalysisPanel">
                     <div class="reference-analysis-head">
@@ -300,10 +240,6 @@
                 </div>
               </form>
 
-              <div class="settings-tip">
-                <strong>提示：</strong>
-                <p>使用清晰、具体的描述词，更容易获得理想效果。尝试加入风格、光线、构图和主体关系。</p>
-              </div>
             </section>
 
             <section class="studio-panel preview-panel">
@@ -364,6 +300,188 @@
               </section>
 
             </aside>
+          </div>
+        </section>
+
+        <section class="view-panel creation-view hidden" data-view-panel="creation">
+          <nav class="studio-mode-tabs" aria-label="创作模式">
+            <a class="studio-mode-tab" href="#studio">提示词模式</a>
+            <a class="studio-mode-tab active" href="#creation">套图模式</a>
+          </nav>
+          <div class="creation-workspace">
+            <section class="studio-panel creation-settings-panel">
+              <form class="creation-form" id="creationForm">
+                <div class="panel-title between">
+                  <div>
+                    <h2>电商营销套图</h2>
+                    <p>单商品可生成 4、6、8、10 或 12 张营销图片，支持独立参考图和场景预设</p>
+                  </div>
+                  <span class="count-pill small" id="creationProgressText">0 / 4</span>
+                </div>
+
+                <label class="compact-field">
+                  <span>商品名称</span>
+                  <input id="creationProductNameInput" name="productName" type="text" maxlength="80" placeholder="例如：AeroPress Clear" />
+                </label>
+
+                <label class="compact-field">
+                  <span>商品描述</span>
+                  <textarea
+                    id="creationProductDescriptionInput"
+                    name="productDescription"
+                    rows="4"
+                    maxlength="600"
+                    placeholder="写清商品是什么、适合谁、使用场景和质感。"
+                  ></textarea>
+                </label>
+
+                <label class="compact-field">
+                  <span>核心卖点</span>
+                  <textarea
+                    id="creationSellingPointsInput"
+                    name="sellingPoints"
+                    rows="3"
+                    maxlength="360"
+                    placeholder="每行或用逗号分隔，例如：轻便、易清洁、口感稳定"
+                  ></textarea>
+                </label>
+
+                <div class="creation-reference-block">
+                  <div class="field-head">
+                    <div>
+                      <span>套图参考图</span>
+                      <small>只影响套图模式，用来锁定产品外观、包装和材质</small>
+                    </div>
+                    <small id="creationReferenceCount">0 / 6</small>
+                  </div>
+                  <label class="reference-dropzone creation-reference-dropzone" id="creationReferenceDropzone">
+                    <input id="creationReferenceInput" name="creationReferenceImages" type="file" accept="image/*" multiple />
+                    <div class="reference-icon" aria-hidden="true"></div>
+                    <span>上传产品参考图</span>
+                    <small>支持拖入多张图片，和提示词模式不互通</small>
+                  </label>
+                  <div class="reference-grid creation-reference-grid hidden" id="creationReferenceGrid"></div>
+                  <div
+                    class="creation-reference-restore-list hidden"
+                    id="creationReferenceRestoreList"
+                    aria-live="polite"
+                  ></div>
+                  <div class="reference-analysis-actions creation-reference-analysis-actions">
+                    <button class="inline-button reference-analysis-button" id="creationReferenceAnalyzeButton" type="button">
+                      智能识别
+                    </button>
+                    <button class="inline-button reference-analysis-button hidden" id="creationReferenceApplyAnalysisButton" type="button">
+                      应用建议
+                    </button>
+                    <p class="prompt-agent-feedback" id="creationReferenceAnalysisFeedback"></p>
+                  </div>
+                  <div class="reference-analysis-panel creation-reference-analysis-panel hidden" id="creationReferenceAnalysisPanel">
+                    <div class="reference-analysis-head">
+                      <div>
+                        <span>参考图建议</span>
+                        <strong id="creationReferenceAnalysisSummary">--</strong>
+                      </div>
+                      <small id="creationReferenceAnalysisMeta">--</small>
+                    </div>
+                    <div class="reference-analysis-list" id="creationReferenceAnalysisList"></div>
+                  </div>
+                </div>
+
+                <div class="creation-control-row creation-option-grid">
+                  <label class="compact-field">
+                    <span>套图数量</span>
+                    <select id="creationImageCountInput" name="imageCount">
+                      <option value="4">4 张</option>
+                      <option value="6">6 张</option>
+                      <option value="8">8 张</option>
+                      <option value="10">10 张</option>
+                      <option value="12">12 张</option>
+                    </select>
+                  </label>
+
+                  <label class="compact-field">
+                    <span>营销场景</span>
+                    <select id="creationScenarioInput" name="scenario">
+                      <option value="standard">标准电商</option>
+                      <option value="detail-page">详情页转化</option>
+                      <option value="social-seeding">社媒种草</option>
+                      <option value="launch">新品发布</option>
+                      <option value="promotion">活动促销</option>
+                      <option value="livestream">直播电商</option>
+                      <option value="gift-guide">礼品推荐</option>
+                      <option value="marketplace-search">平台搜索</option>
+                      <option value="brand-story">品牌故事</option>
+                    </select>
+                  </label>
+
+                  <label class="compact-field">
+                    <span>目标语言</span>
+                    <select id="creationTargetLanguageInput" name="targetLanguage">
+                      <option value="zh-CN">简体中文</option>
+                      <option value="en">English</option>
+                      <option value="ja">日本語</option>
+                      <option value="ko">한국어</option>
+                    </select>
+                  </label>
+
+                  <label class="compact-field">
+                    <span>输出格式</span>
+                    <select id="creationOutputFormatInput" name="format">
+                      <option value="png">PNG</option>
+                      <option value="jpg">JPG</option>
+                    </select>
+                  </label>
+
+                  <label class="compact-field">
+                    <span>比例</span>
+                    <select id="creationRatioInput" name="ratio">
+                      <option value="1:1">1:1</option>
+                    </select>
+                  </label>
+
+                  <label class="compact-field">
+                    <span>分辨率</span>
+                    <select id="creationSizeInput" name="size">
+                      <option value="auto">自动</option>
+                    </select>
+                  </label>
+                </div>
+                <p class="creation-scenario-hint" id="creationScenarioHint" aria-live="polite">
+                  覆盖首图、卖点、场景与信任证明，适合通用电商上架。
+                </p>
+                <section class="creation-role-picker" id="creationRolePicker" aria-label="套图图片类型">
+                  <div class="field-head">
+                    <div>
+                      <span>图片类型</span>
+                      <small id="creationRoleHint">标准电商推荐，可手动增删</small>
+                    </div>
+                    <small id="creationRoleCount">4 / 12</small>
+                  </div>
+                  <div class="creation-role-grid" id="creationRoleGrid"></div>
+                </section>
+
+                <div class="creation-plan-actions">
+                  <button class="toolbar-button" id="creationPlanButton" type="button">预览计划</button>
+                  <small id="creationPlanMeta">生成前可先确认每张图的计划</small>
+                </div>
+                <button class="generate-button" id="creationGenerateButton" type="submit">生成营销套图</button>
+                <p class="ppt-feedback" id="creationFeedback"></p>
+              </form>
+            </section>
+
+            <section class="studio-panel creation-output-panel">
+              <div class="panel-title between">
+                <div>
+                  <h2>套图产物</h2>
+                  <p id="creationSetMeta">等待生成</p>
+                </div>
+                <div class="creation-output-actions">
+                  <button class="toolbar-button" id="creationRepairFailedButton" type="button" disabled>补齐未完成项</button>
+                </div>
+              </div>
+              <div class="creation-record-detail" id="creationRecordDetail" aria-live="polite"></div>
+              <div class="creation-result-grid" id="creationResultGrid"></div>
+            </section>
           </div>
         </section>
 
@@ -672,6 +790,36 @@
           </section>
         </section>
 
+        <section class="view-panel creation-record-view hidden" data-view-panel="creation-record">
+          <section class="studio-panel creation-record-panel">
+            <div class="panel-title between">
+              <div>
+                <h2>套图记录</h2>
+                <p>电商套图生成记录和 creation 文件夹历史</p>
+              </div>
+              <div class="creation-record-actions">
+                <label class="creation-record-search">
+                  <span>搜索</span>
+                  <input id="creationRecordSearchInput" type="search" placeholder="商品、场景、语言" autocomplete="off" />
+                </label>
+                <span class="count-pill" id="creationRecordCount">0 套</span>
+                <button class="toolbar-button" id="creationRecordOpenFolderButton" type="button" disabled>打开套图文件夹</button>
+                <button class="toolbar-button" id="creationRecordCopyPathsButton" type="button" disabled>复制图片路径</button>
+                <button class="toolbar-button" id="creationRecordReuseButton" type="button" disabled>复用到当前套图</button>
+                <button class="toolbar-button" id="creationRecordRefreshButton" type="button">刷新记录</button>
+                <p class="prompt-agent-feedback creation-record-feedback" id="creationRecordActionFeedback" aria-live="polite"></p>
+              </div>
+            </div>
+            <div class="creation-record-browser">
+              <div class="creation-set-list creation-record-list" id="creationRecordSetList"></div>
+              <article class="creation-record-archive" aria-live="polite" tabindex="-1">
+                <div class="creation-record-detail" id="creationRecordArchiveDetail"></div>
+                <div class="creation-result-grid creation-record-result-grid" id="creationRecordResultGrid"></div>
+              </article>
+            </div>
+          </section>
+        </section>
+
         <section class="view-panel ppt-record-view hidden" data-view-panel="ppt-record">
           <section class="studio-panel ppt-record-panel">
             <div class="panel-title between">
@@ -948,6 +1096,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260506-reference-compress-1"></script>
+    <script type="module" src="/app.js?v=20260506-creation-reference-restore-1"></script>
   </body>
 </html>

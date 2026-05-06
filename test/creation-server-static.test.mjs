@@ -1,0 +1,148 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const serverPath = new URL("../server.mjs", import.meta.url);
+const galleryStorePath = new URL("../lib/gallery-store.mjs", import.meta.url);
+const creationStorePath = new URL("../lib/creation-store.mjs", import.meta.url);
+const cloudflareWorkerPath = new URL("../cloudflare-pages-worker.mjs", import.meta.url);
+
+test("server exposes independent creation generation and record endpoints", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /createCreationSetStore/);
+  assert.match(server, /async function handleCreationGenerate/);
+  assert.match(server, /async function handleCreationSetsGet/);
+  assert.match(server, /url\.pathname === "\/api\/creation\/generate"/);
+  assert.match(server, /url\.pathname === "\/api\/creation\/sets"/);
+  assert.doesNotMatch(server, /mode=creation/);
+});
+
+test("server saves creation assets into a dated creation folder and hides them from gallery", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const galleryStore = await readFile(galleryStorePath, "utf8");
+  const creationStore = await readFile(creationStorePath, "utf8");
+
+  assert.match(server, /buildCreationRelativeDir/);
+  assert.match(creationStore, /\$\{dateFolder\}-creation/);
+  assert.match(server, /relativeDir:\s*creationRelativeDir/);
+  assert.match(server, /assetKind:\s*"creation-image"/);
+  assert.match(server, /galleryVisible:\s*false/);
+  assert.match(galleryStore, /creationSetId/);
+  assert.match(galleryStore, /creationItemId/);
+  assert.match(galleryStore, /targetLanguage/);
+});
+
+test("daily output opener prepares image ppt and creation folders", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /`\$\{todayDateFolder\}-image`/);
+  assert.match(server, /`\$\{todayDateFolder\}-ppt`/);
+  assert.match(server, /`\$\{todayDateFolder\}-creation`/);
+});
+
+test("server opens a selected creation set folder by manifest id", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /async function handleCreationSetFolderOpen/);
+  assert.match(server, /url\.pathname === "\/api\/creation\/sets\/open-folder"/);
+  assert.match(server, /creationSetStore\.readManifest\(setId\)/);
+  assert.match(server, /set\.relativeDir/);
+  assert.match(server, /resolveSafeOutputSubdirectory\(set\.relativeDir\)/);
+  assert.match(server, /openDirectory\(targetDir\)/);
+});
+
+test("cloudflare worker exposes creation record and generation routes", async () => {
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+
+  assert.match(worker, /buildCreationPlan/);
+  assert.match(worker, /async function runCreationGenerate/);
+  assert.match(worker, /url\.pathname === "\/api\/creation\/sets"/);
+  assert.match(worker, /url\.pathname === "\/api\/creation\/generate"/);
+});
+
+test("creation generation accepts references image count and marketing scenario", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+
+  assert.match(server, /formData\.get\("imageCount"\)/);
+  assert.match(server, /formData\.get\("scenario"\)/);
+  assert.match(server, /const referenceImages = await toReferenceImages/);
+  assert.match(server, /referenceImageNames:\s*referenceImages\.map/);
+  assert.match(server, /referenceImages,/);
+  assert.doesNotMatch(server, /handleCreationGenerate[\s\S]*referenceImages:\s*\[\]/);
+
+  assert.match(worker, /formData\.get\("imageCount"\)/);
+  assert.match(worker, /formData\.get\("scenario"\)/);
+  assert.match(worker, /const referenceImages = await toReferenceImages/);
+  assert.match(worker, /referenceImageNames:\s*referenceImages\.map/);
+  assert.match(worker, /referenceImages,/);
+  assert.doesNotMatch(worker, /runCreationGenerate[\s\S]*referenceImages:\s*\[\]/);
+});
+
+test("local creation generation accepts reference role metadata", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /normalizeCreationReferenceRoles/);
+  assert.match(server, /formData\.get\("referenceImageRoles"\)/);
+  assert.match(server, /referenceImageRoles:\s*plan\.referenceImageRoles/);
+  assert.match(server, /referenceImageRoles,/);
+  assert.match(server, /metadata:\s*\{[\s\S]*referenceImageRoles,/);
+});
+
+test("local creation reference analysis has an independent route and does not write prompt history", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const handler =
+    server.match(/async function handleCreationReferenceAnalyze[\s\S]*?\r?\n}\r?\n\r?\nasync function handleCreationGenerate/)?.[0] || "";
+
+  assert.match(server, /CREATION_REFERENCE_ANALYSIS_MODE/);
+  assert.match(server, /async function handleCreationReferenceAnalyze/);
+  assert.match(server, /url\.pathname === "\/api\/creation\/reference\/analyze"/);
+  assert.match(handler, /requestPromptAgentAnalysis/);
+  assert.match(handler, /normalizeCreationReferenceAnalysis/);
+  assert.doesNotMatch(handler, /promptAgentStore\.append/);
+});
+
+test("local creation generation accepts selected creation roles", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /formData\.get\("selectedRoles"\)/);
+  assert.match(server, /selectedRoles:\s*formData\.get\("selectedRoles"\)/);
+});
+
+test("local creation plan preview exposes an independent route and shared overrides", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const previewHandler =
+    server.match(/async function handleCreationPlan[\s\S]*?\r?\n}\r?\n\r?\nasync function handleCreationGenerate/)?.[0] || "";
+  const generateHandler =
+    server.match(/async function handleCreationGenerate[\s\S]*?\r?\n}\r?\n\r?\nasync function handleCreationRepair/)?.[0] || "";
+
+  assert.match(server, /applyCreationPlanOverrides/);
+  assert.match(server, /async function handleCreationPlan/);
+  assert.match(server, /url\.pathname === "\/api\/creation\/plan"/);
+  assert.match(previewHandler, /buildCreationPlan/);
+  assert.match(previewHandler, /formData\.get\("planOverrides"\)/);
+  assert.match(previewHandler, /sendJson\(response,\s*200,\s*\{\s*ok:\s*true,\s*plan/);
+  assert.doesNotMatch(previewHandler, /mergeRequestPrivateConfig/);
+  assert.match(generateHandler, /formData\.get\("planOverrides"\)/);
+  assert.match(generateHandler, /applyCreationPlanOverrides\(plan,/);
+});
+
+test("creation repair route regenerates selected set items", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /selectCreationRepairItems/);
+  assert.match(server, /async function handleCreationRepair/);
+  assert.match(server, /url\.pathname === "\/api\/creation\/repair"/);
+  assert.match(server, /creationSetStore\.readManifest\(setId\)/);
+  assert.match(server, /formData\.get\("itemId"\)/);
+  assert.match(server, /formData\.get\("scope"\)/);
+  assert.match(server, /formData\.get\("promptOverride"\)/);
+  assert.match(server, /formData\.get\("marketingCopyOverride"\)/);
+  assert.match(server, /const repairItems = selectCreationRepairItems/);
+  assert.match(server, /applyCreationRepairOverrides/);
+  assert.match(server, /filename:\s*item\.filename \|\| buildCreationImageFilename/);
+  assert.match(server, /prompt:\s*repairItem\.prompt/);
+  assert.match(server, /referenceImages,/);
+  assert.match(server, /writeSseEvent\(response, "repair_started"/);
+});

@@ -161,6 +161,8 @@ const GALLERY_REFERENCE_LABELS = {
 };
 const STACKED_STUDIO_LAYOUT_MODES = new Set(["stacked", "tablet", "mobile"]);
 const PPT_SOURCE_MODES = new Set(["upload", "text", "topic"]);
+const CREATE_VIEW_IDS = new Set(["studio", "creation", "ppt"]);
+const ASSET_VIEW_IDS = new Set(["gallery", "ppt-record", "creation-record"]);
 
 let studioHeightSyncFrame = 0;
 let studioHeightObserver = null;
@@ -185,6 +187,27 @@ const state = {
   aspectRatios: [],
   clientSessionId: "",
   config: null,
+  creation: {
+    currentSet: null,
+    editingItemId: "",
+    feedback: "",
+    generating: false,
+    itemDrafts: {},
+    planning: false,
+    recordQuery: "",
+    recordSetId: "",
+    sets: [],
+  },
+  creationReferenceFiles: [],
+  creationReferenceRestoreQueue: [],
+  creationReferenceAnalysis: {
+    applied: false,
+    dirty: false,
+    result: null,
+    running: false,
+  },
+  creationReferencePreviewItem: null,
+  creationSelectedRoles: [],
   gallery: [],
   galleryMetadataCache: {},
   galleryControls: { ...DEFAULT_GALLERY_CONTROLS },
@@ -230,6 +253,7 @@ const state = {
   promptTemplates: [],
   reasoningEfforts: [...DEFAULT_REASONING_EFFORTS],
   referenceAnalysis: {
+    collapsed: false,
     dirty: false,
     result: null,
     running: false,
@@ -258,6 +282,51 @@ const refs = {
   configStatus: document.querySelector("#configStatus"),
   connectionLabel: document.querySelector("#connectionLabel"),
   connectionStatus: document.querySelector("#connectionStatus"),
+  creationFeedback: document.querySelector("#creationFeedback"),
+  creationForm: document.querySelector("#creationForm"),
+  creationGenerateButton: document.querySelector("#creationGenerateButton"),
+  creationImageCountInput: document.querySelector("#creationImageCountInput"),
+  creationOutputFormatInput: document.querySelector("#creationOutputFormatInput"),
+  creationPlanButton: document.querySelector("#creationPlanButton"),
+  creationPlanMeta: document.querySelector("#creationPlanMeta"),
+  creationProductDescriptionInput: document.querySelector("#creationProductDescriptionInput"),
+  creationProductNameInput: document.querySelector("#creationProductNameInput"),
+  creationProgressText: document.querySelector("#creationProgressText"),
+  creationReferenceAnalysisFeedback: document.querySelector("#creationReferenceAnalysisFeedback"),
+  creationReferenceAnalysisList: document.querySelector("#creationReferenceAnalysisList"),
+  creationReferenceAnalysisMeta: document.querySelector("#creationReferenceAnalysisMeta"),
+  creationReferenceAnalysisPanel: document.querySelector("#creationReferenceAnalysisPanel"),
+  creationReferenceAnalysisSummary: document.querySelector("#creationReferenceAnalysisSummary"),
+  creationReferenceAnalyzeButton: document.querySelector("#creationReferenceAnalyzeButton"),
+  creationReferenceApplyAnalysisButton: document.querySelector("#creationReferenceApplyAnalysisButton"),
+  creationReferenceCount: document.querySelector("#creationReferenceCount"),
+  creationReferenceDropzone: document.querySelector("#creationReferenceDropzone"),
+  creationReferenceGrid: document.querySelector("#creationReferenceGrid"),
+  creationReferenceInput: document.querySelector("#creationReferenceInput"),
+  creationReferenceRestoreList: document.querySelector("#creationReferenceRestoreList"),
+  creationRecordActionFeedback: document.querySelector("#creationRecordActionFeedback"),
+  creationRecordArchiveDetail: document.querySelector("#creationRecordArchiveDetail"),
+  creationRecordCopyPathsButton: document.querySelector("#creationRecordCopyPathsButton"),
+  creationRecordCount: document.querySelector("#creationRecordCount"),
+  creationRecordDetail: document.querySelector("#creationRecordDetail"),
+  creationRecordOpenFolderButton: document.querySelector("#creationRecordOpenFolderButton"),
+  creationRecordRefreshButton: document.querySelector("#creationRecordRefreshButton"),
+  creationRecordReuseButton: document.querySelector("#creationRecordReuseButton"),
+  creationRecordResultGrid: document.querySelector("#creationRecordResultGrid"),
+  creationRecordSearchInput: document.querySelector("#creationRecordSearchInput"),
+  creationRecordSetList: document.querySelector("#creationRecordSetList"),
+  creationRepairFailedButton: document.querySelector("#creationRepairFailedButton"),
+  creationResultGrid: document.querySelector("#creationResultGrid"),
+  creationRoleCount: document.querySelector("#creationRoleCount"),
+  creationRoleGrid: document.querySelector("#creationRoleGrid"),
+  creationRoleHint: document.querySelector("#creationRoleHint"),
+  creationScenarioHint: document.querySelector("#creationScenarioHint"),
+  creationScenarioInput: document.querySelector("#creationScenarioInput"),
+  creationSellingPointsInput: document.querySelector("#creationSellingPointsInput"),
+  creationSetMeta: document.querySelector("#creationSetMeta"),
+  creationSizeInput: document.querySelector("#creationSizeInput"),
+  creationRatioInput: document.querySelector("#creationRatioInput"),
+  creationTargetLanguageInput: document.querySelector("#creationTargetLanguageInput"),
   errorBanner: document.querySelector("#errorBanner"),
   filmstrip: document.querySelector("#filmstrip"),
   focusGalleryButton: document.querySelector("#focusGalleryButton"),
@@ -403,6 +472,7 @@ const refs = {
   referenceAnalysisMeta: document.querySelector("#referenceAnalysisMeta"),
   referenceAnalysisPanel: document.querySelector("#referenceAnalysisPanel"),
   referenceAnalysisSummary: document.querySelector("#referenceAnalysisSummary"),
+  referenceAnalysisToggleButton: document.querySelector("#referenceAnalysisToggleButton"),
   referenceAnalyzeButton: document.querySelector("#referenceAnalyzeButton"),
   referenceDropzone: document.querySelector("#referenceDropzone"),
   referenceGrid: document.querySelector("#referenceGrid"),
@@ -1392,8 +1462,14 @@ function toggleUiTheme() {
 }
 
 function getViewFromHash() {
+  if (window.location.hash === "#creation") {
+    return "creation";
+  }
   if (window.location.hash === "#gallery") {
     return "gallery";
+  }
+  if (window.location.hash === "#creation-record") {
+    return "creation-record";
   }
   if (window.location.hash === "#ppt-record") {
     return "ppt-record";
@@ -1406,7 +1482,15 @@ function getViewFromHash() {
 
 function syncHash(view) {
   const nextHash =
-    view === "gallery" ? "#gallery" : view === "ppt-record" ? "#ppt-record" : view === "ppt" ? "#ppt" : "#studio";
+    view === "creation" ? "#creation" : view === "gallery"
+        ? "#gallery"
+        : view === "creation-record"
+          ? "#creation-record"
+          : view === "ppt-record"
+            ? "#ppt-record"
+            : view === "ppt"
+              ? "#ppt"
+              : "#studio";
   if (window.location.hash !== nextHash) {
     window.history.replaceState(null, "", nextHash);
   }
@@ -1700,9 +1784,10 @@ function bindStudioDensitySync() {
 function setActiveView(view) {
   state.activeView = view;
   syncHash(view);
+  const activeTabView = CREATE_VIEW_IDS.has(view) ? "studio" : ASSET_VIEW_IDS.has(view) ? "gallery" : view;
 
   refs.viewTabs.forEach((button) => {
-    button.classList.toggle("active", button.dataset.viewTab === view);
+    button.classList.toggle("active", button.dataset.viewTab === activeTabView);
   });
 
   refs.viewPanels.forEach((panel) => {
@@ -2027,6 +2112,7 @@ function openReferencePreview(referenceId) {
 
 function closeReferencePreview() {
   state.referencePreviewItem = null;
+  state.creationReferencePreviewItem = null;
   refs.referencePreviewViewer.classList.remove("open");
   refs.referencePreviewViewer.setAttribute("aria-hidden", "true");
   refs.referencePreviewImage.removeAttribute("src");
@@ -2163,6 +2249,15 @@ function markReferenceAnalysisDirty() {
   }
 }
 
+function toggleReferenceAnalysisPanel() {
+  if (!state.referenceAnalysis.result?.json) {
+    return;
+  }
+
+  state.referenceAnalysis.collapsed = !state.referenceAnalysis.collapsed;
+  renderReferenceAnalysis();
+}
+
 function createReferenceAnalysisCard(option, index) {
   const card = document.createElement("article");
   card.className = "reference-analysis-card";
@@ -2195,8 +2290,14 @@ function renderReferenceAnalysis() {
   refs.referenceAnalysisList.replaceChildren();
 
   if (!item?.json) {
+    state.referenceAnalysis.collapsed = false;
     refs.referenceAnalysisSummary.textContent = "--";
     refs.referenceAnalysisMeta.textContent = "--";
+    refs.referenceAnalysisToggleButton.classList.add("hidden");
+    refs.referenceAnalysisToggleButton.disabled = true;
+    refs.referenceAnalysisToggleButton.setAttribute("aria-expanded", "false");
+    refs.referenceAnalysisToggleButton.textContent = "折叠提示词";
+    refs.referenceAnalysisList.classList.remove("hidden");
     return;
   }
 
@@ -2213,13 +2314,25 @@ function renderReferenceAnalysis() {
   ]
     .filter(Boolean)
     .join(" · ");
+  refs.referenceAnalysisToggleButton.classList.remove("hidden");
+  refs.referenceAnalysisToggleButton.disabled = false;
+  refs.referenceAnalysisToggleButton.setAttribute("aria-expanded", String(!state.referenceAnalysis.collapsed));
+  refs.referenceAnalysisToggleButton.textContent = state.referenceAnalysis.collapsed ? "展开提示词" : "折叠提示词";
+  refs.referenceAnalysisList.classList.toggle("hidden", state.referenceAnalysis.collapsed);
 
-  roles.slice(0, 6).forEach((role) => {
-    const rolePill = document.createElement("span");
-    rolePill.className = "reference-analysis-role";
-    rolePill.textContent = role;
-    refs.referenceAnalysisList.append(rolePill);
-  });
+  if (roles.length > 0) {
+    const roleGroup = document.createElement("div");
+    roleGroup.className = "reference-analysis-roles";
+
+    roles.slice(0, 6).forEach((role) => {
+      const rolePill = document.createElement("span");
+      rolePill.className = "reference-analysis-role";
+      rolePill.textContent = role;
+      roleGroup.append(rolePill);
+    });
+
+    refs.referenceAnalysisList.append(roleGroup);
+  }
 
   prompts.forEach((option, index) => {
     refs.referenceAnalysisList.append(createReferenceAnalysisCard(option, index));
@@ -2278,6 +2391,39 @@ function renderSizeOptions() {
   });
 
   refs.sizeInput.value = currentValue;
+}
+
+function renderCreationRatioOptions() {
+  const currentValue = refs.creationRatioInput.value || DEFAULT_UI_RATIO;
+  const options = getVisibleRatios();
+  refs.creationRatioInput.innerHTML = "";
+
+  options.forEach((option) => {
+    const element = document.createElement("option");
+    element.value = option.value;
+    element.textContent = option.value;
+    refs.creationRatioInput.appendChild(element);
+  });
+
+  refs.creationRatioInput.value = options.some((option) => option.value === currentValue)
+    ? currentValue
+    : DEFAULT_UI_RATIO;
+  renderCreationSizeOptions();
+}
+
+function renderCreationSizeOptions() {
+  const ratioValue = refs.creationRatioInput.value || DEFAULT_UI_RATIO;
+  const currentValue = normalizeGenerationSize(ratioValue, refs.creationSizeInput.value || "auto");
+  refs.creationSizeInput.innerHTML = "";
+
+  getGenerationSizeOptions(ratioValue).forEach((option) => {
+    const element = document.createElement("option");
+    element.value = option.value;
+    element.textContent = option.label;
+    refs.creationSizeInput.appendChild(element);
+  });
+
+  refs.creationSizeInput.value = currentValue;
 }
 
 function getSettingsFormScrollTop() {
@@ -2649,7 +2795,11 @@ function syncConfigUi(config) {
   renderRatioGrid();
   renderReasoningOptions();
   renderOutputFormatOptions();
+  refs.creationOutputFormatInput.value = normalizeOutputFormat(
+    refs.creationOutputFormatInput.value || config.defaults?.format || "png",
+  );
   renderSizeOptions();
+  renderCreationRatioOptions();
   syncConnectionState();
   updateGenerateButton();
   renderReferenceGrid();
@@ -3676,6 +3826,8 @@ function renderAll() {
   updateGenerateButton();
   renderTimeline();
   renderStudio();
+  renderCreationView();
+  renderCreationRecordView();
   renderPptView();
   renderGalleryView();
   syncLightboxItem();
@@ -4635,6 +4787,1968 @@ function completeMissingPptSlides() {
   runPptCompletion(getPptMissingSlideNumbers()).catch((error) => setPptFeedback(error.message, "error"));
 }
 
+const CREATION_ITEM_STATUS_LABELS = {
+  idle: "等待开始",
+  queued: "排队中",
+  generating: "生成中",
+  completed: "已完成",
+  failed: "生成失败",
+  partial_failed: "部分失败",
+  planning: "待开始",
+};
+
+const CREATION_PREVIEW_SLOTS = [
+  { itemId: "1-hero", role: "hero", title: "主图", brief: "商品清晰居中，适合作为首图" },
+  { itemId: "2-benefit", role: "benefit", title: "卖点图", brief: "突出 1-2 个核心卖点" },
+  { itemId: "3-scene", role: "scene", title: "场景图", brief: "展示真实使用环境、比例和使用方式" },
+  { itemId: "4-detail-trust", role: "detail-trust", title: "详情信任图", brief: "强调材质、结构、包装或品质证明" },
+  { itemId: "5-comparison", role: "comparison", title: "对比图", brief: "让商品优势一眼可比" },
+  { itemId: "6-social-proof", role: "social-proof", title: "种草图", brief: "适合社媒与口碑分享语境" },
+  { itemId: "7-package", role: "package", title: "包装清单图", brief: "说明包装、配件和到手内容" },
+  { itemId: "8-promotion", role: "promotion", title: "活动图", brief: "突出优惠、限时和购买理由" },
+  { itemId: "9-material-closeup", role: "material-closeup", title: "材质细节图", brief: "放大纹理、工艺和品质细节" },
+  { itemId: "10-usage-steps", role: "usage-steps", title: "使用步骤图", brief: "用步骤降低理解和使用门槛" },
+  { itemId: "11-dimensions", role: "dimensions", title: "尺寸规格图", brief: "呈现尺寸、容量和兼容信息" },
+  { itemId: "12-review-qa", role: "review-qa", title: "口碑问答图", brief: "回答购买前常见疑虑" },
+];
+
+const CREATION_SCENARIO_LABELS = {
+  standard: "标准电商",
+  "detail-page": "详情页转化",
+  "social-seeding": "社媒种草",
+  launch: "新品发布",
+  promotion: "活动促销",
+  livestream: "直播电商",
+  "gift-guide": "礼品推荐",
+  "marketplace-search": "平台搜索",
+  "brand-story": "品牌故事",
+};
+
+const CREATION_SCENARIO_HINTS = {
+  standard: "覆盖首图、卖点、场景与信任证明，适合通用电商上架。",
+  "detail-page": "适合商品详情页的模块化叙事，强化转化路径。",
+  "social-seeding": "偏生活方式和真实分享语境，适合内容平台投放。",
+  launch: "突出发现感、核心承诺和可信度，适合新品首发。",
+  promotion: "强化优惠信息、紧迫感和购买理由，适合活动流量。",
+  livestream: "面向直播间讲解与转化，强调演示、卖点节奏和即时购买理由。",
+  "gift-guide": "突出送礼对象、场合和包装吸引力，适合节日推荐。",
+  "marketplace-search": "面向平台搜索列表，强调主体识别、差异点和快速理解。",
+  "brand-story": "串联材料、工艺、价值观和日常使用，适合品牌内容页。",
+};
+
+const CREATION_SCENARIO_ROLE_PRESETS = {
+  standard: ["hero", "benefit", "scene", "detail-trust"],
+  "detail-page": [
+    "hero",
+    "benefit",
+    "detail-trust",
+    "material-closeup",
+    "dimensions",
+    "usage-steps",
+    "comparison",
+    "package",
+  ],
+  "social-seeding": ["hero", "scene", "social-proof", "benefit", "review-qa", "promotion"],
+  launch: ["hero", "benefit", "scene", "material-closeup", "package", "social-proof", "dimensions", "promotion"],
+  promotion: ["hero", "benefit", "comparison", "promotion", "package", "review-qa"],
+  livestream: [
+    "hero",
+    "benefit",
+    "scene",
+    "usage-steps",
+    "detail-trust",
+    "comparison",
+    "promotion",
+    "social-proof",
+    "review-qa",
+    "dimensions",
+  ],
+  "gift-guide": ["hero", "package", "scene", "benefit", "social-proof", "review-qa"],
+  "marketplace-search": ["hero", "benefit", "comparison", "dimensions", "material-closeup", "review-qa"],
+  "brand-story": [
+    "hero",
+    "scene",
+    "material-closeup",
+    "package",
+    "detail-trust",
+    "social-proof",
+    "usage-steps",
+    "review-qa",
+  ],
+};
+
+const CREATION_REFERENCE_ROLE_OPTIONS = [
+  { value: "product", label: "商品主体" },
+  { value: "package", label: "包装清单" },
+  { value: "material", label: "材质细节" },
+  { value: "scene", label: "使用场景" },
+  { value: "style", label: "风格参考" },
+  { value: "other", label: "其他" },
+];
+
+function getCreationReferenceRoleLabel(role) {
+  return CREATION_REFERENCE_ROLE_OPTIONS.find((option) => option.value === role)?.label || CREATION_REFERENCE_ROLE_OPTIONS[0].label;
+}
+
+function getCreationSelectedImageCount() {
+  const value = Number.parseInt(refs.creationImageCountInput?.value || "4", 10);
+  return [4, 6, 8, 10, 12].includes(value) ? value : 4;
+}
+
+function createEmptyCreationReferenceAnalysisState() {
+  return {
+    applied: false,
+    dirty: false,
+    result: null,
+    running: false,
+  };
+}
+
+function setCreationSelectValue(select, value, fallback = "") {
+  if (!select) {
+    return;
+  }
+
+  const normalizedValue = String(value || fallback || "");
+  const fallbackValue = String(fallback || "");
+  const hasOption = Array.from(select.options).some((option) => option.value === normalizedValue);
+  select.value = hasOption ? normalizedValue : fallbackValue;
+}
+
+function setCreationImageCountValue(count) {
+  if (!refs.creationImageCountInput) {
+    return;
+  }
+
+  const normalizedCount = Number(count) || 4;
+  refs.creationImageCountInput.value = [4, 6, 8, 10, 12].includes(normalizedCount) ? String(normalizedCount) : "4";
+}
+
+function getCreationSelectedScenario() {
+  const value = refs.creationScenarioInput?.value || "standard";
+  return {
+    value,
+    label: CREATION_SCENARIO_LABELS[value] || value,
+  };
+}
+
+function getDefaultCreationRoleIds(count = getCreationSelectedImageCount()) {
+  return getCreationRoleIdsForCount(count);
+}
+
+function normalizeCreationRoleIds(roles) {
+  if (!Array.isArray(roles)) {
+    return [];
+  }
+
+  const supportedRoles = new Set(CREATION_PREVIEW_SLOTS.map((slot) => slot.role));
+  const seen = new Set();
+  return roles
+    .map((role) => String(role || "").trim())
+    .filter((role) => supportedRoles.has(role))
+    .filter((role) => {
+      if (seen.has(role)) {
+        return false;
+      }
+
+      seen.add(role);
+      return true;
+    });
+}
+
+function getCreationScenarioRolePreset(scenarioValue = getCreationSelectedScenario().value) {
+  return normalizeCreationRoleIds(
+    CREATION_SCENARIO_ROLE_PRESETS[scenarioValue] || CREATION_SCENARIO_ROLE_PRESETS.standard,
+  );
+}
+
+function getCreationRoleIdsForCount(count = getCreationSelectedImageCount(), scenarioValue = getCreationSelectedScenario().value) {
+  const presetRoles = getCreationScenarioRolePreset(scenarioValue);
+  const presetRoleSet = new Set(presetRoles);
+  const fallbackRoles = CREATION_PREVIEW_SLOTS.map((slot) => slot.role).filter((role) => !presetRoleSet.has(role));
+  return [...presetRoles, ...fallbackRoles].slice(0, count);
+}
+
+function getCreationSelectedRoles() {
+  const selectedRoles = normalizeCreationRoleIds(state.creationSelectedRoles);
+  return selectedRoles.length > 0 ? selectedRoles : getDefaultCreationRoleIds();
+}
+
+function syncCreationSelectedRolesToCount() {
+  state.creationSelectedRoles = getDefaultCreationRoleIds();
+  resetCreationDraftPreview();
+}
+
+function syncCreationSelectedRolesToScenario() {
+  const selectedRoles = getCreationScenarioRolePreset();
+  state.creationSelectedRoles = selectedRoles;
+  if (refs.creationImageCountInput && [4, 6, 8, 10, 12].includes(selectedRoles.length)) {
+    refs.creationImageCountInput.value = String(selectedRoles.length);
+  }
+  resetCreationDraftPreview();
+}
+
+function toggleCreationSelectedRole(role) {
+  const currentRoles = new Set(getCreationSelectedRoles());
+  if (currentRoles.has(role)) {
+    if (currentRoles.size <= 1) {
+      renderCreationRolePicker();
+      return;
+    }
+    currentRoles.delete(role);
+  } else {
+    currentRoles.add(role);
+  }
+
+  state.creationSelectedRoles = CREATION_PREVIEW_SLOTS.filter((slot) => currentRoles.has(slot.role)).map((slot) => slot.role);
+  resetCreationDraftPreview();
+}
+
+function getCreationPreviewSlots(count = getCreationSelectedImageCount()) {
+  const selectedRoles = normalizeCreationRoleIds(state.creationSelectedRoles);
+  const roleIds = selectedRoles.length > 0 ? selectedRoles : getDefaultCreationRoleIds(count);
+  return roleIds.map((role) => CREATION_PREVIEW_SLOTS.find((slot) => slot.role === role)).filter(Boolean);
+}
+
+function resetCreationDraftPreview() {
+  if (!state.creation.generating && !state.creation.planning) {
+    state.creation.currentSet = null;
+  }
+  renderCreationView();
+}
+
+function getCreationStatusLabel(status) {
+  return CREATION_ITEM_STATUS_LABELS[String(status || "")] || "处理中";
+}
+
+function getCreationSellingPoints(value) {
+  return String(value || "")
+    .split(/[\n,，;；、]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function getCreationSelectedLanguage() {
+  const select = refs.creationTargetLanguageInput;
+  const option = select?.selectedOptions?.[0];
+  return {
+    value: select?.value || "zh-CN",
+    label: option?.textContent || select?.value || "zh-CN",
+  };
+}
+
+function setCreationFeedback(message = "", kind = "") {
+  if (!refs.creationFeedback) {
+    return;
+  }
+
+  refs.creationFeedback.textContent = message || "";
+  refs.creationFeedback.dataset.state = kind || "";
+  state.creation.feedback = message || "";
+}
+
+function setCreationRecordFeedback(message = "", kind = "") {
+  if (!refs.creationRecordActionFeedback) {
+    return;
+  }
+
+  refs.creationRecordActionFeedback.textContent = message || "";
+  refs.creationRecordActionFeedback.dataset.state = kind || "";
+}
+
+async function writeTextToClipboard(text) {
+  const value = String(text || "");
+  if (!value) {
+    return;
+  }
+
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch (_error) {
+      // Fall through to the legacy copy path used by stricter embedded browsers.
+    }
+  }
+
+  const activeElement = document.activeElement;
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  try {
+    if (!document.execCommand("copy")) {
+      throw new Error("copy command failed");
+    }
+  } catch (_error) {
+    throw new Error("当前浏览器不支持复制图片路径。");
+  } finally {
+    textarea.remove();
+    activeElement?.focus?.();
+  }
+}
+
+function normalizeCreationItemForView(item = {}, fallbackIndex = 0) {
+  const imageUrl = String(item.imageUrl || item.thumbnailUrl || item.previewUrl || "");
+  const status = String(item.status || (imageUrl ? "completed" : "queued"));
+  return {
+    itemId: String(item.itemId || `slot-${fallbackIndex + 1}`),
+    slotIndex: Number(item.slotIndex) || fallbackIndex + 1,
+    role: String(item.role || CREATION_PREVIEW_SLOTS[fallbackIndex]?.role || ""),
+    title: String(item.title || CREATION_PREVIEW_SLOTS[fallbackIndex]?.title || ""),
+    brief: String(item.brief || CREATION_PREVIEW_SLOTS[fallbackIndex]?.brief || ""),
+    filename: String(item.filename || ""),
+    relativePath: String(item.relativePath || ""),
+    prompt: String(item.prompt || ""),
+    marketingCopy: String(item.marketingCopy || ""),
+    status,
+    imageUrl,
+    thumbnailUrl: String(item.thumbnailUrl || imageUrl),
+    error: String(item.error || ""),
+    generationStartedAt: String(item.generationStartedAt || ""),
+    generationCompletedAt: String(item.generationCompletedAt || ""),
+    generationDurationMs: String(item.generationDurationMs || ""),
+  };
+}
+
+function normalizeCreationSetForView(set = {}) {
+  const items = (Array.isArray(set.items) ? set.items : [])
+    .map((item, index) => normalizeCreationItemForView(item, index))
+    .sort((left, right) => left.slotIndex - right.slotIndex);
+  const status = String(set.status || "");
+  const resolvedStatus =
+    status || (items.every((item) => item.status === "completed") && items.length > 0
+      ? "completed"
+      : items.some((item) => item.status === "failed")
+        ? "partial_failed"
+        : items.some((item) => item.status === "generating" || item.status === "queued")
+          ? "generating"
+          : "planning");
+
+  return {
+    setId: String(set.setId || ""),
+    productName: String(set.productName || ""),
+    productDescription: String(set.productDescription || ""),
+    sellingPoints: Array.isArray(set.sellingPoints) ? set.sellingPoints.map((item) => String(item)).filter(Boolean) : [],
+    targetLanguage: String(set.targetLanguage || "zh-CN"),
+    targetLanguageLabel: String(set.targetLanguageLabel || ""),
+    imageCount: Number(set.imageCount) || items.length || 4,
+    selectedRoles: normalizeCreationRoleIds(set.selectedRoles || items.map((item) => item.role)),
+    scenario: String(set.scenario || "standard"),
+    scenarioLabel: String(set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || ""),
+    referenceImageNames: Array.isArray(set.referenceImageNames)
+      ? set.referenceImageNames.map((item) => String(item)).filter(Boolean)
+      : [],
+    referenceImageRoles: Array.isArray(set.referenceImageRoles)
+      ? set.referenceImageRoles
+          .map((item) => ({
+            filename: String(item?.filename || ""),
+            role: String(item?.role || "product"),
+            roleLabel: String(item?.roleLabel || getCreationReferenceRoleLabel(item?.role || "product")),
+            note: String(item?.note || item?.analysisNote || item?.description || ""),
+          }))
+          .filter((item) => item.filename)
+      : [],
+    createdAt: String(set.createdAt || nowIso()),
+    updatedAt: String(set.updatedAt || set.createdAt || nowIso()),
+    status: resolvedStatus,
+    relativeDir: String(set.relativeDir || ""),
+    items,
+  };
+}
+
+function buildCreationReferenceRestoreQueue(set = {}) {
+  const normalized = normalizeCreationSetForView(set);
+  const roles = Array.isArray(normalized.referenceImageRoles) ? normalized.referenceImageRoles : [];
+  const names = Array.isArray(normalized.referenceImageNames) ? normalized.referenceImageNames : [];
+  const usedRoleIndexes = new Set();
+  const queue = [];
+
+  const createEntry = (roleEntry = {}, filename = "", index = 0) => {
+    const resolvedFilename = String(filename || roleEntry?.filename || `reference-image-${index + 1}`).trim();
+    if (!resolvedFilename) {
+      return null;
+    }
+
+    const role = String(roleEntry?.role || "product").trim();
+    return {
+      id: `creation-reference-restore-${index}-${resolvedFilename.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      filename: resolvedFilename,
+      role,
+      roleLabel: String(roleEntry?.roleLabel || getCreationReferenceRoleLabel(role)).trim(),
+      note: String(roleEntry?.note || "").trim(),
+      status: "missing",
+      referenceId: "",
+      uploadedFilename: "",
+    };
+  };
+
+  names.forEach((filename, index) => {
+    const normalizedName = filename.toLowerCase();
+    let roleIndex = roles.findIndex(
+      (entry, entryIndex) => !usedRoleIndexes.has(entryIndex) && String(entry.filename || "").toLowerCase() === normalizedName,
+    );
+    if (roleIndex < 0 && roles[index] && !usedRoleIndexes.has(index)) {
+      roleIndex = index;
+    }
+    if (roleIndex >= 0) {
+      usedRoleIndexes.add(roleIndex);
+    }
+
+    const entry = createEntry(roleIndex >= 0 ? roles[roleIndex] : {}, filename, queue.length);
+    if (entry) {
+      queue.push(entry);
+    }
+  });
+
+  roles.forEach((entry, index) => {
+    if (usedRoleIndexes.has(index)) {
+      return;
+    }
+    const restoreEntry = createEntry(entry, entry.filename, queue.length);
+    if (restoreEntry) {
+      queue.push(restoreEntry);
+    }
+  });
+
+  return queue;
+}
+
+function findCreationReferenceRestoreEntryForFile(file, restoreQueue = state.creationReferenceRestoreQueue) {
+  const missingEntries = (Array.isArray(restoreQueue) ? restoreQueue : []).filter((entry) => entry.status !== "uploaded");
+  if (missingEntries.length === 0) {
+    return null;
+  }
+
+  const filename = String(file?.name || "").trim().toLowerCase();
+  return missingEntries.find((entry) => entry.filename.toLowerCase() === filename) || missingEntries[0] || null;
+}
+
+function markCreationReferenceRestoreEntryMissing(restoreEntryId) {
+  if (!restoreEntryId) {
+    return;
+  }
+
+  state.creationReferenceRestoreQueue = state.creationReferenceRestoreQueue.map((entry) =>
+    entry.id === restoreEntryId
+      ? {
+          ...entry,
+          status: "missing",
+          referenceId: "",
+          uploadedFilename: "",
+        }
+      : entry,
+  );
+}
+
+function renderCreationReferenceRestoreList() {
+  if (!refs.creationReferenceRestoreList) {
+    return;
+  }
+
+  const restoreQueue = state.creationReferenceRestoreQueue;
+  refs.creationReferenceRestoreList.replaceChildren();
+  refs.creationReferenceRestoreList.classList.toggle("hidden", restoreQueue.length === 0);
+  if (restoreQueue.length === 0) {
+    return;
+  }
+
+  const missingCount = restoreQueue.filter((entry) => entry.status !== "uploaded").length;
+  const summary = document.createElement("div");
+  summary.className = "creation-reference-restore-summary";
+  summary.textContent =
+    missingCount > 0
+      ? `历史参考图需重传：${missingCount}/${restoreQueue.length} 张待补齐，重传后才会参与预览、生成和补图。`
+      : `历史参考图已重传：${restoreQueue.length}/${restoreQueue.length} 张会参与预览、生成和补图。`;
+  refs.creationReferenceRestoreList.appendChild(summary);
+
+  restoreQueue.forEach((entry) => {
+    const item = document.createElement("div");
+    item.className = `creation-reference-restore-item ${entry.status === "uploaded" ? "is-uploaded" : "is-missing"}`;
+
+    const copy = document.createElement("span");
+    const title = document.createElement("strong");
+    title.textContent = entry.filename;
+    const meta = document.createElement("small");
+    meta.textContent = [entry.roleLabel || getCreationReferenceRoleLabel(entry.role), entry.note].filter(Boolean).join(" · ");
+    copy.append(title, meta);
+
+    const status = document.createElement("em");
+    status.className = "creation-reference-restore-status";
+    status.textContent = entry.status === "uploaded" ? `已重传${entry.uploadedFilename ? ` · ${entry.uploadedFilename}` : ""}` : "待重传";
+
+    item.append(copy, status);
+    refs.creationReferenceRestoreList.appendChild(item);
+  });
+}
+
+function resetCreationReferenceFilesForRecordReuse(normalized = null) {
+  state.creationReferenceFiles.forEach((item) => {
+    if (item.previewUrl) {
+      URL.revokeObjectURL(item.previewUrl);
+    }
+  });
+  state.creationReferenceFiles = [];
+  state.creationReferenceRestoreQueue = buildCreationReferenceRestoreQueue(normalized);
+  state.creationReferenceAnalysis = createEmptyCreationReferenceAnalysisState();
+  if (refs.creationReferenceInput) {
+    refs.creationReferenceInput.value = "";
+  }
+  setCreationReferenceAnalysisFeedback("", "");
+  renderCreationReferenceRestoreList();
+  renderCreationReferenceAnalysis();
+}
+
+function applyCreationSetToForm(set) {
+  const normalized = normalizeCreationSetForView(set);
+  refs.creationProductNameInput.value = normalized.productName || "";
+  refs.creationProductDescriptionInput.value = normalized.productDescription || "";
+  refs.creationSellingPointsInput.value = normalized.sellingPoints.join("\n");
+  setCreationSelectValue(refs.creationTargetLanguageInput, normalized.targetLanguage, "zh-CN");
+  setCreationSelectValue(refs.creationScenarioInput, normalized.scenario, "standard");
+
+  const normalizedRoles = normalizeCreationRoleIds(
+    normalized.selectedRoles.length > 0 ? normalized.selectedRoles : normalized.items.map((item) => item.role),
+  );
+  state.creationSelectedRoles = normalizedRoles.length > 0 ? normalizedRoles : getCreationRoleIdsForCount(normalized.imageCount);
+  setCreationImageCountValue(state.creationSelectedRoles.length || normalized.imageCount);
+  resetCreationReferenceFilesForRecordReuse(normalized);
+  renderCreationRolePicker();
+  renderCreationReferenceGrid();
+}
+
+function getCreationCurrentSet() {
+  return state.creation.currentSet ? normalizeCreationSetForView(state.creation.currentSet) : null;
+}
+
+function isCreationDraftSet(set = getCreationCurrentSet()) {
+  const setId = String(set?.setId || "");
+  return setId.startsWith("creation-local-") || setId.startsWith("creation-draft-");
+}
+
+function canEditCreationItem(set = getCreationCurrentSet()) {
+  return Boolean(set?.setId) && !state.creation.generating && !state.creation.planning && (canRepairCreationSet(set) || isCreationDraftSet(set));
+}
+
+function getCreationItemDraftKey(setId, itemId) {
+  return `${setId || "draft"}:${itemId || ""}`;
+}
+
+function getCreationItemDraft(itemId, set = getCreationCurrentSet()) {
+  const key = getCreationItemDraftKey(set?.setId, itemId);
+  return String(state.creation.itemDrafts[key] || "");
+}
+
+function toggleCreationItemEditor(itemId) {
+  state.creation.editingItemId = state.creation.editingItemId === itemId ? "" : itemId;
+  renderCreationView();
+}
+
+function saveCreationItemDraft(itemId, promptOverride) {
+  const currentSet = getCreationCurrentSet();
+  if (!currentSet || !itemId) {
+    return;
+  }
+
+  const existingItem = currentSet.items.find((item) => item.itemId === itemId);
+  const nextPrompt = String(promptOverride || "").trim();
+  const key = getCreationItemDraftKey(currentSet.setId, itemId);
+  if (nextPrompt) {
+    state.creation.itemDrafts[key] = nextPrompt;
+  } else {
+    delete state.creation.itemDrafts[key];
+  }
+
+  updateCreationCurrentItem(itemId, {
+    prompt: nextPrompt || existingItem?.prompt || "",
+    updatedAt: nowIso(),
+  });
+  state.creation.editingItemId = "";
+  setCreationFeedback("已保存单张微调，重生成时会使用新的提示词。", "success");
+  renderCreationView();
+}
+
+function getCreationProgressSummary(set = getCreationCurrentSet()) {
+  const items = Array.isArray(set?.items) ? set.items : [];
+  const total = items.length || Number(set?.imageCount) || getCreationSelectedImageCount();
+  const completed = items.filter((item) => item.status === "completed").length;
+  const failed = items.filter((item) => item.status === "failed").length;
+  return { total, completed, failed };
+}
+
+function getCreationIncompleteItems(set = getCreationCurrentSet()) {
+  const items = Array.isArray(set?.items) ? set.items : [];
+  return items.filter((item) => item.status !== "completed" || !item.filename || !item.relativePath);
+}
+
+function canRepairCreationSet(set = getCreationCurrentSet()) {
+  return Boolean(set?.setId && !isCreationDraftSet(set));
+}
+
+function renderCreationRecordDetail(set) {
+  if (!refs.creationRecordDetail) {
+    return;
+  }
+
+  refs.creationRecordDetail.innerHTML = "";
+  const hasRepairableSet = canRepairCreationSet(set);
+  const incompleteItems = getCreationIncompleteItems(set);
+  if (refs.creationRepairFailedButton) {
+    refs.creationRepairFailedButton.disabled = state.creation.generating || !hasRepairableSet || incompleteItems.length === 0;
+    refs.creationRepairFailedButton.textContent = incompleteItems.length > 0 ? `补齐未完成项 ${incompleteItems.length}` : "补齐未完成项";
+  }
+
+  if (!set) {
+    const empty = document.createElement("span");
+    empty.textContent = "还没有选中套图记录。";
+    refs.creationRecordDetail.appendChild(empty);
+    return;
+  }
+
+  const progress = getCreationProgressSummary(set);
+  const detailItems = [
+    ["商品", set.productName || "未命名商品"],
+    ["场景", set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || "标准电商"],
+    ["语言", set.targetLanguageLabel || set.targetLanguage || "zh-CN"],
+    ["进度", `${progress.completed}/${progress.total}`],
+    ["参考图", set.referenceImageNames.length > 0 ? set.referenceImageNames.join("、") : "未使用"],
+    ["参考用途", formatCreationReferenceRoleSummary(set.referenceImageRoles)],
+  ];
+
+  detailItems.forEach(([label, value]) => {
+    const item = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = `${label}: `;
+    item.appendChild(strong);
+    item.append(document.createTextNode(value));
+    refs.creationRecordDetail.appendChild(item);
+  });
+}
+
+function upsertCreationSet(set) {
+  const normalized = normalizeCreationSetForView(set);
+  if (!normalized.setId) {
+    return null;
+  }
+
+  state.creation.sets = [normalized, ...state.creation.sets.filter((entry) => entry.setId !== normalized.setId)];
+  const currentSetId = state.creation.currentSet?.setId || "";
+  if (!currentSetId || currentSetId === normalized.setId || currentSetId.startsWith("creation-local-") || state.creation.generating) {
+    state.creation.currentSet = normalized;
+  }
+  renderCreationRecordView();
+
+  return normalized;
+}
+
+function updateCreationCurrentItem(itemId, patch = {}) {
+  const currentSet = getCreationCurrentSet();
+  if (!currentSet || !itemId) {
+    return null;
+  }
+
+  const nextItems = [...currentSet.items];
+  const index = nextItems.findIndex((item) => item.itemId === itemId);
+  const existing = index >= 0 ? nextItems[index] : { itemId };
+  const nextItem = normalizeCreationItemForView({ ...existing, ...patch, itemId }, index >= 0 ? index : nextItems.length);
+
+  if (index >= 0) {
+    nextItems[index] = nextItem;
+  } else {
+    nextItems.push(nextItem);
+  }
+
+  const nextSet = normalizeCreationSetForView({
+    ...currentSet,
+    ...patch.set,
+    items: nextItems,
+    updatedAt: patch.updatedAt || nowIso(),
+    status: patch.setStatus || currentSet.status,
+  });
+  state.creation.currentSet = nextSet;
+  if (!isCreationDraftSet(nextSet)) {
+    state.creation.sets = [nextSet, ...state.creation.sets.filter((entry) => entry.setId !== nextSet.setId)];
+  }
+  return nextSet;
+}
+
+function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
+  const showActions = options.showActions !== false;
+  const card = document.createElement("article");
+  card.className = "creation-card";
+
+  const head = document.createElement("div");
+  head.className = "creation-card-head";
+
+  const title = document.createElement("strong");
+  title.textContent = item.title || CREATION_PREVIEW_SLOTS[fallbackIndex]?.title || `第 ${fallbackIndex + 1} 张`;
+  head.appendChild(title);
+
+  const status = document.createElement("span");
+  status.className = "creation-card-status";
+  status.textContent = getCreationStatusLabel(item.status);
+  head.appendChild(status);
+
+  card.appendChild(head);
+
+  const brief = document.createElement("p");
+  brief.className = "creation-card-brief";
+  brief.textContent = item.brief || CREATION_PREVIEW_SLOTS[fallbackIndex]?.brief || "";
+  brief.hidden = !brief.textContent;
+  card.appendChild(brief);
+
+  const media = document.createElement("div");
+  media.className = "creation-card-media";
+  const imageUrl = getImageUrl(item);
+  if (imageUrl) {
+    const image = document.createElement("img");
+    image.loading = "lazy";
+    image.decoding = "async";
+    image.alt = item.title || `套图 ${fallbackIndex + 1}`;
+    image.src = imageUrl;
+    media.appendChild(image);
+  } else {
+    const placeholder = document.createElement("span");
+    placeholder.textContent = item.status === "failed" ? item.error || "生成失败" : "等待生成";
+    media.appendChild(placeholder);
+  }
+  card.appendChild(media);
+
+  const prompt = document.createElement("p");
+  prompt.className = "creation-card-prompt";
+  prompt.textContent =
+    item.marketingCopy ||
+    item.prompt ||
+    (item.status === "failed" ? "请检查配置后重试。" : item.error) ||
+    "填写商品信息后会自动生成对应的营销图。";
+  card.appendChild(prompt);
+
+  const path = document.createElement("span");
+  path.className = "creation-card-path";
+  path.textContent = item.relativePath || item.error || "";
+  path.title = path.textContent;
+  path.hidden = !path.textContent;
+  card.appendChild(path);
+
+  if (showActions && state.creation.editingItemId === item.itemId) {
+    const editor = document.createElement("div");
+    editor.className = "creation-card-editor";
+
+    const textarea = document.createElement("textarea");
+    textarea.dataset.creationPromptEditor = item.itemId;
+    textarea.rows = 4;
+    textarea.value = getCreationItemDraft(item.itemId) || item.prompt || "";
+    textarea.placeholder = "调整这张图的生成提示词";
+    editor.appendChild(textarea);
+
+    const editorActions = document.createElement("div");
+    editorActions.className = "creation-card-editor-actions";
+
+    const saveButton = document.createElement("button");
+    saveButton.className = "mini-action";
+    saveButton.type = "button";
+    saveButton.dataset.creationSavePromptItemId = item.itemId;
+    saveButton.textContent = "保存微调";
+    saveButton.disabled = state.creation.generating || state.creation.planning;
+    editorActions.appendChild(saveButton);
+
+    editor.appendChild(editorActions);
+    card.appendChild(editor);
+  }
+
+  if (showActions) {
+    const actions = document.createElement("div");
+    actions.className = "creation-card-actions";
+    const editButton = document.createElement("button");
+    editButton.className = "mini-action";
+    editButton.type = "button";
+    editButton.dataset.creationEditItemId = item.itemId;
+    editButton.textContent = state.creation.editingItemId === item.itemId ? "收起" : "微调";
+    editButton.disabled = !canEditCreationItem();
+    editButton.setAttribute("aria-label", `${item.title || "套图项"}微调提示词`);
+    actions.appendChild(editButton);
+
+    const button = document.createElement("button");
+    button.className = "mini-action";
+    button.type = "button";
+    button.dataset.creationRetryItemId = item.itemId;
+    button.textContent = item.status === "completed" ? "重生成" : item.status === "failed" ? "重试" : "补图";
+    button.disabled = state.creation.generating || !canRepairCreationSet();
+    button.setAttribute("aria-label", `${item.title || "套图项"}${button.textContent}`);
+    actions.appendChild(button);
+    card.appendChild(actions);
+  }
+
+  return card;
+}
+
+function getCreationRecordSearchText(set = {}) {
+  return [
+    set.productName,
+    set.productDescription,
+    set.scenario,
+    set.scenarioLabel,
+    set.targetLanguage,
+    set.targetLanguageLabel,
+    ...(Array.isArray(set.sellingPoints) ? set.sellingPoints : []),
+    ...(Array.isArray(set.referenceImageNames) ? set.referenceImageNames : []),
+    ...(Array.isArray(set.items)
+      ? set.items.flatMap((item) => [item.title, item.role, item.prompt, item.marketingCopy, item.filename, item.relativePath])
+      : []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function filterCreationRecordSets() {
+  const query = String(state.creation.recordQuery || "").trim().toLowerCase();
+  if (!query) {
+    return state.creation.sets;
+  }
+
+  return state.creation.sets.filter((set) => getCreationRecordSearchText(set).includes(query));
+}
+
+function getCreationRecordSelectedSet() {
+  const sets = filterCreationRecordSets();
+  return sets.find((set) => set.setId === state.creation.recordSetId) || sets[0] || null;
+}
+
+function getCreationRecordImagePaths(set) {
+  return Array.isArray(set?.items) ? set.items.map((item) => item.relativePath).filter(Boolean) : [];
+}
+
+function buildCreationRecordPathText(set) {
+  const paths = getCreationRecordImagePaths(set);
+  if (!set || paths.length === 0) {
+    return "";
+  }
+
+  return [
+    `套图: ${set.productName || "未命名商品"}`,
+    `目录: ${set.relativeDir || "未记录目录"}`,
+    "图片:",
+    ...paths.map((path, index) => `${index + 1}. ${path}`),
+  ].join("\n");
+}
+
+function renderCreationRecordSetList() {
+  if (!refs.creationRecordSetList) {
+    return;
+  }
+
+  refs.creationRecordSetList.innerHTML = "";
+  const selectedSet = getCreationRecordSelectedSet();
+  const selectedSetId = selectedSet?.setId || "";
+  const sets = filterCreationRecordSets().slice(0, 60);
+
+  if (sets.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "creation-record";
+    empty.textContent = state.creation.recordQuery ? "没有匹配的套图记录" : "暂无套图记录";
+    refs.creationRecordSetList.appendChild(empty);
+    return;
+  }
+
+  sets.forEach((set) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "creation-record";
+    button.dataset.creationRecordSetId = set.setId;
+    button.classList.toggle("active", set.setId === selectedSetId);
+
+    const title = document.createElement("strong");
+    title.className = "creation-record-title";
+    title.textContent = set.productName || "未命名商品";
+    button.appendChild(title);
+
+    const meta = document.createElement("span");
+    meta.className = "creation-record-meta";
+    const progress = getCreationProgressSummary(set);
+    const languageLabel = set.targetLanguageLabel || set.targetLanguage || "zh-CN";
+    meta.textContent = `${languageLabel} · ${progress.completed}/${progress.total} · ${formatClock(set.createdAt)}`;
+    button.appendChild(meta);
+
+    refs.creationRecordSetList.appendChild(button);
+  });
+}
+
+function selectCreationRecord(setId) {
+  const set = filterCreationRecordSets().find((entry) => entry.setId === setId);
+  if (!set) {
+    return;
+  }
+
+  state.creation.recordSetId = set.setId;
+  setCreationRecordFeedback();
+  renderCreationRecordView();
+}
+
+async function openCreationRecordFolder() {
+  const selectedSet = getCreationRecordSelectedSet();
+  if (!selectedSet?.setId) {
+    setCreationRecordFeedback("请先选择一套记录。", "error");
+    return;
+  }
+
+  const response = await fetch("/api/creation/sets/open-folder", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      setId: selectedSet.setId,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(payload.message || "打开套图文件夹失败。");
+  }
+
+  setCreationRecordFeedback("已打开套图文件夹。", "success");
+}
+
+async function copyCreationRecordPaths() {
+  const selectedSet = getCreationRecordSelectedSet();
+  const text = buildCreationRecordPathText(selectedSet);
+  if (!text) {
+    setCreationRecordFeedback("当前套图还没有可复制的图片路径。", "error");
+    return;
+  }
+
+  await writeTextToClipboard(text);
+  setCreationRecordFeedback("已复制当前套图图片路径。", "success");
+}
+
+function reuseCreationRecordSet() {
+  const selectedSet = getCreationRecordSelectedSet();
+  if (!selectedSet) {
+    return;
+  }
+
+  applyCreationSetToForm(selectedSet);
+  state.creation.currentSet = normalizeCreationSetForView(selectedSet);
+  state.creation.editingItemId = "";
+  setCreationFeedback("已载入历史套图，商品信息与角色已同步；如需沿用参考图，请重新上传原图。", "success");
+  setActiveView("creation");
+  renderCreationView();
+}
+
+function renderCreationRecordArchiveDetail(set) {
+  if (!refs.creationRecordArchiveDetail) {
+    return;
+  }
+
+  refs.creationRecordArchiveDetail.innerHTML = "";
+  const archive = refs.creationRecordArchiveDetail.closest(".creation-record-archive");
+  archive?.classList.toggle("is-empty", !set);
+
+  if (!set) {
+    const empty = document.createElement("span");
+    empty.textContent = "还没有套图记录。";
+    refs.creationRecordArchiveDetail.appendChild(empty);
+    return;
+  }
+
+  const progress = getCreationProgressSummary(set);
+  const detailItems = [
+    ["商品", set.productName || "未命名商品"],
+    ["场景", set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || "标准电商"],
+    ["语言", set.targetLanguageLabel || set.targetLanguage || "zh-CN"],
+    ["进度", `${progress.completed}/${progress.total}`],
+    ["创建时间", formatClock(set.createdAt)],
+    ["参考图", set.referenceImageNames.length > 0 ? set.referenceImageNames.join("、") : "未使用"],
+    ["参考用途", formatCreationReferenceRoleSummary(set.referenceImageRoles)],
+  ];
+
+  detailItems.forEach(([label, value]) => {
+    const item = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = `${label}: `;
+    item.appendChild(strong);
+    item.append(document.createTextNode(value));
+    refs.creationRecordArchiveDetail.appendChild(item);
+  });
+}
+
+function renderCreationRecordView() {
+  const filteredSets = filterCreationRecordSets();
+  const selectedSet = getCreationRecordSelectedSet();
+  if (refs.creationRecordSearchInput && refs.creationRecordSearchInput.value !== state.creation.recordQuery) {
+    refs.creationRecordSearchInput.value = state.creation.recordQuery;
+  }
+  if (refs.creationRecordCount) {
+    refs.creationRecordCount.textContent = state.creation.recordQuery
+      ? `${filteredSets.length} / ${state.creation.sets.length} 套`
+      : `${state.creation.sets.length} 套`;
+  }
+  if (refs.creationRecordReuseButton) {
+    refs.creationRecordReuseButton.disabled = !selectedSet;
+  }
+  if (refs.creationRecordOpenFolderButton) {
+    refs.creationRecordOpenFolderButton.disabled = !selectedSet?.relativeDir;
+  }
+  if (refs.creationRecordCopyPathsButton) {
+    refs.creationRecordCopyPathsButton.disabled = getCreationRecordImagePaths(selectedSet).length === 0;
+  }
+
+  renderCreationRecordSetList();
+  state.creation.recordSetId = selectedSet?.setId || "";
+  renderCreationRecordArchiveDetail(selectedSet);
+
+  if (!refs.creationRecordResultGrid) {
+    return;
+  }
+
+  refs.creationRecordResultGrid.innerHTML = "";
+  refs.creationRecordResultGrid.classList.toggle("hidden", !selectedSet);
+  if (!selectedSet) {
+    return;
+  }
+
+  selectedSet.items.forEach((item, index) => {
+    refs.creationRecordResultGrid.appendChild(createCreationCard(item, index, { showActions: false }));
+  });
+}
+
+function openCreationReferencePreview(referenceId) {
+  const item = state.creationReferenceFiles.find((entry) => entry.id === referenceId);
+  if (!item?.previewUrl) {
+    return;
+  }
+
+  state.creationReferencePreviewItem = item;
+  refs.referencePreviewImage.src = item.previewUrl;
+  refs.referencePreviewViewer.classList.add("open");
+  refs.referencePreviewViewer.setAttribute("aria-hidden", "false");
+}
+
+function removeCreationReferenceFile(referenceId) {
+  const target = state.creationReferenceFiles.find((item) => item.id === referenceId);
+  if (state.creationReferencePreviewItem?.id === referenceId) {
+    closeReferencePreview();
+  }
+  revokeReferencePreview(target);
+  state.creationReferenceFiles = state.creationReferenceFiles.filter((item) => item.id !== referenceId);
+  markCreationReferenceRestoreEntryMissing(target?.restoreEntryId);
+  markCreationReferenceAnalysisDirty();
+  renderCreationReferenceGrid();
+}
+
+function updateCreationReferenceRole(referenceId, role) {
+  state.creationReferenceFiles = state.creationReferenceFiles.map((item) =>
+    item.id === referenceId ? { ...item, role: role || "product" } : item,
+  );
+  renderCreationReferenceGrid();
+}
+
+function applyCreationReferenceFiles(fileList) {
+  const incomingFiles = [...(fileList || [])].filter((file) => file.type.startsWith("image/"));
+  if (incomingFiles.length === 0) {
+    return;
+  }
+
+  const next = [...state.creationReferenceFiles];
+  let restoreQueue = [...state.creationReferenceRestoreQueue];
+  const fingerprints = new Set(next.map((item) => item.fingerprint));
+  let overflowed = false;
+
+  for (const file of incomingFiles) {
+    if (next.length >= state.limits.maxReferenceImages) {
+      overflowed = true;
+      break;
+    }
+
+    const fingerprint = buildReferenceFingerprint(file);
+    if (fingerprints.has(fingerprint)) {
+      continue;
+    }
+
+    const restoreEntry = findCreationReferenceRestoreEntryForFile(file, restoreQueue);
+    const referenceItem = {
+      id: `creation-ref-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      fingerprint,
+      file,
+      previewUrl: URL.createObjectURL(file),
+      role: restoreEntry?.role || "product",
+      note: restoreEntry?.note || "",
+      restoreEntryId: restoreEntry?.id || "",
+      restoredFromRecordFilename: restoreEntry?.filename || "",
+    };
+    next.push(referenceItem);
+    if (restoreEntry) {
+      restoreQueue = restoreQueue.map((entry) =>
+        entry.id === restoreEntry.id
+          ? {
+              ...entry,
+              status: "uploaded",
+              referenceId: referenceItem.id,
+              uploadedFilename: file.name,
+            }
+          : entry,
+      );
+    }
+    fingerprints.add(fingerprint);
+  }
+
+  state.creationReferenceFiles = next;
+  state.creationReferenceRestoreQueue = restoreQueue;
+  markCreationReferenceAnalysisDirty();
+  if (refs.creationReferenceInput) {
+    refs.creationReferenceInput.value = "";
+  }
+  renderCreationReferenceGrid();
+
+  if (overflowed) {
+    showError(`套图参考图最多支持 ${state.limits.maxReferenceImages} 张。`);
+  }
+}
+
+function renderCreationReferenceGrid() {
+  if (!refs.creationReferenceGrid) {
+    return;
+  }
+
+  refs.creationReferenceGrid.innerHTML = "";
+  refs.creationReferenceCount.textContent = `${state.creationReferenceFiles.length} / ${state.limits.maxReferenceImages}`;
+  refs.creationReferenceGrid.classList.toggle("hidden", state.creationReferenceFiles.length === 0);
+
+  state.creationReferenceFiles.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "reference-card";
+
+    const previewButton = document.createElement("button");
+    previewButton.type = "button";
+    previewButton.className = "reference-preview-button";
+    previewButton.dataset.creationReferencePreviewId = item.id;
+    previewButton.setAttribute("aria-label", "放大查看套图参考图");
+
+    const image = document.createElement("img");
+    image.src = item.previewUrl;
+    image.alt = "套图参考图预览";
+    previewButton.appendChild(image);
+    card.appendChild(previewButton);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "reference-remove";
+    remove.textContent = "x";
+    remove.setAttribute("aria-label", "移除套图参考图");
+    remove.addEventListener("click", () => removeCreationReferenceFile(item.id));
+    card.appendChild(remove);
+
+    const roleSelect = document.createElement("select");
+    roleSelect.className = "creation-reference-role";
+    roleSelect.dataset.creationReferenceRoleId = item.id;
+    roleSelect.setAttribute("aria-label", "选择套图参考图用途");
+    CREATION_REFERENCE_ROLE_OPTIONS.forEach((option) => {
+      const choice = document.createElement("option");
+      choice.value = option.value;
+      choice.textContent = option.label;
+      choice.selected = (item.role || "product") === option.value;
+      roleSelect.appendChild(choice);
+    });
+    card.appendChild(roleSelect);
+
+    if (item.note) {
+      const note = document.createElement("span");
+      note.className = "creation-reference-note";
+      note.textContent = item.note;
+      card.appendChild(note);
+    }
+
+    refs.creationReferenceGrid.appendChild(card);
+  });
+  renderCreationReferenceRestoreList();
+  renderCreationReferenceAnalysis();
+}
+
+function buildCreationReferenceRolePayload() {
+  return state.creationReferenceFiles.map((item, index) => ({
+    filename: item.file?.name || `reference-image-${index + 1}`,
+    role: item.role || "product",
+    note: item.note || "",
+  }));
+}
+
+function formatCreationReferenceRoleSummary(referenceImageRoles = []) {
+  const roles = Array.isArray(referenceImageRoles) ? referenceImageRoles : [];
+  if (roles.length === 0) {
+    return "未标注";
+  }
+
+  return roles
+    .map((item) => {
+      const filename = String(item?.filename || "").trim();
+      const role = String(item?.role || "product").trim();
+      const roleLabel = String(item?.roleLabel || getCreationReferenceRoleLabel(role)).trim();
+      const note = String(item?.note || "").trim();
+      return `${filename || "参考图"}: ${roleLabel}${note ? ` (${note})` : ""}`;
+    })
+    .join("、");
+}
+
+function getCreationRepairReferenceRolePayload(set = getCreationCurrentSet()) {
+  const uploadedRoles = buildCreationReferenceRolePayload();
+  if (uploadedRoles.length > 0) {
+    return uploadedRoles;
+  }
+  if (state.creationReferenceRestoreQueue.length > 0) {
+    return [];
+  }
+  return Array.isArray(set?.referenceImageRoles) ? set.referenceImageRoles : [];
+}
+
+function setCreationReferenceAnalysisFeedback(message, kind = "") {
+  if (!refs.creationReferenceAnalysisFeedback) {
+    return;
+  }
+
+  refs.creationReferenceAnalysisFeedback.textContent = message ? compactErrorMessage(message, "套图参考图识别失败") : "";
+  refs.creationReferenceAnalysisFeedback.dataset.state = kind;
+}
+
+function markCreationReferenceAnalysisDirty() {
+  if (state.creationReferenceAnalysis.result) {
+    state.creationReferenceAnalysis.applied = false;
+    state.creationReferenceAnalysis.dirty = true;
+    setCreationReferenceAnalysisFeedback("参考图已变化，请重新识别。", "busy");
+  } else {
+    setCreationReferenceAnalysisFeedback("", "");
+  }
+}
+
+function normalizeCreationReferenceAnalysisRecommendation(entry = {}, index = 0) {
+  const filename = String(state.creationReferenceFiles[index]?.file?.name || entry.filename || `reference-image-${index + 1}`).trim();
+  if (!filename) {
+    return null;
+  }
+
+  return {
+    index: Number(entry.index) || index + 1,
+    filename,
+    role: CREATION_REFERENCE_ROLE_OPTIONS.some((option) => option.value === entry.role) ? entry.role : "product",
+    roleLabel: String(entry.roleLabel || getCreationReferenceRoleLabel(entry.role || "product")),
+    note: String(entry.note || "").trim(),
+  };
+}
+
+function normalizeCreationReferenceAnalysisPayload(payload = {}) {
+  const analysis = payload.analysis || payload;
+  const recommendations = Array.isArray(analysis?.recommendations)
+    ? analysis.recommendations
+        .map((entry, index) => normalizeCreationReferenceAnalysisRecommendation(entry, index))
+        .filter(Boolean)
+    : [];
+
+  return {
+    summary: String(analysis?.summary || "已识别套图参考图用途").trim(),
+    recommendations,
+    risks: Array.isArray(analysis?.risks) ? analysis.risks.map((item) => String(item).trim()).filter(Boolean) : [],
+  };
+}
+
+function applyCreationReferenceAnalysis(analysis) {
+  const normalized = normalizeCreationReferenceAnalysisPayload(analysis);
+  state.creationReferenceAnalysis.result = normalized;
+  state.creationReferenceAnalysis.applied = false;
+  state.creationReferenceAnalysis.dirty = false;
+  renderCreationReferenceAnalysis();
+}
+
+function applyCreationReferenceAnalysisRecommendations() {
+  const analysis = state.creationReferenceAnalysis.result;
+  if (!analysis || state.creationReferenceAnalysis.dirty) {
+    return;
+  }
+
+  const recommendationsByFilename = new Map(analysis.recommendations.map((entry) => [entry.filename, entry]));
+  state.creationReferenceFiles = state.creationReferenceFiles.map((item, index) => {
+    const filename = item.file?.name || `reference-image-${index + 1}`;
+    const recommendation = recommendationsByFilename.get(filename) || analysis.recommendations[index];
+    return recommendation
+      ? {
+          ...item,
+          role: recommendation.role || item.role || "product",
+          note: recommendation.note || "",
+        }
+      : item;
+  });
+  state.creationReferenceAnalysis.applied = true;
+  setCreationReferenceAnalysisFeedback(`已应用 ${analysis.recommendations.length} 张参考图用途建议。`, "success");
+  renderCreationReferenceGrid();
+}
+
+function renderCreationReferenceAnalysis() {
+  if (!refs.creationReferenceAnalysisPanel) {
+    return;
+  }
+
+  refs.creationReferenceAnalyzeButton.disabled =
+    state.creationReferenceAnalysis.running || state.creation.generating || state.creationReferenceFiles.length === 0;
+  refs.creationReferenceAnalyzeButton.textContent = state.creationReferenceAnalysis.running ? "识别中..." : "智能识别";
+
+  const analysis = state.creationReferenceAnalysis.result;
+  if (refs.creationReferenceApplyAnalysisButton) {
+    const canApply =
+      Boolean(analysis) &&
+      !state.creationReferenceAnalysis.dirty &&
+      !state.creationReferenceAnalysis.applied &&
+      !state.creationReferenceAnalysis.running &&
+      !state.creation.generating;
+    refs.creationReferenceApplyAnalysisButton.classList.toggle("hidden", !analysis);
+    refs.creationReferenceApplyAnalysisButton.disabled = !canApply;
+    refs.creationReferenceApplyAnalysisButton.textContent = state.creationReferenceAnalysis.applied ? "已应用" : "应用建议";
+  }
+  refs.creationReferenceAnalysisPanel.classList.toggle("hidden", !analysis);
+  refs.creationReferenceAnalysisList.replaceChildren();
+
+  if (!analysis) {
+    refs.creationReferenceAnalysisSummary.textContent = "--";
+    refs.creationReferenceAnalysisMeta.textContent = "--";
+    return;
+  }
+
+  refs.creationReferenceAnalysisSummary.textContent = analysis.summary || "已识别套图参考图用途";
+  refs.creationReferenceAnalysisMeta.textContent = [
+    `${analysis.recommendations.length} 张建议`,
+    state.creationReferenceAnalysis.applied ? "已应用" : "待应用",
+    state.creationReferenceAnalysis.dirty ? "参考图已变化" : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  analysis.recommendations.forEach((entry) => {
+    const item = document.createElement("article");
+    item.className = "reference-analysis-card creation-reference-analysis-card";
+
+    const title = document.createElement("strong");
+    title.textContent = `${entry.filename} · ${entry.roleLabel || getCreationReferenceRoleLabel(entry.role)}`;
+    item.appendChild(title);
+
+    const note = document.createElement("p");
+    note.textContent = entry.note || "可应用到参考图用途。";
+    item.appendChild(note);
+
+    refs.creationReferenceAnalysisList.appendChild(item);
+  });
+
+  analysis.risks.forEach((riskText) => {
+    const risk = document.createElement("p");
+    risk.className = "reference-analysis-risk";
+    risk.textContent = riskText;
+    refs.creationReferenceAnalysisList.appendChild(risk);
+  });
+}
+
+async function buildCreationReferenceAnalysisFormData() {
+  const formData = new FormData();
+  formData.set(
+    "reasoningEffort",
+    refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
+  );
+  const analysisFiles = await Promise.all(
+    state.creationReferenceFiles.map((item) => preparePromptAnalysisImageFile(item.file)),
+  );
+  analysisFiles.forEach((file) => {
+    formData.append("referenceImages", file);
+  });
+  appendBrowserConfigToFormData(formData);
+  return formData;
+}
+
+async function analyzeCreationReferenceImages() {
+  clearError();
+  if (state.creationReferenceFiles.length === 0) {
+    setCreationReferenceAnalysisFeedback("请先上传套图参考图。", "error");
+    return;
+  }
+
+  state.creationReferenceAnalysis.running = true;
+  setCreationReferenceAnalysisFeedback("正在识别参考图用途...", "busy");
+  renderCreationReferenceAnalysis();
+
+  try {
+    const response = await fetch("/api/creation/reference/analyze", {
+      method: "POST",
+      body: await buildCreationReferenceAnalysisFormData(),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.message || "套图参考图识别失败。");
+    }
+
+    applyCreationReferenceAnalysis(payload);
+    const count = state.creationReferenceAnalysis.result?.recommendations?.length || 0;
+    setCreationReferenceAnalysisFeedback(`已识别 ${count} 张参考图用途建议，可点击应用建议。`, "success");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setCreationReferenceAnalysisFeedback(message, "error");
+    showError(message);
+  } finally {
+    state.creationReferenceAnalysis.running = false;
+    renderCreationReferenceAnalysis();
+  }
+}
+
+function renderCreationRolePicker() {
+  if (!refs.creationRoleGrid) {
+    return;
+  }
+
+  const selectedRoles = getCreationSelectedRoles();
+  const selectedRoleSet = new Set(selectedRoles);
+  if (refs.creationRoleCount) {
+    refs.creationRoleCount.textContent = `${selectedRoles.length} / ${CREATION_PREVIEW_SLOTS.length}`;
+  }
+  if (refs.creationRoleHint) {
+    const scenario = getCreationSelectedScenario();
+    refs.creationRoleHint.textContent = `${scenario.label} 推荐，可手动增删`;
+  }
+
+  refs.creationRoleGrid.innerHTML = "";
+  CREATION_PREVIEW_SLOTS.forEach((slot) => {
+    const label = document.createElement("label");
+    label.className = "creation-role-option";
+    label.classList.toggle("is-selected", selectedRoleSet.has(slot.role));
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = slot.role;
+    input.checked = selectedRoleSet.has(slot.role);
+    input.disabled = state.creation.generating;
+    input.dataset.creationRole = slot.role;
+
+    const text = document.createElement("span");
+    text.textContent = slot.title;
+
+    label.append(input, text);
+    refs.creationRoleGrid.appendChild(label);
+  });
+}
+
+function renderCreationView() {
+  if (!refs.creationResultGrid) {
+    return;
+  }
+
+  const currentSet = getCreationCurrentSet();
+  const previewSlots = getCreationPreviewSlots(currentSet?.imageCount || getCreationSelectedImageCount());
+  const items = currentSet?.items.length ? currentSet.items : previewSlots.map((slot, index) => ({
+    ...slot,
+    itemId: slot.itemId,
+    slotIndex: index + 1,
+    status: state.creation.generating ? "queued" : "idle",
+    prompt: "填写商品信息后会自动生成电商营销套图。",
+  }));
+  const progress = getCreationProgressSummary(currentSet);
+  const targetLanguageLabel =
+    currentSet?.targetLanguageLabel ||
+    getCreationSelectedLanguage().label ||
+    refs.creationTargetLanguageInput?.value ||
+    "zh-CN";
+
+  refs.creationGenerateButton.textContent = state.creation.generating ? "生成中..." : "生成套图";
+  refs.creationGenerateButton.disabled = state.creation.generating || state.creation.planning;
+  if (refs.creationPlanButton) {
+    refs.creationPlanButton.textContent = state.creation.planning ? "预览中..." : "预览计划";
+    refs.creationPlanButton.disabled = state.creation.generating || state.creation.planning;
+  }
+  if (refs.creationPlanMeta) {
+    refs.creationPlanMeta.textContent = state.creation.planning
+      ? "正在生成每张图的计划"
+      : isCreationDraftSet(currentSet)
+        ? `已预览 ${currentSet.items.length} 张，可先微调再生成`
+        : "生成前可先确认每张图的计划";
+  }
+  refs.creationProgressText.textContent = `${progress.completed} / ${progress.total}`;
+  if (refs.creationScenarioHint) {
+    refs.creationScenarioHint.textContent = CREATION_SCENARIO_HINTS[getCreationSelectedScenario().value] || CREATION_SCENARIO_HINTS.standard;
+  }
+  renderCreationRolePicker();
+  renderCreationReferenceGrid();
+  refs.creationSetMeta.textContent = currentSet
+    ? `${currentSet.productName || "未命名商品"} · ${currentSet.scenarioLabel || CREATION_SCENARIO_LABELS[currentSet.scenario] || "标准电商"} · ${targetLanguageLabel} · ${CREATION_ITEM_STATUS_LABELS[currentSet.status] || currentSet.status} · ${formatClock(currentSet.createdAt)}`
+    : `填写商品信息后自动生成 ${getCreationSelectedRoles().length} 张电商营销图`;
+
+  renderCreationRecordDetail(currentSet);
+
+  refs.creationResultGrid.innerHTML = "";
+  items.forEach((item, index) => {
+    refs.creationResultGrid.appendChild(createCreationCard(item, index));
+  });
+
+}
+
+function getCreationPlanOverrides() {
+  const currentSet = getCreationCurrentSet();
+  if (!currentSet?.items?.length) {
+    return [];
+  }
+
+  return currentSet.items
+    .map((item) => {
+      const prompt = getCreationItemDraft(item.itemId, currentSet);
+      if (!prompt) {
+        return null;
+      }
+
+      return {
+        itemId: item.itemId,
+        role: item.role,
+        slotIndex: item.slotIndex,
+        prompt,
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildCreationPlanPreviewFormData() {
+  const formData = new FormData();
+  const targetLanguage = getCreationSelectedLanguage();
+  const selectedRoles = getCreationSelectedRoles();
+
+  formData.set("productName", refs.creationProductNameInput.value.trim());
+  formData.set("productDescription", refs.creationProductDescriptionInput.value.trim());
+  formData.set("sellingPoints", refs.creationSellingPointsInput.value.trim());
+  formData.set("targetLanguage", targetLanguage.value);
+  formData.set("imageCount", String(selectedRoles.length || getCreationSelectedImageCount()));
+  formData.set("scenario", refs.creationScenarioInput.value);
+  formData.set("selectedRoles", JSON.stringify(getCreationSelectedRoles()));
+  formData.set("referenceImageRoles", JSON.stringify(buildCreationReferenceRolePayload()));
+  formData.set("planOverrides", JSON.stringify(getCreationPlanOverrides()));
+
+  return formData;
+}
+
+function buildCreationFormData() {
+  const formData = buildCreationPlanPreviewFormData();
+
+  formData.set("format", normalizeOutputFormat(refs.creationOutputFormatInput.value || state.config?.defaults?.format || "png"));
+  formData.set("ratio", refs.creationRatioInput.value || DEFAULT_UI_RATIO);
+  formData.set("size", refs.creationSizeInput.value || "auto");
+  formData.set("reasoningEffort", refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh");
+  formData.set("clientSessionId", state.clientSessionId);
+  state.creationReferenceFiles.forEach((item) => {
+    formData.append("referenceImages", item.file);
+  });
+  appendBrowserConfigToFormData(formData);
+
+  return formData;
+}
+
+function buildCreationRepairFormData({ itemId = "", scope = "incomplete" } = {}) {
+  const formData = new FormData();
+  const currentSet = getCreationCurrentSet();
+
+  formData.set("setId", currentSet?.setId || "");
+  if (itemId) {
+    formData.set("itemId", itemId);
+    const promptOverride = getCreationItemDraft(itemId, currentSet);
+    if (promptOverride) {
+      formData.set("promptOverride", promptOverride);
+    }
+  } else {
+    formData.set("scope", scope);
+  }
+  formData.set("format", normalizeOutputFormat(refs.creationOutputFormatInput.value || state.config?.defaults?.format || "png"));
+  formData.set("ratio", refs.creationRatioInput.value || DEFAULT_UI_RATIO);
+  formData.set("size", refs.creationSizeInput.value || "auto");
+  formData.set("reasoningEffort", refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh");
+  formData.set("clientSessionId", state.clientSessionId);
+  formData.set("referenceImageRoles", JSON.stringify(getCreationRepairReferenceRolePayload(currentSet)));
+  state.creationReferenceFiles.forEach((item) => {
+    formData.append("referenceImages", item.file);
+  });
+  appendBrowserConfigToFormData(formData);
+
+  return formData;
+}
+
+function handleCreationStreamEvent(eventName, payload = {}) {
+  if (eventName === "repair_started") {
+    upsertCreationSet(payload.set);
+    setCreationFeedback("正在补齐套图项...", "busy");
+    renderCreationView();
+    return;
+  }
+
+  if (eventName === "set_started") {
+    upsertCreationSet(payload.set);
+    setCreationFeedback(`套图任务已创建，正在生成 ${payload.set?.imageCount || getCreationSelectedImageCount()} 张营销图。`, "busy");
+    renderCreationView();
+    return;
+  }
+
+  if (eventName === "plan") {
+    if (payload.setId && state.creation.currentSet?.setId !== payload.setId && Array.isArray(payload.items)) {
+      upsertCreationSet({
+        ...state.creation.currentSet,
+        setId: payload.setId,
+        items: payload.items,
+      });
+    }
+    renderCreationView();
+    return;
+  }
+
+  if (eventName === "item_started") {
+    updateCreationCurrentItem(payload.itemId, {
+      status: "generating",
+      updatedAt: nowIso(),
+    });
+    setCreationFeedback(`正在生成 ${payload.role || payload.itemId}。`, "busy");
+    renderCreationView();
+    return;
+  }
+
+  if (eventName === "item_status") {
+    updateCreationCurrentItem(payload.itemId, {
+      status: "generating",
+      updatedAt: nowIso(),
+    });
+    if (payload.message) {
+      setCreationFeedback(payload.message, "busy");
+    }
+    renderCreationView();
+    return;
+  }
+
+  if (eventName === "item_partial_image") {
+    updateCreationCurrentItem(payload.itemId, {
+      status: "generating",
+      imageUrl: payload.dataUrl,
+      thumbnailUrl: payload.dataUrl,
+      updatedAt: nowIso(),
+    });
+    renderCreationView();
+    return;
+  }
+
+  if (eventName === "item_final_image") {
+    updateCreationCurrentItem(payload.itemId, {
+      status: "generating",
+      imageUrl: payload.dataUrl,
+      thumbnailUrl: payload.dataUrl,
+      updatedAt: nowIso(),
+    });
+    renderCreationView();
+    return;
+  }
+
+  if (eventName === "item_saved") {
+    if (payload.set) {
+      upsertCreationSet(payload.set);
+    } else if (payload.item) {
+      updateCreationCurrentItem(payload.item.itemId, {
+        ...payload.item,
+        status: "completed",
+        updatedAt: nowIso(),
+      });
+    }
+    setCreationFeedback("已生成一张套图。", "success");
+    renderCreationView();
+    return;
+  }
+
+  if (eventName === "item_failed") {
+    if (payload.set) {
+      upsertCreationSet(payload.set);
+    } else if (payload.itemId) {
+      updateCreationCurrentItem(payload.itemId, {
+        status: "failed",
+        error: payload.message || "",
+        updatedAt: nowIso(),
+      });
+    }
+    setCreationFeedback(payload.message || "套图生成失败。", "error");
+    renderCreationView();
+    return;
+  }
+
+  if (eventName === "complete") {
+    if (payload.set) {
+      upsertCreationSet(payload.set);
+    }
+    setCreationFeedback("套图生成完成。", "success");
+    renderCreationView();
+    return;
+  }
+
+  if (eventName === "error") {
+    const message = compactErrorMessage(payload.message, "套图生成请求失败");
+    const currentSet = getCreationCurrentSet();
+    if (currentSet) {
+      state.creation.currentSet = normalizeCreationSetForView({
+        ...currentSet,
+        status: "failed",
+        updatedAt: nowIso(),
+        items: currentSet.items.map((item) =>
+          item.status === "completed"
+            ? item
+            : {
+                ...item,
+                status: "failed",
+                error: message,
+              },
+        ),
+      });
+    }
+    setCreationFeedback(message, "error");
+    showError(message);
+    renderCreationView();
+  }
+}
+
+async function runCreationStream(response) {
+  await consumeSse(response.body, async (eventName, payload) => {
+    handleCreationStreamEvent(eventName, payload);
+  });
+}
+
+async function loadCreationSets() {
+  const response = await fetch("/api/creation/sets");
+  if (response.status === 404) {
+    state.creation.sets = [];
+    state.creation.recordSetId = "";
+    renderCreationView();
+    renderCreationRecordView();
+    return;
+  }
+
+  if (!response.ok) {
+    throw new Error("读取套图记录失败");
+  }
+
+  const payload = await response.json();
+  const nextSets = Array.isArray(payload) ? payload.map(normalizeCreationSetForView).filter(Boolean) : [];
+  const currentSetId = state.creation.currentSet?.setId || "";
+  state.creation.sets = nextSets;
+  if (currentSetId) {
+    const matchedCurrentSet = nextSets.find((set) => set.setId === currentSetId);
+    if (matchedCurrentSet) {
+      state.creation.currentSet = normalizeCreationSetForView(matchedCurrentSet);
+    }
+  }
+  if (state.creation.recordSetId && !nextSets.some((set) => set.setId === state.creation.recordSetId)) {
+    state.creation.recordSetId = "";
+  }
+  renderCreationView();
+  renderCreationRecordView();
+}
+
+async function previewCreationPlan() {
+  if (state.creation.generating || state.creation.planning) {
+    return;
+  }
+
+  clearError();
+  setCreationFeedback("");
+
+  const productName = refs.creationProductNameInput.value.trim();
+  const productDescription = refs.creationProductDescriptionInput.value.trim();
+  const sellingPoints = getCreationSellingPoints(refs.creationSellingPointsInput.value);
+  if (!productName && !productDescription && sellingPoints.length === 0) {
+    const message = "请至少填写商品名称、商品描述或核心卖点。";
+    setCreationFeedback(message, "error");
+    showError(message);
+    return;
+  }
+
+  state.creation.planning = true;
+  setCreationFeedback("正在生成套图计划...", "busy");
+  renderCreationView();
+
+  try {
+    const response = await fetch("/api/creation/plan", {
+      method: "POST",
+      body: buildCreationPlanPreviewFormData(),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.message || "套图计划生成失败");
+    }
+
+    const plan = payload.plan || {};
+    const createdAt = nowIso();
+    const previousDraft = isCreationDraftSet() ? getCreationCurrentSet() : null;
+    const items = Array.isArray(plan.items)
+      ? plan.items.map((item, index) => ({
+          ...item,
+          slotIndex: item.slotIndex || index + 1,
+          status: "idle",
+        }))
+      : [];
+
+    state.creation.currentSet = normalizeCreationSetForView({
+      setId: previousDraft?.setId || `creation-draft-${Date.now()}`,
+      productName: plan.productName || productName,
+      productDescription: plan.productDescription || productDescription,
+      sellingPoints: plan.sellingPoints || sellingPoints,
+      targetLanguage: plan.targetLanguage || getCreationSelectedLanguage().value,
+      targetLanguageLabel: plan.targetLanguageLabel || getCreationSelectedLanguage().label,
+      imageCount: plan.imageCount || items.length || getCreationSelectedRoles().length,
+      scenario: plan.scenario || getCreationSelectedScenario().value,
+      scenarioLabel: plan.scenarioLabel || getCreationSelectedScenario().label,
+      selectedRoles: plan.selectedRoles || getCreationSelectedRoles(),
+      referenceImageNames: state.creationReferenceFiles.map((item) => item.file?.name || "").filter(Boolean),
+      referenceImageRoles: plan.referenceImageRoles || buildCreationReferenceRolePayload(),
+      createdAt: previousDraft?.createdAt || createdAt,
+      updatedAt: createdAt,
+      status: "planning",
+      items,
+    });
+    state.creation.editingItemId = "";
+    setCreationFeedback(`已生成 ${items.length} 张套图计划，可以先微调再正式生成。`, "success");
+  } catch (error) {
+    const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "套图计划生成失败");
+    setCreationFeedback(message, "error");
+    showError(message);
+  } finally {
+    state.creation.planning = false;
+    renderCreationView();
+  }
+}
+
+async function startCreationGeneration(event) {
+  event.preventDefault();
+  if (state.creation.generating || state.creation.planning) {
+    return;
+  }
+
+  clearError();
+  setCreationFeedback("");
+
+  const productName = refs.creationProductNameInput.value.trim();
+  const productDescription = refs.creationProductDescriptionInput.value.trim();
+  const sellingPoints = getCreationSellingPoints(refs.creationSellingPointsInput.value);
+  if (!productName && !productDescription && sellingPoints.length === 0) {
+    const message = "请至少填写商品名称、商品描述或核心卖点。";
+    setCreationFeedback(message, "error");
+    showError(message);
+    return;
+  }
+
+  const generationFormData = buildCreationFormData();
+  const draftSet = isCreationDraftSet() ? getCreationCurrentSet() : null;
+  const draftItems = draftSet?.items?.length ? draftSet.items : null;
+  state.creation.generating = true;
+  const createdAt = nowIso();
+  const scenario = getCreationSelectedScenario();
+  const previewSlots = getCreationPreviewSlots();
+  const selectedRoles = getCreationSelectedRoles();
+  const imageCount = draftItems?.length || selectedRoles.length || previewSlots.length || getCreationSelectedImageCount();
+  state.creation.currentSet = normalizeCreationSetForView({
+    setId: `creation-local-${Date.now()}`,
+    productName,
+    productDescription,
+    sellingPoints,
+    targetLanguage: getCreationSelectedLanguage().value,
+    targetLanguageLabel: getCreationSelectedLanguage().label,
+    imageCount,
+    scenario: scenario.value,
+    scenarioLabel: scenario.label,
+    selectedRoles,
+    referenceImageNames: state.creationReferenceFiles.map((item) => item.file?.name || "").filter(Boolean),
+    referenceImageRoles: buildCreationReferenceRolePayload(),
+    createdAt,
+    updatedAt: createdAt,
+    status: "generating",
+    items: (draftItems || previewSlots).map((slot, index) => ({
+      ...slot,
+      slotIndex: index + 1,
+      status: "queued",
+    })),
+  });
+  renderCreationView();
+
+  try {
+    const response = await fetch("/api/creation/generate", {
+      method: "POST",
+      body: generationFormData,
+    });
+    if (!response.ok || !response.body) {
+      throw new Error("套图生成请求失败");
+    }
+
+    await runCreationStream(response);
+    await loadCreationSets();
+  } catch (error) {
+    const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "套图生成请求失败");
+    setCreationFeedback(message, "error");
+    showError(message);
+  } finally {
+    state.creation.generating = false;
+    renderCreationView();
+  }
+}
+
+async function repairCreationItems({ itemId = "", scope = "incomplete" } = {}) {
+  if (state.creation.generating) {
+    return;
+  }
+
+  const currentSet = getCreationCurrentSet();
+  if (!canRepairCreationSet(currentSet)) {
+    const message = "请先选择一个已保存的套图记录。";
+    setCreationFeedback(message, "error");
+    showError(message);
+    return;
+  }
+
+  const targetItems = itemId
+    ? currentSet.items.filter((item) => item.itemId === itemId)
+    : getCreationIncompleteItems(currentSet);
+  if (targetItems.length === 0) {
+    setCreationFeedback("没有需要补齐的套图项。", "success");
+    renderCreationView();
+    return;
+  }
+
+  clearError();
+  state.creation.generating = true;
+  targetItems.forEach((item) => {
+    updateCreationCurrentItem(item.itemId, {
+      status: "generating",
+      error: "",
+      updatedAt: nowIso(),
+    });
+  });
+  setCreationFeedback(itemId ? "正在重生成单张套图..." : "正在补齐未完成项...", "busy");
+  renderCreationView();
+
+  try {
+    const response = await fetch("/api/creation/repair", {
+      method: "POST",
+      body: buildCreationRepairFormData({ itemId, scope }),
+    });
+    if (response.status === 404) {
+      throw new Error("当前部署不支持套图补图。");
+    }
+    if (!response.ok || !response.body) {
+      throw new Error("套图补图请求失败");
+    }
+
+    await runCreationStream(response);
+    await loadCreationSets();
+  } catch (error) {
+    const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "套图补图请求失败");
+    setCreationFeedback(message, "error");
+    showError(message);
+  } finally {
+    state.creation.generating = false;
+    renderCreationView();
+  }
+}
+
 async function loadPptDecks() {
   const response = await fetch("/api/ppt/decks");
   if (!response.ok) {
@@ -5481,6 +7595,7 @@ async function analyzeReferenceImages() {
     }
 
     state.referenceAnalysis.result = payload.item;
+    state.referenceAnalysis.collapsed = false;
     state.referenceAnalysis.dirty = false;
     state.promptAgent.history = [
       payload.item,
@@ -5847,6 +7962,111 @@ function bindEvents() {
     saveConfig(event).catch((error) => showError(error.message));
   });
   refs.generateForm.addEventListener("submit", startGeneration);
+  refs.creationForm.addEventListener("submit", startCreationGeneration);
+  refs.creationPlanButton.addEventListener("click", () => {
+    previewCreationPlan().catch((error) => setCreationFeedback(error.message, "error"));
+  });
+  refs.creationRepairFailedButton.addEventListener("click", () => {
+    repairCreationItems({ scope: "incomplete" }).catch((error) => setCreationFeedback(error.message, "error"));
+  });
+  refs.creationRecordRefreshButton.addEventListener("click", () => {
+    loadCreationSets().catch((error) => setCreationRecordFeedback(error.message, "error"));
+  });
+  refs.creationRecordReuseButton.addEventListener("click", reuseCreationRecordSet);
+  refs.creationRecordOpenFolderButton.addEventListener("click", () => {
+    openCreationRecordFolder().catch((error) => setCreationRecordFeedback(error.message, "error"));
+  });
+  refs.creationRecordCopyPathsButton.addEventListener("click", () => {
+    copyCreationRecordPaths().catch((error) => setCreationRecordFeedback(error.message, "error"));
+  });
+  refs.creationRecordSearchInput.addEventListener("input", (event) => {
+    state.creation.recordQuery = event.target.value;
+    renderCreationRecordView();
+  });
+  refs.creationRecordSetList.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-creation-record-set-id]");
+    if (!target) {
+      return;
+    }
+
+    selectCreationRecord(target.dataset.creationRecordSetId);
+  });
+  refs.creationResultGrid.addEventListener("click", (event) => {
+    const editButton = event.target.closest("[data-creation-edit-item-id]");
+    if (editButton) {
+      toggleCreationItemEditor(editButton.dataset.creationEditItemId);
+      return;
+    }
+
+    const saveButton = event.target.closest("[data-creation-save-prompt-item-id]");
+    if (saveButton) {
+      const itemId = saveButton.dataset.creationSavePromptItemId;
+      const textarea = [...refs.creationResultGrid.querySelectorAll("[data-creation-prompt-editor]")].find(
+        (node) => node.dataset.creationPromptEditor === itemId,
+      );
+      saveCreationItemDraft(itemId, textarea?.value || "");
+      return;
+    }
+
+    const button = event.target.closest("[data-creation-retry-item-id]");
+    if (!button) {
+      return;
+    }
+
+    repairCreationItems({ itemId: button.dataset.creationRetryItemId }).catch((error) =>
+      setCreationFeedback(error.message, "error"),
+    );
+  });
+  refs.creationImageCountInput.addEventListener("change", syncCreationSelectedRolesToCount);
+  refs.creationScenarioInput.addEventListener("change", syncCreationSelectedRolesToScenario);
+  refs.creationRatioInput.addEventListener("change", renderCreationSizeOptions);
+  refs.creationRoleGrid.addEventListener("change", (event) => {
+    const target = event.target.closest("[data-creation-role]");
+    if (!target) {
+      return;
+    }
+
+    toggleCreationSelectedRole(target.dataset.creationRole);
+  });
+  refs.creationReferenceInput.addEventListener("change", (event) => {
+    applyCreationReferenceFiles(event.target.files);
+  });
+  refs.creationReferenceAnalyzeButton.addEventListener("click", () => {
+    analyzeCreationReferenceImages().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      setCreationReferenceAnalysisFeedback(message, "error");
+      showError(message);
+    });
+  });
+  refs.creationReferenceApplyAnalysisButton.addEventListener("click", applyCreationReferenceAnalysisRecommendations);
+  refs.creationReferenceGrid.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-creation-reference-preview-id]");
+    if (!target) {
+      return;
+    }
+
+    openCreationReferencePreview(target.dataset.creationReferencePreviewId);
+  });
+  refs.creationReferenceGrid.addEventListener("change", (event) => {
+    const target = event.target.closest("[data-creation-reference-role-id]");
+    if (!target) {
+      return;
+    }
+
+    updateCreationReferenceRole(target.dataset.creationReferenceRoleId, target.value);
+  });
+  refs.creationReferenceDropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    refs.creationReferenceDropzone.classList.add("dragover");
+  });
+  refs.creationReferenceDropzone.addEventListener("dragleave", () => {
+    refs.creationReferenceDropzone.classList.remove("dragover");
+  });
+  refs.creationReferenceDropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    refs.creationReferenceDropzone.classList.remove("dragover");
+    applyCreationReferenceFiles(event.dataTransfer?.files);
+  });
   refs.pptForm.addEventListener("submit", startPptGeneration);
   refs.pptCompleteMissingButton.addEventListener("click", completeMissingPptSlides);
   refs.pptRefreshHistoryButton.addEventListener("click", () => {
@@ -5981,6 +8201,7 @@ function bindEvents() {
       showError(message);
     });
   });
+  refs.referenceAnalysisToggleButton.addEventListener("click", toggleReferenceAnalysisPanel);
   refs.referenceAnalysisList.addEventListener("click", (event) => {
     const target = event.target.closest("[data-reference-analysis-prompt-index]");
     if (target) {
@@ -6219,6 +8440,7 @@ async function bootstrap() {
   renderPromptTemplates();
   renderTimeline();
   renderStudio();
+  renderCreationView();
   renderPptView();
   renderGalleryView();
   setActiveView(getViewFromHash());
@@ -6228,6 +8450,7 @@ async function bootstrap() {
   try {
     await loadConfig();
     await loadGallery();
+    await loadCreationSets();
     await loadGenerationTasks();
     await loadPromptAgentHistory();
     await loadPptDecks();
