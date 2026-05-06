@@ -1010,6 +1010,13 @@ textarea::-webkit-scrollbar-corner {
   overflow: auto;
 }
 
+.creation-prompt-editor-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  pointer-events: none;
+}
+
 .creation-card {
   position: relative;
   isolation: isolate;
@@ -1128,6 +1135,10 @@ textarea::-webkit-scrollbar-corner {
     0 18px 48px rgba(0, 0, 0, 0.34),
     0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
   backdrop-filter: blur(16px);
+}
+
+.creation-prompt-editor-layer .creation-card-editor {
+  pointer-events: auto;
 }
 
 .creation-card-editor-head {

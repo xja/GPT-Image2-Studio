@@ -289,6 +289,7 @@ const refs = {
   creationOutputFormatInput: document.querySelector("#creationOutputFormatInput"),
   creationPlanButton: document.querySelector("#creationPlanButton"),
   creationPlanMeta: document.querySelector("#creationPlanMeta"),
+  creationPromptEditorLayer: document.querySelector("#creationPromptEditorLayer"),
   creationProductDescriptionInput: document.querySelector("#creationProductDescriptionInput"),
   creationProductNameInput: document.querySelector("#creationProductNameInput"),
   creationProgressText: document.querySelector("#creationProgressText"),
@@ -5634,7 +5635,7 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
     editorActions.appendChild(saveButton);
 
     editor.appendChild(editorActions);
-    card.appendChild(editor);
+    refs.creationPromptEditorLayer?.appendChild(editor);
   }
 
   if (showActions) {
@@ -6363,6 +6364,7 @@ function renderCreationView() {
   renderCreationRecordDetail(currentSet);
 
   refs.creationResultGrid.innerHTML = "";
+  refs.creationPromptEditorLayer?.replaceChildren();
   items.forEach((item, index) => {
     refs.creationResultGrid.appendChild(createCreationCard(item, index));
   });
@@ -8081,6 +8083,24 @@ function bindEvents() {
     }
 
     selectCreationRecord(target.dataset.creationRecordSetId);
+  });
+  refs.creationPromptEditorLayer.addEventListener("click", (event) => {
+    const closeButton = event.target.closest("[data-creation-close-prompt-editor]");
+    if (closeButton) {
+      closeCreationItemEditor(closeButton.dataset.creationClosePromptEditor);
+      return;
+    }
+
+    const saveButton = event.target.closest("[data-creation-save-prompt-item-id]");
+    if (!saveButton) {
+      return;
+    }
+
+    const itemId = saveButton.dataset.creationSavePromptItemId;
+    const textarea = refs.creationPromptEditorLayer.querySelector(
+      `[data-creation-prompt-editor="${CSS.escape(itemId)}"]`,
+    );
+    saveCreationItemDraft(itemId, textarea?.value || "");
   });
   refs.creationResultGrid.addEventListener("click", (event) => {
     const editButton = event.target.closest("[data-creation-edit-item-id]");

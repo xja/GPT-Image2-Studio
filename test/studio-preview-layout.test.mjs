@@ -129,7 +129,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260506-creation-layout-fix-1/);
+  assert.match(html, /\/app\.js\?v=20260506-creation-editor-layer-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -645,7 +645,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260506-creation-layout-fix-1/);
+  assert.match(html, /\/app\.js\?v=20260506-creation-editor-layer-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -947,7 +947,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260506-creation-layout-fix-1/);
+  assert.match(html, /app\.js\?v=20260506-creation-editor-layer-1/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
@@ -1002,6 +1002,21 @@ test("creation mode exposes record detail and item repair actions", async () => 
   assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationClosePromptEditor/);
   assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationSavePromptItemId/);
   assert.match(app, /refs\.creationRepairFailedButton\.addEventListener\("click"/);
+});
+
+test("creation prompt editor uses a top-level layer so cards do not intercept save clicks", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /id="creationResultGrid"[\s\S]*id="creationPromptEditorLayer"/);
+  assert.match(styles, /\.creation-prompt-editor-layer\s*\{[\s\S]*position:\s*fixed;[\s\S]*pointer-events:\s*none;/);
+  assert.match(styles, /\.creation-prompt-editor-layer \.creation-card-editor\s*\{[\s\S]*pointer-events:\s*auto;/);
+  assert.match(app, /creationPromptEditorLayer: document\.querySelector\("#creationPromptEditorLayer"\)/);
+  assert.match(app, /refs\.creationPromptEditorLayer\?\.replaceChildren\(\);/);
+  assert.match(app, /refs\.creationPromptEditorLayer\?\.appendChild\(editor\);/);
+  assert.match(app, /refs\.creationPromptEditorLayer\.addEventListener\("click"/);
+  assert.doesNotMatch(app, /card\.appendChild\(editor\);/);
 });
 
 test("creation record reuse tracks reference images that need reupload", async () => {

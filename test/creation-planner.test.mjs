@@ -68,6 +68,22 @@ test("creation planner builds the fixed four-image ecommerce set", () => {
   assert.match(plan.items[3].prompt, /trust/i);
 });
 
+test("creation planner avoids duplicated punctuation in composed prompt fields", () => {
+  const plan = buildCreationPlan({
+    productName: "AeroPress Clear.",
+    productDescription: "Transparent portable coffee brewer.",
+    sellingPoints: ["Brew anywhere.", "Leakproof!"],
+    targetLanguage: "en",
+  });
+
+  const prompt = plan.items[0].prompt;
+  assert.match(prompt, /Product: AeroPress Clear\./);
+  assert.match(prompt, /Description: Transparent portable coffee brewer\./);
+  assert.match(prompt, /Selling points: Brew anywhere \/ Leakproof\./);
+  assert.doesNotMatch(prompt, /\.\./);
+  assert.doesNotMatch(prompt, /!\./);
+});
+
 test("creation planner injects Simplified Chinese target-language guidance", () => {
   const plan = buildCreationPlan({
     productName: "云感防晒衣",

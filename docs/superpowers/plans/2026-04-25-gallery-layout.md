@@ -1,54 +1,21 @@
-# Gallery Layout Implementation Plan
+# Gallery Layout Plan Archive
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+状态：已完成并归档。
 
-**Goal:** 修复瀑布画廊滚动，并增加按时间筛选和按日期分组的浏览方式。
+这个文件原本是瀑布画廊布局和历史浏览改造的执行计划。对应实现现在已经落在代码和测试中，保留本文只作为历史索引，不再作为待执行计划使用。
 
-**Architecture:** 把画廊组织逻辑抽成独立模块并先写测试；前端页面改为“筛选条 + 日期分组 + 分组内瀑布流”；用单独的高度同步逻辑保证画廊在响应式下仍然是内部滚动。
+## 已落地范围
 
-**Tech Stack:** Node.js、原生 ES Modules、原生 DOM、CSS、Node test、浏览器验证
+- 画廊组织逻辑已抽到 `lib/gallery-organizer.mjs`。
+- 已支持按时间、尺寸、参考图等条件筛选。
+- 已支持按日期分组展示历史图片。
+- 瀑布流历史已按日期段分页，关键词搜索时绕过分页。
+- 画廊相关布局、滚动和响应式行为已有静态测试覆盖。
 
----
+## 当前验证入口
 
-### Task 1: 画廊组织逻辑
+- `test/gallery-organizer.test.mjs`
+- `test/studio-preview-layout.test.mjs`
+- `cmd /c npm test`
 
-**Files:**
-- Create: `lib/gallery-organizer.mjs`
-- Create: `test/gallery-organizer.test.mjs`
-
-- [ ] **Step 1: 写失败测试**
-- [ ] **Step 2: 运行测试确认失败**
-- [ ] **Step 3: 实现最小排序/筛选/分组逻辑**
-- [ ] **Step 4: 再跑测试确认通过**
-
-### Task 2: 画廊结构与渲染
-
-**Files:**
-- Modify: `public/index.html`
-- Modify: `public/app.js`
-
-- [ ] **Step 1: 增加筛选条和分组容器**
-- [ ] **Step 2: 接入筛选状态与分组渲染**
-- [ ] **Step 3: 保持现有预览/灯箱/删除行为不回退**
-
-### Task 3: 画廊滚动与样式
-
-**Files:**
-- Modify: `public/styles.css`
-- Modify: `public/app.js`
-
-- [ ] **Step 1: 单独同步画廊可用高度**
-- [ ] **Step 2: 让滚动条继续绑定内部滚动区域**
-- [ ] **Step 3: 补齐筛选条、分组头、分组瀑布流样式**
-
-### Task 4: 验证
-
-**Files:**
-- Verify: `test/gallery-organizer.test.mjs`
-- Verify: `public/index.html`
-- Verify: `public/app.js`
-- Verify: `public/styles.css`
-
-- [ ] **Step 1: 运行针对性单测**
-- [ ] **Step 2: 运行全量测试**
-- [ ] **Step 3: 浏览器验证滚动和分组**
+后续如果继续改画廊，不应复用这个历史计划；应以新的明确需求或 OpenSpec change 为事实来源。
