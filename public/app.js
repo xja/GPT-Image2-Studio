@@ -2041,8 +2041,16 @@ function getGenerationReferenceFile(item) {
   return item?.generationFile || item?.file;
 }
 
+function getCreationReferenceGenerationFile(item) {
+  return item?.generationFile || item?.file;
+}
+
 function hasPendingReferenceGenerationFiles() {
   return state.referenceFiles.some((item) => item.generationFilePromise);
+}
+
+function hasPendingCreationReferenceGenerationFiles() {
+  return state.creationReferenceFiles.some((item) => item.generationFilePromise);
 }
 
 function startReferenceGenerationCompression(item) {
@@ -2072,6 +2080,33 @@ function startReferenceGenerationCompression(item) {
   return item.generationFilePromise;
 }
 
+function startCreationReferenceGenerationCompression(item) {
+  if (!item?.file) {
+    return null;
+  }
+
+  item.generationFile = item.file;
+  item.generationCompressed = false;
+  item.generationFilePromise = prepareGenerationReferenceImageFile(item.file)
+    .then((preparedFile) => {
+      item.generationFile = preparedFile || item.file;
+      item.generationCompressed = Boolean(preparedFile && preparedFile !== item.file);
+      return item.generationFile;
+    })
+    .catch(() => {
+      item.generationFile = item.file;
+      item.generationCompressed = false;
+      return item.file;
+    })
+    .finally(() => {
+      item.generationFilePromise = null;
+      renderCreationView();
+    });
+
+  renderCreationView();
+  return item.generationFilePromise;
+}
+
 async function ensureReferenceGenerationFilesReady() {
   const pending = state.referenceFiles.map((item) => item.generationFilePromise).filter(Boolean);
   if (pending.length === 0) {
@@ -2085,6 +2120,19 @@ async function ensureReferenceGenerationFilesReady() {
   } finally {
     state.referenceCompressionRunning = false;
     updateGenerateButton();
+  }
+}
+
+async function ensureCreationReferenceGenerationFilesReady() {
+  const pending = state.creationReferenceFiles.map((item) => item.generationFilePromise).filter(Boolean);
+  if (pending.length === 0) {
+    return;
+  }
+
+  try {
+    await Promise.allSettled(pending);
+  } finally {
+    renderCreationView();
   }
 }
 
@@ -5877,12 +5925,16 @@ function applyCreationReferenceFiles(fileList) {
       id: `creation-ref-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       fingerprint,
       file,
+      generationFile: file,
+      generationFilePromise: null,
+      generationCompressed: false,
       previewUrl: URL.createObjectURL(file),
       role: restoreEntry?.role || "product",
       note: restoreEntry?.note || "",
       restoreEntryId: restoreEntry?.id || "",
       restoredFromRecordFilename: restoreEntry?.filename || "",
     };
+    startCreationReferenceGenerationCompression(referenceItem);
     next.push(referenceItem);
     if (restoreEntry) {
       restoreQueue = restoreQueue.map((entry) =>
@@ -5906,6 +5958,7 @@ function applyCreationReferenceFiles(fileList) {
     refs.creationReferenceInput.value = "";
   }
   renderCreationReferenceGrid();
+  renderCreationView();
 
   if (overflowed) {
     showError(`套图参考图最多支持 ${state.limits.maxReferenceImages} 张。`);
@@ -6250,6 +6303,7 @@ function renderCreationView() {
     prompt: "填写商品信息后会自动生成电商营销套图。",
   }));
   const progress = getCreationProgressSummary(currentSet);
+  const preparingReferences = hasPendingCreationReferenceGenerationFiles();
   const targetLanguageLabel =
     currentSet?.targetLanguageLabel ||
     getCreationSelectedLanguage().label ||
@@ -6257,7 +6311,7 @@ function renderCreationView() {
     "zh-CN";
 
   refs.creationGenerateButton.textContent = state.creation.generating ? "生成中..." : "生成套图";
-  refs.creationGenerateButton.disabled = state.creation.generating || state.creation.planning;
+  refs.creationGenerateButton.disabled = state.creation.generating || state.creation.planning || preparingReferences;
   if (refs.creationPlanButton) {
     refs.creationPlanButton.textContent = state.creation.planning ? "预览中..." : "预览计划";
     refs.creationPlanButton.disabled = state.creation.generating || state.creation.planning;
@@ -6338,7 +6392,10 @@ function buildCreationFormData() {
   formData.set("reasoningEffort", refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh");
   formData.set("clientSessionId", state.clientSessionId);
   state.creationReferenceFiles.forEach((item) => {
-    formData.append("referenceImages", item.file);
+    const file = getCreationReferenceGenerationFile(item);
+    if (file) {
+      formData.append("referenceImages", file);
+    }
   });
   appendBrowserConfigToFormData(formData);
 
@@ -6366,7 +6423,10 @@ function buildCreationRepairFormData({ itemId = "", scope = "incomplete" } = {})
   formData.set("clientSessionId", state.clientSessionId);
   formData.set("referenceImageRoles", JSON.stringify(getCreationRepairReferenceRolePayload(currentSet)));
   state.creationReferenceFiles.forEach((item) => {
-    formData.append("referenceImages", item.file);
+    const file = getCreationReferenceGenerationFile(item);
+    if (file) {
+      formData.append("referenceImages", file);
+    }
   });
   appendBrowserConfigToFormData(formData);
 
@@ -6637,40 +6697,43 @@ async function startCreationGeneration(event) {
     return;
   }
 
-  const generationFormData = buildCreationFormData();
-  const draftSet = isCreationDraftSet() ? getCreationCurrentSet() : null;
-  const draftItems = draftSet?.items?.length ? draftSet.items : null;
   state.creation.generating = true;
-  const createdAt = nowIso();
-  const scenario = getCreationSelectedScenario();
-  const previewSlots = getCreationPreviewSlots();
-  const selectedRoles = getCreationSelectedRoles();
-  const imageCount = draftItems?.length || selectedRoles.length || previewSlots.length || getCreationSelectedImageCount();
-  state.creation.currentSet = normalizeCreationSetForView({
-    setId: `creation-local-${Date.now()}`,
-    productName,
-    productDescription,
-    sellingPoints,
-    targetLanguage: getCreationSelectedLanguage().value,
-    targetLanguageLabel: getCreationSelectedLanguage().label,
-    imageCount,
-    scenario: scenario.value,
-    scenarioLabel: scenario.label,
-    selectedRoles,
-    referenceImageNames: state.creationReferenceFiles.map((item) => item.file?.name || "").filter(Boolean),
-    referenceImageRoles: buildCreationReferenceRolePayload(),
-    createdAt,
-    updatedAt: createdAt,
-    status: "generating",
-    items: (draftItems || previewSlots).map((slot, index) => ({
-      ...slot,
-      slotIndex: index + 1,
-      status: "queued",
-    })),
-  });
   renderCreationView();
 
   try {
+    await ensureCreationReferenceGenerationFilesReady();
+    const generationFormData = buildCreationFormData();
+    const draftSet = isCreationDraftSet() ? getCreationCurrentSet() : null;
+    const draftItems = draftSet?.items?.length ? draftSet.items : null;
+    const createdAt = nowIso();
+    const scenario = getCreationSelectedScenario();
+    const previewSlots = getCreationPreviewSlots();
+    const selectedRoles = getCreationSelectedRoles();
+    const imageCount = draftItems?.length || selectedRoles.length || previewSlots.length || getCreationSelectedImageCount();
+    state.creation.currentSet = normalizeCreationSetForView({
+      setId: `creation-local-${Date.now()}`,
+      productName,
+      productDescription,
+      sellingPoints,
+      targetLanguage: getCreationSelectedLanguage().value,
+      targetLanguageLabel: getCreationSelectedLanguage().label,
+      imageCount,
+      scenario: scenario.value,
+      scenarioLabel: scenario.label,
+      selectedRoles,
+      referenceImageNames: state.creationReferenceFiles.map((item) => item.file?.name || "").filter(Boolean),
+      referenceImageRoles: buildCreationReferenceRolePayload(),
+      createdAt,
+      updatedAt: createdAt,
+      status: "generating",
+      items: (draftItems || previewSlots).map((slot, index) => ({
+        ...slot,
+        slotIndex: index + 1,
+        status: "queued",
+      })),
+    });
+    renderCreationView();
+
     const response = await fetch("/api/creation/generate", {
       method: "POST",
       body: generationFormData,
@@ -6726,6 +6789,7 @@ async function repairCreationItems({ itemId = "", scope = "incomplete" } = {}) {
   renderCreationView();
 
   try {
+    await ensureCreationReferenceGenerationFilesReady();
     const response = await fetch("/api/creation/repair", {
       method: "POST",
       body: buildCreationRepairFormData({ itemId, scope }),

@@ -123,7 +123,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260506-creation-reference-restore-1/);
+  assert.match(html, /\/app\.js\?v=20260506-creation-reference-compress-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -638,7 +638,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260506-creation-reference-restore-1/);
+  assert.match(html, /\/app\.js\?v=20260506-creation-reference-compress-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -923,7 +923,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function canEditCreationItem\(/);
   assert.match(app, /function previewCreationPlan\(\) \{/);
   assert.match(app, /function resetCreationDraftPreview\(\) \{/);
-  assert.match(app, /formData\.append\("referenceImages", item\.file\)/);
+  assert.match(app, /const file = getCreationReferenceGenerationFile\(item\);[\s\S]*formData\.append\("referenceImages", file\)/);
   assert.match(app, /formData\.set\("referenceImageRoles", JSON\.stringify\(buildCreationReferenceRolePayload\(\)\)\)/);
   assert.match(app, /formData\.set\("planOverrides", JSON\.stringify\(getCreationPlanOverrides\(\)\)\)/);
   assert.match(app, /fetch\("\/api\/creation\/reference\/analyze"/);
@@ -940,7 +940,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260506-creation-reference-restore-1/);
+  assert.match(html, /app\.js\?v=20260506-creation-reference-compress-1/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
@@ -1007,6 +1007,20 @@ test("creation record reuse tracks reference images that need reupload", async (
   assert.match(app, /markCreationReferenceRestoreEntryMissing\(target\?\.restoreEntryId\)/);
   assert.match(app, /renderCreationReferenceRestoreList\(\);/);
   assert.match(app, /if \(state\.creationReferenceRestoreQueue\.length > 0\) \{[\s\S]*return \[\];/);
+});
+
+test("creation mode uploads prepared reference images for generation and repair", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /function getCreationReferenceGenerationFile\(item\) \{/);
+  assert.match(app, /async function ensureCreationReferenceGenerationFilesReady\(\) \{/);
+  assert.match(app, /startCreationGeneration[\s\S]*await ensureCreationReferenceGenerationFilesReady\(\);[\s\S]*const generationFormData = buildCreationFormData\(\);/);
+  assert.match(app, /repairCreationItems[\s\S]*await ensureCreationReferenceGenerationFilesReady\(\);[\s\S]*body: buildCreationRepairFormData/);
+  assert.match(
+    app,
+    /state\.creationReferenceFiles\.forEach\(\(item\) => \{\s*const file = getCreationReferenceGenerationFile\(item\);\s*if \(file\) \{\s*formData\.append\("referenceImages", file\);\s*\}\s*\}\);/,
+  );
+  assert.doesNotMatch(app, /formData\.append\("referenceImages", item\.file\)/);
 });
 
 test("asset record views include PPT records and Creation set records", async () => {
