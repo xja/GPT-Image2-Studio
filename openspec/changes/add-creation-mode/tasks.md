@@ -164,3 +164,9 @@
 - [x] 27.1 Add failing layout tests for Creation record prompt export controls and per-item full-path copying.
 - [x] 27.2 Add record-level actions to copy all prompts, export prompts as text, and export the selected set manifest as JSON.
 - [x] 27.3 Add a per-item full-path copy action that reuses the safe local path report endpoint.
+
+## 28. Creation Record Lightbox Parity
+
+- [x] 28.1 Add failing layout tests for Creation record cards that hide inline prompts and use the shared lightbox for item details.
+- [x] 28.2 Move single-item prompt/path/download access into the lightbox while keeping the card-level View action.
+- [x] 28.3 Keep Creation record lightbox parameters aligned with saved relative paths and gallery-style enlarged image viewing.

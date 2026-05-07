@@ -1079,6 +1079,24 @@ textarea::-webkit-scrollbar-corner {
   overflow: hidden;
 }
 
+.creation-card.is-record-card .creation-card-media {
+  width: 100%;
+  padding: 0;
+}
+
+.creation-record-preview-media {
+  color: inherit;
+  cursor: zoom-in;
+}
+
+.creation-record-preview-media:hover,
+.creation-record-preview-media:focus-visible {
+  border-color: rgba(145, 159, 255, 0.42);
+  background:
+    linear-gradient(135deg, rgba(112, 226, 162, 0.1), transparent 42%),
+    rgba(255, 255, 255, 0.045);
+}
+
 .creation-card-media img {
   display: block;
   width: 100%;
@@ -1226,7 +1244,7 @@ textarea::-webkit-scrollbar-corner {
 }
 
 .creation-record-card-actions {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .creation-record-card-actions .mini-action {

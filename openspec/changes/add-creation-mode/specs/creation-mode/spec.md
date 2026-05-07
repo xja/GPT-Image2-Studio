@@ -133,6 +133,12 @@ The system SHALL provide Creation Mode set record details that show the set-leve
 - **WHEN** the user opens a Creation Mode set record
 - **THEN** the detail view shows the set metadata and every planned item with its role, prompt, status, error message when present, and saved image path when present
 
+#### Scenario: User previews one saved item image
+- **WHEN** the user clicks a saved Creation Mode item thumbnail or its View action
+- **THEN** the shared image lightbox opens with the saved image enlarged
+- **AND** the item prompt, generation parameters, saved relative path, download action, and path-copy actions are available inside the lightbox
+- **AND** the record card itself does not render the full prompt or saved path inline below the image
+
 #### Scenario: User regenerates one saved item
 - **WHEN** the user requests regeneration for a completed item in a Creation Mode set record
 - **THEN** only that item is generated again using the set metadata and item role prompt

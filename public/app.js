@@ -368,6 +368,8 @@ const refs = {
   lightboxBackdrop: document.querySelector("#lightboxBackdrop"),
   lightboxClose: document.querySelector("#lightboxClose"),
   copyPromptButton: document.querySelector("#copyPromptButton"),
+  lightboxCopyFullPathButton: document.querySelector("#lightboxCopyFullPathButton"),
+  lightboxCopyPathButton: document.querySelector("#lightboxCopyPathButton"),
   lightboxDelete: document.querySelector("#lightboxDelete"),
   lightboxDownload: document.querySelector("#lightboxDownload"),
   lightboxId: document.querySelector("#lightboxId"),
@@ -1698,6 +1700,24 @@ function syncLightboxZoomState() {
   refs.lightboxMediaStage?.classList.toggle("is-zoomed", state.lightboxZoomed);
 }
 
+function syncLightboxCreationRecordActions(fresh = {}) {
+  const isCreationRecordItem = Boolean(fresh.isCreationRecordItem);
+  const hasRelativePath = Boolean(String(fresh.relativePath || "").trim());
+
+  refs.lightboxCopyPathButton?.classList.toggle("hidden", !isCreationRecordItem);
+  refs.lightboxCopyFullPathButton?.classList.toggle("hidden", !isCreationRecordItem);
+  if (refs.lightboxCopyPathButton) {
+    refs.lightboxCopyPathButton.disabled = !isCreationRecordItem || !hasRelativePath;
+  }
+  if (refs.lightboxCopyFullPathButton) {
+    refs.lightboxCopyFullPathButton.disabled = !isCreationRecordItem || !hasRelativePath;
+  }
+  if (refs.lightboxDelete) {
+    refs.lightboxDelete.hidden = Boolean(fresh.isCreationRecordItem);
+    refs.lightboxDelete.disabled = isCreationRecordItem || !fresh.filename;
+  }
+}
+
 function getCurrentStudioLayoutMode() {
   return (
     document.documentElement.dataset.uiLayout ||
@@ -2935,6 +2955,7 @@ function syncLightboxItem() {
   if (!state.lightboxItem) {
     refs.copyPromptButton.disabled = true;
     resetPromptCopyFeedback();
+    syncLightboxCreationRecordActions();
     return;
   }
 
@@ -2958,7 +2979,7 @@ function syncLightboxItem() {
   refs.lightboxAmbient.style.backgroundImage = imageUrl ? `url("${imageUrl}")` : "";
   refs.lightboxDownload.href = imageUrl || "#";
   refs.lightboxDownload.download = fresh.filename || "preview.png";
-  refs.lightboxDelete.disabled = fresh.isCreationRecordItem || !fresh.filename;
+  syncLightboxCreationRecordActions(fresh);
   syncLightboxZoomState();
 }
 
@@ -5677,6 +5698,7 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
   const showRecordActions = options.showRecordActions === true;
   const card = document.createElement("article");
   card.className = "creation-card";
+  card.classList.toggle("is-record-card", showRecordActions);
 
   const head = document.createElement("div");
   head.className = "creation-card-head";
@@ -5698,9 +5720,16 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
   brief.hidden = !brief.textContent;
   card.appendChild(brief);
 
-  const media = document.createElement("div");
-  media.className = "creation-card-media";
   const imageUrl = getImageUrl(item);
+  const media = document.createElement(showRecordActions && imageUrl ? "button" : "div");
+  media.className = "creation-card-media";
+  if (showRecordActions && imageUrl) {
+    media.type = "button";
+    media.classList.add("creation-record-preview-media");
+    media.dataset.creationRecordPreviewItemId = item.itemId;
+    media.setAttribute("aria-label", `${item.title || "套图项"}查看大图`);
+  }
+
   if (imageUrl) {
     const image = document.createElement("img");
     image.loading = "lazy";
@@ -5715,21 +5744,23 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
   }
   card.appendChild(media);
 
-  const prompt = document.createElement("p");
-  prompt.className = "creation-card-prompt";
-  prompt.textContent =
-    item.marketingCopy ||
-    item.prompt ||
-    (item.status === "failed" ? "请检查配置后重试。" : item.error) ||
-    "填写商品信息后会自动生成对应的营销图。";
-  card.appendChild(prompt);
+  if (!showRecordActions) {
+    const prompt = document.createElement("p");
+    prompt.className = "creation-card-prompt";
+    prompt.textContent =
+      item.marketingCopy ||
+      item.prompt ||
+      (item.status === "failed" ? "请检查配置后重试。" : item.error) ||
+      "填写商品信息后会自动生成对应的营销图。";
+    card.appendChild(prompt);
 
-  const path = document.createElement("span");
-  path.className = "creation-card-path";
-  path.textContent = item.relativePath || item.error || "";
-  path.title = path.textContent;
-  path.hidden = !path.textContent;
-  card.appendChild(path);
+    const path = document.createElement("span");
+    path.className = "creation-card-path";
+    path.textContent = item.relativePath || item.error || "";
+    path.title = path.textContent;
+    path.hidden = !path.textContent;
+    card.appendChild(path);
+  }
 
   if (showActions && state.creation.editingItemId === item.itemId) {
     const editor = document.createElement("div");
@@ -5811,46 +5842,6 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
     previewButton.disabled = !imageUrl;
     previewButton.setAttribute("aria-label", `${itemTitle}查看大图`);
     actions.appendChild(previewButton);
-
-    const copyPromptButton = document.createElement("button");
-    copyPromptButton.className = "mini-action";
-    copyPromptButton.type = "button";
-    copyPromptButton.dataset.creationRecordCopyPromptItemId = item.itemId;
-    copyPromptButton.textContent = "提示词";
-    copyPromptButton.disabled = !String(item.prompt || "").trim();
-    copyPromptButton.setAttribute("aria-label", `${itemTitle}复制提示词`);
-    actions.appendChild(copyPromptButton);
-
-    const downloadLink = document.createElement("a");
-    downloadLink.className = "mini-action";
-    downloadLink.href = imageUrl || "#";
-    downloadLink.download = item.filename || `creation-item-${fallbackIndex + 1}.png`;
-    downloadLink.textContent = "下载";
-    downloadLink.setAttribute("aria-label", `${itemTitle}下载图片`);
-    if (!imageUrl) {
-      downloadLink.classList.add("is-disabled");
-      downloadLink.setAttribute("aria-disabled", "true");
-      downloadLink.tabIndex = -1;
-    }
-    actions.appendChild(downloadLink);
-
-    const copyPathButton = document.createElement("button");
-    copyPathButton.className = "mini-action";
-    copyPathButton.type = "button";
-    copyPathButton.dataset.creationRecordCopyPathItemId = item.itemId;
-    copyPathButton.textContent = "路径";
-    copyPathButton.disabled = !String(item.relativePath || "").trim();
-    copyPathButton.setAttribute("aria-label", `${itemTitle}复制图片路径`);
-    actions.appendChild(copyPathButton);
-
-    const copyFullPathButton = document.createElement("button");
-    copyFullPathButton.className = "mini-action";
-    copyFullPathButton.type = "button";
-    copyFullPathButton.dataset.creationRecordCopyFullPathItemId = item.itemId;
-    copyFullPathButton.textContent = "完整路径";
-    copyFullPathButton.disabled = !String(item.relativePath || "").trim();
-    copyFullPathButton.setAttribute("aria-label", `${itemTitle}复制完整路径`);
-    actions.appendChild(copyFullPathButton);
 
     card.appendChild(actions);
   }
@@ -6032,8 +6023,10 @@ function exportCreationRecordManifest() {
   setCreationRecordFeedback("已导出当前套图清单。", "success");
 }
 
-function getCreationRecordItemById(itemId) {
-  const selectedSet = getCreationRecordSelectedSet();
+function getCreationRecordItemById(itemId, setId = "") {
+  const selectedSet = setId
+    ? state.creation.sets.find((set) => set.setId === setId) || null
+    : getCreationRecordSelectedSet();
   if (!selectedSet || !itemId) {
     return null;
   }
@@ -6047,6 +6040,8 @@ function buildCreationRecordLightboxItem(item, set) {
   return {
     ...item,
     id: `creation-record:${set.setId}:${item.itemId || item.filename || relativeFilename}`,
+    creationItemId: item.itemId || "",
+    creationSetId: set.setId || "",
     filename: item.filename || relativeFilename || "creation-item.png",
     createdAt: item.generationCompletedAt || set.updatedAt || set.createdAt || nowIso(),
     prompt: item.prompt || "",
@@ -6065,20 +6060,8 @@ function openCreationRecordItemPreview(itemId) {
   openLightbox(buildCreationRecordLightboxItem(record.item, record.set));
 }
 
-async function copyCreationRecordItemPrompt(itemId) {
-  const record = getCreationRecordItemById(itemId);
-  const promptText = String(record?.item?.prompt || "").trim();
-  if (!promptText) {
-    setCreationRecordFeedback("当前单张没有可复制的提示词。", "error");
-    return;
-  }
-
-  await writeTextToClipboard(promptText, "当前浏览器不支持复制提示词。");
-  setCreationRecordFeedback("已复制单张提示词。", "success");
-}
-
-async function copyCreationRecordItemPath(itemId) {
-  const record = getCreationRecordItemById(itemId);
+async function copyCreationRecordItemPath(itemId, setId = "") {
+  const record = getCreationRecordItemById(itemId, setId);
   const pathText = String(record?.item?.relativePath || "").trim();
   if (!pathText) {
     setCreationRecordFeedback("当前单张没有可复制的图片路径。", "error");
@@ -6089,8 +6072,8 @@ async function copyCreationRecordItemPath(itemId) {
   setCreationRecordFeedback("已复制单张图片路径。", "success");
 }
 
-async function copyCreationRecordItemFullPath(itemId) {
-  const record = getCreationRecordItemById(itemId);
+async function copyCreationRecordItemFullPath(itemId, setId = "") {
+  const record = getCreationRecordItemById(itemId, setId);
   if (!record?.item) {
     setCreationRecordFeedback("请先选择一个套图单张。", "error");
     return;
@@ -6106,6 +6089,18 @@ async function copyCreationRecordItemFullPath(itemId) {
 
   await writeTextToClipboard(pathText);
   setCreationRecordFeedback("已复制单张完整路径。", "success");
+}
+
+async function copyLightboxCreationRecordPath() {
+  const itemId = state.lightboxItem?.creationItemId || state.lightboxItem?.itemId || "";
+  const setId = state.lightboxItem?.creationSetId || "";
+  await copyCreationRecordItemPath(itemId, setId);
+}
+
+async function copyLightboxCreationRecordFullPath() {
+  const itemId = state.lightboxItem?.creationItemId || state.lightboxItem?.itemId || "";
+  const setId = state.lightboxItem?.creationSetId || "";
+  await copyCreationRecordItemFullPath(itemId, setId);
 }
 
 function renderCreationRecordSetList() {
@@ -8560,29 +8555,6 @@ function bindEvents() {
       openCreationRecordItemPreview(previewButton.dataset.creationRecordPreviewItemId);
       return;
     }
-
-    const copyPromptButton = event.target.closest("[data-creation-record-copy-prompt-item-id]");
-    if (copyPromptButton) {
-      copyCreationRecordItemPrompt(copyPromptButton.dataset.creationRecordCopyPromptItemId).catch((error) =>
-        setCreationRecordFeedback(error.message, "error"),
-      );
-      return;
-    }
-
-    const copyPathButton = event.target.closest("[data-creation-record-copy-path-item-id]");
-    if (copyPathButton) {
-      copyCreationRecordItemPath(copyPathButton.dataset.creationRecordCopyPathItemId).catch((error) =>
-        setCreationRecordFeedback(error.message, "error"),
-      );
-      return;
-    }
-
-    const copyFullPathButton = event.target.closest("[data-creation-record-copy-full-path-item-id]");
-    if (copyFullPathButton) {
-      copyCreationRecordItemFullPath(copyFullPathButton.dataset.creationRecordCopyFullPathItemId).catch((error) =>
-        setCreationRecordFeedback(error.message, "error"),
-      );
-    }
   });
   refs.creationPromptEditorLayer.addEventListener("click", (event) => {
     const closeButton = event.target.closest("[data-creation-close-prompt-editor]");
@@ -8979,6 +8951,16 @@ function bindEvents() {
   });
   refs.copyPromptButton.addEventListener("click", () => {
     copyLightboxPrompt().catch((error) => {
+      showError(error.message);
+    });
+  });
+  refs.lightboxCopyPathButton.addEventListener("click", () => {
+    copyLightboxCreationRecordPath().catch((error) => {
+      showError(error.message);
+    });
+  });
+  refs.lightboxCopyFullPathButton.addEventListener("click", () => {
+    copyLightboxCreationRecordFullPath().catch((error) => {
       showError(error.message);
     });
   });

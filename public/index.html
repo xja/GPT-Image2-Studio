@@ -21,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260507-creation-record-export-actions-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260507-creation-record-lightbox-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -873,6 +873,8 @@
 
           <div class="lightbox-actions">
             <a class="toolbar-button" id="lightboxDownload" href="#" download>下载</a>
+            <button class="toolbar-button lightbox-record-action hidden" id="lightboxCopyPathButton" type="button">复制路径</button>
+            <button class="toolbar-button lightbox-record-action hidden" id="lightboxCopyFullPathButton" type="button">复制完整路径</button>
             <button class="toolbar-button danger" id="lightboxDelete" type="button">删除</button>
             <button class="toolbar-button" id="lightboxClose" type="button">关闭</button>
           </div>
@@ -1115,6 +1117,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260507-creation-record-export-actions-1"></script>
+    <script type="module" src="/app.js?v=20260507-creation-record-lightbox-1"></script>
   </body>
 </html>

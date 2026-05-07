@@ -63,6 +63,10 @@ export function buildParameterText(item = {}, fallbackConfig = {}) {
     lines.push(`本地文件：${item.absolutePath}`);
   }
 
+  if (item.relativePath) {
+    lines.push(`相对路径：${item.relativePath}`);
+  }
+
   return lines.join("\n");
 }
 
