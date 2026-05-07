@@ -106,9 +106,10 @@ function getMimeType(filePath) {
   return MIME_TYPES[extname(filePath).toLowerCase()] || "application/octet-stream";
 }
 
-function sendJson(response, statusCode, payload) {
+function sendJson(response, statusCode, payload, headers = {}) {
   response.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
+    ...headers,
   });
   response.end(`${JSON.stringify(payload, null, 2)}\n`);
 }
@@ -1227,7 +1228,9 @@ function buildCreationImageFilename({ item, createdAt, setId, format }) {
 }
 
 async function handleCreationSetsGet(response) {
-  sendJson(response, 200, await creationSetStore.listManifests());
+  sendJson(response, 200, await creationSetStore.listManifests(), {
+    "Cache-Control": "no-store",
+  });
 }
 
 async function handleCreationSetFolderOpen(request, response) {

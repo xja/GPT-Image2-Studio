@@ -18,6 +18,14 @@ test("server exposes independent creation generation and record endpoints", asyn
   assert.doesNotMatch(server, /mode=creation/);
 });
 
+test("creation record list responses are not cacheable", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /async function handleCreationSetsGet\(response\) \{/);
+  assert.match(server, /function sendJson\(response, statusCode, payload, headers = \{\}\) \{/);
+  assert.match(server, /sendJson\(response, 200, await creationSetStore\.listManifests\(\), \{\s*"Cache-Control": "no-store"/);
+});
+
 test("server saves creation assets into a dated creation folder and hides them from gallery", async () => {
   const server = await readFile(serverPath, "utf8");
   const galleryStore = await readFile(galleryStorePath, "utf8");

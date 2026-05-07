@@ -127,7 +127,7 @@ The system SHALL persist Creation Mode records as set manifests with set-level i
 - **THEN** the set manifest status is `partial_failed` and saved item records remain available
 
 ### Requirement: Creation set records expose details and item repair
-The system SHALL provide Creation Mode set record details that show the set-level input, target language, marketing scenario, industry template, reference image names, item roles, prompts, statuses, failure messages, and saved image paths. From the detail view, the system SHALL allow users to regenerate a saved item, fill a missing item, or retry failed items without creating a new set record.
+The system SHALL provide Creation Mode set record details that show the set-level input, target language, marketing scenario, industry template, reference image names, item roles, prompts, statuses, failure messages, and saved image paths. From the detail view, the system SHALL allow users to regenerate a saved item, fill a missing item, retry failed items, preview saved item images, copy item prompts, copy relative or full item paths, export set prompts, and export the set manifest without creating a new set record.
 
 #### Scenario: User opens a set record detail
 - **WHEN** the user opens a Creation Mode set record
@@ -199,6 +199,13 @@ The system SHALL group waterfall gallery browsing, PPT records, Creation Mode se
 #### Scenario: User copies Creation set image paths
 - **WHEN** the user copies paths from a selected Creation Mode set record
 - **THEN** the clipboard text includes the selected set label, recorded creation folder, and saved image relative paths
+- **AND** the active Creation Mode workspace is not replaced
+
+#### Scenario: User exports Creation set prompts and manifest
+- **WHEN** the user exports a selected Creation Mode set record
+- **THEN** the app can copy or download all saved item prompts for the selected set
+- **AND** the app can download the selected set manifest as JSON
+- **AND** item-level actions can copy either the saved relative path or the local full path for one generated image
 - **AND** the active Creation Mode workspace is not replaced
 
 #### Scenario: User works in Creation Mode

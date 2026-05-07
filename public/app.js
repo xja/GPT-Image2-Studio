@@ -310,8 +310,11 @@ const refs = {
   creationRecordArchiveDetail: document.querySelector("#creationRecordArchiveDetail"),
   creationRecordCopyFullPathsButton: document.querySelector("#creationRecordCopyFullPathsButton"),
   creationRecordCopyPathsButton: document.querySelector("#creationRecordCopyPathsButton"),
+  creationRecordCopyPromptsButton: document.querySelector("#creationRecordCopyPromptsButton"),
   creationRecordCount: document.querySelector("#creationRecordCount"),
   creationRecordDetail: document.querySelector("#creationRecordDetail"),
+  creationRecordExportManifestButton: document.querySelector("#creationRecordExportManifestButton"),
+  creationRecordExportPromptsButton: document.querySelector("#creationRecordExportPromptsButton"),
   creationRecordOpenFolderButton: document.querySelector("#creationRecordOpenFolderButton"),
   creationRecordRefreshButton: document.querySelector("#creationRecordRefreshButton"),
   creationRecordReuseButton: document.querySelector("#creationRecordReuseButton"),
@@ -5840,6 +5843,15 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
     copyPathButton.setAttribute("aria-label", `${itemTitle}复制图片路径`);
     actions.appendChild(copyPathButton);
 
+    const copyFullPathButton = document.createElement("button");
+    copyFullPathButton.className = "mini-action";
+    copyFullPathButton.type = "button";
+    copyFullPathButton.dataset.creationRecordCopyFullPathItemId = item.itemId;
+    copyFullPathButton.textContent = "完整路径";
+    copyFullPathButton.disabled = !String(item.relativePath || "").trim();
+    copyFullPathButton.setAttribute("aria-label", `${itemTitle}复制完整路径`);
+    actions.appendChild(copyFullPathButton);
+
     card.appendChild(actions);
   }
 
@@ -5899,6 +5911,51 @@ function buildCreationRecordPathText(set) {
   ].join("\n");
 }
 
+function buildCreationRecordPromptText(set) {
+  const items = Array.isArray(set?.items) ? set.items : [];
+  if (!set || items.length === 0) {
+    return "";
+  }
+
+  return [
+    `套图: ${set.productName || "未命名商品"}`,
+    `记录: ${set.setId || "unknown"}`,
+    `场景: ${set.scenarioLabel || set.scenario || "standard"}`,
+    `行业: ${set.industryTemplateLabel || set.industryTemplate || "general"}`,
+    "",
+    ...items.flatMap((item, index) => [
+      `${index + 1}. ${item.title || item.role || item.itemId || "套图单张"}`,
+      item.prompt ? item.prompt : "",
+      item.marketingCopy ? `文案: ${item.marketingCopy}` : "",
+      "",
+    ]),
+  ]
+    .map((line) => String(line || "").trimEnd())
+    .join("\n")
+    .trim();
+}
+
+function triggerBrowserTextDownload(text, filename, mimeType = "text/plain;charset=utf-8") {
+  const blob = new Blob([text], { type: mimeType });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename || "creation-record.txt";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+function downloadCreationRecordTextFile(text, filename, mimeType = "text/plain;charset=utf-8") {
+  const value = String(text || "").trim();
+  if (!value) {
+    return;
+  }
+
+  triggerBrowserTextDownload(value, filename, mimeType);
+}
+
 async function fetchCreationRecordPathReport(set) {
   if (!set?.setId) {
     throw new Error("请先选择一套记录。");
@@ -5934,6 +5991,45 @@ function buildCreationRecordFullPathText(payload, set) {
     "图片:",
     ...items.map((item, index) => `${index + 1}. ${item.absolutePath}`),
   ].join("\n");
+}
+
+async function copyCreationRecordPrompts() {
+  const selectedSet = getCreationRecordSelectedSet();
+  const text = buildCreationRecordPromptText(selectedSet);
+  if (!text) {
+    setCreationRecordFeedback("当前套图还没有可复制的提示词。", "error");
+    return;
+  }
+
+  await writeTextToClipboard(text);
+  setCreationRecordFeedback("已复制当前套图提示词。", "success");
+}
+
+function exportCreationRecordPrompts() {
+  const selectedSet = getCreationRecordSelectedSet();
+  const text = buildCreationRecordPromptText(selectedSet);
+  if (!text) {
+    setCreationRecordFeedback("当前套图还没有可导出的提示词。", "error");
+    return;
+  }
+
+  downloadCreationRecordTextFile(text, `creation-prompts-${selectedSet.setId || "record"}.txt`);
+  setCreationRecordFeedback("已导出当前套图提示词。", "success");
+}
+
+function exportCreationRecordManifest() {
+  const selectedSet = getCreationRecordSelectedSet();
+  if (!selectedSet) {
+    setCreationRecordFeedback("请先选择一套记录。", "error");
+    return;
+  }
+
+  downloadCreationRecordTextFile(
+    `${JSON.stringify(selectedSet, null, 2)}\n`,
+    `creation-record-${selectedSet.setId || "record"}.json`,
+    "application/json;charset=utf-8",
+  );
+  setCreationRecordFeedback("已导出当前套图清单。", "success");
 }
 
 function getCreationRecordItemById(itemId) {
@@ -5991,6 +6087,25 @@ async function copyCreationRecordItemPath(itemId) {
 
   await writeTextToClipboard(pathText);
   setCreationRecordFeedback("已复制单张图片路径。", "success");
+}
+
+async function copyCreationRecordItemFullPath(itemId) {
+  const record = getCreationRecordItemById(itemId);
+  if (!record?.item) {
+    setCreationRecordFeedback("请先选择一个套图单张。", "error");
+    return;
+  }
+
+  const payload = await fetchCreationRecordPathReport(record.set);
+  const item = Array.isArray(payload?.items) ? payload.items.find((entry) => entry.itemId === itemId) : null;
+  const pathText = String(item?.absolutePath || "").trim();
+  if (!pathText) {
+    setCreationRecordFeedback("当前单张没有可复制的完整路径。", "error");
+    return;
+  }
+
+  await writeTextToClipboard(pathText);
+  setCreationRecordFeedback("已复制单张完整路径。", "success");
 }
 
 function renderCreationRecordSetList() {
@@ -6174,6 +6289,15 @@ function renderCreationRecordView() {
   }
   if (refs.creationRecordCopyFullPathsButton) {
     refs.creationRecordCopyFullPathsButton.disabled = getCreationRecordImagePaths(selectedSet).length === 0;
+  }
+  if (refs.creationRecordCopyPromptsButton) {
+    refs.creationRecordCopyPromptsButton.disabled = !buildCreationRecordPromptText(selectedSet);
+  }
+  if (refs.creationRecordExportPromptsButton) {
+    refs.creationRecordExportPromptsButton.disabled = !buildCreationRecordPromptText(selectedSet);
+  }
+  if (refs.creationRecordExportManifestButton) {
+    refs.creationRecordExportManifestButton.disabled = !selectedSet;
   }
 
   renderCreationRecordSetList();
@@ -6935,7 +7059,9 @@ async function runCreationStream(response) {
 }
 
 async function loadCreationSets() {
-  const response = await fetch("/api/creation/sets");
+  const response = await fetch("/api/creation/sets", {
+    cache: "no-store",
+  });
   if (response.status === 404) {
     state.creation.sets = [];
     state.creation.recordSetId = "";
@@ -8411,6 +8537,11 @@ function bindEvents() {
   refs.creationRecordCopyFullPathsButton.addEventListener("click", () => {
     copyCreationRecordFullPaths().catch((error) => setCreationRecordFeedback(error.message, "error"));
   });
+  refs.creationRecordCopyPromptsButton.addEventListener("click", () => {
+    copyCreationRecordPrompts().catch((error) => setCreationRecordFeedback(error.message, "error"));
+  });
+  refs.creationRecordExportPromptsButton.addEventListener("click", exportCreationRecordPrompts);
+  refs.creationRecordExportManifestButton.addEventListener("click", exportCreationRecordManifest);
   refs.creationRecordSearchInput.addEventListener("input", (event) => {
     state.creation.recordQuery = event.target.value;
     renderCreationRecordView();
@@ -8441,6 +8572,14 @@ function bindEvents() {
     const copyPathButton = event.target.closest("[data-creation-record-copy-path-item-id]");
     if (copyPathButton) {
       copyCreationRecordItemPath(copyPathButton.dataset.creationRecordCopyPathItemId).catch((error) =>
+        setCreationRecordFeedback(error.message, "error"),
+      );
+      return;
+    }
+
+    const copyFullPathButton = event.target.closest("[data-creation-record-copy-full-path-item-id]");
+    if (copyFullPathButton) {
+      copyCreationRecordItemFullPath(copyFullPathButton.dataset.creationRecordCopyFullPathItemId).catch((error) =>
         setCreationRecordFeedback(error.message, "error"),
       );
     }

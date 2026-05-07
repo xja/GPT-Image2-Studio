@@ -129,7 +129,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260507-creation-industry-templates-1/);
+  assert.match(html, /\/app\.js\?v=20260507-creation-record-export-actions-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -645,7 +645,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260507-creation-industry-templates-1/);
+  assert.match(html, /\/app\.js\?v=20260507-creation-record-export-actions-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -957,7 +957,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260507-creation-industry-templates-1/);
+  assert.match(html, /app\.js\?v=20260507-creation-record-export-actions-1/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
@@ -1140,6 +1140,7 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.match(app, /refs\.creationRecordCopyPathsButton\.addEventListener\("click",/);
   assert.match(app, /refs\.creationRecordCopyFullPathsButton\.addEventListener\("click",/);
   assert.match(app, /refs\.creationRecordRefreshButton\.addEventListener\("click",/);
+  assert.match(app, /fetch\("\/api\/creation\/sets", \{\s*cache: "no-store"/);
   assert.match(app, /refs\.creationRecordSetList\.addEventListener\("click",[\s\S]*target\.closest\("\[data-creation-record-set-id\]"\)/);
   assert.match(app, /state\.ppt\.decks = Array\.isArray\(payload\) \? payload : \[\];[\s\S]*renderPptRecordView\(\);/);
   assert.match(app, /state\.creation\.sets = nextSets;[\s\S]*renderCreationRecordView\(\);/);
@@ -1179,6 +1180,29 @@ test("creation record cards expose single-image detail actions", async () => {
   assert.match(app, /refs\.creationRecordResultGrid\.addEventListener\("click",[\s\S]*creationRecordCopyPromptItemId/);
   assert.match(app, /refs\.creationRecordResultGrid\.addEventListener\("click",[\s\S]*creationRecordCopyPathItemId/);
   assert.match(app, /createCreationCard\(item, index, \{ showActions: false, showRecordActions: true \}\)/);
+});
+
+test("creation records expose prompt exports and per-item full path actions", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /id="creationRecordCopyPromptsButton"/);
+  assert.match(html, /id="creationRecordExportPromptsButton"/);
+  assert.match(html, /id="creationRecordExportManifestButton"/);
+  assert.match(styles, /\.creation-record-export-actions\s*\{/);
+  assert.match(app, /creationRecordCopyPromptsButton: document\.querySelector\("#creationRecordCopyPromptsButton"\)/);
+  assert.match(app, /function buildCreationRecordPromptText\(set\) \{/);
+  assert.match(app, /function downloadCreationRecordTextFile\(/);
+  assert.match(app, /async function copyCreationRecordPrompts\(\) \{/);
+  assert.match(app, /function exportCreationRecordPrompts\(\) \{/);
+  assert.match(app, /function exportCreationRecordManifest\(\) \{/);
+  assert.match(app, /async function copyCreationRecordItemFullPath\(itemId\) \{/);
+  assert.match(app, /copyFullPathButton\.dataset\.creationRecordCopyFullPathItemId = item\.itemId;/);
+  assert.match(app, /refs\.creationRecordCopyPromptsButton\.addEventListener\("click",/);
+  assert.match(app, /refs\.creationRecordExportPromptsButton\.addEventListener\("click",/);
+  assert.match(app, /refs\.creationRecordExportManifestButton\.addEventListener\("click",/);
+  assert.match(app, /refs\.creationRecordResultGrid\.addEventListener\("click",[\s\S]*creationRecordCopyFullPathItemId/);
 });
 
 test("waterfall gallery paginates history unless keyword search is active", async () => {

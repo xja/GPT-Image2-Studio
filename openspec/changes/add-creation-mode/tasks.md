@@ -158,3 +158,9 @@
 - [x] 26.1 Add a failing Creation Mode regression test that exercises plan preview, reference reupload metadata, prompt overrides, generation, incomplete-item repair, single-item regeneration, and asset path reporting.
 - [x] 26.2 Add local-only mock image generation and isolated output/local-data directories so the regression can run without real API spend or user-profile writes.
 - [x] 26.3 Expose the regression as `npm run test:creation-e2e` and keep static server assertions aligned with the new test harness.
+
+## 27. Creation Record Export Actions
+
+- [x] 27.1 Add failing layout tests for Creation record prompt export controls and per-item full-path copying.
+- [x] 27.2 Add record-level actions to copy all prompts, export prompts as text, and export the selected set manifest as JSON.
+- [x] 27.3 Add a per-item full-path copy action that reuses the safe local path report endpoint.

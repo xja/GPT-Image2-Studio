@@ -1286,6 +1286,13 @@ textarea::-webkit-scrollbar-corner {
   justify-content: flex-end;
 }
 
+.creation-record-export-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .creation-record-search {
   display: grid;
   grid-template-columns: auto minmax(150px, 220px);
