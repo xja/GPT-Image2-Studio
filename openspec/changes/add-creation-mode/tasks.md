@@ -152,3 +152,9 @@
 - [x] 25.1 Add failing tests for Creation Mode industry templates in the planner, local API, Cloudflare worker, manifest storage, and frontend controls.
 - [x] 25.2 Implement general, apparel, beauty, food, consumer electronics, and home/living templates with role presets and prompt guidance.
 - [x] 25.3 Persist industry metadata in Creation set records, hydrate it on reuse, update README/spec coverage, and rerun targeted verification.
+
+## 26. Creation End-to-End Regression
+
+- [x] 26.1 Add a failing Creation Mode regression test that exercises plan preview, reference reupload metadata, prompt overrides, generation, incomplete-item repair, single-item regeneration, and asset path reporting.
+- [x] 26.2 Add local-only mock image generation and isolated output/local-data directories so the regression can run without real API spend or user-profile writes.
+- [x] 26.3 Expose the regression as `npm run test:creation-e2e` and keep static server assertions aligned with the new test harness.

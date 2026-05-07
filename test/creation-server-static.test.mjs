@@ -64,6 +64,17 @@ test("server returns safe full image paths for a selected creation set", async (
   assert.match(server, /relativePath/);
 });
 
+test("local server has an isolated mock image path for creation regression tests", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /process\.env\.IMAGE_STUDIO_OUTPUT_DIR/);
+  assert.match(server, /process\.env\.IMAGE_STUDIO_LOCAL_DATA_DIR/);
+  assert.match(server, /process\.env\.IMAGE_STUDIO_MOCK_IMAGE_GENERATION === "1"/);
+  assert.match(server, /async function requestStudioImageGeneration/);
+  assert.match(server, /type:\s*"final_image"/);
+  assert.match(server, /finalImageBase64:\s*MOCK_IMAGE_BASE64/);
+});
+
 test("cloudflare worker exposes creation record and generation routes", async () => {
   const worker = await readFile(cloudflareWorkerPath, "utf8");
 

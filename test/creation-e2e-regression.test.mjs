@@ -1,0 +1,327 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer as createTcpServer } from "node:net";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { once } from "node:events";
+import { File } from "node:buffer";
+import { setTimeout as delay } from "node:timers/promises";
+
+const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+async function getFreePort() {
+  const server = createTcpServer();
+  await new Promise((resolveListen, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolveListen);
+  });
+  const address = server.address();
+  await new Promise((resolveClose, reject) => {
+    server.close((error) => (error ? reject(error) : resolveClose()));
+  });
+  return address.port;
+}
+
+async function stopServer(server) {
+  if (!server || server.exitCode !== null || server.signalCode) {
+    return;
+  }
+
+  server.kill("SIGTERM");
+  await Promise.race([
+    once(server, "exit"),
+    delay(1500).then(() => {
+      if (server.exitCode === null && !server.signalCode) {
+        server.kill("SIGKILL");
+      }
+    }),
+  ]);
+}
+
+function collectDiagnostics(server) {
+  const diagnostics = {
+    stdout: "",
+    stderr: "",
+  };
+  server.stdout?.setEncoding("utf8");
+  server.stderr?.setEncoding("utf8");
+  server.stdout?.on("data", (chunk) => {
+    diagnostics.stdout += chunk;
+  });
+  server.stderr?.on("data", (chunk) => {
+    diagnostics.stderr += chunk;
+  });
+  return diagnostics;
+}
+
+async function waitForServer(baseUrl, server, diagnostics) {
+  const deadline = Date.now() + 7000;
+  let lastError = null;
+
+  while (Date.now() < deadline) {
+    if (server.exitCode !== null) {
+      throw new Error(`server exited early (${server.exitCode})\n${diagnostics.stderr}\n${diagnostics.stdout}`);
+    }
+
+    try {
+      const response = await fetch(`${baseUrl}/api/creation/sets`);
+      if (response.status < 500) {
+        await response.arrayBuffer();
+        return;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+
+    await delay(100);
+  }
+
+  throw new Error(`server did not start: ${lastError?.message || "timeout"}\n${diagnostics.stderr}`);
+}
+
+function parseSseEvents(text) {
+  return text
+    .split(/\r?\n\r?\n/)
+    .map((chunk) => {
+      const eventName = chunk.match(/^event:\s*(.+)$/m)?.[1] || "";
+      const data = [...chunk.matchAll(/^data:\s?(.*)$/gm)].map((match) => match[1]).join("\n");
+      return eventName && data ? { eventName, payload: JSON.parse(data) } : null;
+    })
+    .filter(Boolean);
+}
+
+function makeReferenceFile(filename = "front.png") {
+  return new File(["front-reference"], filename, { type: "image/png" });
+}
+
+function makeCreationForm(overrides = {}) {
+  const formData = new FormData();
+  formData.set("productName", "Regression Serum");
+  formData.set("productDescription", "Lightweight serum for reusable creation workflow regression");
+  formData.set("sellingPoints", "hydrating\ntravel friendly\nsmooth texture");
+  formData.set("targetLanguage", "en");
+  formData.set("imageCount", "4");
+  formData.set("scenario", "detail-page");
+  formData.set("industryTemplate", "beauty");
+  formData.set("selectedRoles", JSON.stringify(["hero", "benefit", "package", "review-qa"]));
+  formData.set(
+    "referenceImageRoles",
+    JSON.stringify([{ filename: "front.png", role: "product", note: "manual historical binding" }]),
+  );
+
+  if (overrides.includeReferenceImage !== false) {
+    formData.append("referenceImages", makeReferenceFile(), "front.png");
+  }
+
+  formData.set("ratio", "1:1");
+  formData.set("size", "1024x1024");
+  formData.set("format", "png");
+  formData.set("reasoningEffort", "low");
+  formData.set("baseUrl", "http://127.0.0.1:9/v1");
+  formData.set("apiKey", "test-key");
+  formData.set("responsesModel", "gpt-5.4");
+  formData.set("clientSessionId", "creation-e2e-session");
+
+  for (const [key, value] of Object.entries(overrides.fields || {})) {
+    formData.set(key, value);
+  }
+
+  return formData;
+}
+
+async function postForm(baseUrl, pathname, formData) {
+  const response = await fetch(`${baseUrl}${pathname}`, {
+    method: "POST",
+    body: formData,
+  });
+  const text = await response.text();
+  return {
+    response,
+    text,
+    events: parseSseEvents(text),
+  };
+}
+
+async function postJson(baseUrl, pathname, payload) {
+  const response = await fetch(`${baseUrl}${pathname}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return {
+    response,
+    body: await response.json(),
+  };
+}
+
+async function findCreationManifestPath(outputDir, setId) {
+  const manifestsDir = join(outputDir, "json", "creation-sets");
+  const entries = await readdir(manifestsDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) {
+      continue;
+    }
+
+    const candidatePath = join(manifestsDir, entry.name);
+    const candidate = JSON.parse(await readFile(candidatePath, "utf8"));
+    if (candidate.setId === setId) {
+      return candidatePath;
+    }
+  }
+
+  throw new Error(`Missing creation manifest for ${setId}`);
+}
+
+function getCompleteSet(events) {
+  const complete = events.find((event) => event.eventName === "complete");
+  assert.ok(complete, "expected complete SSE event");
+  assert.ok(complete.payload.set, "complete event should include the set manifest");
+  return complete.payload.set;
+}
+
+test("creation workflow reuses history, reuploads references, tweaks prompts, repairs items, and exposes asset paths", async (t) => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "creation-e2e-"));
+  const outputDir = join(tempRoot, "output");
+  const localDataRootDir = join(tempRoot, "local-data");
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const server = spawn(process.execPath, ["server.mjs"], {
+    cwd: rootDir,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      VERCEL: "1",
+      TMP: tempRoot,
+      TEMP: tempRoot,
+      IMAGE_STUDIO_MOCK_IMAGE_GENERATION: "1",
+      IMAGE_STUDIO_OUTPUT_DIR: outputDir,
+      IMAGE_STUDIO_LOCAL_DATA_DIR: localDataRootDir,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const diagnostics = collectDiagnostics(server);
+
+  t.after(async () => {
+    await stopServer(server);
+    await rm(tempRoot, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl, server, diagnostics);
+
+  const planResponse = await fetch(`${baseUrl}/api/creation/plan`, {
+    method: "POST",
+    body: makeCreationForm({ includeReferenceImage: false }),
+  });
+  assert.equal(planResponse.status, 200);
+  const planBody = await planResponse.json();
+  assert.equal(planBody.ok, true);
+  assert.equal(planBody.plan.industryTemplate, "beauty");
+  assert.equal(planBody.plan.items.length, 4);
+  assert.equal(planBody.plan.items[0].itemId, "1-hero");
+  assert.match(planBody.plan.items[0].prompt, /manual historical binding/);
+  assert.match(planBody.plan.items[0].prompt, /Industry template:/);
+
+  const generateResult = await postForm(
+    baseUrl,
+    "/api/creation/generate",
+    makeCreationForm({
+      fields: {
+        planOverrides: JSON.stringify([{ itemId: "1-hero", prompt: "Custom hero prompt from regression." }]),
+      },
+    }),
+  );
+  assert.equal(generateResult.response.status, 200);
+  assert.deepEqual(
+    generateResult.events.filter((event) => event.eventName === "error"),
+    [],
+    generateResult.text,
+  );
+  const generatedSet = getCompleteSet(generateResult.events);
+  assert.equal(generatedSet.status, "completed");
+  assert.equal(generatedSet.industryTemplate, "beauty");
+  assert.equal(generatedSet.referenceImageRoles[0].filename, "front.png");
+  assert.equal(generatedSet.referenceImageRoles[0].note, "manual historical binding");
+  assert.equal(generatedSet.items.length, 4);
+  assert.equal(generatedSet.items.filter((item) => item.status === "completed").length, 4);
+  assert.equal(generatedSet.items[0].prompt, "Custom hero prompt from regression.");
+  assert.ok(generatedSet.items[0].relativePath);
+
+  const listResponse = await fetch(`${baseUrl}/api/creation/sets`);
+  assert.equal(listResponse.status, 200);
+  const sets = await listResponse.json();
+  assert.ok(sets.some((set) => set.setId === generatedSet.setId), "generated set should appear in records");
+
+  const initialPathReport = await postJson(baseUrl, "/api/creation/sets/paths", { setId: generatedSet.setId });
+  assert.equal(initialPathReport.response.status, 200);
+  assert.ok(
+    initialPathReport.body.absoluteDir.startsWith(outputDir),
+    `expected ${initialPathReport.body.absoluteDir} to stay under ${outputDir}`,
+  );
+
+  const manifestPath = await findCreationManifestPath(outputDir, generatedSet.setId);
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.items[1] = {
+    ...manifest.items[1],
+    status: "failed",
+    filename: "",
+    relativePath: "",
+    imageUrl: "",
+    thumbnailUrl: "",
+    error: "forced regression gap",
+  };
+  manifest.status = "partial_failed";
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+  const repairIncompleteResult = await postForm(
+    baseUrl,
+    "/api/creation/repair",
+    makeCreationForm({
+      fields: {
+        setId: generatedSet.setId,
+        scope: "incomplete",
+      },
+    }),
+  );
+  assert.equal(repairIncompleteResult.response.status, 200);
+  assert.deepEqual(
+    repairIncompleteResult.events.filter((event) => event.eventName === "error"),
+    [],
+    repairIncompleteResult.text,
+  );
+  const repairedSet = getCompleteSet(repairIncompleteResult.events);
+  assert.equal(repairedSet.status, "completed");
+  assert.equal(repairedSet.items[1].status, "completed");
+  assert.ok(repairedSet.items[1].relativePath);
+
+  const regenerateResult = await postForm(
+    baseUrl,
+    "/api/creation/repair",
+    makeCreationForm({
+      fields: {
+        setId: generatedSet.setId,
+        itemId: generatedSet.items[0].itemId,
+        promptOverride: "Regenerated hero prompt from regression.",
+      },
+    }),
+  );
+  assert.equal(regenerateResult.response.status, 200);
+  assert.deepEqual(
+    regenerateResult.events.filter((event) => event.eventName === "error"),
+    [],
+    regenerateResult.text,
+  );
+  const regeneratedSet = getCompleteSet(regenerateResult.events);
+  assert.equal(regeneratedSet.status, "completed");
+  assert.equal(regeneratedSet.items[0].prompt, "Regenerated hero prompt from regression.");
+
+  const pathReport = await postJson(baseUrl, "/api/creation/sets/paths", { setId: generatedSet.setId });
+  assert.equal(pathReport.response.status, 200);
+  assert.equal(pathReport.body.setId, generatedSet.setId);
+  assert.equal(pathReport.body.items.length, 4);
+  assert.ok(pathReport.body.absoluteDir.startsWith(outputDir));
+  assert.ok(pathReport.body.items.every((item) => item.absolutePath.startsWith(outputDir)));
+});

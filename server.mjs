@@ -68,8 +68,12 @@ import { buildCreationRelativeDir, createCreationSetStore } from "./lib/creation
 const rootDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(rootDir, "public");
 const libDir = join(rootDir, "lib");
-const outputDir = process.env.VERCEL ? join(tmpdir(), "gpt-image2-studio-output") : join(homedir(), "Pictures");
-const localDataRootDir = process.env.VERCEL ? join(tmpdir(), "gpt-image2-studio-local") : rootDir;
+const outputDir =
+  process.env.IMAGE_STUDIO_OUTPUT_DIR ||
+  (process.env.VERCEL ? join(tmpdir(), "gpt-image2-studio-output") : join(homedir(), "Pictures"));
+const localDataRootDir =
+  process.env.IMAGE_STUDIO_LOCAL_DATA_DIR ||
+  (process.env.VERCEL ? join(tmpdir(), "gpt-image2-studio-local") : rootDir);
 const configStore = createConfigStore({ rootDir: localDataRootDir });
 const promptAgentStore = createPromptAgentStore({ rootDir: localDataRootDir });
 const generationTaskStore = createGenerationTaskStore();
@@ -80,6 +84,9 @@ const activeTasksBySession = new Map();
 const PPT_SOURCE_EXTENSIONS = new Set([".pdf", ".docx", ".pptx", ".txt", ".md", ".csv"]);
 const PPT_SLIDE_SIZE = "2048x1152";
 const PPT_SLIDE_FORMAT = "png";
+const MOCK_IMAGE_GENERATION_ENABLED = process.env.IMAGE_STUDIO_MOCK_IMAGE_GENERATION === "1";
+const MOCK_IMAGE_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==";
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -111,6 +118,33 @@ function sendText(response, statusCode, message) {
     "Content-Type": "text/plain; charset=utf-8",
   });
   response.end(message);
+}
+
+async function requestStudioImageGeneration(options) {
+  if (!MOCK_IMAGE_GENERATION_ENABLED) {
+    return requestImageGeneration(options);
+  }
+
+  await options.onEvent?.({
+    type: "status",
+    stage: "mock",
+    message: "Using local mock image generation.",
+  });
+  await options.onEvent?.({
+    type: "final_image",
+    base64: MOCK_IMAGE_BASE64,
+  });
+
+  return {
+    finalImageBase64: MOCK_IMAGE_BASE64,
+    responseCompleted: true,
+    fallbackUsed: false,
+    streamFallbackUsed: false,
+    sizeFallbackUsed: false,
+    requestedSize: options.size,
+    effectiveSize: options.size,
+    format: options.format,
+  };
 }
 
 function writeSseEvent(response, type, payload) {
@@ -552,7 +586,7 @@ async function generateAndSavePptSlide({
   });
 
   let finalBase64 = "";
-  const generationResult = await requestImageGeneration({
+  const generationResult = await requestStudioImageGeneration({
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
     prompt: slidePrompt.prompt,
@@ -1486,7 +1520,7 @@ async function handleCreationGenerate(request, response) {
         writeSseEvent(response, "item_started", { setId, itemId: item.itemId, role: item.role });
 
         const finalPrompt = appendRatioHintToPrompt(item.prompt, ratioOption);
-        const generationResult = await requestImageGeneration({
+        const generationResult = await requestStudioImageGeneration({
           baseUrl: config.baseUrl,
           apiKey: config.apiKey,
           prompt: finalPrompt,
@@ -1832,7 +1866,7 @@ async function handleCreationRepair(request, response) {
         writeSseEvent(response, "item_started", { setId, itemId: item.itemId, role: repairItem.role });
 
         const finalPrompt = appendRatioHintToPrompt(repairItem.prompt, ratioOption);
-        const generationResult = await requestImageGeneration({
+        const generationResult = await requestStudioImageGeneration({
           baseUrl: config.baseUrl,
           apiKey: config.apiKey,
           prompt: finalPrompt,
@@ -2150,7 +2184,7 @@ async function handleGenerate(request, response) {
       reasoningEffort,
     });
 
-    const generationResult = await requestImageGeneration({
+    const generationResult = await requestStudioImageGeneration({
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
       prompt: finalPrompt,

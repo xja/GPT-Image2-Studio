@@ -48,7 +48,7 @@ test("server marks PPT slide assets hidden from the waterfall gallery", async ()
 test("server persists the effective image size after an upstream fallback", async () => {
   const server = await readFile(serverPath, "utf8");
 
-  assert.match(server, /const generationResult = await requestImageGeneration\(/);
+  assert.match(server, /const generationResult = await requestStudioImageGeneration\(/);
   assert.match(server, /const savedSize = generationResult\.effectiveSize \|\| finalSize;/);
   assert.match(server, /generationTaskStore\.completeTask\([\s\S]*size:\s*savedSize/);
   assert.match(server, /metadata:\s*\{[\s\S]*size:\s*savedSize/);
@@ -60,6 +60,7 @@ test("server uses tmp output storage on Vercel serverless runtime", async () => 
 
   assert.match(server, /tmpdir/);
   assert.match(server, /process\.env\.VERCEL/);
+  assert.match(server, /process\.env\.IMAGE_STUDIO_OUTPUT_DIR/);
   assert.match(server, /join\(tmpdir\(\),\s*"gpt-image2-studio-output"\)/);
   assert.doesNotMatch(server, /const outputDir = join\(homedir\(\), "Pictures"\);/);
 });
@@ -67,7 +68,8 @@ test("server uses tmp output storage on Vercel serverless runtime", async () => 
 test("server keeps local data stores writable on Vercel serverless runtime", async () => {
   const server = await readFile(serverPath, "utf8");
 
-  assert.match(server, /const localDataRootDir = process\.env\.VERCEL \? join\(tmpdir\(\), "gpt-image2-studio-local"\) : rootDir;/);
+  assert.match(server, /process\.env\.IMAGE_STUDIO_LOCAL_DATA_DIR/);
+  assert.match(server, /join\(tmpdir\(\),\s*"gpt-image2-studio-local"\)/);
   assert.match(server, /createConfigStore\(\{ rootDir: localDataRootDir \}\)/);
   assert.match(server, /createPromptAgentStore\(\{ rootDir: localDataRootDir \}\)/);
 });
