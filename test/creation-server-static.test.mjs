@@ -73,12 +73,15 @@ test("cloudflare worker exposes creation record and generation routes", async ()
   assert.match(worker, /url\.pathname === "\/api\/creation\/generate"/);
 });
 
-test("creation generation accepts references image count and marketing scenario", async () => {
+test("creation generation accepts references image count marketing scenario and industry template", async () => {
   const server = await readFile(serverPath, "utf8");
   const worker = await readFile(cloudflareWorkerPath, "utf8");
 
   assert.match(server, /formData\.get\("imageCount"\)/);
   assert.match(server, /formData\.get\("scenario"\)/);
+  assert.match(server, /formData\.get\("industryTemplate"\)/);
+  assert.match(server, /industryTemplate:\s*plan\.industryTemplate/);
+  assert.match(server, /creationIndustryTemplate:\s*plan\.industryTemplate/);
   assert.match(server, /const referenceImages = await toReferenceImages/);
   assert.match(server, /referenceImageNames:\s*referenceImages\.map/);
   assert.match(server, /referenceImages,/);
@@ -86,6 +89,8 @@ test("creation generation accepts references image count and marketing scenario"
 
   assert.match(worker, /formData\.get\("imageCount"\)/);
   assert.match(worker, /formData\.get\("scenario"\)/);
+  assert.match(worker, /formData\.get\("industryTemplate"\)/);
+  assert.match(worker, /industryTemplate:\s*plan\.industryTemplate/);
   assert.match(worker, /const referenceImages = await toReferenceImages/);
   assert.match(worker, /referenceImageNames:\s*referenceImages\.map/);
   assert.match(worker, /referenceImages,/);

@@ -286,6 +286,7 @@ const refs = {
   creationForm: document.querySelector("#creationForm"),
   creationGenerateButton: document.querySelector("#creationGenerateButton"),
   creationImageCountInput: document.querySelector("#creationImageCountInput"),
+  creationIndustryTemplateInput: document.querySelector("#creationIndustryTemplateInput"),
   creationOutputFormatInput: document.querySelector("#creationOutputFormatInput"),
   creationPlanButton: document.querySelector("#creationPlanButton"),
   creationPlanMeta: document.querySelector("#creationPlanMeta"),
@@ -4887,6 +4888,24 @@ const CREATION_SCENARIO_HINTS = {
   "brand-story": "串联材料、工艺、价值观和日常使用，适合品牌内容页。",
 };
 
+const CREATION_INDUSTRY_TEMPLATE_LABELS = {
+  general: "通用电商",
+  apparel: "服饰鞋包",
+  beauty: "美妆个护",
+  food: "食品饮料",
+  electronics: "3C 数码",
+  home: "家居生活",
+};
+
+const CREATION_INDUSTRY_TEMPLATE_HINTS = {
+  general: "使用通用电商结构，营销场景决定推荐图片类型。",
+  apparel: "优先呈现版型、面料、上身或搭配效果、尺寸比例与细节质感。",
+  beauty: "优先呈现质地、试色、使用步骤、包装信息和功效层级，避免医疗化表述。",
+  food: "优先呈现新鲜感、食用场景、包装信息、原料线索和诱人质地。",
+  electronics: "优先呈现接口、尺寸、屏幕或机身细节、规格信息和差异对比。",
+  home: "优先呈现空间比例、材质饰面、安装或使用场景和日常生活价值。",
+};
+
 const CREATION_SCENARIO_ROLE_PRESETS = {
   standard: ["hero", "benefit", "scene", "detail-trust"],
   "detail-page": [
@@ -4926,6 +4945,15 @@ const CREATION_SCENARIO_ROLE_PRESETS = {
     "usage-steps",
     "review-qa",
   ],
+};
+
+const CREATION_INDUSTRY_ROLE_PRESETS = {
+  general: [],
+  apparel: ["hero", "scene", "material-closeup", "dimensions", "benefit", "social-proof", "review-qa", "promotion"],
+  beauty: ["hero", "benefit", "material-closeup", "usage-steps", "detail-trust", "social-proof", "package", "review-qa"],
+  food: ["hero", "benefit", "scene", "package", "material-closeup", "social-proof", "promotion", "review-qa"],
+  electronics: ["hero", "benefit", "dimensions", "usage-steps", "detail-trust", "comparison", "package", "review-qa"],
+  home: ["hero", "scene", "dimensions", "material-closeup", "usage-steps", "benefit", "comparison", "review-qa"],
 };
 
 const CREATION_REFERENCE_ROLE_OPTIONS = [
@@ -4983,6 +5011,14 @@ function getCreationSelectedScenario() {
   };
 }
 
+function getCreationSelectedIndustryTemplate() {
+  const value = refs.creationIndustryTemplateInput?.value || "general";
+  return {
+    value,
+    label: CREATION_INDUSTRY_TEMPLATE_LABELS[value] || value,
+  };
+}
+
 function getDefaultCreationRoleIds(count = getCreationSelectedImageCount()) {
   return getCreationRoleIdsForCount(count);
 }
@@ -5013,8 +5049,24 @@ function getCreationScenarioRolePreset(scenarioValue = getCreationSelectedScenar
   );
 }
 
-function getCreationRoleIdsForCount(count = getCreationSelectedImageCount(), scenarioValue = getCreationSelectedScenario().value) {
-  const presetRoles = getCreationScenarioRolePreset(scenarioValue);
+function getCreationIndustryRolePreset(industryValue = getCreationSelectedIndustryTemplate().value) {
+  return normalizeCreationRoleIds(CREATION_INDUSTRY_ROLE_PRESETS[industryValue] || []);
+}
+
+function getCreationRecommendedRolePreset({
+  scenarioValue = getCreationSelectedScenario().value,
+  industryValue = getCreationSelectedIndustryTemplate().value,
+} = {}) {
+  const industryRoles = getCreationIndustryRolePreset(industryValue);
+  return industryRoles.length > 0 ? industryRoles : getCreationScenarioRolePreset(scenarioValue);
+}
+
+function getCreationRoleIdsForCount(
+  count = getCreationSelectedImageCount(),
+  scenarioValue = getCreationSelectedScenario().value,
+  industryValue = getCreationSelectedIndustryTemplate().value,
+) {
+  const presetRoles = getCreationRecommendedRolePreset({ scenarioValue, industryValue });
   const presetRoleSet = new Set(presetRoles);
   const fallbackRoles = CREATION_PREVIEW_SLOTS.map((slot) => slot.role).filter((role) => !presetRoleSet.has(role));
   return [...presetRoles, ...fallbackRoles].slice(0, count);
@@ -5031,7 +5083,16 @@ function syncCreationSelectedRolesToCount() {
 }
 
 function syncCreationSelectedRolesToScenario() {
-  const selectedRoles = getCreationScenarioRolePreset();
+  const selectedRoles = getCreationRecommendedRolePreset();
+  state.creationSelectedRoles = selectedRoles;
+  if (refs.creationImageCountInput && [4, 6, 8, 10, 12].includes(selectedRoles.length)) {
+    refs.creationImageCountInput.value = String(selectedRoles.length);
+  }
+  resetCreationDraftPreview();
+}
+
+function syncCreationSelectedRolesToIndustry() {
+  const selectedRoles = getCreationRecommendedRolePreset();
   state.creationSelectedRoles = selectedRoles;
   if (refs.creationImageCountInput && [4, 6, 8, 10, 12].includes(selectedRoles.length)) {
     refs.creationImageCountInput.value = String(selectedRoles.length);
@@ -5193,6 +5254,8 @@ function normalizeCreationSetForView(set = {}) {
     selectedRoles: normalizeCreationRoleIds(set.selectedRoles || items.map((item) => item.role)),
     scenario: String(set.scenario || "standard"),
     scenarioLabel: String(set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || ""),
+    industryTemplate: String(set.industryTemplate || "general"),
+    industryTemplateLabel: String(set.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[set.industryTemplate] || ""),
     referenceImageNames: Array.isArray(set.referenceImageNames)
       ? set.referenceImageNames.map((item) => String(item)).filter(Boolean)
       : [],
@@ -5429,6 +5492,7 @@ function applyCreationSetToForm(set) {
   refs.creationSellingPointsInput.value = normalized.sellingPoints.join("\n");
   setCreationSelectValue(refs.creationTargetLanguageInput, normalized.targetLanguage, "zh-CN");
   setCreationSelectValue(refs.creationScenarioInput, normalized.scenario, "standard");
+  setCreationSelectValue(refs.creationIndustryTemplateInput, normalized.industryTemplate, "general");
 
   const normalizedRoles = normalizeCreationRoleIds(
     normalized.selectedRoles.length > 0 ? normalized.selectedRoles : normalized.items.map((item) => item.role),
@@ -5541,6 +5605,7 @@ function renderCreationRecordDetail(set) {
   const detailItems = [
     ["商品", set.productName || "未命名商品"],
     ["场景", set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || "标准电商"],
+    ["行业", set.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[set.industryTemplate] || "通用电商"],
     ["语言", set.targetLanguageLabel || set.targetLanguage || "zh-CN"],
     ["进度", `${progress.completed}/${progress.total}`],
     ["参考图", set.referenceImageNames.length > 0 ? set.referenceImageNames.join("、") : "未使用"],
@@ -5787,6 +5852,8 @@ function getCreationRecordSearchText(set = {}) {
     set.productDescription,
     set.scenario,
     set.scenarioLabel,
+    set.industryTemplate,
+    set.industryTemplateLabel,
     set.targetLanguage,
     set.targetLanguageLabel,
     ...(Array.isArray(set.sellingPoints) ? set.sellingPoints : []),
@@ -6067,6 +6134,7 @@ function renderCreationRecordArchiveDetail(set) {
   const detailItems = [
     ["商品", set.productName || "未命名商品"],
     ["场景", set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || "标准电商"],
+    ["行业", set.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[set.industryTemplate] || "通用电商"],
     ["语言", set.targetLanguageLabel || set.targetLanguage || "zh-CN"],
     ["进度", `${progress.completed}/${progress.total}`],
     ["创建时间", formatClock(set.createdAt)],
@@ -6547,7 +6615,9 @@ function renderCreationRolePicker() {
   }
   if (refs.creationRoleHint) {
     const scenario = getCreationSelectedScenario();
-    refs.creationRoleHint.textContent = `${scenario.label} 推荐，可手动增删`;
+    const industryTemplate = getCreationSelectedIndustryTemplate();
+    const roleSourceLabel = industryTemplate.value === "general" ? scenario.label : industryTemplate.label;
+    refs.creationRoleHint.textContent = `${roleSourceLabel} 推荐，可手动增删`;
   }
 
   refs.creationRoleGrid.innerHTML = "";
@@ -6608,12 +6678,17 @@ function renderCreationView() {
   }
   refs.creationProgressText.textContent = `${progress.completed} / ${progress.total}`;
   if (refs.creationScenarioHint) {
-    refs.creationScenarioHint.textContent = CREATION_SCENARIO_HINTS[getCreationSelectedScenario().value] || CREATION_SCENARIO_HINTS.standard;
+    const industryTemplate = getCreationSelectedIndustryTemplate();
+    refs.creationScenarioHint.textContent =
+      industryTemplate.value === "general"
+        ? CREATION_SCENARIO_HINTS[getCreationSelectedScenario().value] || CREATION_SCENARIO_HINTS.standard
+        : CREATION_INDUSTRY_TEMPLATE_HINTS[industryTemplate.value] || CREATION_INDUSTRY_TEMPLATE_HINTS.general;
   }
   renderCreationRolePicker();
   renderCreationReferenceGrid();
+  const currentIndustryLabel = currentSet?.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[currentSet?.industryTemplate] || "通用电商";
   refs.creationSetMeta.textContent = currentSet
-    ? `${currentSet.productName || "未命名商品"} · ${currentSet.scenarioLabel || CREATION_SCENARIO_LABELS[currentSet.scenario] || "标准电商"} · ${targetLanguageLabel} · ${CREATION_ITEM_STATUS_LABELS[currentSet.status] || currentSet.status} · ${formatClock(currentSet.createdAt)}`
+    ? `${currentSet.productName || "未命名商品"} · ${currentSet.scenarioLabel || CREATION_SCENARIO_LABELS[currentSet.scenario] || "标准电商"} · ${currentIndustryLabel} · ${targetLanguageLabel} · ${CREATION_ITEM_STATUS_LABELS[currentSet.status] || currentSet.status} · ${formatClock(currentSet.createdAt)}`
     : `填写商品信息后自动生成 ${getCreationSelectedRoles().length} 张电商营销图`;
 
   renderCreationRecordDetail(currentSet);
@@ -6660,6 +6735,7 @@ function buildCreationPlanPreviewFormData() {
   formData.set("targetLanguage", targetLanguage.value);
   formData.set("imageCount", String(selectedRoles.length || getCreationSelectedImageCount()));
   formData.set("scenario", refs.creationScenarioInput.value);
+  formData.set("industryTemplate", refs.creationIndustryTemplateInput.value);
   formData.set("selectedRoles", JSON.stringify(getCreationSelectedRoles()));
   formData.set("referenceImageRoles", JSON.stringify(buildCreationReferenceRolePayload()));
   formData.set("planOverrides", JSON.stringify(getCreationPlanOverrides()));
@@ -6942,6 +7018,8 @@ async function previewCreationPlan() {
       imageCount: plan.imageCount || items.length || getCreationSelectedRoles().length,
       scenario: plan.scenario || getCreationSelectedScenario().value,
       scenarioLabel: plan.scenarioLabel || getCreationSelectedScenario().label,
+      industryTemplate: plan.industryTemplate || getCreationSelectedIndustryTemplate().value,
+      industryTemplateLabel: plan.industryTemplateLabel || getCreationSelectedIndustryTemplate().label,
       selectedRoles: plan.selectedRoles || getCreationSelectedRoles(),
       referenceImageNames: state.creationReferenceFiles.map((item) => item.file?.name || "").filter(Boolean),
       referenceImageRoles: plan.referenceImageRoles || buildCreationReferenceRolePayload(),
@@ -6991,6 +7069,7 @@ async function startCreationGeneration(event) {
     const draftItems = draftSet?.items?.length ? draftSet.items : null;
     const createdAt = nowIso();
     const scenario = getCreationSelectedScenario();
+    const industryTemplate = getCreationSelectedIndustryTemplate();
     const previewSlots = getCreationPreviewSlots();
     const selectedRoles = getCreationSelectedRoles();
     const imageCount = draftItems?.length || selectedRoles.length || previewSlots.length || getCreationSelectedImageCount();
@@ -7004,6 +7083,8 @@ async function startCreationGeneration(event) {
       imageCount,
       scenario: scenario.value,
       scenarioLabel: scenario.label,
+      industryTemplate: industryTemplate.value,
+      industryTemplateLabel: industryTemplate.label,
       selectedRoles,
       referenceImageNames: state.creationReferenceFiles.map((item) => item.file?.name || "").filter(Boolean),
       referenceImageRoles: buildCreationReferenceRolePayload(),
@@ -8416,6 +8497,7 @@ function bindEvents() {
   });
   refs.creationImageCountInput.addEventListener("change", syncCreationSelectedRolesToCount);
   refs.creationScenarioInput.addEventListener("change", syncCreationSelectedRolesToScenario);
+  refs.creationIndustryTemplateInput.addEventListener("change", syncCreationSelectedRolesToIndustry);
   refs.creationRatioInput.addEventListener("change", renderCreationSizeOptions);
   refs.creationRoleGrid.addEventListener("change", (event) => {
     const target = event.target.closest("[data-creation-role]");

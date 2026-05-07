@@ -1168,6 +1168,8 @@ function buildCreationSetManifest({
     imageCount: plan.imageCount,
     scenario: plan.scenario,
     scenarioLabel: plan.scenarioLabel,
+    industryTemplate: plan.industryTemplate,
+    industryTemplateLabel: plan.industryTemplateLabel,
     selectedRoles: plan.selectedRoles || items.map((item) => item.role).filter(Boolean),
     referenceImageNames,
     referenceImageRoles: plan.referenceImageRoles || referenceImageRoles,
@@ -1350,6 +1352,7 @@ async function handleCreationPlan(request, response) {
       targetLanguage: formData.get("targetLanguage"),
       imageCount: formData.get("imageCount"),
       scenario: formData.get("scenario"),
+      industryTemplate: formData.get("industryTemplate"),
       selectedRoles: formData.get("selectedRoles"),
       referenceImageRoles,
     });
@@ -1405,6 +1408,7 @@ async function handleCreationGenerate(request, response) {
       targetLanguage: formData.get("targetLanguage"),
       imageCount: formData.get("imageCount"),
       scenario: formData.get("scenario"),
+      industryTemplate: formData.get("industryTemplate"),
       selectedRoles: formData.get("selectedRoles"),
       referenceImageRoles,
     });
@@ -1561,6 +1565,7 @@ async function handleCreationGenerate(request, response) {
             creationRole: item.role,
             targetLanguage: plan.targetLanguage,
             creationScenario: plan.scenario,
+            creationIndustryTemplate: plan.industryTemplate,
             creationImageCount: plan.imageCount,
             hasReferenceImage: referenceImages.length > 0,
             referenceImageNames,
@@ -1749,6 +1754,8 @@ async function handleCreationRepair(request, response) {
       imageCount: existingSet.imageCount,
       scenario: existingSet.scenario,
       scenarioLabel: existingSet.scenarioLabel,
+      industryTemplate: existingSet.industryTemplate || "general",
+      industryTemplateLabel: existingSet.industryTemplateLabel || "",
       referenceImageRoles,
     };
 
@@ -1908,6 +1915,7 @@ async function handleCreationRepair(request, response) {
             creationRepairOf: item.itemId,
             targetLanguage: existingSet.targetLanguage,
             creationScenario: existingSet.scenario,
+            creationIndustryTemplate: existingSet.industryTemplate || "general",
             creationImageCount: existingSet.imageCount,
             hasReferenceImage: referenceImages.length > 0,
             referenceImageNames,

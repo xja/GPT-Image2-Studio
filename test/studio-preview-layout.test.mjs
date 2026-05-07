@@ -129,7 +129,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260507-creation-reference-bind-2/);
+  assert.match(html, /\/app\.js\?v=20260507-creation-industry-templates-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -645,7 +645,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260507-creation-reference-bind-2/);
+  assert.match(html, /\/app\.js\?v=20260507-creation-industry-templates-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -867,7 +867,12 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(html, /id="creationScenarioInput"[\s\S]*value="social-seeding"/);
   assert.match(html, /id="creationScenarioInput"[\s\S]*value="livestream"/);
   assert.match(html, /id="creationScenarioInput"[\s\S]*value="gift-guide"/);
-  assert.match(html, /<div class="creation-control-row creation-option-grid">[\s\S]*id="creationImageCountInput"[\s\S]*id="creationScenarioInput"[\s\S]*id="creationTargetLanguageInput"[\s\S]*id="creationOutputFormatInput"[\s\S]*id="creationRatioInput"[\s\S]*id="creationSizeInput"/);
+  assert.match(html, /id="creationIndustryTemplateInput"[\s\S]*value="apparel"/);
+  assert.match(html, /id="creationIndustryTemplateInput"[\s\S]*value="beauty"/);
+  assert.match(html, /id="creationIndustryTemplateInput"[\s\S]*value="food"/);
+  assert.match(html, /id="creationIndustryTemplateInput"[\s\S]*value="electronics"/);
+  assert.match(html, /id="creationIndustryTemplateInput"[\s\S]*value="home"/);
+  assert.match(html, /<div class="creation-control-row creation-option-grid">[\s\S]*id="creationImageCountInput"[\s\S]*id="creationScenarioInput"[\s\S]*id="creationIndustryTemplateInput"[\s\S]*id="creationTargetLanguageInput"[\s\S]*id="creationOutputFormatInput"[\s\S]*id="creationRatioInput"[\s\S]*id="creationSizeInput"/);
   assert.match(html, /<select id="creationRatioInput" name="ratio">[\s\S]*<option value="1:1">1:1<\/option>[\s\S]*<\/select>/);
   assert.match(html, /<select id="creationSizeInput" name="size">[\s\S]*<option value="auto">自动<\/option>[\s\S]*<\/select>/);
   assert.match(html, /id="creationScenarioHint"/);
@@ -907,7 +912,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /usage-steps/);
   assert.match(app, /review-qa/);
   assert.match(app, /brief\.className = "creation-card-brief";/);
-  assert.match(app, /refs\.creationScenarioHint\.textContent = CREATION_SCENARIO_HINTS/);
+  assert.match(app, /refs\.creationScenarioHint\.textContent =[\s\S]*CREATION_INDUSTRY_TEMPLATE_HINTS/);
   assert.match(app, /function getCreationScenarioRolePreset\(/);
   assert.match(app, /function getCreationSelectedRoles\(\) \{/);
   assert.match(app, /function syncCreationSelectedRolesToCount\(\) \{/);
@@ -926,6 +931,9 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function updateCreationReferenceRole\(referenceId, role\) \{/);
   assert.match(app, /function buildCreationReferenceRolePayload\(\) \{/);
   assert.match(app, /function buildCreationPlanPreviewFormData\(\) \{/);
+  assert.match(app, /creationIndustryTemplateInput: document\.querySelector\("#creationIndustryTemplateInput"\)/);
+  assert.match(app, /const CREATION_INDUSTRY_TEMPLATE_HINTS = \{/);
+  assert.match(app, /const CREATION_INDUSTRY_ROLE_PRESETS = \{/);
   assert.match(app, /function getCreationPlanOverrides\(\) \{/);
   assert.match(app, /function canEditCreationItem\(/);
   assert.match(app, /function previewCreationPlan\(\) \{/);
@@ -939,15 +947,17 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /roleSelect\.dataset\.creationReferenceRoleId = item\.id;/);
   assert.match(app, /formData\.set\("imageCount", String\(selectedRoles\.length \|\| getCreationSelectedImageCount\(\)\)\)/);
   assert.match(app, /formData\.set\("scenario", refs\.creationScenarioInput\.value\)/);
+  assert.match(app, /formData\.set\("industryTemplate", refs\.creationIndustryTemplateInput\.value\)/);
   assert.match(app, /refs\.creationImageCountInput\.addEventListener\("change", syncCreationSelectedRolesToCount\)/);
   assert.match(app, /refs\.creationRoleGrid\.addEventListener\("change"/);
   assert.match(app, /refs\.creationScenarioInput\.addEventListener\("change", syncCreationSelectedRolesToScenario\)/);
+  assert.match(app, /refs\.creationIndustryTemplateInput\.addEventListener\("change", syncCreationSelectedRolesToIndustry\)/);
   assert.match(app, /refs\.creationRatioInput\.addEventListener\("change", renderCreationSizeOptions\)/);
   assert.match(app, /refs\.creationPlanButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260507-creation-reference-bind-2/);
+  assert.match(html, /app\.js\?v=20260507-creation-industry-templates-1/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
@@ -1139,6 +1149,7 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.match(app, /refs\.creationSellingPointsInput\.value = normalized\.sellingPoints\.join\("\\n"\);/);
   assert.match(app, /setCreationSelectValue\(refs\.creationTargetLanguageInput, normalized\.targetLanguage, "zh-CN"\);/);
   assert.match(app, /setCreationSelectValue\(refs\.creationScenarioInput, normalized\.scenario, "standard"\);/);
+  assert.match(app, /setCreationSelectValue\(refs\.creationIndustryTemplateInput, normalized\.industryTemplate, "general"\);/);
   assert.match(app, /state\.creationSelectedRoles = normalizedRoles\.length > 0 \? normalizedRoles : getCreationRoleIdsForCount\(normalized\.imageCount\);/);
   assert.match(app, /state\.creationReferenceFiles = \[\];/);
   assert.match(app, /state\.creationReferenceAnalysis = createEmptyCreationReferenceAnalysisState\(\);/);

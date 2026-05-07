@@ -4,10 +4,12 @@ import assert from "node:assert/strict";
 import {
   applyCreationPlanOverrides,
   buildCreationPlan,
+  getCreationIndustryRolePreset,
   getCreationScenarioRoleInstruction,
   getCreationScenarioRolePreset,
   normalizeCreationReferenceAnalysis,
   normalizeCreationImageCount,
+  normalizeCreationIndustryTemplate,
   normalizeCreationReferenceRoles,
   normalizeCreationScenario,
   normalizeCreationSelectedRoles,
@@ -214,6 +216,60 @@ test("creation planner exposes scenario-specific role presets", () => {
     getCreationScenarioRolePreset("unknown").map((role) => role.role),
     ["hero", "benefit", "scene", "detail-trust"],
   );
+});
+
+test("creation planner applies industry templates to default role sets and prompt strategy", () => {
+  const plan = buildCreationPlan({
+    productName: "Glow Serum",
+    productDescription: "Lightweight facial serum for daily skincare routines",
+    sellingPoints: "hydrating, travel friendly, smooth texture",
+    targetLanguage: "en",
+    scenario: "detail-page",
+    imageCount: "8",
+    industryTemplate: "beauty",
+  });
+
+  assert.equal(plan.industryTemplate, "beauty");
+  assert.equal(plan.industryTemplateLabel, "美妆个护");
+  assert.deepEqual(
+    plan.selectedRoles,
+    ["hero", "benefit", "material-closeup", "usage-steps", "detail-trust", "social-proof", "package", "review-qa"],
+  );
+  assert.ok(plan.items.every((item) => item.prompt.includes("Beauty and personal care industry template")));
+  assert.ok(plan.items.every((item) => item.prompt.includes("texture, swatches, skincare use, packaging, and benefit hierarchy")));
+});
+
+test("creation planner normalizes supported industry templates", () => {
+  assert.equal(normalizeCreationIndustryTemplate("apparel").value, "apparel");
+  assert.equal(normalizeCreationIndustryTemplate("beauty").value, "beauty");
+  assert.equal(normalizeCreationIndustryTemplate("food").value, "food");
+  assert.equal(normalizeCreationIndustryTemplate("electronics").value, "electronics");
+  assert.equal(normalizeCreationIndustryTemplate("home").value, "home");
+  assert.equal(normalizeCreationIndustryTemplate("unknown").value, "general");
+  assert.deepEqual(
+    getCreationIndustryRolePreset("electronics").map((role) => role.role),
+    ["hero", "benefit", "dimensions", "usage-steps", "detail-trust", "comparison", "package", "review-qa"],
+  );
+  assert.deepEqual(getCreationIndustryRolePreset("general"), []);
+});
+
+test("creation planner fills larger industry template sets with remaining ecommerce roles", () => {
+  const plan = buildCreationPlan({
+    productName: "Pocket Camera",
+    productDescription: "Compact 3C device with screen and accessory kit",
+    sellingPoints: "portable, clear display, easy setup",
+    targetLanguage: "en",
+    imageCount: "12",
+    industryTemplate: "electronics",
+  });
+
+  assert.equal(plan.imageCount, 12);
+  assert.equal(plan.industryTemplate, "electronics");
+  assert.deepEqual(
+    plan.selectedRoles.slice(0, 8),
+    ["hero", "benefit", "dimensions", "usage-steps", "detail-trust", "comparison", "package", "review-qa"],
+  );
+  assert.equal(new Set(plan.selectedRoles).size, 12);
 });
 
 test("creation planner adds role-specific guidance inside each marketing scenario", () => {

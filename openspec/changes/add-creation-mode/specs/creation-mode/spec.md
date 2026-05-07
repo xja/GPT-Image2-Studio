@@ -12,7 +12,7 @@ The system SHALL expose Creation Mode as a separate tab under the creation works
 - **THEN** the prompt-mode activity feed and default gallery-visible history are not updated as if the images were prompt-mode single-image jobs
 
 ### Requirement: Creation Mode generates configurable ecommerce sets
-The system SHALL generate one set for one product with quick presets of 4, 6, 8, 10, or 12 ecommerce marketing roles and SHALL allow the user to customize which of the 12 image roles are generated for the current set. When the user uses a preset without custom role changes, the first four roles SHALL remain hero image, benefit image, lifestyle scene, and detail/trust image.
+The system SHALL generate one set for one product with quick presets of 4, 6, 8, 10, or 12 ecommerce marketing roles and SHALL allow the user to customize which of the 12 image roles are generated for the current set. The system SHALL also allow the user to choose an industry template for general ecommerce, apparel, beauty, food, consumer electronics, or home/living products. When the user uses a preset without custom role changes and no non-general industry template is selected, the first four roles SHALL remain hero image, benefit image, lifestyle scene, and detail/trust image.
 
 #### Scenario: User starts a creation set
 - **WHEN** the user submits product information and a target language in Creation Mode
@@ -44,6 +44,12 @@ The system SHALL generate one set for one product with quick presets of 4, 6, 8,
 - **THEN** the role picker updates to the scenario's recommended image-role combination
 - **AND** the quick image count reflects the recommended role count when that count is supported
 - **AND** the user can still manually add or remove image roles before generation
+
+#### Scenario: User changes industry template
+- **WHEN** the user selects a Creation Mode industry template such as apparel, beauty, food, consumer electronics, or home/living
+- **THEN** the role picker updates to that industry's recommended image-role combination
+- **AND** the planned prompts include the selected industry template's visual and compliance guidance
+- **AND** the generation and plan-preview requests include the selected industry template
 
 #### Scenario: Product information is missing
 - **WHEN** the user submits Creation Mode without product information
@@ -110,7 +116,7 @@ The system SHALL save Creation Mode generated images under `Pictures/MM/YYYY-MM-
 - **THEN** the same date folder contains creation, image, and ppt output folders
 
 ### Requirement: Creation records are set-based
-The system SHALL persist Creation Mode records as set manifests with set-level input, target language, item roles, item statuses, prompts, image paths, and partial-failure status.
+The system SHALL persist Creation Mode records as set manifests with set-level input, target language, marketing scenario, industry template, item roles, item statuses, prompts, image paths, and partial-failure status.
 
 #### Scenario: All items complete
 - **WHEN** all Creation Mode items save successfully
@@ -121,7 +127,7 @@ The system SHALL persist Creation Mode records as set manifests with set-level i
 - **THEN** the set manifest status is `partial_failed` and saved item records remain available
 
 ### Requirement: Creation set records expose details and item repair
-The system SHALL provide Creation Mode set record details that show the set-level input, target language, marketing scenario, reference image names, item roles, prompts, statuses, failure messages, and saved image paths. From the detail view, the system SHALL allow users to regenerate a saved item, fill a missing item, or retry failed items without creating a new set record.
+The system SHALL provide Creation Mode set record details that show the set-level input, target language, marketing scenario, industry template, reference image names, item roles, prompts, statuses, failure messages, and saved image paths. From the detail view, the system SHALL allow users to regenerate a saved item, fill a missing item, or retry failed items without creating a new set record.
 
 #### Scenario: User opens a set record detail
 - **WHEN** the user opens a Creation Mode set record
@@ -166,13 +172,13 @@ The system SHALL group waterfall gallery browsing, PPT records, Creation Mode se
 - **AND** selecting a saved set in this asset view does not replace the active in-progress Creation Mode set
 
 #### Scenario: User searches Creation set records
-- **WHEN** the user searches the Creation set records asset view by product, scenario, language, prompt, filename, or output path
+- **WHEN** the user searches the Creation set records asset view by product, scenario, industry template, language, prompt, filename, or output path
 - **THEN** the record list narrows to matching Creation Mode set manifests
 
 #### Scenario: User reuses a Creation set record
 - **WHEN** the user explicitly reuses a selected Creation Mode set record
 - **THEN** the selected record is loaded into the active Creation Mode workspace
-- **AND** the Creation Mode form controls reflect the selected record's product input, target language, marketing scenario, image count, and selected roles
+- **AND** the Creation Mode form controls reflect the selected record's product input, target language, marketing scenario, industry template, image count, and selected roles
 - **AND** local reference-image file inputs are cleared because saved manifests cannot restore browser `File` objects
 - **AND** saved reference image names, roles, and notes are shown as items that need reupload
 - **AND** the app switches to the Creation Mode workspace so the user can continue item prompt edits, regeneration, or repair

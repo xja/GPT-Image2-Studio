@@ -146,3 +146,9 @@
 - [x] 24.1 Add failing layout tests for manually binding a reuploaded file to a saved historical reference image.
 - [x] 24.2 Add a compact binding selector on reuploaded Creation reference cards.
 - [x] 24.3 Apply the selected historical reference role and note to the bound uploaded file and keep restore status synchronized.
+
+## 25. Creation Industry Templates
+
+- [x] 25.1 Add failing tests for Creation Mode industry templates in the planner, local API, Cloudflare worker, manifest storage, and frontend controls.
+- [x] 25.2 Implement general, apparel, beauty, food, consumer electronics, and home/living templates with role presets and prompt guidance.
+- [x] 25.3 Persist industry metadata in Creation set records, hydrate it on reuse, update README/spec coverage, and rerun targeted verification.

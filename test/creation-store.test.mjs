@@ -66,6 +66,8 @@ test("creation store preserves scenario image count and reference image metadata
       productName: "AeroPress Clear",
       scenario: "social-seeding",
       scenarioLabel: "社媒种草",
+      industryTemplate: "food",
+      industryTemplateLabel: "食品饮料",
       imageCount: 6,
       selectedRoles: ["hero", "benefit", "comparison"],
       referenceImageNames: ["product-front.png", "package.png"],
@@ -82,6 +84,8 @@ test("creation store preserves scenario image count and reference image metadata
 
   assert.equal(manifest.scenario, "social-seeding");
   assert.equal(manifest.scenarioLabel, "社媒种草");
+  assert.equal(manifest.industryTemplate, "food");
+  assert.equal(manifest.industryTemplateLabel, "食品饮料");
   assert.equal(manifest.imageCount, 6);
   assert.deepEqual(manifest.selectedRoles, ["hero", "benefit", "comparison"]);
   assert.deepEqual(manifest.referenceImageNames, ["product-front.png", "package.png"]);

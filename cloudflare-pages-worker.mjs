@@ -1149,6 +1149,9 @@ function buildCloudCreationSet({ setId, plan, createdAt, updatedAt, status, item
     imageCount: plan.imageCount,
     scenario: plan.scenario,
     scenarioLabel: plan.scenarioLabel,
+    industryTemplate: plan.industryTemplate,
+    industryTemplateLabel: plan.industryTemplateLabel,
+    selectedRoles: plan.selectedRoles,
     referenceImageNames,
     createdAt,
     updatedAt: updatedAt || createdAt,
@@ -1194,6 +1197,8 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
     targetLanguage: formData.get("targetLanguage"),
     imageCount: formData.get("imageCount"),
     scenario: formData.get("scenario"),
+    industryTemplate: formData.get("industryTemplate"),
+    selectedRoles: formData.get("selectedRoles"),
   });
   const config = normalizePrivateConfig(formData);
   const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || "1:1"));
