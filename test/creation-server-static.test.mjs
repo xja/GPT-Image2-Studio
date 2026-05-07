@@ -52,6 +52,18 @@ test("server opens a selected creation set folder by manifest id", async () => {
   assert.match(server, /openDirectory\(targetDir\)/);
 });
 
+test("server returns safe full image paths for a selected creation set", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /function resolveSafeOutputPath\(relativePathValue\) \{/);
+  assert.match(server, /async function handleCreationSetPathsGet/);
+  assert.match(server, /url\.pathname === "\/api\/creation\/sets\/paths"/);
+  assert.match(server, /creationSetStore\.readManifest\(setId\)/);
+  assert.match(server, /resolveSafeOutputPath\(item\.relativePath\)/);
+  assert.match(server, /absolutePath/);
+  assert.match(server, /relativePath/);
+});
+
 test("cloudflare worker exposes creation record and generation routes", async () => {
   const worker = await readFile(cloudflareWorkerPath, "utf8");
 

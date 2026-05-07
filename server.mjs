@@ -197,6 +197,26 @@ function resolveSafeOutputSubdirectory(relativeDirValue) {
   return target;
 }
 
+function resolveSafeOutputPath(relativePathValue) {
+  const relativePathValueNormalized = String(relativePathValue || "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter(Boolean)
+    .join("/");
+  if (!relativePathValueNormalized) {
+    return null;
+  }
+
+  const normalizedBase = resolve(outputDir);
+  const target = resolve(normalizedBase, relativePathValueNormalized);
+  const backToBase = relative(normalizedBase, target);
+  if (backToBase.startsWith("..") || isAbsolute(backToBase)) {
+    return null;
+  }
+
+  return target;
+}
+
 function isSafeOutputFilename(filename) {
   return Boolean(filename) && basename(filename) === filename;
 }
@@ -1220,6 +1240,48 @@ async function handleCreationSetFolderOpen(request, response) {
 
     throw error;
   }
+}
+
+function buildCreationSetPathReport(set) {
+  const items = (Array.isArray(set.items) ? set.items : [])
+    .map((item) => {
+      const relativePath = String(item.relativePath || "").trim();
+      const absolutePath = resolveSafeOutputPath(item.relativePath);
+      if (!relativePath || !absolutePath) {
+        return null;
+      }
+
+      return {
+        itemId: String(item.itemId || ""),
+        title: String(item.title || ""),
+        filename: String(item.filename || ""),
+        relativePath,
+        absolutePath,
+        imageUrl: String(item.imageUrl || item.thumbnailUrl || ""),
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    setId: String(set.setId || ""),
+    productName: String(set.productName || ""),
+    relativeDir: String(set.relativeDir || ""),
+    absoluteDir: set.relativeDir ? resolveSafeOutputSubdirectory(set.relativeDir) : null,
+    items,
+  };
+}
+
+async function handleCreationSetPathsGet(request, response) {
+  const payload = await readJsonBody(request);
+  const setId = String(payload.setId || "").trim();
+  if (!setId) {
+    return sendJson(response, 400, {
+      message: "缺少套图记录 ID。",
+    });
+  }
+
+  const set = await creationSetStore.readManifest(setId);
+  return sendJson(response, 200, buildCreationSetPathReport(set));
 }
 
 async function handleCreationReferenceAnalyze(request, response) {
@@ -2267,6 +2329,10 @@ async function routeRequest(request, response) {
 
   if (request.method === "POST" && url.pathname === "/api/creation/sets/open-folder") {
     return handleCreationSetFolderOpen(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/creation/sets/paths") {
+    return handleCreationSetPathsGet(request, response);
   }
 
   if (request.method === "POST" && url.pathname === "/api/creation/reference/analyze") {

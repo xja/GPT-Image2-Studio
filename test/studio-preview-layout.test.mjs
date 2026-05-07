@@ -129,7 +129,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260506-creation-editor-layer-1/);
+  assert.match(html, /\/app\.js\?v=20260507-creation-reference-bind-2/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -645,7 +645,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260506-creation-editor-layer-1/);
+  assert.match(html, /\/app\.js\?v=20260507-creation-reference-bind-2/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -947,7 +947,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260506-creation-editor-layer-1/);
+  assert.match(html, /app\.js\?v=20260507-creation-reference-bind-2/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
@@ -1042,6 +1042,22 @@ test("creation record reuse tracks reference images that need reupload", async (
   assert.match(app, /if \(state\.creationReferenceRestoreQueue\.length > 0\) \{[\s\S]*return \[\];/);
 });
 
+test("creation reference reuploads can be manually bound to a saved reference", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(styles, /\.creation-reference-bind\s*\{/);
+  assert.match(app, /function bindCreationReferenceToRestoreEntry\(referenceId, restoreEntryId\) \{/);
+  assert.match(app, /select\.className = "creation-reference-bind";/);
+  assert.match(app, /select\.dataset\.creationReferenceRestoreBindId = item\.id;/);
+  assert.match(app, /state\.creationReferenceRestoreQueue = state\.creationReferenceRestoreQueue\.map/);
+  assert.match(app, /restoreEntryId: normalizedRestoreId/);
+  assert.match(app, /restoredFromRecordFilename: nextRestoreEntry\.filename/);
+  assert.match(app, /role: nextRestoreEntry\.role \|\| item\.role \|\| "product"/);
+  assert.match(app, /restoreEntryId: "",[\s\S]*restoredFromRecordFilename: "",[\s\S]*note: "",/);
+  assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRestoreBindId/);
+});
+
 test("creation mode uploads prepared reference images for generation and repair", async () => {
   const app = await readFile(appPath, "utf8");
 
@@ -1071,6 +1087,7 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.match(html, /id="creationRecordReuseButton"/);
   assert.match(html, /id="creationRecordOpenFolderButton"/);
   assert.match(html, /id="creationRecordCopyPathsButton"/);
+  assert.match(html, /id="creationRecordCopyFullPathsButton"/);
   assert.match(html, /id="creationRecordRefreshButton"/);
   assert.match(html, /id="creationRecordActionFeedback"/);
   assert.match(html, /id="creationRecordSetList"/);
@@ -1094,19 +1111,24 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.match(app, /function applyCreationSetToForm\(set\) \{/);
   assert.match(app, /function reuseCreationRecordSet\(\) \{/);
   assert.match(app, /function setCreationRecordFeedback\(message = "", kind = ""\) \{/);
-  assert.match(app, /async function writeTextToClipboard\(text\) \{/);
+  assert.match(app, /async function writeTextToClipboard\(text, failureMessage = "当前浏览器不支持复制图片路径。"\) \{/);
   assert.match(app, /function getCreationRecordImagePaths\(set\) \{/);
+  assert.match(app, /async function fetchCreationRecordPathReport\(set\) \{/);
+  assert.match(app, /function buildCreationRecordFullPathText\(payload, set\) \{/);
   assert.match(app, /async function copyCreationRecordPaths\(\) \{/);
+  assert.match(app, /async function copyCreationRecordFullPaths\(\) \{/);
   assert.match(app, /async function openCreationRecordFolder\(\) \{/);
   assert.match(app, /navigator\.clipboard\.writeText/);
   assert.match(app, /document\.execCommand\("copy"\)/);
   assert.match(app, /await writeTextToClipboard\(text\)/);
+  assert.match(app, /fetch\("\/api\/creation\/sets\/paths"/);
   assert.match(app, /fetch\("\/api\/creation\/sets\/open-folder"/);
   assert.match(app, /refs\.pptRecordRefreshButton\.addEventListener\("click",/);
   assert.match(app, /refs\.creationRecordSearchInput\.addEventListener\("input",/);
   assert.match(app, /refs\.creationRecordReuseButton\.addEventListener\("click",/);
   assert.match(app, /refs\.creationRecordOpenFolderButton\.addEventListener\("click",/);
   assert.match(app, /refs\.creationRecordCopyPathsButton\.addEventListener\("click",/);
+  assert.match(app, /refs\.creationRecordCopyFullPathsButton\.addEventListener\("click",/);
   assert.match(app, /refs\.creationRecordRefreshButton\.addEventListener\("click",/);
   assert.match(app, /refs\.creationRecordSetList\.addEventListener\("click",[\s\S]*target\.closest\("\[data-creation-record-set-id\]"\)/);
   assert.match(app, /state\.ppt\.decks = Array\.isArray\(payload\) \? payload : \[\];[\s\S]*renderPptRecordView\(\);/);
@@ -1121,6 +1143,31 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.match(app, /state\.creationReferenceFiles = \[\];/);
   assert.match(app, /state\.creationReferenceAnalysis = createEmptyCreationReferenceAnalysisState\(\);/);
   assert.doesNotMatch(app, /state\.creation\.currentSet = selectedSet \? normalizeCreationSetForView\(selectedSet\) : null;/);
+});
+
+test("creation record cards expose single-image detail actions", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(styles, /\.creation-record-card-actions\s*\{/);
+  assert.match(styles, /\.creation-record-card-actions \.mini-action\.is-disabled\s*\{/);
+  assert.match(app, /const showRecordActions = options\.showRecordActions === true;/);
+  assert.match(app, /function getCreationRecordItemById\(itemId\) \{/);
+  assert.match(app, /function buildCreationRecordLightboxItem\(item, set\) \{/);
+  assert.match(app, /function openCreationRecordItemPreview\(itemId\) \{/);
+  assert.match(app, /async function copyCreationRecordItemPrompt\(itemId\) \{/);
+  assert.match(app, /async function copyCreationRecordItemPath\(itemId\) \{/);
+  assert.match(app, /actions\.className = "creation-card-actions creation-record-card-actions";/);
+  assert.match(app, /previewButton\.dataset\.creationRecordPreviewItemId = item\.itemId;/);
+  assert.match(app, /copyPromptButton\.dataset\.creationRecordCopyPromptItemId = item\.itemId;/);
+  assert.match(app, /await writeTextToClipboard\(promptText, "当前浏览器不支持复制提示词。"\);/);
+  assert.match(app, /downloadLink\.download = item\.filename \|\| `creation-item-\$\{fallbackIndex \+ 1\}\.png`;/);
+  assert.match(app, /copyPathButton\.dataset\.creationRecordCopyPathItemId = item\.itemId;/);
+  assert.match(app, /refs\.lightboxDelete\.disabled = fresh\.isCreationRecordItem \|\| !fresh\.filename;/);
+  assert.match(app, /refs\.creationRecordResultGrid\.addEventListener\("click",[\s\S]*creationRecordPreviewItemId/);
+  assert.match(app, /refs\.creationRecordResultGrid\.addEventListener\("click",[\s\S]*creationRecordCopyPromptItemId/);
+  assert.match(app, /refs\.creationRecordResultGrid\.addEventListener\("click",[\s\S]*creationRecordCopyPathItemId/);
+  assert.match(app, /createCreationCard\(item, index, \{ showActions: false, showRecordActions: true \}\)/);
 });
 
 test("waterfall gallery paginates history unless keyword search is active", async () => {

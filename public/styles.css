@@ -1225,6 +1225,20 @@ textarea::-webkit-scrollbar-corner {
   white-space: nowrap;
 }
 
+.creation-record-card-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.creation-record-card-actions .mini-action {
+  min-height: 30px;
+}
+
+.creation-record-card-actions .mini-action.is-disabled {
+  opacity: 0.42;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
 .creation-history-block {
   display: grid;
   gap: 8px;
@@ -1660,6 +1674,23 @@ textarea {
   border-color: var(--border-strong);
   outline: none;
   background: var(--input-bg-focus);
+}
+
+.creation-reference-bind {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 7px;
+  border: 1px solid rgba(255, 201, 107, 0.26);
+  border-radius: 8px;
+  background: rgba(255, 201, 107, 0.07);
+  color: var(--text);
+  font-size: var(--type-subtitle-size);
+}
+
+.creation-reference-bind:focus {
+  border-color: rgba(255, 201, 107, 0.44);
+  outline: none;
+  background: rgba(255, 201, 107, 0.12);
 }
 
 .creation-reference-note {

@@ -307,6 +307,7 @@ const refs = {
   creationReferenceRestoreList: document.querySelector("#creationReferenceRestoreList"),
   creationRecordActionFeedback: document.querySelector("#creationRecordActionFeedback"),
   creationRecordArchiveDetail: document.querySelector("#creationRecordArchiveDetail"),
+  creationRecordCopyFullPathsButton: document.querySelector("#creationRecordCopyFullPathsButton"),
   creationRecordCopyPathsButton: document.querySelector("#creationRecordCopyPathsButton"),
   creationRecordCount: document.querySelector("#creationRecordCount"),
   creationRecordDetail: document.querySelector("#creationRecordDetail"),
@@ -2933,9 +2934,10 @@ function syncLightboxItem() {
     return;
   }
 
+  const shouldResolveLightboxItem = !state.lightboxItem.isCreationRecordItem;
   const fresh =
-    (state.lightboxItem.filename && state.gallery.find((item) => item.filename === state.lightboxItem.filename)) ||
-    (state.lightboxItem.id && state.jobs.find((job) => job.id === state.lightboxItem.id)) ||
+    (shouldResolveLightboxItem && state.lightboxItem.filename && state.gallery.find((item) => item.filename === state.lightboxItem.filename)) ||
+    (shouldResolveLightboxItem && state.lightboxItem.id && state.jobs.find((job) => job.id === state.lightboxItem.id)) ||
     state.lightboxItem;
 
   const imageUrl = getImageUrl(fresh);
@@ -2952,7 +2954,7 @@ function syncLightboxItem() {
   refs.lightboxAmbient.style.backgroundImage = imageUrl ? `url("${imageUrl}")` : "";
   refs.lightboxDownload.href = imageUrl || "#";
   refs.lightboxDownload.download = fresh.filename || "preview.png";
-  refs.lightboxDelete.disabled = !fresh.filename;
+  refs.lightboxDelete.disabled = fresh.isCreationRecordItem || !fresh.filename;
   syncLightboxZoomState();
 }
 
@@ -5105,7 +5107,7 @@ function setCreationRecordFeedback(message = "", kind = "") {
   refs.creationRecordActionFeedback.dataset.state = kind || "";
 }
 
-async function writeTextToClipboard(text) {
+async function writeTextToClipboard(text, failureMessage = "当前浏览器不支持复制图片路径。") {
   const value = String(text || "");
   if (!value) {
     return;
@@ -5136,7 +5138,7 @@ async function writeTextToClipboard(text) {
       throw new Error("copy command failed");
     }
   } catch (_error) {
-    throw new Error("当前浏览器不支持复制图片路径。");
+    throw new Error(failureMessage);
   } finally {
     textarea.remove();
     activeElement?.focus?.();
@@ -5294,6 +5296,72 @@ function markCreationReferenceRestoreEntryMissing(restoreEntryId) {
         }
       : entry,
   );
+}
+
+function syncCreationReferenceRestoreQueueBindings(referenceFiles = state.creationReferenceFiles) {
+  state.creationReferenceRestoreQueue = state.creationReferenceRestoreQueue.map((entry) => {
+    const boundFile = referenceFiles.find((item) => item.restoreEntryId === entry.id);
+    if (!boundFile) {
+      return {
+        ...entry,
+        status: "missing",
+        referenceId: "",
+        uploadedFilename: "",
+      };
+    }
+
+    return {
+      ...entry,
+      status: "uploaded",
+      referenceId: boundFile.id,
+      uploadedFilename: boundFile.file?.name || boundFile.uploadedFilename || "",
+    };
+  });
+}
+
+function bindCreationReferenceToRestoreEntry(referenceId, restoreEntryId) {
+  const normalizedReferenceId = String(referenceId || "").trim();
+  const normalizedRestoreId = String(restoreEntryId || "").trim();
+  const target = state.creationReferenceFiles.find((item) => item.id === normalizedReferenceId);
+  if (!target) {
+    return;
+  }
+
+  const nextRestoreEntry = state.creationReferenceRestoreQueue.find((entry) => entry.id === normalizedRestoreId);
+  state.creationReferenceFiles = state.creationReferenceFiles.map((item) => {
+    if (item.id !== normalizedReferenceId) {
+      if (normalizedRestoreId && item.restoreEntryId === normalizedRestoreId) {
+        return {
+          ...item,
+          restoreEntryId: "",
+          restoredFromRecordFilename: "",
+          note: "",
+        };
+      }
+
+      return item;
+    }
+
+    if (!nextRestoreEntry) {
+      return {
+        ...item,
+        restoreEntryId: "",
+        restoredFromRecordFilename: "",
+        note: "",
+      };
+    }
+
+    return {
+      ...item,
+      restoreEntryId: normalizedRestoreId,
+      restoredFromRecordFilename: nextRestoreEntry.filename,
+      role: nextRestoreEntry.role || item.role || "product",
+      note: nextRestoreEntry.note || "",
+    };
+  });
+  syncCreationReferenceRestoreQueueBindings();
+  markCreationReferenceAnalysisDirty();
+  renderCreationReferenceGrid();
 }
 
 function renderCreationReferenceRestoreList() {
@@ -5538,6 +5606,7 @@ function updateCreationCurrentItem(itemId, patch = {}) {
 
 function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
   const showActions = options.showActions !== false;
+  const showRecordActions = options.showRecordActions === true;
   const card = document.createElement("article");
   card.className = "creation-card";
 
@@ -5661,6 +5730,54 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
     card.appendChild(actions);
   }
 
+  if (showRecordActions) {
+    const actions = document.createElement("div");
+    actions.className = "creation-card-actions creation-record-card-actions";
+    const itemTitle = item.title || "套图单张";
+
+    const previewButton = document.createElement("button");
+    previewButton.className = "mini-action";
+    previewButton.type = "button";
+    previewButton.dataset.creationRecordPreviewItemId = item.itemId;
+    previewButton.textContent = "查看";
+    previewButton.disabled = !imageUrl;
+    previewButton.setAttribute("aria-label", `${itemTitle}查看大图`);
+    actions.appendChild(previewButton);
+
+    const copyPromptButton = document.createElement("button");
+    copyPromptButton.className = "mini-action";
+    copyPromptButton.type = "button";
+    copyPromptButton.dataset.creationRecordCopyPromptItemId = item.itemId;
+    copyPromptButton.textContent = "提示词";
+    copyPromptButton.disabled = !String(item.prompt || "").trim();
+    copyPromptButton.setAttribute("aria-label", `${itemTitle}复制提示词`);
+    actions.appendChild(copyPromptButton);
+
+    const downloadLink = document.createElement("a");
+    downloadLink.className = "mini-action";
+    downloadLink.href = imageUrl || "#";
+    downloadLink.download = item.filename || `creation-item-${fallbackIndex + 1}.png`;
+    downloadLink.textContent = "下载";
+    downloadLink.setAttribute("aria-label", `${itemTitle}下载图片`);
+    if (!imageUrl) {
+      downloadLink.classList.add("is-disabled");
+      downloadLink.setAttribute("aria-disabled", "true");
+      downloadLink.tabIndex = -1;
+    }
+    actions.appendChild(downloadLink);
+
+    const copyPathButton = document.createElement("button");
+    copyPathButton.className = "mini-action";
+    copyPathButton.type = "button";
+    copyPathButton.dataset.creationRecordCopyPathItemId = item.itemId;
+    copyPathButton.textContent = "路径";
+    copyPathButton.disabled = !String(item.relativePath || "").trim();
+    copyPathButton.setAttribute("aria-label", `${itemTitle}复制图片路径`);
+    actions.appendChild(copyPathButton);
+
+    card.appendChild(actions);
+  }
+
   return card;
 }
 
@@ -5713,6 +5830,100 @@ function buildCreationRecordPathText(set) {
     "图片:",
     ...paths.map((path, index) => `${index + 1}. ${path}`),
   ].join("\n");
+}
+
+async function fetchCreationRecordPathReport(set) {
+  if (!set?.setId) {
+    throw new Error("请先选择一套记录。");
+  }
+
+  const response = await fetch("/api/creation/sets/paths", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      setId: set.setId,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(payload.message || "读取套图完整路径失败。");
+  }
+
+  return payload;
+}
+
+function buildCreationRecordFullPathText(payload, set) {
+  const items = Array.isArray(payload?.items) ? payload.items.filter((item) => item.absolutePath) : [];
+  if (!set || items.length === 0) {
+    return "";
+  }
+
+  return [
+    `套图: ${set.productName || payload.productName || "未命名商品"}`,
+    `目录: ${payload.absoluteDir || set.relativeDir || "未记录目录"}`,
+    "图片:",
+    ...items.map((item, index) => `${index + 1}. ${item.absolutePath}`),
+  ].join("\n");
+}
+
+function getCreationRecordItemById(itemId) {
+  const selectedSet = getCreationRecordSelectedSet();
+  if (!selectedSet || !itemId) {
+    return null;
+  }
+
+  const item = selectedSet.items.find((entry) => entry.itemId === itemId) || null;
+  return item ? { item, set: selectedSet } : null;
+}
+
+function buildCreationRecordLightboxItem(item, set) {
+  const relativeFilename = String(item.relativePath || "").split(/[\\/]/).filter(Boolean).pop() || "";
+  return {
+    ...item,
+    id: `creation-record:${set.setId}:${item.itemId || item.filename || relativeFilename}`,
+    filename: item.filename || relativeFilename || "creation-item.png",
+    createdAt: item.generationCompletedAt || set.updatedAt || set.createdAt || nowIso(),
+    prompt: item.prompt || "",
+    imageModel: item.imageModel || "gpt-image-2",
+    isCreationRecordItem: true,
+  };
+}
+
+function openCreationRecordItemPreview(itemId) {
+  const record = getCreationRecordItemById(itemId);
+  if (!record?.item || !getImageUrl(record.item)) {
+    setCreationRecordFeedback("当前单张还没有可查看的大图。", "error");
+    return;
+  }
+
+  openLightbox(buildCreationRecordLightboxItem(record.item, record.set));
+}
+
+async function copyCreationRecordItemPrompt(itemId) {
+  const record = getCreationRecordItemById(itemId);
+  const promptText = String(record?.item?.prompt || "").trim();
+  if (!promptText) {
+    setCreationRecordFeedback("当前单张没有可复制的提示词。", "error");
+    return;
+  }
+
+  await writeTextToClipboard(promptText, "当前浏览器不支持复制提示词。");
+  setCreationRecordFeedback("已复制单张提示词。", "success");
+}
+
+async function copyCreationRecordItemPath(itemId) {
+  const record = getCreationRecordItemById(itemId);
+  const pathText = String(record?.item?.relativePath || "").trim();
+  if (!pathText) {
+    setCreationRecordFeedback("当前单张没有可复制的图片路径。", "error");
+    return;
+  }
+
+  await writeTextToClipboard(pathText);
+  setCreationRecordFeedback("已复制单张图片路径。", "success");
 }
 
 function renderCreationRecordSetList() {
@@ -5804,6 +6015,24 @@ async function copyCreationRecordPaths() {
   setCreationRecordFeedback("已复制当前套图图片路径。", "success");
 }
 
+async function copyCreationRecordFullPaths() {
+  const selectedSet = getCreationRecordSelectedSet();
+  if (getCreationRecordImagePaths(selectedSet).length === 0) {
+    setCreationRecordFeedback("当前套图还没有可复制的完整图片路径。", "error");
+    return;
+  }
+
+  const payload = await fetchCreationRecordPathReport(selectedSet);
+  const text = buildCreationRecordFullPathText(payload, selectedSet);
+  if (!text) {
+    setCreationRecordFeedback("当前套图还没有可复制的完整图片路径。", "error");
+    return;
+  }
+
+  await writeTextToClipboard(text);
+  setCreationRecordFeedback("已复制当前套图完整图片路径。", "success");
+}
+
 function reuseCreationRecordSet() {
   const selectedSet = getCreationRecordSelectedSet();
   if (!selectedSet) {
@@ -5875,6 +6104,9 @@ function renderCreationRecordView() {
   if (refs.creationRecordCopyPathsButton) {
     refs.creationRecordCopyPathsButton.disabled = getCreationRecordImagePaths(selectedSet).length === 0;
   }
+  if (refs.creationRecordCopyFullPathsButton) {
+    refs.creationRecordCopyFullPathsButton.disabled = getCreationRecordImagePaths(selectedSet).length === 0;
+  }
 
   renderCreationRecordSetList();
   state.creation.recordSetId = selectedSet?.setId || "";
@@ -5891,7 +6123,7 @@ function renderCreationRecordView() {
   }
 
   selectedSet.items.forEach((item, index) => {
-    refs.creationRecordResultGrid.appendChild(createCreationCard(item, index, { showActions: false }));
+    refs.creationRecordResultGrid.appendChild(createCreationCard(item, index, { showActions: false, showRecordActions: true }));
   });
 }
 
@@ -6038,6 +6270,29 @@ function renderCreationReferenceGrid() {
       roleSelect.appendChild(choice);
     });
     card.appendChild(roleSelect);
+
+    if (state.creationReferenceRestoreQueue.length > 0) {
+      const select = document.createElement("select");
+      select.className = "creation-reference-bind";
+      select.dataset.creationReferenceRestoreBindId = item.id;
+      select.setAttribute("aria-label", "绑定历史参考图");
+
+      const blank = document.createElement("option");
+      blank.value = "";
+      blank.textContent = "不绑定历史参考图";
+      blank.selected = !item.restoreEntryId;
+      select.appendChild(blank);
+
+      state.creationReferenceRestoreQueue.forEach((entry) => {
+        const option = document.createElement("option");
+        option.value = entry.id;
+        option.textContent = `${entry.filename}${entry.referenceId && entry.referenceId !== item.id ? "（已绑定）" : ""}`;
+        option.selected = item.restoreEntryId === entry.id;
+        select.appendChild(option);
+      });
+
+      card.appendChild(select);
+    }
 
     if (item.note) {
       const note = document.createElement("span");
@@ -8072,6 +8327,9 @@ function bindEvents() {
   refs.creationRecordCopyPathsButton.addEventListener("click", () => {
     copyCreationRecordPaths().catch((error) => setCreationRecordFeedback(error.message, "error"));
   });
+  refs.creationRecordCopyFullPathsButton.addEventListener("click", () => {
+    copyCreationRecordFullPaths().catch((error) => setCreationRecordFeedback(error.message, "error"));
+  });
   refs.creationRecordSearchInput.addEventListener("input", (event) => {
     state.creation.recordQuery = event.target.value;
     renderCreationRecordView();
@@ -8083,6 +8341,28 @@ function bindEvents() {
     }
 
     selectCreationRecord(target.dataset.creationRecordSetId);
+  });
+  refs.creationRecordResultGrid.addEventListener("click", (event) => {
+    const previewButton = event.target.closest("[data-creation-record-preview-item-id]");
+    if (previewButton) {
+      openCreationRecordItemPreview(previewButton.dataset.creationRecordPreviewItemId);
+      return;
+    }
+
+    const copyPromptButton = event.target.closest("[data-creation-record-copy-prompt-item-id]");
+    if (copyPromptButton) {
+      copyCreationRecordItemPrompt(copyPromptButton.dataset.creationRecordCopyPromptItemId).catch((error) =>
+        setCreationRecordFeedback(error.message, "error"),
+      );
+      return;
+    }
+
+    const copyPathButton = event.target.closest("[data-creation-record-copy-path-item-id]");
+    if (copyPathButton) {
+      copyCreationRecordItemPath(copyPathButton.dataset.creationRecordCopyPathItemId).catch((error) =>
+        setCreationRecordFeedback(error.message, "error"),
+      );
+    }
   });
   refs.creationPromptEditorLayer.addEventListener("click", (event) => {
     const closeButton = event.target.closest("[data-creation-close-prompt-editor]");
@@ -8165,6 +8445,12 @@ function bindEvents() {
     openCreationReferencePreview(target.dataset.creationReferencePreviewId);
   });
   refs.creationReferenceGrid.addEventListener("change", (event) => {
+    const bindTarget = event.target.closest("[data-creation-reference-restore-bind-id]");
+    if (bindTarget) {
+      bindCreationReferenceToRestoreEntry(bindTarget.dataset.creationReferenceRestoreBindId, bindTarget.value);
+      return;
+    }
+
     const target = event.target.closest("[data-creation-reference-role-id]");
     if (!target) {
       return;

@@ -140,3 +140,9 @@
 - [x] 23.1 Add failing layout tests for historical reference images that need reupload after record reuse.
 - [x] 23.2 Track saved reference names, roles, and notes as missing or uploaded items in the active Creation Mode workspace.
 - [x] 23.3 Apply saved roles and notes to matching reuploaded files and only send uploaded reference files in preview, generation, and repair requests.
+
+## 24. Creation Reference Manual Binding
+
+- [x] 24.1 Add failing layout tests for manually binding a reuploaded file to a saved historical reference image.
+- [x] 24.2 Add a compact binding selector on reuploaded Creation reference cards.
+- [x] 24.3 Apply the selected historical reference role and note to the bound uploaded file and keep restore status synchronized.

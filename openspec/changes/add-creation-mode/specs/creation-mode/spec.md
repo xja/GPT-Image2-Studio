@@ -181,6 +181,8 @@ The system SHALL group waterfall gallery browsing, PPT records, Creation Mode se
 - **WHEN** the user uploads reference images after reusing a Creation Mode set record
 - **THEN** files matching saved reference names, or the next missing reference by order, are marked as uploaded
 - **AND** the uploaded files inherit the saved reference role and note for preview, generation, and repair requests
+- **AND** the user can manually bind an uploaded file to a selected historical reference item to override automatic filename or order matching
+- **AND** manual binding applies the selected historical reference role and note to that uploaded file
 - **AND** missing historical reference items are not sent as usable reference-image metadata until a real file is uploaded
 
 #### Scenario: User opens a Creation set record folder
