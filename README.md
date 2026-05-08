@@ -41,7 +41,7 @@
 | Frontend | 原生 HTML / CSS / JavaScript，浏览器端 ESM |
 | API | `POST /responses`，结构化大纲生成，`tools[].type = "image_generation"`，`tools[].model = "gpt-image-2"` |
 | Streaming | `text/event-stream` / SSE，监听中途预览和最终图片事件 |
-| Storage | 本地 `.local/config.json` 保存配置，`Pictures/MM/YYYY-MM-DD/YYYY-MM-DD-image/` 保存图片，`Pictures/MM/YYYY-MM-DD/YYYY-MM-DD-creation/商品名-短ID/` 保存套图图片，`Pictures/MM/YYYY-MM-DD/YYYY-MM-DD-ppt/PPT名称-短ID/` 保存 PPT 图片和 PPTX，`Pictures/json/creation-sets/` 和 `Pictures/json/ppt-decks/` 保存清单 |
+| Storage | 本地 `.local/config.json` 保存配置，`Pictures/YYYY-MM/MM-DD/YYYY-MM-DD-image/` 保存图片，`Pictures/YYYY-MM/MM-DD/YYYY-MM-DD-creation/商品名-短ID/` 保存套图图片，`Pictures/YYYY-MM/MM-DD/YYYY-MM-DD-ppt/PPT名称-短ID/` 保存 PPT 图片和 PPTX，`Pictures/json/creation-sets/` 和 `Pictures/json/ppt-decks/` 保存清单 |
 | Packaging | Windows `iexpress.exe` + `tar.exe`，生成自解压安装包 |
 
 ## 快速启动
@@ -226,15 +226,15 @@ $env:RESPONSES_MODEL="gpt-5.4"
 工作台生成的图片默认保存到 Windows 图片目录：
 
 ```text
-C:\Users\<你的用户名>\Pictures\MM\YYYY-MM-DD\YYYY-MM-DD-image\
+C:\Users\<你的用户名>\Pictures\YYYY-MM\MM-DD\YYYY-MM-DD-image\
 ```
 
-每张图片会同时保存一份同名元数据，画廊会按月份和日期读取并展示这些本地输出。页面里的“打开输出目录”会直接打开当天日期目录。服务启动时会把历史 `YYYY-MM-DD` 日期目录自动归类到对应 `MM` 月份目录中。
+每张图片会同时保存一份同名元数据，画廊会按月份和日期读取并展示这些本地输出。页面里的“打开输出目录”会直接打开当天日期目录。服务启动时会把历史 `YYYY-MM-DD` 或 `MM/YYYY-MM-DD` 日期目录自动归类到对应 `YYYY-MM/MM-DD` 日期目录中。
 
 套图模式生成的图片不会进入普通画廊目录，而是保存到同级 `creation` 日期目录，并在 `Pictures/json/creation-sets/` 维护套图清单。生成前计划预览只生成本地计划，不会写入图片文件；正式生成、后续单张提示词微调、重生成或补齐未完成项才会更新同一套图清单和同一 creation 文件夹。套图清单会记录参考图文件名、用途标签和智能识别备注：
 
 ```text
-C:\Users\<你的用户名>\Pictures\MM\YYYY-MM-DD\YYYY-MM-DD-creation\商品名-短ID\
+C:\Users\<你的用户名>\Pictures\YYYY-MM\MM-DD\YYYY-MM-DD-creation\商品名-短ID\
 ```
 
 ```text
@@ -246,7 +246,7 @@ C:\Users\<你的用户名>\Pictures\json\creation-sets\
 PPT 工作流会在当天目录下创建带日期前缀的 PPT 目录，并按 PPT 名称自动建立一个文件夹。该 PPT 的幻灯片图片和最终 `.pptx` 文件都会放在同一个文件夹中：
 
 ```text
-C:\Users\<你的用户名>\Pictures\MM\YYYY-MM-DD\YYYY-MM-DD-ppt\PPT名称-短ID\
+C:\Users\<你的用户名>\Pictures\YYYY-MM\MM-DD\YYYY-MM-DD-ppt\PPT名称-短ID\
 ```
 
 PPT 历史清单保存在：

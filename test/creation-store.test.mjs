@@ -17,7 +17,7 @@ test("creation store builds dated creation directories beside image and ppt fold
       productName: "AeroPress Clear",
       setId: "creation-set-abc12345",
     }),
-    "05/2026-05-05/2026-05-05-creation/AeroPressClear-abc12345",
+    "2026-05/05-05/2026-05-05-creation/AeroPressClear-abc12345",
   );
 });
 
@@ -35,14 +35,14 @@ test("creation store normalizes set manifests with output URLs and item ordering
           slotIndex: 2,
           role: "benefit",
           title: "卖点图",
-          relativePath: "05/2026-05-05/2026-05-05-creation/demo/02-benefit.png",
+          relativePath: "2026-05/05-05/2026-05-05-creation/demo/02-benefit.png",
         },
         {
           itemId: "1-hero",
           slotIndex: 1,
           role: "hero",
           title: "主图",
-          relativePath: "05/2026-05-05/2026-05-05-creation/demo/01-hero.png",
+          relativePath: "2026-05/05-05/2026-05-05-creation/demo/01-hero.png",
         },
       ],
     },
@@ -55,7 +55,7 @@ test("creation store normalizes set manifests with output URLs and item ordering
   );
   assert.equal(
     manifest.items[0].imageUrl,
-    "/output/05/2026-05-05/2026-05-05-creation/demo/01-hero.png",
+    "/output/2026-05/05-05/2026-05-05-creation/demo/01-hero.png",
   );
 });
 
@@ -110,7 +110,7 @@ test("creation store preserves item generation telemetry", () => {
           slotIndex: 1,
           status: "completed",
           filename: "01-hero.jpg",
-          relativePath: "05/2026-05-05/2026-05-05-creation/demo/01-hero.jpg",
+          relativePath: "2026-05/05-05/2026-05-05-creation/demo/01-hero.jpg",
           generationStartedAt: "2026-05-05T09:00:01.000Z",
           generationCompletedAt: "2026-05-05T09:00:31.000Z",
           generationDurationMs: 30000,
@@ -153,7 +153,7 @@ test("creation set store writes and lists manifests newest first", async () => {
         slotIndex: 1,
         role: "hero",
         title: "主图",
-        relativePath: "05/2026-05-05/2026-05-05-creation/new/01-hero.png",
+        relativePath: "2026-05/05-05/2026-05-05-creation/new/01-hero.png",
       },
     ],
   });

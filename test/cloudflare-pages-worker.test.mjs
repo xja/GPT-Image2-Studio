@@ -376,6 +376,81 @@ test("Cloudflare interactive generation streams chunks even when a queue binding
   assert.doesNotMatch(text, /test-browser-key/);
 });
 
+test("Cloudflare style transfer generation labels source and style references", async () => {
+  const seenRequests = [];
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("jobId", "job-style-transfer");
+  formData.set("prompt", "Transfer the second image style onto the first image");
+  formData.set("mode", "style-transfer");
+  formData.set("ratio", "1:1");
+  formData.set("size", "2048x2048");
+  formData.set("format", "png");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("referenceImages", new File(["source"], "source.png", { type: "image/png" }));
+  formData.append("referenceImages", new File(["style"], "style.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        body: JSON.parse(init.body),
+      });
+      return makeSseResponse();
+    },
+  });
+
+  const text = await response.text();
+  const content = seenRequests[0].body.input[0].content;
+
+  assert.equal(response.status, 200);
+  assert.match(text, /event: complete/);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(content.filter((item) => item.type === "input_image").length, 2);
+  assert.match(content[1].text, /SOURCE image/);
+  assert.match(content[3].text, /STYLE reference/);
+});
+
+test("Cloudflare style transfer generation requires both source and style images", async () => {
+  const seenRequests = [];
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("jobId", "job-style-transfer-missing");
+  formData.set("prompt", "Transfer style");
+  formData.set("mode", "style-transfer");
+  formData.set("ratio", "1:1");
+  formData.set("size", "2048x2048");
+  formData.set("format", "png");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("referenceImages", new File(["source"], "source.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl(url, init) {
+      seenRequests.push({ url, body: init.body });
+      return makeSseResponse();
+    },
+  });
+
+  const text = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 0);
+  assert.match(text, /event: error/);
+  assert.match(text, /风格迁移需要上传原图和风格参考图/);
+});
+
 test("Cloudflare image proxy rejects invalid keys", async () => {
   const imageBucket = makeImageBucket();
   const response = await handleApiRequest(new Request("https://studio.example/api/images/..%2Fsecret.png"), {

@@ -28,6 +28,7 @@ import {
   buildPublicAssetUrl,
   deleteGeneratedAsset,
   formatDateFolder,
+  formatDayFolder,
   formatMonthFolder,
   listGalleryItems,
   repairGeneratedAssetMetadata,
@@ -87,6 +88,10 @@ const PPT_SLIDE_FORMAT = "png";
 const MOCK_IMAGE_GENERATION_ENABLED = process.env.IMAGE_STUDIO_MOCK_IMAGE_GENERATION === "1";
 const MOCK_IMAGE_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==";
+const STYLE_TRANSFER_REFERENCE_IMAGE_LABELS = [
+  "Reference image 1: SOURCE image. Preserve content, identity, pose, composition, and layout only. Do not preserve its visual style.",
+  "Reference image 2: STYLE reference. This image is the style authority for final rendering, realism level, lighting, texture, color, and material finish.",
+];
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -104,6 +109,15 @@ const MIME_TYPES = {
 
 function getMimeType(filePath) {
   return MIME_TYPES[extname(filePath).toLowerCase()] || "application/octet-stream";
+}
+
+function getStaticCacheControl(filePath) {
+  const relativePublicPath = relative(publicDir, filePath);
+  const relativeLibPath = relative(libDir, filePath);
+  const isPublicAsset = relativePublicPath && !relativePublicPath.startsWith("..") && !isAbsolute(relativePublicPath);
+  const isLibraryAsset = relativeLibPath && !relativeLibPath.startsWith("..") && !isAbsolute(relativeLibPath);
+
+  return isPublicAsset || isLibraryAsset ? "no-store" : null;
 }
 
 function sendJson(response, statusCode, payload, headers = {}) {
@@ -188,9 +202,16 @@ async function readFormDataBody(request) {
 
 async function serveFile(response, filePath) {
   await stat(filePath);
-  response.writeHead(200, {
+  const cacheControl = getStaticCacheControl(filePath);
+  const headers = {
     "Content-Type": getMimeType(filePath),
-  });
+  };
+
+  if (cacheControl) {
+    headers["Cache-Control"] = cacheControl;
+  }
+
+  response.writeHead(200, headers);
 
   await new Promise((resolvePromise, rejectPromise) => {
     const stream = createReadStream(filePath);
@@ -204,8 +225,9 @@ function resolveSafeFile(baseDir, requestPath) {
   const decoded = decodeURIComponent(requestPath);
   const target = resolve(baseDir, `.${decoded}`);
   const normalizedBase = resolve(baseDir);
+  const backToBase = relative(normalizedBase, target);
 
-  if (!target.startsWith(normalizedBase)) {
+  if (backToBase.startsWith("..") || isAbsolute(backToBase)) {
     return null;
   }
 
@@ -368,8 +390,9 @@ async function handlePromptAgentHistoryGet(response) {
 async function handleOpenOutput(response) {
   const now = new Date();
   const todayMonthFolder = formatMonthFolder(now);
+  const todayDayFolder = formatDayFolder(now);
   const todayDateFolder = formatDateFolder(now);
-  const todayOutputDir = join(outputDir, todayMonthFolder, todayDateFolder);
+  const todayOutputDir = join(outputDir, todayMonthFolder, todayDayFolder);
   await Promise.all([
     mkdir(todayOutputDir, { recursive: true }),
     mkdir(join(todayOutputDir, `${todayDateFolder}-image`), { recursive: true }),
@@ -526,9 +549,10 @@ function buildPptDeckFolderName({ outline, deckId }) {
 
 function buildPptDeckRelativeDir({ outline, deckId, createdAt }) {
   const monthFolder = formatMonthFolder(createdAt);
+  const dayFolder = formatDayFolder(createdAt);
   const dateFolder = formatDateFolder(createdAt);
   const deckFolderName = buildPptDeckFolderName({ outline, deckId });
-  return normalizePptRelativePath(`${monthFolder}/${dateFolder}/${dateFolder}-ppt/${deckFolderName}`);
+  return normalizePptRelativePath(`${monthFolder}/${dayFolder}/${dateFolder}-ppt/${deckFolderName}`);
 }
 
 function extractPptDeckRelativeDirFromSlides(slides = []) {
@@ -1126,6 +1150,9 @@ function buildSavedItem({
   format,
   referenceImages,
   reasoningEffort,
+  generationMode = "",
+  styleTransferSourceImageName = "",
+  styleTransferReferenceImageName = "",
   generationStartedAt,
   generationCompletedAt,
   generationDurationMs,
@@ -1147,6 +1174,9 @@ function buildSavedItem({
     hasReferenceImage: referenceImages.length > 0,
     referenceImageNames: referenceImages.map((image) => image.filename),
     referenceImageName: referenceImages[0]?.filename || "",
+    generationMode,
+    styleTransferSourceImageName,
+    styleTransferReferenceImageName,
     ratio: ratioOption.value,
     ratioLabel: ratioOption.label,
     size,
@@ -2088,6 +2118,9 @@ async function handleGenerate(request, response) {
     const ratio = String(formData.get("ratio") || "4:5");
     const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
     const requestedFormatInput = String(formData.get("format") || "").trim().toLowerCase();
+    const generationMode = String(formData.get("mode") || "").trim() === "style-transfer" ? "style-transfer" : "";
+    const styleTransferSourceImageName = String(formData.get("styleTransferSourceImageName") || "").trim();
+    const styleTransferReferenceImageName = String(formData.get("styleTransferReferenceImageName") || "").trim();
     clientSessionId = getClientSessionId(request, formData);
     const createdAt = new Date().toISOString();
 
@@ -2129,6 +2162,15 @@ async function handleGenerate(request, response) {
       });
       writeSseEvent(response, "error", {
         message: `参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`,
+      });
+      return;
+    }
+    if (generationMode === "style-transfer" && referenceImages.length < 2) {
+      generationTaskStore.failTask(clientSessionId, taskId, {
+        errorMessage: "风格迁移需要上传原图和风格参考图。",
+      });
+      writeSseEvent(response, "error", {
+        message: "风格迁移需要上传原图和风格参考图。",
       });
       return;
     }
@@ -2184,6 +2226,9 @@ async function handleGenerate(request, response) {
       hasReferenceImage: referenceImages.length > 0,
       referenceImageNames: referenceImages.map((image) => image.filename),
       referenceImageName: referenceImages[0]?.filename || "",
+      generationMode,
+      styleTransferSourceImageName,
+      styleTransferReferenceImageName,
       reasoningEffort,
     });
 
@@ -2192,6 +2237,7 @@ async function handleGenerate(request, response) {
       apiKey: config.apiKey,
       prompt: finalPrompt,
       referenceImages,
+      referenceImageLabels: generationMode === "style-transfer" ? STYLE_TRANSFER_REFERENCE_IMAGE_LABELS : [],
       size: finalSize,
       quality: finalQuality,
       format: toApiOutputFormat(finalFormat),
@@ -2279,6 +2325,9 @@ async function handleGenerate(request, response) {
         hasReferenceImage: referenceImages.length > 0,
         referenceImageNames: referenceImages.map((image) => image.filename),
         referenceImageName: referenceImages[0]?.filename || "",
+        generationMode,
+        styleTransferSourceImageName,
+        styleTransferReferenceImageName,
         reasoningEffort,
         generationStartedAt,
         generationCompletedAt,
@@ -2300,6 +2349,9 @@ async function handleGenerate(request, response) {
       format: finalFormat,
       referenceImages,
       reasoningEffort,
+      generationMode,
+      styleTransferSourceImageName,
+      styleTransferReferenceImageName,
       generationStartedAt,
       generationCompletedAt,
       generationDurationMs,
@@ -2514,6 +2566,6 @@ server.listen(port, () => {
   const now = new Date();
   console.log(`Responses Image Studio 正在运行: http://localhost:${port}`);
   console.log(`输出根目录: ${outputDir}`);
-  console.log(`当前输出目录: ${join(outputDir, formatMonthFolder(now), formatDateFolder(now))}`);
+  console.log(`当前输出目录: ${join(outputDir, formatMonthFolder(now), formatDayFolder(now))}`);
   console.log(`配置文件: ${configStore.configPath}`);
 });

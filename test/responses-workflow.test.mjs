@@ -54,6 +54,51 @@ test("buildResponsesInput returns multimodal user message with multiple referenc
   ]);
 });
 
+test("buildResponsesInput can label reference images before each image", () => {
+  const input = buildResponsesInput({
+    prompt: "Transfer style from the second image to the first image.",
+    referenceImageLabels: [
+      "Reference image 1: SOURCE image. Preserve content only.",
+      "Reference image 2: STYLE image. This is the style authority.",
+    ],
+    referenceImages: [
+      {
+        mimeType: "image/png",
+        base64: "c291cmNl",
+        filename: "source.png",
+      },
+      {
+        mimeType: "image/jpeg",
+        base64: "c3R5bGU=",
+        filename: "style.jpeg",
+      },
+    ],
+  });
+
+  assert.deepEqual(input[0].content, [
+    {
+      type: "input_text",
+      text: "Transfer style from the second image to the first image.",
+    },
+    {
+      type: "input_text",
+      text: "Reference image 1: SOURCE image. Preserve content only.",
+    },
+    {
+      type: "input_image",
+      image_url: "data:image/png;base64,c291cmNl",
+    },
+    {
+      type: "input_text",
+      text: "Reference image 2: STYLE image. This is the style authority.",
+    },
+    {
+      type: "input_image",
+      image_url: "data:image/jpeg;base64,c3R5bGU=",
+    },
+  ]);
+});
+
 test("createResponsesRequestBody keeps gpt-5.4 on the outer model and passes reasoning effort", () => {
   const requestBody = createResponsesRequestBody({
     prompt: "生成一张图",

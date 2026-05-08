@@ -28,7 +28,7 @@ test("server exposes PPT generation, completion and deck history endpoints", asy
   assert.match(server, /function buildPptDeckRelativeDir/);
   assert.match(server, /function resolvePptDeckRelativeDir/);
   assert.match(server, /extractPptDeckRelativeDirFromSlides\(slides\) \|\| buildPptDeckRelativeDir/);
-  assert.match(server, /\$\{monthFolder\}\/\$\{dateFolder\}\/\$\{dateFolder\}-ppt\/\$\{deckFolderName\}/);
+  assert.match(server, /\$\{monthFolder\}\/\$\{dayFolder\}\/\$\{dateFolder\}-ppt\/\$\{deckFolderName\}/);
   assert.match(server, /migrateOutputDirectoryMonths\(\{ outputDir \}\)/);
   assert.match(server, /relativeDir:\s*pptDeckRelativeDir/);
   assert.match(server, /const pptxRelativePath = normalizePptRelativePath\(`\$\{pptDeckRelativeDir\}\/\$\{pptxFilename\}`\)/);
@@ -82,6 +82,14 @@ test("server serves browser modules from public before Vercel-bundled lib files"
   assert.ok(publicRouteIndex > -1);
   assert.ok(bundledLibRouteIndex > -1);
   assert.ok(publicRouteIndex < bundledLibRouteIndex);
+});
+
+test("server static file resolver rejects same-prefix sibling directories", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /const backToBase = relative\(normalizedBase, target\);/);
+  assert.match(server, /backToBase\.startsWith\("\.\."\) \|\| isAbsolute\(backToBase\)/);
+  assert.doesNotMatch(server, /target\.startsWith\(normalizedBase\)/);
 });
 
 test("package declares pptxgenjs dependency for deck export", async () => {

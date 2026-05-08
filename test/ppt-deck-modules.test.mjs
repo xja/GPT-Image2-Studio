@@ -240,11 +240,11 @@ test("PPT deck store merges manifest records with PPTX files found in output fol
 
   await mkdir(join(outputDir, "2026-04-29"), { recursive: true });
   await mkdir(join(outputDir, "2026-04-30", "ppt"), { recursive: true });
-  await mkdir(join(outputDir, "05", "2026-05-01", "2026-05-01-ppt", "folder-deck"), { recursive: true });
+  await mkdir(join(outputDir, "2026-05", "05-01", "2026-05-01-ppt", "folder-deck"), { recursive: true });
   await writeFile(join(outputDir, "2026-04-29", "manifested.pptx"), "manifested");
   await writeFile(join(outputDir, "2026-04-30", "ppt", "folder-only.pptx"), "folder-only");
   await writeFile(
-    join(outputDir, "05", "2026-05-01", "2026-05-01-ppt", "folder-deck", "month-folder-only.pptx"),
+    join(outputDir, "2026-05", "05-01", "2026-05-01-ppt", "folder-deck", "month-folder-only.pptx"),
     "month-folder-only",
   );
 
@@ -262,7 +262,7 @@ test("PPT deck store merges manifest records with PPTX files found in output fol
   const manifestedRecords = decks.filter((deck) => deck.pptxRelativePath === "2026-04-29/manifested.pptx");
   const folderOnly = decks.find((deck) => deck.pptxRelativePath === "2026-04-30/ppt/folder-only.pptx");
   const monthFolderOnly = decks.find(
-    (deck) => deck.pptxRelativePath === "05/2026-05-01/2026-05-01-ppt/folder-deck/month-folder-only.pptx",
+    (deck) => deck.pptxRelativePath === "2026-05/05-01/2026-05-01-ppt/folder-deck/month-folder-only.pptx",
   );
 
   assert.equal(manifestedRecords.length, 1);
@@ -275,6 +275,6 @@ test("PPT deck store merges manifest records with PPTX files found in output fol
   assert.equal(monthFolderOnly?.recordSource, "folder");
   assert.equal(
     monthFolderOnly?.pptxUrl,
-    "/output/05/2026-05-01/2026-05-01-ppt/folder-deck/month-folder-only.pptx",
+    "/output/2026-05/05-01/2026-05-01-ppt/folder-deck/month-folder-only.pptx",
   );
 });

@@ -6,18 +6,40 @@ import { join } from "node:path";
 
 import { migrateOutputDirectoryMonths } from "../lib/output-directory-migration.mjs";
 
-test("output directory migration moves legacy date folders into month folders and rewrites PPT manifests", async () => {
+test("output directory migration moves legacy date folders into year-month folders and rewrites PPT manifests", async () => {
   const outputDir = await mkdtemp(join(tmpdir(), "output-month-migration-"));
   const manifestPath = join(outputDir, "json", "ppt-decks", "deck-demo.json");
 
   await mkdir(join(outputDir, "2026-05-05", "2026-05-05-image"), { recursive: true });
   await mkdir(join(outputDir, "2026-05-05", "2026-05-05-ppt", "演示文稿-1234abcd"), { recursive: true });
   await mkdir(join(outputDir, "json", "2026-05-05", "2026-05-05-image"), { recursive: true });
+  await mkdir(join(outputDir, "json", "creation-sets"), { recursive: true });
   await mkdir(join(outputDir, "json", "ppt-decks"), { recursive: true });
   await writeFile(join(outputDir, "2026-05-05", "2026-05-05-image", "demo.png"), "image");
   await writeFile(join(outputDir, "2026-05-05", "2026-05-05-ppt", "演示文稿-1234abcd", "slide-1.png"), "slide");
   await writeFile(join(outputDir, "2026-05-05", "2026-05-05-ppt", "演示文稿-1234abcd", "演示文稿-1234abcd.pptx"), "pptx");
   await writeFile(join(outputDir, "json", "2026-05-05", "2026-05-05-image", "demo.json"), "{}");
+  await writeFile(
+    join(outputDir, "json", "creation-sets", "creation-set-demo.json"),
+    `${JSON.stringify(
+      {
+        setId: "creation-set-demo",
+        createdAt: "2026-05-05T10:00:00.000Z",
+        relativeDir: "05/2026-05-05/2026-05-05-creation/demo",
+        items: [
+          {
+            itemId: "1-hero",
+            slotIndex: 1,
+            relativePath: "05/2026-05-05/2026-05-05-creation/demo/01-hero.png",
+            imageUrl: "/output/05/2026-05-05/2026-05-05-creation/demo/01-hero.png",
+            thumbnailUrl: "/output/05/2026-05-05/2026-05-05-creation/demo/01-hero.png",
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+  );
   await writeFile(
     manifestPath,
     `${JSON.stringify(
@@ -46,26 +68,39 @@ test("output directory migration moves legacy date folders into month folders an
   await migrateOutputDirectoryMonths({ outputDir });
 
   const migratedManifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const migratedCreationManifest = JSON.parse(
+    await readFile(join(outputDir, "json", "creation-sets", "creation-set-demo.json"), "utf8"),
+  );
   assert.equal(result.movedDateFolders, 1);
   assert.equal(result.movedMetadataDateFolders, 1);
   assert.equal(result.updatedPptManifests, 1);
-  await access(join(outputDir, "05", "2026-05-05", "2026-05-05-image", "demo.png"));
-  await access(join(outputDir, "05", "2026-05-05", "2026-05-05-ppt", "演示文稿-1234abcd", "slide-1.png"));
-  await access(join(outputDir, "05", "2026-05-05", "2026-05-05-ppt", "演示文稿-1234abcd", "演示文稿-1234abcd.pptx"));
-  await access(join(outputDir, "json", "05", "2026-05-05", "2026-05-05-image", "demo.json"));
+  assert.equal(result.updatedCreationManifests, 1);
+  await access(join(outputDir, "2026-05", "05-05", "2026-05-05-image", "demo.png"));
+  await access(join(outputDir, "2026-05", "05-05", "2026-05-05-ppt", "演示文稿-1234abcd", "slide-1.png"));
+  await access(join(outputDir, "2026-05", "05-05", "2026-05-05-ppt", "演示文稿-1234abcd", "演示文稿-1234abcd.pptx"));
+  await access(join(outputDir, "json", "2026-05", "05-05", "2026-05-05-image", "demo.json"));
   await assert.rejects(access(join(outputDir, "2026-05-05", "2026-05-05-image", "demo.png")));
+  assert.equal(migratedCreationManifest.relativeDir, "2026-05/05-05/2026-05-05-creation/demo");
+  assert.equal(
+    migratedCreationManifest.items[0].relativePath,
+    "2026-05/05-05/2026-05-05-creation/demo/01-hero.png",
+  );
+  assert.equal(
+    migratedCreationManifest.items[0].imageUrl,
+    "/output/2026-05/05-05/2026-05-05-creation/demo/01-hero.png",
+  );
   assert.equal(
     migratedManifest.pptxRelativePath,
-    "05/2026-05-05/2026-05-05-ppt/演示文稿-1234abcd/演示文稿-1234abcd.pptx",
+    "2026-05/05-05/2026-05-05-ppt/演示文稿-1234abcd/演示文稿-1234abcd.pptx",
   );
   assert.equal(
     migratedManifest.pptxUrl,
-    "/output/05/2026-05-05/2026-05-05-ppt/演示文稿-1234abcd/演示文稿-1234abcd.pptx",
+    "/output/2026-05/05-05/2026-05-05-ppt/演示文稿-1234abcd/演示文稿-1234abcd.pptx",
   );
-  assert.equal(migratedManifest.slides[0].relativePath, "05/2026-05-05/2026-05-05-ppt/演示文稿-1234abcd/slide-1.png");
-  assert.equal(migratedManifest.slides[0].imageUrl, "/output/05/2026-05-05/2026-05-05-ppt/演示文稿-1234abcd/slide-1.png");
+  assert.equal(migratedManifest.slides[0].relativePath, "2026-05/05-05/2026-05-05-ppt/演示文稿-1234abcd/slide-1.png");
+  assert.equal(migratedManifest.slides[0].imageUrl, "/output/2026-05/05-05/2026-05-05-ppt/演示文稿-1234abcd/slide-1.png");
   assert.equal(
     migratedManifest.slides[0].thumbnailUrl,
-    "/output/05/2026-05-05/2026-05-05-ppt/演示文稿-1234abcd/slide-1.png",
+    "/output/2026-05/05-05/2026-05-05-ppt/演示文稿-1234abcd/slide-1.png",
   );
 });

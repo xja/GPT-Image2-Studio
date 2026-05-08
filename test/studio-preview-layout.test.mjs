@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const indexPath = new URL("../public/index.html", import.meta.url);
 const stylesPath = new URL("../public/styles.css", import.meta.url);
 const appPath = new URL("../public/app.js", import.meta.url);
+const serverPath = new URL("../server.mjs", import.meta.url);
 
 test("browser-imported lib modules are copied into public for Vercel static serving", async () => {
   const app = await readFile(appPath, "utf8");
@@ -129,7 +130,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260507-creation-record-lightbox-1/);
+  assert.match(html, /\/app\.js\?v=20260508-reference-analysis-scroll-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -193,6 +194,54 @@ test("reference thumbnail remove control is a top-right x button", async () => {
   assert.doesNotMatch(app, /remove\.textContent = "移除";/);
 });
 
+test("style transfer thumbnail remove control anchors to the thumbnail corner", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+
+  assert.match(
+    styles,
+    /\.studio-view\[data-studio-mode="style-transfer"\]\s+\.style-transfer-grid\s+\.reference-card\s*\{[\s\S]*width:\s*100%;[\s\S]*justify-self:\s*stretch;/,
+  );
+  assert.match(
+    styles,
+    /\.studio-view\[data-studio-mode="style-transfer"\]\s+\.style-transfer-grid\s+\.reference-remove\s*\{[\s\S]*top:\s*2px;[\s\S]*right:\s*2px;/,
+  );
+});
+
+test("style transfer upload slots accept one image and align preview width to upload button", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+
+  assert.match(html, /id="styleTransferSourceInput"[^>]*type="file"[^>]*accept="image\/\*"[^>]*>/);
+  assert.match(html, /id="styleTransferStyleInput"[^>]*type="file"[^>]*accept="image\/\*"[^>]*>/);
+  assert.doesNotMatch(html, /id="styleTransferSourceInput"[^>]*\bmultiple\b/);
+  assert.doesNotMatch(html, /id="styleTransferStyleInput"[^>]*\bmultiple\b/);
+  assert.match(html, /id="styleTransferSourceDropzone"[\s\S]*<strong>[^<]+<\/strong>\s*<\/label>/);
+  assert.match(html, /id="styleTransferStyleDropzone"[\s\S]*<strong>[^<]+<\/strong>\s*<\/label>/);
+  assert.match(app, /const imageFiles = \[\.\.\.\(fileList \|\| \[\]\)\]\.filter\(\(item\) => item\.type\.startsWith\("image\/"\)\);/);
+  assert.match(app, /if \(imageFiles\.length > 1\) \{[\s\S]*showError\("原图和风格参考图每个区域只能上传一张图片。"\);[\s\S]*return;/);
+  assert.match(
+    styles,
+    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot:has\(\.style-transfer-grid:not\(\.hidden\)\) \{[\s\S]*grid-template-rows:\s*minmax\(64px,\s*auto\)\s*64px\s*minmax\(132px,\s*auto\);/,
+  );
+  assert.match(
+    styles,
+    /\.reference-grid\.style-transfer-grid\s*\{[\s\S]*width:\s*100%;[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\);[\s\S]*justify-items:\s*stretch;/,
+  );
+  assert.match(
+    styles,
+    /\.reference-grid\.style-transfer-grid \.reference-card\s*\{[\s\S]*width:\s*100%;[\s\S]*justify-self:\s*stretch;/,
+  );
+  assert.match(
+    styles,
+    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-grid \.reference-preview-button\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*132px;/,
+  );
+  assert.match(
+    styles,
+    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-grid \.reference-preview-button img\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;/,
+  );
+});
+
 test("reference thumbnails render three per row and open a local preview viewer", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
@@ -220,6 +269,108 @@ test("reference images are compressed before generation uploads", async () => {
   assert.match(app, /const referenceFiles = state\.referenceFiles\.map\(getGenerationReferenceFile\);/);
   assert.match(app, /await ensureReferenceGenerationFilesReady\(\);[\s\S]*const job = createJob\(\);/);
   assert.match(app, /job\.referenceFiles\.forEach\(\(file\) => \{[\s\S]*formData\.append\("referenceImages", file\);/);
+});
+
+test("style transfer mode exposes independent source and style uploads", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /href="#style-transfer"[\s\S]*data-view-panel="studio"/);
+  assert.match(html, /id="styleTransferBlock"/);
+  assert.match(html, /id="styleTransferSourceInput"[\s\S]*id="styleTransferSourceGrid"/);
+  assert.match(html, /id="styleTransferStyleInput"[\s\S]*id="styleTransferStyleGrid"/);
+  assert.match(html, /id="styleTransferInstructionInput"/);
+  assert.match(styles, /\.style-transfer-block\s*\{/);
+  assert.match(styles, /\.style-transfer-upload-grid\s*\{/);
+  assert.match(app, /const CREATE_VIEW_IDS = new Set\(\["studio", "style-transfer", "reference-analysis", "creation", "ppt"\]\);/);
+  assert.match(app, /studioMode:\s*"prompt"/);
+  assert.match(app, /function setStudioGenerationMode\(mode = "prompt"\)/);
+  assert.match(app, /function getViewFromHash\(\) \{[\s\S]*"#style-transfer"[\s\S]*return "style-transfer";/);
+  assert.match(app, /function syncHash\(view\) \{[\s\S]*view === "style-transfer"[\s\S]*"#style-transfer"/);
+});
+
+test("style transfer mode keeps the shared studio height sync and mode styling hooks", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /studioView:\s*document\.querySelector\("\.studio-view"\),/);
+  assert.match(app, /if \(refs\.studioView\) \{[\s\S]*refs\.studioView\.dataset\.studioMode = nextMode;[\s\S]*\}/);
+  assert.match(app, /const isStudioLikeView = state\.activeView === "studio" \|\| state\.activeView === "style-transfer";/);
+  assert.match(app, /if \(STACKED_STUDIO_LAYOUT_MODES\.has\(getCurrentStudioLayoutMode\(\)\) \|\| !isStudioLikeView\) \{/);
+  assert.match(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.studio-grid \{/);
+  assert.match(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-upload-grid \{/);
+});
+
+test("style transfer panel aligns slot rows and clips its own background", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+
+  assert.match(
+    styles,
+    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-block \{[\s\S]*box-sizing:\s*border-box;[\s\S]*overflow:\s*hidden;/,
+  );
+  assert.match(
+    styles,
+    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot \{[\s\S]*grid-template-rows:\s*minmax\(64px,\s*auto\)\s*minmax\(86px,\s*auto\);/,
+  );
+  assert.match(
+    styles,
+    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot:has\(\.style-transfer-grid:not\(\.hidden\)\) \{[\s\S]*grid-template-rows:\s*minmax\(64px,\s*auto\)\s*64px\s*minmax\(132px,\s*auto\);/,
+  );
+  assert.match(
+    styles,
+    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot \.field-head \{[\s\S]*min-height:\s*64px;/,
+  );
+  assert.match(
+    styles,
+    /html\[data-ui-layout="mobile"\] \.nav-item\[data-nav-section="settings"\] \.nav-flyout\.mega-menu \{[\s\S]*left:\s*auto;[\s\S]*right:\s*0;/,
+  );
+});
+
+test("style transfer generation builds a preservation prompt and submits both images as references", async () => {
+  const app = await readFile(appPath, "utf8");
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(app, /function buildStyleTransferPrompt\(\) \{/);
+  assert.match(app, /Use the first reference image as the source image/);
+  assert.match(app, /preserve every visible subject, object, pose, layout, composition, spatial relationship/);
+  assert.match(app, /Use the second reference image only as the style reference/);
+  assert.match(app, /The second reference image is the style authority/);
+  assert.match(app, /Do not keep anime, cartoon, comic, cel-shaded, line-art, CGI doll, or illustration residue/);
+  assert.match(app, /function createStyleTransferJob\(\) \{/);
+  assert.match(app, /mode:\s*"style-transfer"/);
+  assert.match(app, /referenceFiles:\s*getStyleTransferReferenceFiles\(\)/);
+  assert.match(app, /function appendStyleTransferReferencesToFormData\(formData, job\) \{/);
+  assert.match(app, /formData\.set\("mode", "style-transfer"\);/);
+  assert.match(app, /formData\.set\("styleTransferSourceImageName", job\.styleTransferSourceImageName\);/);
+  assert.match(app, /formData\.set\("styleTransferReferenceImageName", job\.styleTransferReferenceImageName\);/);
+  assert.match(app, /job\.referenceFiles\.forEach\(\(file\) => \{[\s\S]*formData\.append\("referenceImages", file\);/);
+  assert.match(
+    app,
+    /startGeneration[\s\S]*if \(state\.studioMode === "style-transfer"\) \{[\s\S]*await ensureStyleTransferGenerationFilesReady\(\);[\s\S]*const job = createStyleTransferJob\(\);/,
+  );
+  assert.match(server, /STYLE_TRANSFER_REFERENCE_IMAGE_LABELS/);
+  assert.match(server, /referenceImageLabels:\s*generationMode === "style-transfer"\s*\?\s*STYLE_TRANSFER_REFERENCE_IMAGE_LABELS\s*:\s*\[\]/);
+});
+
+test("reference analysis generation uploads prepared reference images", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /function getReferenceAnalysisGenerationFile\(item\) \{/);
+  assert.match(app, /function startReferenceAnalysisGenerationCompression\(item\) \{/);
+  assert.match(app, /function ensureReferenceAnalysisGenerationFilesReady\(\) \{/);
+  assert.match(
+    app,
+    /function createReferenceAnalysisJob\(\) \{[\s\S]*const referenceFiles = state\.referenceAnalysis\.files\.map\(getReferenceAnalysisGenerationFile\)\.filter\(Boolean\);/,
+  );
+  assert.match(
+    app,
+    /startReferenceAnalysisGeneration[\s\S]*await ensureReferenceAnalysisGenerationFilesReady\(\);[\s\S]*const job = createReferenceAnalysisJob\(\);/,
+  );
+  assert.doesNotMatch(
+    app,
+    /const referenceFiles = state\.referenceAnalysis\.files\.map\(\(item\) => item\.file\)\.filter\(Boolean\);/,
+  );
 });
 
 test("prompt field can start generation with Ctrl+Enter", async () => {
@@ -267,7 +418,8 @@ test("studio panels start without redundant title blocks and merge parameters un
   const app = await readFile(appPath, "utf8");
   const promptParameterSettings = html.match(/<div class="field-group parameter-settings">[\s\S]*?(?=<\/form>)/)?.[0] || "";
 
-  assert.match(html, /<div class="field-group parameter-settings">[\s\S]*<span>参数设置<\/span>[\s\S]*<small>Parameters<\/small>[\s\S]*<div class="ratio-grid" id="ratioGrid"><\/div>[\s\S]*<div class="advanced-content">/);
+  assert.match(html, /<div class="field-group parameter-settings">[\s\S]*<span>参数设置<\/span>[\s\S]*<div class="ratio-grid" id="ratioGrid"><\/div>[\s\S]*<div class="advanced-content">/);
+  assert.doesNotMatch(promptParameterSettings, /<small>Parameters<\/small>/);
   assert.match(html, /<div class="field-group parameter-settings">[\s\S]*<label class="compact-field">[\s\S]*<span>推理强度<\/span>[\s\S]*<label class="compact-field">[\s\S]*<span>分辨率<\/span>[\s\S]*<label class="compact-field">[\s\S]*<span>输出格式<\/span>/);
   assert.match(html, /<div class="advanced-controls">[\s\S]*<label class="compact-field">[\s\S]*<span>输出格式<\/span>[\s\S]*<\/label>[\s\S]*<div class="parameter-meta" aria-label="工具模型与质量">[\s\S]*<span>工具模型<\/span>[\s\S]*<strong>gpt-image-2<\/strong>[\s\S]*<span>质量<\/span>[\s\S]*<strong>High<\/strong>[\s\S]*<\/div>[\s\S]*<\/div>/);
   assert.doesNotMatch(html, /<p>工具模型：/);
@@ -337,14 +489,15 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.match(html, /<nav class="primary-nav global-nav" aria-label="全局导航">/);
   assert.doesNotMatch(html, /nav-region-label/);
   assert.doesNotMatch(html, />主区</);
-  assert.match(html, /<div class="view-tabs global-nav-list" role="tablist" aria-label="功能区导航">/);
-  assert.match(html, /data-nav-section="create"[\s\S]*data-view-tab="studio"[\s\S]*<span class="nav-tab-label">创作<\/span>[\s\S]*<span class="nav-tab-note">Studio<\/span>/);
+  assert.match(html, /<div class="view-tabs global-nav-list" aria-label="功能菜单导航">/);
+  assert.match(html, /data-nav-section="create"[\s\S]*data-nav-menu="create"[\s\S]*aria-haspopup="true"[\s\S]*aria-expanded="false"[\s\S]*<span class="nav-tab-label">创作<\/span>[\s\S]*<span class="nav-tab-note">Studio<\/span>/);
   assert.doesNotMatch(html, /data-nav-section="present"/);
   assert.doesNotMatch(html, /data-view-tab="ppt"/);
-  assert.match(html, /data-nav-section="assets"[\s\S]*data-view-tab="gallery"[\s\S]*<span class="nav-tab-label">资产<\/span>[\s\S]*<span class="nav-tab-note">Gallery<\/span>/);
+  assert.match(html, /data-nav-section="assets"[\s\S]*data-nav-menu="assets"[\s\S]*aria-haspopup="true"[\s\S]*aria-expanded="false"[\s\S]*<span class="nav-tab-label">资产<\/span>[\s\S]*<span class="nav-tab-note">Gallery<\/span>/);
   assert.doesNotMatch(html, /data-nav-section="records"/);
   assert.doesNotMatch(html, /data-view-tab="ppt-record"/);
-  assert.match(html, /data-nav-section="settings"[\s\S]*data-nav-action="config"[\s\S]*<span class="nav-tab-label">配置<\/span>[\s\S]*<span class="nav-tab-note">Settings<\/span>/);
+  assert.match(html, /data-nav-section="settings"[\s\S]*data-nav-menu="settings"[\s\S]*aria-haspopup="true"[\s\S]*aria-expanded="false"[\s\S]*<span class="nav-tab-label">配置<\/span>[\s\S]*<span class="nav-tab-note">Settings<\/span>/);
+  assert.doesNotMatch(html, /<button class="view-tab[^>]*(data-view-tab|data-nav-action)=/);
   assert.match(createMenu, /href="#studio"[\s\S]*提示词生图/);
   assert.match(createMenu, /href="#creation"[\s\S]*套图模式/);
   assert.match(createMenu, /href="#ppt"[\s\S]*PPT生成/);
@@ -381,13 +534,24 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.doesNotMatch(styles, /\.nav-item:focus-within \.nav-flyout/);
   assert.match(styles, /\.nav-item\.is-nav-open \.nav-flyout\s*\{[\s\S]*opacity:\s*1;[\s\S]*visibility:\s*visible;[\s\S]*pointer-events:\s*auto;/);
   assert.match(app, /function handleGlobalNavAction\(action\) \{/);
-  assert.match(app, /const activeTabView = CREATE_VIEW_IDS\.has\(view\) \? "studio" : ASSET_VIEW_IDS\.has\(view\) \? "gallery" : view;/);
+  assert.match(app, /const activeNavSection = CREATE_VIEW_IDS\.has\(view\) \? "create" : ASSET_VIEW_IDS\.has\(view\) \? "assets" : "";/);
   assert.match(app, /refs\.connectionStatus\.addEventListener\("click",\s*\(\) => setDrawerOpen\(true\)\);/);
   assert.match(app, /globalNavItems:\s*\[\.\.\.document\.querySelectorAll\("\[data-nav-section\]"\)\]/);
   assert.match(app, /function setActiveGlobalNavItem\(item\) \{[\s\S]*refs\.globalNavItems\.forEach\(\(navItem\) => \{[\s\S]*const isOpen = navItem === item;[\s\S]*navItem\.classList\.toggle\("is-nav-open",\s*isOpen\);/);
   assert.match(app, /button\.addEventListener\("pointerenter",\s*\(\) => setActiveGlobalNavItem\(item\)\);/);
   assert.match(app, /button\.addEventListener\("focus",\s*\(\) => setActiveGlobalNavItem\(item\)\);/);
+  assert.match(app, /button\.addEventListener\("click",\s*\(event\) => \{[\s\S]*event\.preventDefault\(\);[\s\S]*setActiveGlobalNavItem\(item\);[\s\S]*\}\);/);
   assert.match(app, /document\.querySelectorAll\("\[data-nav-action\]"\)\.forEach/);
+});
+
+test("global navigation closes flyouts after links and actions", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /target\.closest\("a\[href\^='#'\]"\)[\s\S]*setActiveGlobalNavItem\(null\);/);
+  assert.match(
+    app,
+    /button\.addEventListener\("click", \(\) => \{[\s\S]*handleGlobalNavAction\(button\.dataset\.navAction\);[\s\S]*setActiveGlobalNavItem\(null\);[\s\S]*\}\);/,
+  );
 });
 
 test("PPT record cards open a deck preview detail with slide thumbnails", async () => {
@@ -485,12 +649,27 @@ test("prompt image analysis compresses large browser uploads before posting to V
   assert.match(app, /body: await buildPromptAgentFormData\(\),/);
 });
 
-test("studio reference images can be manually analyzed into orchestration prompts", async () => {
+test("reference orchestration analysis is a separate studio mode outside prompt generation", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
+  const generateForm = html.match(/<form id="generateForm"[\s\S]*?<\/form>/)?.[0] || "";
 
+  assert.doesNotMatch(generateForm, /id="referenceAnalyzeButton"|id="referenceAnalysisPanel"|reference-analysis-actions/);
+  assert.match(html, /href="#reference-analysis"[\s\S]*融图分析/);
+  assert.match(html, /data-view-panel="reference-analysis"/);
+  assert.match(html, /id="referenceAnalysisDropzone"[\s\S]*id="referenceAnalysisGrid"/);
+  assert.match(html, /id="referenceAnalysisGrid"[\s\S]*class="reference-analysis-actions"[\s\S]*class="reference-analysis-params"/);
+  assert.match(html, /id="referenceAnalysisRatioGrid"[\s\S]*id="referenceAnalysisSizeInput"[\s\S]*id="referenceAnalysisGenerateButton"/);
   assert.match(html, /id="referenceAnalyzeButton"[\s\S]*融图分析/);
+  assert.match(html, /id="referenceAnalysisSelectedPromptPanel"[\s\S]*id="referenceAnalysisGenerationCanvas"[\s\S]*id="referenceAnalysisSelectedPrompt"/);
+  assert.match(html, /id="referenceAnalysisCopyPromptButton"/);
+  assert.match(html, /id="referenceAnalysisGenerationImage"/);
+  assert.match(html, /id="referenceAnalysisGenerationDownloadButton"/);
+  const selectedPromptBlock =
+    html.match(/<div class="reference-analysis-selected hidden"[\s\S]*?<textarea id="referenceAnalysisSelectedPrompt"[\s\S]*?<\/textarea>\s*<\/div>/)?.[0] ||
+    "";
+  assert.doesNotMatch(selectedPromptBlock, /id="referenceAnalysisGenerateButton"/);
   assert.doesNotMatch(html, /id="referenceAnalyzeButton"[^>]*disabled/);
   assert.match(html, /id="referenceAnalysisPanel"[\s\S]*编排提示词/);
   assert.match(html, /id="referenceAnalysisList"/);
@@ -502,47 +681,92 @@ test("studio reference images can be manually analyzed into orchestration prompt
   assert.doesNotMatch(referenceAnalysisPanelHeadBlock, /id="referenceAnalysisToggleButton"/);
   assert.match(html, /aria-controls="referenceAnalysisList"/);
   assert.match(html, /id="referenceAnalysisToggleButton"[\s\S]*class="reference-analysis-toggle hidden"/);
-  assert.match(styles, /\.reference-analysis-actions\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto;/);
+  assert.match(styles, /\.reference-analysis-actions\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/);
+  assert.match(styles, /\.reference-analysis-button\s*\{[\s\S]*width:\s*100%;/);
   assert.match(styles, /\.reference-analysis-panel\s*\{/);
   assert.match(styles, /\.reference-analysis-card\s*\{/);
   assert.match(styles, /\.reference-analysis-card p\s*\{[\s\S]*font-size:\s*var\(--type-body-size\);/);
+  assert.match(styles, /\.reference-analysis-selected\s*\{/);
+  assert.match(styles, /\.reference-analysis-generation\s*\{/);
+  assert.match(styles, /\.reference-analysis-generation-canvas\s*\{/);
   assert.match(styles, /\.reference-analysis-roles\s*\{/);
   assert.match(styles, /\.reference-analysis-role\s*\{[\s\S]*width:\s*auto;/);
   assert.match(styles, /\.reference-analysis-toggle\s*\{/);
   assert.match(styles, /\.reference-analysis-list\.hidden\s*\{/);
+  assert.match(styles, /\.reference-analysis-view\s+\.reference-analysis-workspace\s*\{/);
+  assert.match(styles, /\.reference-analysis-upload-panel\s*\{/);
+  assert.match(styles, /\.reference-analysis-result-panel\s*\{[\s\S]*overflow-y:\s*auto;/);
+  assert.match(styles, /\.reference-analysis-params\s*\{/);
+  assert.match(styles, /\.reference-analysis-view\s+\.reference-grid\s*\{/);
+  assert.match(app, /const CREATE_VIEW_IDS = new Set\(\["studio", "style-transfer", "reference-analysis", "creation", "ppt"\]\);/);
   assert.match(app, /referenceAnalysis:\s*\{/);
+  assert.match(app, /files:\s*\[\]/);
   assert.match(app, /collapsed:\s*false/);
+  assert.match(app, /previewKey:\s*""/);
+  assert.match(app, /selectedPrompt:\s*""/);
+  assert.match(app, /referenceAnalysisDropzone:\s*document\.querySelector\("#referenceAnalysisDropzone"\),/);
+  assert.match(app, /referenceAnalysisGrid:\s*document\.querySelector\("#referenceAnalysisGrid"\),/);
+  assert.match(app, /referenceAnalysisRatioGrid:\s*document\.querySelector\("#referenceAnalysisRatioGrid"\),/);
+  assert.match(app, /referenceAnalysisSizeInput:\s*document\.querySelector\("#referenceAnalysisSizeInput"\),/);
+  assert.match(app, /referenceAnalysisSelectedPrompt:\s*document\.querySelector\("#referenceAnalysisSelectedPrompt"\),/);
+  assert.match(app, /referenceAnalysisSelectedPromptPanel:\s*document\.querySelector\("#referenceAnalysisSelectedPromptPanel"\),/);
+  assert.match(app, /referenceAnalysisCopyPromptButton:\s*document\.querySelector\("#referenceAnalysisCopyPromptButton"\),/);
+  assert.match(app, /referenceAnalysisGenerateButton:\s*document\.querySelector\("#referenceAnalysisGenerateButton"\),/);
+  assert.match(app, /referenceAnalysisGenerationCanvas:\s*document\.querySelector\("#referenceAnalysisGenerationCanvas"\),/);
+  assert.match(app, /referenceAnalysisGenerationDownloadButton:\s*document\.querySelector\("#referenceAnalysisGenerationDownloadButton"\),/);
+  assert.match(app, /referenceAnalysisGenerationImage:\s*document\.querySelector\("#referenceAnalysisGenerationImage"\),/);
+  assert.match(app, /referenceAnalysisGenerationMeta:\s*document\.querySelector\("#referenceAnalysisGenerationMeta"\),/);
+  assert.match(app, /referenceAnalysisGenerationPlaceholder:\s*document\.querySelector\("#referenceAnalysisGenerationPlaceholder"\),/);
   assert.match(app, /referenceAnalysisToggleButton:\s*document\.querySelector\("#referenceAnalysisToggleButton"\),/);
+  assert.match(app, /function applyReferenceAnalysisFiles\(fileList\) \{/);
+  assert.match(app, /function renderReferenceAnalysisGrid\(\) \{/);
+  assert.match(app, /function createReferenceAnalysisJob\(\) \{/);
+  assert.match(app, /function renderReferenceAnalysisGenerationPreview\(\) \{/);
+  assert.match(app, /function renderReferenceAnalysisSelectedPrompt\(\) \{/);
+  assert.match(app, /function renderReferenceAnalysisRatioGrid\(\) \{/);
+  assert.match(app, /function renderReferenceAnalysisSizeOptions\(\) \{/);
+  assert.match(app, /function syncGenerationRatio\(value\) \{/);
+  assert.match(app, /function syncGenerationSize\(value\) \{/);
   assert.match(app, /function toggleReferenceAnalysisPanel\(\) \{/);
   assert.match(app, /refs\.referenceAnalysisList\.classList\.toggle\("hidden", state\.referenceAnalysis\.collapsed\);/);
   assert.match(app, /refs\.referenceAnalysisToggleButton\.textContent = state\.referenceAnalysis\.collapsed \? "展开提示词" : "折叠提示词";/);
   assert.match(app, /roleGroup\.className = "reference-analysis-roles";/);
   assert.match(app, /async function buildReferenceAnalysisFormData\(\) \{/);
   assert.match(app, /formData\.set\("mode", "reference-orchestration"\);/);
-  assert.match(app, /preparePromptAnalysisImageFile\(item\.file\)/);
+  assert.match(app, /state\.referenceAnalysis\.files\.map\(\(item\) => preparePromptAnalysisImageFile\(item\.file\)\)/);
   assert.match(app, /formData\.append\("image", file\);/);
   assert.match(app, /appendBrowserConfigToFormData\(formData\);/);
   assert.match(app, /body: await buildReferenceAnalysisFormData\(\),/);
   assert.match(app, /fetch\("\/api\/prompt-agent\/analyze"/);
   assert.match(app, /button\.dataset\.referenceAnalysisPromptIndex = String\(index\);/);
   assert.match(app, /function applyReferenceAnalysisPrompt\(index\) \{/);
+  assert.match(app, /async function startReferenceAnalysisGeneration\(\) \{/);
+  assert.match(app, /if \(job\.mode === "reference-analysis"\) \{[\s\S]*state\.referenceAnalysis\.previewKey = makeGalleryPreviewKey\(payload\.item\.filename\);/);
+  const referenceApplyBody =
+    app.match(/function applyReferenceAnalysisPrompt\(index\) \{[\s\S]*?\r?\n\}\r?\n\r?\nfunction mapPromptAgentPrompt/)?.[0] || "";
+  assert.match(referenceApplyBody, /state\.referenceAnalysis\.selectedPrompt = promptText;/);
+  assert.match(referenceApplyBody, /state\.referenceAnalysis\.collapsed = true;/);
+  assert.match(referenceApplyBody, /renderReferenceAnalysis\(\);/);
+  assert.doesNotMatch(referenceApplyBody, /refs\.promptInput\.value|setActiveView\("studio"\)|refs\.promptInput\.focus/);
   assert.match(app, /refs\.referenceAnalyzeButton\.disabled = state\.referenceAnalysis\.running;/);
   assert.match(app, /refs\.referenceAnalyzeButton\.textContent = state\.referenceAnalysis\.running \? "分析中\.\.\." : "融图分析";/);
   assert.match(app, /refs\.referenceAnalysisToggleButton\.addEventListener\("click", toggleReferenceAnalysisPanel\);/);
+  assert.match(app, /refs\.referenceAnalysisGenerateButton\.addEventListener\("click", \(\) => \{[\s\S]*startReferenceAnalysisGeneration\(\)\.catch/);
   assert.match(app, /setReferenceAnalysisFeedback\("图形分析需要上传参考图。", "error"\);/);
-  assert.match(app, /refs\.referenceDropzone\.addEventListener\("dragover",[\s\S]*event\.preventDefault\(\);[\s\S]*classList\.add\("dragover"\);/);
-  assert.match(app, /refs\.referenceDropzone\.addEventListener\("drop",[\s\S]*event\.preventDefault\(\);[\s\S]*applyReferenceFiles\(event\.dataTransfer\?\.files\);/);
-  const applyReferenceFilesBody = app.match(/function applyReferenceFiles\(fileList\) \{[\s\S]*?\n\}/)?.[0] || "";
-  assert.doesNotMatch(applyReferenceFilesBody, /analyzeReferenceImages\(\)/);
+  assert.match(app, /refs\.referenceAnalysisDropzone\.addEventListener\("dragover",[\s\S]*event\.preventDefault\(\);[\s\S]*classList\.add\("dragover"\);/);
+  assert.match(app, /refs\.referenceAnalysisDropzone\.addEventListener\("drop",[\s\S]*event\.preventDefault\(\);[\s\S]*applyReferenceAnalysisFiles\(event\.dataTransfer\?\.files\);/);
+  assert.match(app, /refs\.referenceAnalysisSizeInput\.addEventListener\("change",[\s\S]*syncGenerationSize\(event\.target\.value\);/);
+  assert.match(app, /refs\.referenceAnalysisCopyPromptButton\.addEventListener\("click",[\s\S]*copyReferenceAnalysisSelectedPrompt\(\)\.catch/);
 });
 
-test("direct prompt applications replace the current Studio prompt", async () => {
+test("direct prompt applications keep reference analysis independent", async () => {
   const app = await readFile(appPath, "utf8");
   const referenceApplyBody =
     app.match(/function applyReferenceAnalysisPrompt\(index\) \{[\s\S]*?\r?\n\}\r?\n\r?\nfunction mapPromptAgentPrompt/)?.[0] || "";
 
   assert.match(app, /function applyPromptTemplate\(templateId = ""\) \{[\s\S]*refs\.promptInput\.value = prompt;[\s\S]*updatePromptCounter\(\);/);
-  assert.match(referenceApplyBody, /refs\.promptInput\.value = promptText;[\s\S]*updatePromptCounter\(\);/);
+  assert.match(referenceApplyBody, /state\.referenceAnalysis\.selectedPrompt = promptText;[\s\S]*state\.referenceAnalysis\.collapsed = true;[\s\S]*renderReferenceAnalysis\(\);/);
+  assert.doesNotMatch(referenceApplyBody, /refs\.promptInput\.value|updatePromptCounter\(\)|setActiveView\("studio"\)|refs\.promptInput\.focus/);
   assert.doesNotMatch(referenceApplyBody, /currentPrompt|includes\(promptText\)|`\\$\\{currentPrompt\\}\\n\\n\\$\\{promptText\\}`/);
   assert.match(app, /function mapPromptAgentPrompt\(itemId\) \{[\s\S]*refs\.promptInput\.value = promptText;[\s\S]*updatePromptCounter\(\);/);
 });
@@ -607,10 +831,14 @@ test("mobile and Pad studio layout keeps panels inside the viewport column", asy
 test("studio columns use synchronized desktop height so wide screens do not leave a dead zone under the workspace", async () => {
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
+  const studioGridBlock = styles.match(/\.studio-view \.studio-grid\s*\{[\s\S]*?\}/)?.[0] || "";
 
   assert.match(styles, /\.settings-panel\s*\{[\s\S]*height:\s*var\(--studio-column-height,\s*auto\);/);
   assert.match(styles, /\.preview-panel\s*\{[\s\S]*height:\s*var\(--studio-column-height,\s*auto\);/);
   assert.match(styles, /\.side-column\s*\{[\s\S]*height:\s*var\(--studio-column-height,\s*auto\);/);
+  assert.match(studioGridBlock, /min-height:\s*0;/);
+  assert.match(studioGridBlock, /height:\s*100%;/);
+  assert.doesNotMatch(studioGridBlock, /calc\(100% - 48px\)/);
   assert.match(
     app,
     /const viewRootRect = refs\.viewRoot\.getBoundingClientRect\(\);[\s\S]*const availableHeight = Math\.max\(600,\s*Math\.floor\(window\.innerHeight - viewRootRect\.top - 12\)\);[\s\S]*const resolvedHeight = availableHeight;/,
@@ -645,7 +873,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260507-creation-record-lightbox-1/);
+  assert.match(html, /\/app\.js\?v=20260508-reference-analysis-scroll-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -815,23 +1043,37 @@ test("PPT view exposes source options, page count, progress, retry and PPTX down
   assert.match(app, /eventName === "slide_failed"/);
 });
 
-test("creation mode is a separate studio tab with isolated state and routes", async () => {
+test("studio compact panels omit repeated helper copy", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.doesNotMatch(
+    html,
+    /Reference（可选，最多 6 张）|支持 JPG \/ PNG|Style Transfer|保留主体、元素和构图|只复刻画风和视觉语言|<small>Prompt<\/small>|<small>Parameters<\/small>|Output Preview|Live Feed|Reference Orchestration|Ratio \/ Size|Prompt Candidates|Deck History|电商套图生成记录和 creation 文件夹历史|生成记录和文件夹历史|点击提示词可映射到 Studio 文本框|单商品可生成|只影响套图模式|支持拖入多张图片|上传文档、输入文本或主题|三选一或组合使用|源文档只用于本次解析|渐进披露会|生成后会在这里显示大纲/,
+  );
+  assert.doesNotMatch(
+    app,
+    /填写商品信息后会自动生成|填写商品信息后自动生成|生成后会在这里显示大纲|CREATION_SCENARIO_HINTS|CREATION_INDUSTRY_TEMPLATE_HINTS|creation-card-prompt|creation-card-brief/,
+  );
+});
+
+test("creation mode is a separate studio view with isolated state and routes", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
   const creationPanel = html.match(/data-view-panel="creation"[\s\S]*?(?=<section class="view-panel ppt-view)/)?.[0] || "";
 
-  assert.match(html, /href="#studio"[\s\S]*提示词模式/);
-  assert.match(html, /href="#creation"[\s\S]*套图模式/);
+  assert.doesNotMatch(html, /<nav class="studio-mode-tabs"/);
+  assert.doesNotMatch(html, /data-studio-mode-tab/);
   assert.match(html, /data-view-panel="creation"/);
   assert.match(html, /id="creationForm"/);
   assert.match(html, /id="creationTargetLanguageInput"/);
   assert.match(html, /id="creationGenerateButton"/);
   assert.match(html, /id="creationPlanButton"/);
-  assert.match(html, /id="creationPlanMeta"/);
+  assert.doesNotMatch(html, /id="creationPlanMeta"/);
   assert.doesNotMatch(creationPanel, /id="creationSetList"|id="creationHistoryCount"|creation-history-block/);
 
-  assert.match(styles, /\.studio-mode-tabs\s*\{/);
+  assert.doesNotMatch(styles, /\.studio-mode-tabs\s*\{/);
   assert.match(styles, /\.creation-workspace\s*\{/);
   assert.match(styles, /\.creation-result-grid\s*\{/);
   assert.match(styles, /\.creation-plan-actions\s*\{/);
@@ -844,7 +1086,7 @@ test("creation mode is a separate studio tab with isolated state and routes", as
   assert.match(app, /fetch\("\/api\/creation\/generate"/);
   assert.match(app, /fetch\("\/api\/creation\/sets"/);
   assert.match(app, /creationPlanButton: document\.querySelector\("#creationPlanButton"\)/);
-  assert.match(app, /creationPlanMeta: document\.querySelector\("#creationPlanMeta"\)/);
+  assert.doesNotMatch(app, /creationPlanMeta: document\.querySelector\("#creationPlanMeta"\)/);
   assert.match(app, /creationProductNameInput: document\.querySelector\("#creationProductNameInput"\)/);
   assert.doesNotMatch(app, /creation[\s\S]{0,400}PROMPT_TEMPLATE_STORAGE_KEY/);
 });
@@ -875,11 +1117,11 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(html, /<div class="creation-control-row creation-option-grid">[\s\S]*id="creationImageCountInput"[\s\S]*id="creationScenarioInput"[\s\S]*id="creationIndustryTemplateInput"[\s\S]*id="creationTargetLanguageInput"[\s\S]*id="creationOutputFormatInput"[\s\S]*id="creationRatioInput"[\s\S]*id="creationSizeInput"/);
   assert.match(html, /<select id="creationRatioInput" name="ratio">[\s\S]*<option value="1:1">1:1<\/option>[\s\S]*<\/select>/);
   assert.match(html, /<select id="creationSizeInput" name="size">[\s\S]*<option value="auto">自动<\/option>[\s\S]*<\/select>/);
-  assert.match(html, /id="creationScenarioHint"/);
+  assert.doesNotMatch(html, /id="creationScenarioHint"/);
   assert.match(html, /id="creationRolePicker"/);
   assert.match(html, /id="creationRoleGrid"/);
   assert.match(html, /id="creationRoleCount"/);
-  assert.match(html, /id="creationRoleHint"/);
+  assert.doesNotMatch(html, /id="creationRoleHint"/);
 
   assert.match(styles, /\.creation-reference-grid\s*\{/);
   assert.match(styles, /\.creation-reference-role\s*\{/);
@@ -887,11 +1129,11 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(styles, /\.creation-reference-note\s*\{/);
   assert.match(styles, /\.creation-option-grid\s*\{\s*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.creation-option-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\);/);
-  assert.match(styles, /\.creation-scenario-hint\s*\{/);
   assert.match(styles, /\.creation-role-picker\s*\{/);
   assert.match(styles, /\.creation-role-grid\s*\{/);
   assert.match(styles, /\.creation-role-option\s*\{/);
-  assert.match(styles, /\.creation-card-brief\s*\{/);
+  assert.doesNotMatch(styles, /\.creation-scenario-hint\s*\{/);
+  assert.doesNotMatch(styles, /\.creation-card-brief\s*\{/);
 
   assert.match(app, /creationReferenceFiles:\s*\[\]/);
   assert.match(app, /creationReferenceAnalysis:\s*\{/);
@@ -900,19 +1142,18 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /creationReferenceAnalysisList: document\.querySelector\("#creationReferenceAnalysisList"\)/);
   assert.match(app, /creationReferenceAnalysisPanel: document\.querySelector\("#creationReferenceAnalysisPanel"\)/);
   assert.match(app, /creationReferenceInput: document\.querySelector\("#creationReferenceInput"\)/);
-  assert.match(app, /creationScenarioHint: document\.querySelector\("#creationScenarioHint"\)/);
   assert.match(app, /creationRoleGrid: document\.querySelector\("#creationRoleGrid"\)/);
   assert.match(app, /creationRoleCount: document\.querySelector\("#creationRoleCount"\)/);
-  assert.match(app, /creationRoleHint: document\.querySelector\("#creationRoleHint"\)/);
+  assert.doesNotMatch(app, /creationScenarioHint: document\.querySelector\("#creationScenarioHint"\)/);
+  assert.doesNotMatch(app, /creationRoleHint: document\.querySelector\("#creationRoleHint"\)/);
   assert.match(app, /creationSelectedRoles:\s*\[\]/);
   assert.match(app, /const CREATION_REFERENCE_ROLE_OPTIONS = \[/);
-  assert.match(app, /const CREATION_SCENARIO_HINTS = \{/);
   assert.match(app, /const CREATION_SCENARIO_ROLE_PRESETS = \{/);
   assert.match(app, /material-closeup/);
   assert.match(app, /usage-steps/);
   assert.match(app, /review-qa/);
-  assert.match(app, /brief\.className = "creation-card-brief";/);
-  assert.match(app, /refs\.creationScenarioHint\.textContent =[\s\S]*CREATION_INDUSTRY_TEMPLATE_HINTS/);
+  assert.doesNotMatch(app, /brief\.className = "creation-card-brief";/);
+  assert.doesNotMatch(app, /refs\.creationScenarioHint\.textContent =[\s\S]*CREATION_INDUSTRY_TEMPLATE_HINTS/);
   assert.match(app, /function getCreationScenarioRolePreset\(/);
   assert.match(app, /function getCreationSelectedRoles\(\) \{/);
   assert.match(app, /function syncCreationSelectedRolesToCount\(\) \{/);
@@ -932,7 +1173,8 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function buildCreationReferenceRolePayload\(\) \{/);
   assert.match(app, /function buildCreationPlanPreviewFormData\(\) \{/);
   assert.match(app, /creationIndustryTemplateInput: document\.querySelector\("#creationIndustryTemplateInput"\)/);
-  assert.match(app, /const CREATION_INDUSTRY_TEMPLATE_HINTS = \{/);
+  assert.doesNotMatch(app, /const CREATION_SCENARIO_HINTS = \{/);
+  assert.doesNotMatch(app, /const CREATION_INDUSTRY_TEMPLATE_HINTS = \{/);
   assert.match(app, /const CREATION_INDUSTRY_ROLE_PRESETS = \{/);
   assert.match(app, /function getCreationPlanOverrides\(\) \{/);
   assert.match(app, /function canEditCreationItem\(/);
@@ -957,7 +1199,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260507-creation-record-lightbox-1/);
+  assert.match(html, /app\.js\?v=20260508-reference-analysis-scroll-1/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
@@ -1012,6 +1254,32 @@ test("creation mode exposes record detail and item repair actions", async () => 
   assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationClosePromptEditor/);
   assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationSavePromptItemId/);
   assert.match(app, /refs\.creationRepairFailedButton\.addEventListener\("click"/);
+});
+
+test("creation generation cards replace plan details with loading animation", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /generationScope:\s*""/);
+  assert.match(app, /function shouldShowCreationCardLoading\(item = \{\}, showRecordActions = false\) \{/);
+  assert.match(app, /if \(getImageUrl\(item\)\) \{\s*return false;\s*\}/);
+  assert.doesNotMatch(app, /state\.creation\.generationScope === "full"[\s\S]*return status !== "failed";/);
+  assert.match(app, /function shouldHideCreationCardDetails\(showRecordActions = false\) \{/);
+  assert.match(app, /function createCreationCardLoading\(\) \{/);
+  assert.match(app, /card\.classList\.toggle\("is-generating", isLoadingCard\);/);
+  assert.match(app, /status\.textContent = isLoadingCard \? "生成中" : getCreationStatusLabel\(item\.status\);/);
+  assert.match(app, /media\.classList\.add\("is-loading"\);[\s\S]*media\.appendChild\(createCreationCardLoading\(\)\);/);
+  assert.match(app, /if \(!showRecordActions && !hideGenerationDetails\) \{/);
+  assert.match(app, /if \(showActions && !hideGenerationDetails\) \{/);
+  assert.match(app, /state\.creation\.generationScope = "full";/);
+  assert.match(app, /state\.creation\.generationScope = itemId \? "single" : "repair";/);
+
+  assert.match(styles, /\.creation-card\.is-generating\s*\{/);
+  assert.match(styles, /\.creation-card-media\.is-loading\s*\{/);
+  assert.match(styles, /\.creation-card-media\.is-loading\s*\{[\s\S]*width:\s*calc\(100% - 12px\);/);
+  assert.match(styles, /\.creation-card-loading\s*\{[\s\S]*min-height:\s*132px;[\s\S]*padding:\s*12px;/);
+  assert.match(styles, /\.creation-card-loading-motion span\s*\{[\s\S]*animation:\s*creation-card-loading-bar/);
+  assert.match(styles, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.creation-card-loading-motion span[\s\S]*animation:\s*none;/);
 });
 
 test("creation prompt editor uses a top-level layer so cards do not intercept save clicks", async () => {
@@ -1170,7 +1438,8 @@ test("creation record cards open gallery-style lightbox details", async () => {
   assert.match(styles, /\.creation-record-card-actions \.mini-action\.is-disabled\s*\{/);
   assert.match(app, /const showRecordActions = options\.showRecordActions === true;/);
   assert.match(app, /card\.classList\.toggle\("is-record-card", showRecordActions\);/);
-  assert.match(app, /if \(!showRecordActions\) \{[\s\S]*prompt\.className = "creation-card-prompt";[\s\S]*card\.appendChild\(prompt\);[\s\S]*path\.className = "creation-card-path";[\s\S]*card\.appendChild\(path\);[\s\S]*\}/);
+  assert.doesNotMatch(app, /creation-card-prompt/);
+  assert.match(app, /if \(!showRecordActions && !hideGenerationDetails\) \{[\s\S]*path\.className = "creation-card-path";[\s\S]*card\.appendChild\(path\);[\s\S]*\}/);
   assert.match(app, /media\.dataset\.creationRecordPreviewItemId = item\.itemId;/);
   assert.match(app, /function getCreationRecordItemById\(itemId, setId = ""\) \{/);
   assert.match(app, /function buildCreationRecordLightboxItem\(item, set\) \{/);
@@ -1267,7 +1536,8 @@ test("PPT view exposes dynamic components and transition effect controls", async
   assert.match(html, /id="pptTransitionSpeedInput"/);
 
   assert.match(styles, /\.ppt-motion-grid\s*\{/);
-  assert.match(styles, /\.ppt-motion-note\s*\{/);
+  assert.doesNotMatch(styles, /\.ppt-motion-note\s*\{/);
+  assert.match(styles, /\.ppt-outline-box:empty\s*\{/);
 
   assert.match(app, /pptDynamicPresetInput: document\.querySelector\("#pptDynamicPresetInput"\)/);
   assert.match(app, /pptTransitionPresetInput: document\.querySelector\("#pptTransitionPresetInput"\)/);

@@ -25,5 +25,5 @@ None.
 - Frontend: `public/index.html`, `public/app.js`, and `public/styles.css` need a new tab, panel, independent state, and SSE rendering for Creation Mode.
 - Backend: `server.mjs` needs independent `/api/creation/*` endpoints and output-directory handling.
 - Libraries: new creation planning/store helpers may be added under `lib/`.
-- Storage: generated files will be written under `Pictures/MM/YYYY-MM-DD/YYYY-MM-DD-creation/<set-folder>/`; manifests will be stored separately from gallery and PPT records.
+- Storage: generated files will be written under `Pictures/YYYY-MM/MM-DD/YYYY-MM-DD-creation/<set-folder>/`; manifests will be stored separately from gallery and PPT records.
 - Tests: add unit, storage, API, and layout coverage for creation planning, output paths, routing, and data isolation.

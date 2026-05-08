@@ -34,7 +34,7 @@ GPT-Image2-Studio currently has prompt-driven single image generation, PPT gener
    - Rationale: A set needs product input, language, item roles, prompts, relative paths, and partial-failure status. That relationship does not fit the gallery index or PPT deck manifest.
    - Alternative considered: encode the set through `deckId` and `slideNumber`. This was rejected because PPT semantics must remain reserved for presentations.
 
-3. **Store images under `MM/YYYY-MM-DD/YYYY-MM-DD-creation/<set-folder>/`.**
+3. **Store images under `YYYY-MM/MM-DD/YYYY-MM-DD-creation/<set-folder>/`.**
    - Rationale: This satisfies the requirement that Creation Mode output sits beside `image` and `ppt`, while keeping each set grouped.
    - Alternative considered: a top-level `Pictures/creation` folder. This was rejected because the app already groups assets under month/date folders.
 

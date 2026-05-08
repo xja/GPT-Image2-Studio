@@ -161,7 +161,7 @@ const GALLERY_REFERENCE_LABELS = {
 };
 const STACKED_STUDIO_LAYOUT_MODES = new Set(["stacked", "tablet", "mobile"]);
 const PPT_SOURCE_MODES = new Set(["upload", "text", "topic"]);
-const CREATE_VIEW_IDS = new Set(["studio", "creation", "ppt"]);
+const CREATE_VIEW_IDS = new Set(["studio", "style-transfer", "reference-analysis", "creation", "ppt"]);
 const ASSET_VIEW_IDS = new Set(["gallery", "ppt-record", "creation-record"]);
 
 let studioHeightSyncFrame = 0;
@@ -191,6 +191,7 @@ const state = {
     currentSet: null,
     editingItemId: "",
     feedback: "",
+    generationScope: "",
     generating: false,
     itemDrafts: {},
     planning: false,
@@ -253,16 +254,26 @@ const state = {
   promptTemplates: [],
   reasoningEfforts: [...DEFAULT_REASONING_EFFORTS],
   referenceAnalysis: {
+    files: [],
     collapsed: false,
     dirty: false,
+    previewKey: "",
     result: null,
     running: false,
+    selectedPrompt: "",
   },
   referenceCompressionRunning: false,
   referenceFiles: [],
+  referenceAnalysisPreviewItem: null,
   referencePreviewItem: null,
   selectedPromptTemplateId: "",
   selectedPreviewKey: "",
+  studioMode: "prompt",
+  styleTransfer: {
+    source: null,
+    style: null,
+  },
+  styleTransferPreviewItem: null,
   timelineHasRendered: false,
   timelineSignatures: new Map(),
   timelineUnreadCount: 0,
@@ -289,7 +300,6 @@ const refs = {
   creationIndustryTemplateInput: document.querySelector("#creationIndustryTemplateInput"),
   creationOutputFormatInput: document.querySelector("#creationOutputFormatInput"),
   creationPlanButton: document.querySelector("#creationPlanButton"),
-  creationPlanMeta: document.querySelector("#creationPlanMeta"),
   creationPromptEditorLayer: document.querySelector("#creationPromptEditorLayer"),
   creationProductDescriptionInput: document.querySelector("#creationProductDescriptionInput"),
   creationProductNameInput: document.querySelector("#creationProductNameInput"),
@@ -325,8 +335,6 @@ const refs = {
   creationResultGrid: document.querySelector("#creationResultGrid"),
   creationRoleCount: document.querySelector("#creationRoleCount"),
   creationRoleGrid: document.querySelector("#creationRoleGrid"),
-  creationRoleHint: document.querySelector("#creationRoleHint"),
-  creationScenarioHint: document.querySelector("#creationScenarioHint"),
   creationScenarioInput: document.querySelector("#creationScenarioInput"),
   creationSellingPointsInput: document.querySelector("#creationSellingPointsInput"),
   creationSetMeta: document.querySelector("#creationSetMeta"),
@@ -463,6 +471,7 @@ const refs = {
   pptTransitionPresetInput: document.querySelector("#pptTransitionPresetInput"),
   pptTransitionSpeedInput: document.querySelector("#pptTransitionSpeedInput"),
   promptInput: document.querySelector("#promptInput"),
+  promptModeBlocks: [document.querySelector(".reference-field-group"), ...document.querySelectorAll("[data-prompt-mode-block]")].filter(Boolean),
   promptTemplateFeedback: document.querySelector("#promptTemplateFeedback"),
   promptTemplateForm: document.querySelector("#promptTemplateForm"),
   promptTemplateList: document.querySelector("#promptTemplateList"),
@@ -475,10 +484,27 @@ const refs = {
   recentEmpty: document.querySelector("#recentEmpty"),
   recentList: document.querySelector("#recentList"),
   referenceCount: document.querySelector("#referenceCount"),
+  referenceAnalysisCount: document.querySelector("#referenceAnalysisCount"),
+  referenceAnalysisDropzone: document.querySelector("#referenceAnalysisDropzone"),
+  referenceAnalysisEmpty: document.querySelector("#referenceAnalysisEmpty"),
   referenceAnalysisFeedback: document.querySelector("#referenceAnalysisFeedback"),
+  referenceAnalysisGrid: document.querySelector("#referenceAnalysisGrid"),
+  referenceAnalysisInput: document.querySelector("#referenceAnalysisInput"),
   referenceAnalysisList: document.querySelector("#referenceAnalysisList"),
   referenceAnalysisMeta: document.querySelector("#referenceAnalysisMeta"),
   referenceAnalysisPanel: document.querySelector("#referenceAnalysisPanel"),
+  referenceAnalysisRatioGrid: document.querySelector("#referenceAnalysisRatioGrid"),
+  referenceAnalysisRatioInput: document.querySelector("#referenceAnalysisRatioInput"),
+  referenceAnalysisSizeInput: document.querySelector("#referenceAnalysisSizeInput"),
+  referenceAnalysisSelectedPrompt: document.querySelector("#referenceAnalysisSelectedPrompt"),
+  referenceAnalysisSelectedPromptPanel: document.querySelector("#referenceAnalysisSelectedPromptPanel"),
+  referenceAnalysisCopyPromptButton: document.querySelector("#referenceAnalysisCopyPromptButton"),
+  referenceAnalysisGenerateButton: document.querySelector("#referenceAnalysisGenerateButton"),
+  referenceAnalysisGenerationCanvas: document.querySelector("#referenceAnalysisGenerationCanvas"),
+  referenceAnalysisGenerationDownloadButton: document.querySelector("#referenceAnalysisGenerationDownloadButton"),
+  referenceAnalysisGenerationImage: document.querySelector("#referenceAnalysisGenerationImage"),
+  referenceAnalysisGenerationMeta: document.querySelector("#referenceAnalysisGenerationMeta"),
+  referenceAnalysisGenerationPlaceholder: document.querySelector("#referenceAnalysisGenerationPlaceholder"),
   referenceAnalysisSummary: document.querySelector("#referenceAnalysisSummary"),
   referenceAnalysisToggleButton: document.querySelector("#referenceAnalysisToggleButton"),
   referenceAnalyzeButton: document.querySelector("#referenceAnalyzeButton"),
@@ -500,6 +526,15 @@ const refs = {
   newPromptTemplateButton: document.querySelector("#newPromptTemplateButton"),
   settingsPanel: document.querySelector(".settings-panel"),
   sideColumn: document.querySelector(".side-column"),
+  studioView: document.querySelector(".studio-view"),
+  styleTransferBlock: document.querySelector("#styleTransferBlock"),
+  styleTransferInstructionInput: document.querySelector("#styleTransferInstructionInput"),
+  styleTransferSourceDropzone: document.querySelector("#styleTransferSourceDropzone"),
+  styleTransferSourceGrid: document.querySelector("#styleTransferSourceGrid"),
+  styleTransferSourceInput: document.querySelector("#styleTransferSourceInput"),
+  styleTransferStyleDropzone: document.querySelector("#styleTransferStyleDropzone"),
+  styleTransferStyleGrid: document.querySelector("#styleTransferStyleGrid"),
+  styleTransferStyleInput: document.querySelector("#styleTransferStyleInput"),
   themeToggleButton: document.querySelector("#themeToggleButton"),
   themeToggleLabel: document.querySelector("#themeToggleLabel"),
   topbar: document.querySelector(".topbar"),
@@ -1470,6 +1505,12 @@ function toggleUiTheme() {
 }
 
 function getViewFromHash() {
+  if (window.location.hash === "#style-transfer") {
+    return "style-transfer";
+  }
+  if (window.location.hash === "#reference-analysis") {
+    return "reference-analysis";
+  }
   if (window.location.hash === "#creation") {
     return "creation";
   }
@@ -1490,18 +1531,36 @@ function getViewFromHash() {
 
 function syncHash(view) {
   const nextHash =
-    view === "creation" ? "#creation" : view === "gallery"
-        ? "#gallery"
-        : view === "creation-record"
-          ? "#creation-record"
-          : view === "ppt-record"
-            ? "#ppt-record"
-            : view === "ppt"
-              ? "#ppt"
-              : "#studio";
+    view === "creation" ? "#creation" : view === "style-transfer"
+        ? "#style-transfer"
+        : view === "reference-analysis"
+          ? "#reference-analysis"
+          : view === "gallery"
+            ? "#gallery"
+            : view === "creation-record"
+              ? "#creation-record"
+              : view === "ppt-record"
+                ? "#ppt-record"
+                : view === "ppt"
+                  ? "#ppt"
+                  : "#studio";
   if (window.location.hash !== nextHash) {
     window.history.replaceState(null, "", nextHash);
   }
+}
+
+function setStudioGenerationMode(mode = "prompt") {
+  const nextMode = mode === "style-transfer" ? "style-transfer" : "prompt";
+  state.studioMode = nextMode;
+  if (refs.studioView) {
+    refs.studioView.dataset.studioMode = nextMode;
+  }
+
+  refs.promptModeBlocks.forEach((block) => {
+    block.classList.toggle("hidden", nextMode === "style-transfer");
+  });
+  refs.styleTransferBlock?.classList.toggle("hidden", nextMode !== "style-transfer");
+  updateGenerateButton();
 }
 
 function getOrCreateClientSessionId() {
@@ -1810,16 +1869,26 @@ function bindStudioDensitySync() {
 function setActiveView(view) {
   state.activeView = view;
   syncHash(view);
+  const activeNavSection = CREATE_VIEW_IDS.has(view) ? "create" : ASSET_VIEW_IDS.has(view) ? "assets" : "";
   const activeTabView = CREATE_VIEW_IDS.has(view) ? "studio" : ASSET_VIEW_IDS.has(view) ? "gallery" : view;
+  const activePanelView = view === "style-transfer" ? "studio" : view === "reference-analysis" ? "reference-analysis" : view;
+
+  refs.globalNavItems.forEach((item) => {
+    const button = item.querySelector("[data-nav-menu]");
+    button?.classList.toggle("active", item.dataset.navSection === activeNavSection);
+  });
 
   refs.viewTabs.forEach((button) => {
     button.classList.toggle("active", button.dataset.viewTab === activeTabView);
   });
 
   refs.viewPanels.forEach((panel) => {
-    panel.classList.toggle("hidden", panel.dataset.viewPanel !== view);
+    panel.classList.toggle("hidden", panel.dataset.viewPanel !== activePanelView);
   });
 
+  if (view === "studio" || view === "style-transfer") {
+    setStudioGenerationMode(view === "style-transfer" ? "style-transfer" : "prompt");
+  }
   syncGalleryLayoutMode();
   scheduleStudioHeightSync();
   scheduleGalleryPanelHeightSync();
@@ -1851,10 +1920,14 @@ function updateGenerateButton() {
   const queuedCount = getQueuedJobCount();
   const maxQueuedCount = getMaxQueuedJobCount();
   const maxParallelCount = getMaxParallelJobCount();
-  const preparingReference = state.referenceCompressionRunning || hasPendingReferenceGenerationFiles();
+  const preparingReference =
+    state.referenceCompressionRunning ||
+    hasPendingReferenceGenerationFiles() ||
+    hasPendingStyleTransferGenerationFiles();
   refs.generateButton.disabled = preparingReference || queuedCount >= maxQueuedCount;
+  const idleLabel = state.studioMode === "style-transfer" ? "风格迁移" : "开始生成";
   refs.generateButton.textContent =
-    preparingReference ? "处理参考图..." : queuedCount > 0 ? `队列 ${queuedCount}/${maxQueuedCount}` : "开始生成";
+    preparingReference ? "处理参考图..." : queuedCount > 0 ? `队列 ${queuedCount}/${maxQueuedCount}` : idleLabel;
   refs.liveCount.textContent = `${runningCount} / ${maxParallelCount}`;
 }
 
@@ -2071,12 +2144,20 @@ function getCreationReferenceGenerationFile(item) {
   return item?.generationFile || item?.file;
 }
 
+function getReferenceAnalysisGenerationFile(item) {
+  return item?.generationFile || item?.file;
+}
+
 function hasPendingReferenceGenerationFiles() {
   return state.referenceFiles.some((item) => item.generationFilePromise);
 }
 
 function hasPendingCreationReferenceGenerationFiles() {
   return state.creationReferenceFiles.some((item) => item.generationFilePromise);
+}
+
+function hasPendingReferenceAnalysisGenerationFiles() {
+  return state.referenceAnalysis.files.some((item) => item.generationFilePromise);
 }
 
 function startReferenceGenerationCompression(item) {
@@ -2102,6 +2183,76 @@ function startReferenceGenerationCompression(item) {
       updateGenerateButton();
     });
 
+  updateGenerateButton();
+  return item.generationFilePromise;
+}
+
+function startReferenceAnalysisGenerationCompression(item) {
+  if (!item?.file) {
+    return null;
+  }
+
+  item.generationFile = item.file;
+  item.generationCompressed = false;
+  item.generationFilePromise = prepareGenerationReferenceImageFile(item.file)
+    .then((preparedFile) => {
+      item.generationFile = preparedFile || item.file;
+      item.generationCompressed = Boolean(preparedFile && preparedFile !== item.file);
+      return item.generationFile;
+    })
+    .catch(() => {
+      item.generationFile = item.file;
+      item.generationCompressed = false;
+      return item.file;
+    })
+    .finally(() => {
+      item.generationFilePromise = null;
+      renderReferenceAnalysisGrid();
+      renderReferenceAnalysis();
+    });
+
+  renderReferenceAnalysisGrid();
+  renderReferenceAnalysis();
+  return item.generationFilePromise;
+}
+
+function getStyleTransferReferenceItem(slot) {
+  return slot === "style" ? state.styleTransfer.style : state.styleTransfer.source;
+}
+
+function getStyleTransferGenerationFile(slot) {
+  return getGenerationReferenceFile(getStyleTransferReferenceItem(slot));
+}
+
+function hasPendingStyleTransferGenerationFiles() {
+  return Boolean(state.styleTransfer.source?.generationFilePromise || state.styleTransfer.style?.generationFilePromise);
+}
+
+function startStyleTransferGenerationCompression(item) {
+  if (!item?.file) {
+    return null;
+  }
+
+  item.generationFile = item.file;
+  item.generationCompressed = false;
+  item.generationFilePromise = prepareGenerationReferenceImageFile(item.file)
+    .then((preparedFile) => {
+      item.generationFile = preparedFile || item.file;
+      item.generationCompressed = Boolean(preparedFile && preparedFile !== item.file);
+      return item.generationFile;
+    })
+    .catch(() => {
+      item.generationFile = item.file;
+      item.generationCompressed = false;
+      return item.file;
+    })
+    .finally(() => {
+      item.generationFilePromise = null;
+      renderStyleTransferReferences();
+      updateGenerateButton();
+    });
+
+  renderStyleTransferReferences();
   updateGenerateButton();
   return item.generationFilePromise;
 }
@@ -2133,6 +2284,21 @@ function startCreationReferenceGenerationCompression(item) {
   return item.generationFilePromise;
 }
 
+async function ensureStyleTransferGenerationFilesReady() {
+  const pending = [state.styleTransfer.source?.generationFilePromise, state.styleTransfer.style?.generationFilePromise].filter(
+    Boolean,
+  );
+  if (pending.length === 0) {
+    return;
+  }
+
+  try {
+    await Promise.allSettled(pending);
+  } finally {
+    renderStyleTransferReferences();
+  }
+}
+
 async function ensureReferenceGenerationFilesReady() {
   const pending = state.referenceFiles.map((item) => item.generationFilePromise).filter(Boolean);
   if (pending.length === 0) {
@@ -2162,12 +2328,25 @@ async function ensureCreationReferenceGenerationFilesReady() {
   }
 }
 
+async function ensureReferenceAnalysisGenerationFilesReady() {
+  const pending = state.referenceAnalysis.files.map((item) => item.generationFilePromise).filter(Boolean);
+  if (pending.length === 0) {
+    return;
+  }
+
+  try {
+    await Promise.allSettled(pending);
+  } finally {
+    renderReferenceAnalysisGrid();
+    renderReferenceAnalysis();
+  }
+}
+
 function resetReferenceFiles() {
   closeReferencePreview();
   state.referenceFiles.forEach(revokeReferencePreview);
   state.referenceFiles = [];
   refs.referenceInput.value = "";
-  markReferenceAnalysisDirty();
   renderReferenceGrid();
   updateGenerateButton();
 }
@@ -2187,6 +2366,8 @@ function openReferencePreview(referenceId) {
 function closeReferencePreview() {
   state.referencePreviewItem = null;
   state.creationReferencePreviewItem = null;
+  state.referenceAnalysisPreviewItem = null;
+  state.styleTransferPreviewItem = null;
   refs.referencePreviewViewer.classList.remove("open");
   refs.referencePreviewViewer.setAttribute("aria-hidden", "true");
   refs.referencePreviewImage.removeAttribute("src");
@@ -2199,7 +2380,6 @@ function removeReferenceFile(referenceId) {
   }
   revokeReferencePreview(target);
   state.referenceFiles = state.referenceFiles.filter((item) => item.id !== referenceId);
-  markReferenceAnalysisDirty();
   renderReferenceGrid();
   updateGenerateButton();
 }
@@ -2241,13 +2421,233 @@ function applyReferenceFiles(fileList) {
 
   state.referenceFiles = next;
   refs.referenceInput.value = "";
-  markReferenceAnalysisDirty();
   renderReferenceGrid();
   updateGenerateButton();
 
   if (overflowed) {
     showError(`参考图最多支持 ${state.limits.maxReferenceImages} 张。`);
   }
+}
+
+function createReferenceAnalysisItem(file) {
+  return {
+    id: `reference-analysis-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    fingerprint: buildReferenceFingerprint(file),
+    file,
+    generationFile: file,
+    generationFilePromise: null,
+    generationCompressed: false,
+    previewUrl: URL.createObjectURL(file),
+  };
+}
+
+function applyReferenceAnalysisFiles(fileList) {
+  const incomingFiles = [...(fileList || [])].filter((file) => file.type.startsWith("image/"));
+  if (incomingFiles.length === 0) {
+    return;
+  }
+
+  const next = [...state.referenceAnalysis.files];
+  const fingerprints = new Set(next.map((item) => item.fingerprint));
+  let overflowed = false;
+
+  for (const file of incomingFiles) {
+    if (next.length >= state.limits.maxReferenceImages) {
+      overflowed = true;
+      break;
+    }
+
+    const fingerprint = buildReferenceFingerprint(file);
+    if (fingerprints.has(fingerprint)) {
+      continue;
+    }
+
+    const referenceItem = createReferenceAnalysisItem(file);
+    startReferenceAnalysisGenerationCompression(referenceItem);
+    next.push(referenceItem);
+    fingerprints.add(fingerprint);
+  }
+
+  state.referenceAnalysis.files = next;
+  refs.referenceAnalysisInput.value = "";
+  markReferenceAnalysisDirty();
+  renderReferenceAnalysisGrid();
+  renderReferenceAnalysis();
+
+  if (overflowed) {
+    setReferenceAnalysisFeedback(`融图分析最多支持 ${state.limits.maxReferenceImages} 张图片。`, "error");
+  }
+}
+
+function removeReferenceAnalysisFile(referenceId) {
+  const target = state.referenceAnalysis.files.find((item) => item.id === referenceId);
+  if (state.referenceAnalysisPreviewItem?.id === referenceId) {
+    closeReferencePreview();
+  }
+  revokeReferencePreview(target);
+  state.referenceAnalysis.files = state.referenceAnalysis.files.filter((item) => item.id !== referenceId);
+  markReferenceAnalysisDirty();
+  renderReferenceAnalysisGrid();
+  renderReferenceAnalysis();
+}
+
+function openReferenceAnalysisPreview(referenceId) {
+  const item = state.referenceAnalysis.files.find((entry) => entry.id === referenceId);
+  if (!item?.previewUrl) {
+    return;
+  }
+
+  state.referenceAnalysisPreviewItem = item;
+  refs.referencePreviewImage.src = item.previewUrl;
+  refs.referencePreviewViewer.classList.add("open");
+  refs.referencePreviewViewer.setAttribute("aria-hidden", "false");
+}
+
+function renderReferenceAnalysisGrid() {
+  refs.referenceAnalysisGrid.replaceChildren();
+  refs.referenceAnalysisCount.textContent = `${state.referenceAnalysis.files.length} / ${state.limits.maxReferenceImages}`;
+  refs.referenceAnalysisGrid.classList.toggle("hidden", state.referenceAnalysis.files.length === 0);
+
+  state.referenceAnalysis.files.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "reference-card";
+
+    const previewButton = document.createElement("button");
+    previewButton.type = "button";
+    previewButton.className = "reference-preview-button";
+    previewButton.dataset.referenceAnalysisPreviewId = item.id;
+    previewButton.setAttribute("aria-label", "放大查看待分析图片");
+
+    const image = document.createElement("img");
+    image.src = item.previewUrl;
+    image.alt = "待分析图片预览";
+    previewButton.appendChild(image);
+    card.appendChild(previewButton);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "reference-remove";
+    remove.textContent = "x";
+    remove.setAttribute("aria-label", "移除待分析图片");
+    remove.addEventListener("click", () => removeReferenceAnalysisFile(item.id));
+    card.appendChild(remove);
+
+    refs.referenceAnalysisGrid.appendChild(card);
+  });
+}
+
+function createStyleTransferReferenceItem(slot, file) {
+  return {
+    id: `style-transfer-${slot}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    slot,
+    fingerprint: buildReferenceFingerprint(file),
+    file,
+    generationFile: file,
+    generationFilePromise: null,
+    generationCompressed: false,
+    previewUrl: URL.createObjectURL(file),
+  };
+}
+
+function applyStyleTransferReferenceFile(slot, fileList) {
+  const imageFiles = [...(fileList || [])].filter((item) => item.type.startsWith("image/"));
+  if (imageFiles.length === 0) {
+    showError("请选择一张图片。");
+    return;
+  }
+  if (imageFiles.length > 1) {
+    showError("原图和风格参考图每个区域只能上传一张图片。");
+    return;
+  }
+
+  const file = imageFiles[0];
+
+  const current = getStyleTransferReferenceItem(slot);
+  const nextFingerprint = buildReferenceFingerprint(file);
+  if (current?.fingerprint === nextFingerprint) {
+    refs[slot === "style" ? "styleTransferStyleInput" : "styleTransferSourceInput"].value = "";
+    return;
+  }
+
+  if (state.styleTransferPreviewItem?.id === current?.id) {
+    closeReferencePreview();
+  }
+  revokeReferencePreview(current);
+  const nextItem = createStyleTransferReferenceItem(slot, file);
+  state.styleTransfer[slot === "style" ? "style" : "source"] = nextItem;
+  refs[slot === "style" ? "styleTransferStyleInput" : "styleTransferSourceInput"].value = "";
+  startStyleTransferGenerationCompression(nextItem);
+  renderStyleTransferReferences();
+  updateGenerateButton();
+}
+
+function removeStyleTransferReference(slot) {
+  const key = slot === "style" ? "style" : "source";
+  const target = state.styleTransfer[key];
+  if (state.styleTransferPreviewItem?.id === target?.id) {
+    closeReferencePreview();
+  }
+  revokeReferencePreview(target);
+  state.styleTransfer[key] = null;
+  renderStyleTransferReferences();
+  updateGenerateButton();
+}
+
+function openStyleTransferPreview(slot) {
+  const item = getStyleTransferReferenceItem(slot);
+  if (!item?.previewUrl) {
+    return;
+  }
+
+  closeReferencePreview();
+  state.styleTransferPreviewItem = item;
+  refs.referencePreviewImage.src = item.previewUrl;
+  refs.referencePreviewViewer.classList.add("open");
+  refs.referencePreviewViewer.setAttribute("aria-hidden", "false");
+}
+
+function renderStyleTransferReferenceSlot(slot, grid) {
+  if (!grid) {
+    return;
+  }
+
+  const item = getStyleTransferReferenceItem(slot);
+  grid.replaceChildren();
+  grid.classList.toggle("hidden", !item);
+  if (!item) {
+    return;
+  }
+
+  const card = document.createElement("div");
+  card.className = "reference-card";
+
+  const previewButton = document.createElement("button");
+  previewButton.type = "button";
+  previewButton.className = "reference-preview-button";
+  previewButton.dataset.styleTransferPreviewRole = slot;
+  previewButton.setAttribute("aria-label", slot === "style" ? "放大查看风格参考图" : "放大查看原图");
+  previewButton.addEventListener("click", () => openStyleTransferPreview(slot));
+
+  const image = document.createElement("img");
+  image.src = item.previewUrl;
+  image.alt = slot === "style" ? "风格参考图预览" : "原图预览";
+  previewButton.appendChild(image);
+  card.appendChild(previewButton);
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "reference-remove";
+  remove.textContent = "x";
+  remove.setAttribute("aria-label", slot === "style" ? "移除风格参考图" : "移除原图");
+  remove.addEventListener("click", () => removeStyleTransferReference(slot));
+  card.appendChild(remove);
+
+  grid.appendChild(card);
+}
+
+function renderStyleTransferReferences() {
+  renderStyleTransferReferenceSlot("source", refs.styleTransferSourceGrid);
+  renderStyleTransferReferenceSlot("style", refs.styleTransferStyleGrid);
 }
 
 function renderReferenceGrid() {
@@ -2280,7 +2680,6 @@ function renderReferenceGrid() {
     card.appendChild(remove);
     refs.referenceGrid.appendChild(card);
   });
-  renderReferenceAnalysis();
 }
 
 function getReferenceAnalysisPrompts(item = state.referenceAnalysis.result) {
@@ -2317,10 +2716,13 @@ function setReferenceAnalysisFeedback(message, kind = "") {
 function markReferenceAnalysisDirty() {
   if (state.referenceAnalysis.result) {
     state.referenceAnalysis.dirty = true;
+    state.referenceAnalysis.previewKey = "";
+    state.referenceAnalysis.selectedPrompt = "";
     setReferenceAnalysisFeedback("参考图已变化，请重新分析。", "busy");
   } else {
     setReferenceAnalysisFeedback("", "");
   }
+  renderReferenceAnalysisSelectedPrompt();
 }
 
 function toggleReferenceAnalysisPanel() {
@@ -2349,18 +2751,83 @@ function createReferenceAnalysisCard(option, index) {
   button.className = "inline-button";
   button.type = "button";
   button.dataset.referenceAnalysisPromptIndex = String(index);
-  button.textContent = "应用";
+  button.textContent = "选用";
 
   card.append(title, intent, prompt, button);
   return card;
 }
 
+function getReferenceAnalysisGenerationPreviewItem() {
+  const key = state.referenceAnalysis.previewKey || "";
+  if (key.startsWith("job:")) {
+    return state.jobs.find((job) => job.id === key.slice(4)) || null;
+  }
+
+  if (key.startsWith("file:")) {
+    return state.gallery.find((item) => item.filename === key.slice(5)) || null;
+  }
+
+  return null;
+}
+
+function renderReferenceAnalysisGenerationPreview() {
+  const item = getReferenceAnalysisGenerationPreviewItem();
+  const imageUrl = item ? getImageUrl(item) : "";
+  const isRunning = Boolean(item?.isRunning || (item?.started && !item?.filename));
+
+  refs.referenceAnalysisGenerationCanvas.classList.toggle("has-image", Boolean(imageUrl));
+  refs.referenceAnalysisGenerationCanvas.classList.toggle("is-running", isRunning && !imageUrl);
+  refs.referenceAnalysisGenerationPlaceholder.classList.toggle("hidden", Boolean(imageUrl));
+  refs.referenceAnalysisGenerationPlaceholder.textContent = isRunning
+    ? item?.statusText || "正在生成图片"
+    : "生成图展示框";
+
+  if (imageUrl) {
+    refs.referenceAnalysisGenerationImage.src = imageUrl;
+    refs.referenceAnalysisGenerationImage.alt = getDisplayPrompt(item) || "融图分析生成结果";
+    refs.referenceAnalysisGenerationDownloadButton.href = imageUrl;
+    refs.referenceAnalysisGenerationDownloadButton.download = item.filename || "reference-analysis.png";
+    refs.referenceAnalysisGenerationDownloadButton.classList.remove("disabled");
+    refs.referenceAnalysisGenerationDownloadButton.setAttribute("aria-disabled", "false");
+  } else {
+    refs.referenceAnalysisGenerationImage.removeAttribute("src");
+    refs.referenceAnalysisGenerationDownloadButton.href = "#";
+    refs.referenceAnalysisGenerationDownloadButton.removeAttribute("download");
+    refs.referenceAnalysisGenerationDownloadButton.classList.add("disabled");
+    refs.referenceAnalysisGenerationDownloadButton.setAttribute("aria-disabled", "true");
+  }
+
+  refs.referenceAnalysisGenerationMeta.textContent = item
+    ? [formatTime(item.createdAt), formatCanvasLabel(item.size), item.statusText || ""].filter(Boolean).join(" · ")
+    : "等待生成";
+}
+
+function renderReferenceAnalysisSelectedPrompt() {
+  const promptText = String(state.referenceAnalysis.selectedPrompt || "").trim();
+  const previewItem = getReferenceAnalysisGenerationPreviewItem();
+  const isGenerating = Boolean(previewItem?.isRunning || (previewItem?.started && !previewItem?.filename));
+  refs.referenceAnalysisSelectedPromptPanel.classList.toggle("hidden", !promptText);
+  refs.referenceAnalysisSelectedPrompt.value = promptText;
+  refs.referenceAnalysisCopyPromptButton.disabled = !promptText;
+  const preparingReference = hasPendingReferenceAnalysisGenerationFiles();
+  refs.referenceAnalysisGenerateButton.disabled =
+    !promptText || preparingReference || isGenerating || getQueuedJobCount() >= getMaxQueuedJobCount();
+  refs.referenceAnalysisGenerateButton.textContent = preparingReference
+    ? "处理参考图..."
+    : isGenerating
+      ? "生成中..."
+      : "开始生成";
+  renderReferenceAnalysisGenerationPreview();
+}
+
 function renderReferenceAnalysis() {
   refs.referenceAnalyzeButton.disabled = state.referenceAnalysis.running;
   refs.referenceAnalyzeButton.textContent = state.referenceAnalysis.running ? "分析中..." : "融图分析";
+  renderReferenceAnalysisSelectedPrompt();
 
   const item = state.referenceAnalysis.result;
   refs.referenceAnalysisPanel.classList.toggle("hidden", !item?.json);
+  refs.referenceAnalysisEmpty?.classList.toggle("hidden", Boolean(item?.json));
   refs.referenceAnalysisList.replaceChildren();
 
   if (!item?.json) {
@@ -2452,19 +2919,49 @@ function renderOutputFormatOptions() {
   refs.outputFormatInput.value = currentValue;
 }
 
-function renderSizeOptions() {
+function syncGenerationSize(value) {
   const ratioValue = refs.ratioInput.value || DEFAULT_UI_RATIO;
-  const currentValue = normalizeGenerationSize(ratioValue, refs.sizeInput.value || "auto");
-  refs.sizeInput.innerHTML = "";
+  const nextValue = normalizeGenerationSize(ratioValue, value || "auto");
+  refs.sizeInput.value = nextValue;
+  if (refs.referenceAnalysisSizeInput) {
+    refs.referenceAnalysisSizeInput.value = nextValue;
+  }
+}
+
+function renderSizeOptions(sizeInput = refs.sizeInput, ratioInput = refs.ratioInput) {
+  if (!sizeInput || !ratioInput) {
+    return;
+  }
+
+  const ratioValue = ratioInput.value || DEFAULT_UI_RATIO;
+  const currentValue = normalizeGenerationSize(ratioValue, sizeInput.value || "auto");
+  sizeInput.innerHTML = "";
 
   getGenerationSizeOptions(ratioValue).forEach((option) => {
     const element = document.createElement("option");
     element.value = option.value;
     element.textContent = option.label;
-    refs.sizeInput.appendChild(element);
+    sizeInput.appendChild(element);
   });
 
-  refs.sizeInput.value = currentValue;
+  sizeInput.value = currentValue;
+}
+
+function renderReferenceAnalysisSizeOptions() {
+  renderSizeOptions(refs.referenceAnalysisSizeInput, refs.referenceAnalysisRatioInput);
+}
+
+function syncGenerationRatio(value) {
+  const nextValue = getRatioOption(value)?.value || DEFAULT_UI_RATIO;
+  refs.ratioInput.value = nextValue;
+  if (refs.referenceAnalysisRatioInput) {
+    refs.referenceAnalysisRatioInput.value = nextValue;
+  }
+  renderRatioGrid();
+  renderReferenceAnalysisRatioGrid();
+  renderSizeOptions();
+  renderReferenceAnalysisSizeOptions();
+  syncGenerationSize(refs.sizeInput.value);
 }
 
 function renderCreationRatioOptions() {
@@ -2524,7 +3021,8 @@ function syncStudioHeight() {
 
   const settingsScrollTop = getSettingsFormScrollTop();
 
-  if (STACKED_STUDIO_LAYOUT_MODES.has(getCurrentStudioLayoutMode()) || state.activeView !== "studio") {
+  const isStudioLikeView = state.activeView === "studio" || state.activeView === "style-transfer";
+  if (STACKED_STUDIO_LAYOUT_MODES.has(getCurrentStudioLayoutMode()) || !isStudioLikeView) {
     document.documentElement.style.removeProperty("--studio-column-height");
     restoreSettingsFormScrollTop(settingsScrollTop);
     return;
@@ -2820,14 +3318,18 @@ function bindGalleryScrollSync() {
   }
 }
 
-function renderRatioGrid() {
-  refs.ratioGrid.innerHTML = "";
+function renderRatioGrid(ratioGrid = refs.ratioGrid, ratioInput = refs.ratioInput) {
+  if (!ratioGrid || !ratioInput) {
+    return;
+  }
+
+  ratioGrid.innerHTML = "";
 
   getVisibleRatios().forEach((option) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "ratio-chip";
-    if (refs.ratioInput.value === option.value) {
+    if (ratioInput.value === option.value) {
       button.classList.add("active");
     }
 
@@ -2836,13 +3338,15 @@ function renderRatioGrid() {
     button.appendChild(title);
 
     button.addEventListener("click", () => {
-      refs.ratioInput.value = option.value;
-      renderRatioGrid();
-      renderSizeOptions();
+      syncGenerationRatio(option.value);
     });
 
-    refs.ratioGrid.appendChild(button);
+    ratioGrid.appendChild(button);
   });
+}
+
+function renderReferenceAnalysisRatioGrid() {
+  renderRatioGrid(refs.referenceAnalysisRatioGrid, refs.referenceAnalysisRatioInput);
 }
 
 function syncConfigUi(config) {
@@ -2865,14 +3369,22 @@ function syncConfigUi(config) {
   if (!refs.ratioInput.value || !getRatioOption(refs.ratioInput.value)) {
     refs.ratioInput.value = DEFAULT_UI_RATIO;
   }
+  if (refs.referenceAnalysisRatioInput) {
+    refs.referenceAnalysisRatioInput.value = refs.ratioInput.value || DEFAULT_UI_RATIO;
+  }
+  if (refs.referenceAnalysisSizeInput) {
+    refs.referenceAnalysisSizeInput.value = refs.sizeInput.value || "auto";
+  }
 
   renderRatioGrid();
+  renderReferenceAnalysisRatioGrid();
   renderReasoningOptions();
   renderOutputFormatOptions();
   refs.creationOutputFormatInput.value = normalizeOutputFormat(
     refs.creationOutputFormatInput.value || config.defaults?.format || "png",
   );
   renderSizeOptions();
+  renderReferenceAnalysisSizeOptions();
   renderCreationRatioOptions();
   syncConnectionState();
   updateGenerateButton();
@@ -3902,6 +4414,8 @@ function renderAll() {
   updateGenerateButton();
   renderTimeline();
   renderStudio();
+  renderReferenceAnalysisGrid();
+  renderReferenceAnalysis();
   renderCreationView();
   renderCreationRecordView();
   renderPptView();
@@ -4900,18 +5414,6 @@ const CREATION_SCENARIO_LABELS = {
   "brand-story": "品牌故事",
 };
 
-const CREATION_SCENARIO_HINTS = {
-  standard: "覆盖首图、卖点、场景与信任证明，适合通用电商上架。",
-  "detail-page": "适合商品详情页的模块化叙事，强化转化路径。",
-  "social-seeding": "偏生活方式和真实分享语境，适合内容平台投放。",
-  launch: "突出发现感、核心承诺和可信度，适合新品首发。",
-  promotion: "强化优惠信息、紧迫感和购买理由，适合活动流量。",
-  livestream: "面向直播间讲解与转化，强调演示、卖点节奏和即时购买理由。",
-  "gift-guide": "突出送礼对象、场合和包装吸引力，适合节日推荐。",
-  "marketplace-search": "面向平台搜索列表，强调主体识别、差异点和快速理解。",
-  "brand-story": "串联材料、工艺、价值观和日常使用，适合品牌内容页。",
-};
-
 const CREATION_INDUSTRY_TEMPLATE_LABELS = {
   general: "通用电商",
   apparel: "服饰鞋包",
@@ -4919,15 +5421,6 @@ const CREATION_INDUSTRY_TEMPLATE_LABELS = {
   food: "食品饮料",
   electronics: "3C 数码",
   home: "家居生活",
-};
-
-const CREATION_INDUSTRY_TEMPLATE_HINTS = {
-  general: "使用通用电商结构，营销场景决定推荐图片类型。",
-  apparel: "优先呈现版型、面料、上身或搭配效果、尺寸比例与细节质感。",
-  beauty: "优先呈现质地、试色、使用步骤、包装信息和功效层级，避免医疗化表述。",
-  food: "优先呈现新鲜感、食用场景、包装信息、原料线索和诱人质地。",
-  electronics: "优先呈现接口、尺寸、屏幕或机身细节、规格信息和差异对比。",
-  home: "优先呈现空间比例、材质饰面、安装或使用场景和日常生活价值。",
 };
 
 const CREATION_SCENARIO_ROLE_PRESETS = {
@@ -5693,12 +6186,54 @@ function updateCreationCurrentItem(itemId, patch = {}) {
   return nextSet;
 }
 
+function shouldShowCreationCardLoading(item = {}, showRecordActions = false) {
+  if (showRecordActions || !state.creation.generating) {
+    return false;
+  }
+
+  if (getImageUrl(item)) {
+    return false;
+  }
+
+  const status = String(item.status || "queued");
+  return !["completed", "failed"].includes(status);
+}
+
+function shouldHideCreationCardDetails(showRecordActions = false) {
+  return !showRecordActions && state.creation.generating;
+}
+
+function createCreationCardLoading() {
+  const loading = document.createElement("div");
+  loading.className = "creation-card-loading";
+
+  const motion = document.createElement("div");
+  motion.className = "creation-card-loading-motion";
+  motion.setAttribute("aria-hidden", "true");
+  for (let index = 0; index < 3; index += 1) {
+    motion.appendChild(document.createElement("span"));
+  }
+
+  const label = document.createElement("strong");
+  label.textContent = "生成中";
+
+  const detail = document.createElement("span");
+  detail.className = "creation-card-loading-detail";
+  detail.textContent = "正在生成套图图片";
+
+  loading.append(motion, label, detail);
+  return loading;
+}
+
 function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
   const showActions = options.showActions !== false;
   const showRecordActions = options.showRecordActions === true;
+  const isLoadingCard = shouldShowCreationCardLoading(item, showRecordActions);
+  const hideGenerationDetails = shouldHideCreationCardDetails(showRecordActions);
   const card = document.createElement("article");
   card.className = "creation-card";
   card.classList.toggle("is-record-card", showRecordActions);
+  card.classList.toggle("is-generating", isLoadingCard);
 
   const head = document.createElement("div");
   head.className = "creation-card-head";
@@ -5709,16 +6244,10 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
 
   const status = document.createElement("span");
   status.className = "creation-card-status";
-  status.textContent = getCreationStatusLabel(item.status);
+  status.textContent = isLoadingCard ? "生成中" : getCreationStatusLabel(item.status);
   head.appendChild(status);
 
   card.appendChild(head);
-
-  const brief = document.createElement("p");
-  brief.className = "creation-card-brief";
-  brief.textContent = item.brief || CREATION_PREVIEW_SLOTS[fallbackIndex]?.brief || "";
-  brief.hidden = !brief.textContent;
-  card.appendChild(brief);
 
   const imageUrl = getImageUrl(item);
   const media = document.createElement(showRecordActions && imageUrl ? "button" : "div");
@@ -5730,7 +6259,11 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
     media.setAttribute("aria-label", `${item.title || "套图项"}查看大图`);
   }
 
-  if (imageUrl) {
+  if (isLoadingCard) {
+    media.classList.add("is-loading");
+    media.setAttribute("aria-busy", "true");
+    media.appendChild(createCreationCardLoading());
+  } else if (imageUrl) {
     const image = document.createElement("img");
     image.loading = "lazy";
     image.decoding = "async";
@@ -5744,16 +6277,7 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
   }
   card.appendChild(media);
 
-  if (!showRecordActions) {
-    const prompt = document.createElement("p");
-    prompt.className = "creation-card-prompt";
-    prompt.textContent =
-      item.marketingCopy ||
-      item.prompt ||
-      (item.status === "failed" ? "请检查配置后重试。" : item.error) ||
-      "填写商品信息后会自动生成对应的营销图。";
-    card.appendChild(prompt);
-
+  if (!showRecordActions && !hideGenerationDetails) {
     const path = document.createElement("span");
     path.className = "creation-card-path";
     path.textContent = item.relativePath || item.error || "";
@@ -5762,7 +6286,7 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
     card.appendChild(path);
   }
 
-  if (showActions && state.creation.editingItemId === item.itemId) {
+  if (showActions && !hideGenerationDetails && state.creation.editingItemId === item.itemId) {
     const editor = document.createElement("div");
     editor.className = "creation-card-editor";
     editor.setAttribute("role", "dialog");
@@ -5806,7 +6330,7 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
     refs.creationPromptEditorLayer?.appendChild(editor);
   }
 
-  if (showActions) {
+  if (showActions && !hideGenerationDetails) {
     const actions = document.createElement("div");
     actions.className = "creation-card-actions";
     const editButton = document.createElement("button");
@@ -6732,12 +7256,6 @@ function renderCreationRolePicker() {
   if (refs.creationRoleCount) {
     refs.creationRoleCount.textContent = `${selectedRoles.length} / ${CREATION_PREVIEW_SLOTS.length}`;
   }
-  if (refs.creationRoleHint) {
-    const scenario = getCreationSelectedScenario();
-    const industryTemplate = getCreationSelectedIndustryTemplate();
-    const roleSourceLabel = industryTemplate.value === "general" ? scenario.label : industryTemplate.label;
-    refs.creationRoleHint.textContent = `${roleSourceLabel} 推荐，可手动增删`;
-  }
 
   refs.creationRoleGrid.innerHTML = "";
   CREATION_PREVIEW_SLOTS.forEach((slot) => {
@@ -6772,7 +7290,6 @@ function renderCreationView() {
     itemId: slot.itemId,
     slotIndex: index + 1,
     status: state.creation.generating ? "queued" : "idle",
-    prompt: "填写商品信息后会自动生成电商营销套图。",
   }));
   const progress = getCreationProgressSummary(currentSet);
   const preparingReferences = hasPendingCreationReferenceGenerationFiles();
@@ -6788,27 +7305,13 @@ function renderCreationView() {
     refs.creationPlanButton.textContent = state.creation.planning ? "预览中..." : "预览计划";
     refs.creationPlanButton.disabled = state.creation.generating || state.creation.planning;
   }
-  if (refs.creationPlanMeta) {
-    refs.creationPlanMeta.textContent = state.creation.planning
-      ? "正在生成每张图的计划"
-      : isCreationDraftSet(currentSet)
-        ? `已预览 ${currentSet.items.length} 张，可先微调再生成`
-        : "生成前可先确认每张图的计划";
-  }
   refs.creationProgressText.textContent = `${progress.completed} / ${progress.total}`;
-  if (refs.creationScenarioHint) {
-    const industryTemplate = getCreationSelectedIndustryTemplate();
-    refs.creationScenarioHint.textContent =
-      industryTemplate.value === "general"
-        ? CREATION_SCENARIO_HINTS[getCreationSelectedScenario().value] || CREATION_SCENARIO_HINTS.standard
-        : CREATION_INDUSTRY_TEMPLATE_HINTS[industryTemplate.value] || CREATION_INDUSTRY_TEMPLATE_HINTS.general;
-  }
   renderCreationRolePicker();
   renderCreationReferenceGrid();
   const currentIndustryLabel = currentSet?.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[currentSet?.industryTemplate] || "通用电商";
   refs.creationSetMeta.textContent = currentSet
     ? `${currentSet.productName || "未命名商品"} · ${currentSet.scenarioLabel || CREATION_SCENARIO_LABELS[currentSet.scenario] || "标准电商"} · ${currentIndustryLabel} · ${targetLanguageLabel} · ${CREATION_ITEM_STATUS_LABELS[currentSet.status] || currentSet.status} · ${formatClock(currentSet.createdAt)}`
-    : `填写商品信息后自动生成 ${getCreationSelectedRoles().length} 张电商营销图`;
+    : "等待生成";
 
   renderCreationRecordDetail(currentSet);
 
@@ -7181,6 +7684,8 @@ async function startCreationGeneration(event) {
   }
 
   state.creation.generating = true;
+  state.creation.generationScope = "full";
+  state.creation.editingItemId = "";
   renderCreationView();
 
   try {
@@ -7236,6 +7741,7 @@ async function startCreationGeneration(event) {
     showError(message);
   } finally {
     state.creation.generating = false;
+    state.creation.generationScope = "";
     renderCreationView();
   }
 }
@@ -7264,6 +7770,8 @@ async function repairCreationItems({ itemId = "", scope = "incomplete" } = {}) {
 
   clearError();
   state.creation.generating = true;
+  state.creation.generationScope = itemId ? "single" : "repair";
+  state.creation.editingItemId = "";
   targetItems.forEach((item) => {
     updateCreationCurrentItem(item.itemId, {
       status: "generating",
@@ -7295,6 +7803,7 @@ async function repairCreationItems({ itemId = "", scope = "incomplete" } = {}) {
     showError(message);
   } finally {
     state.creation.generating = false;
+    state.creation.generationScope = "";
     renderCreationView();
   }
 }
@@ -7654,12 +8163,37 @@ function renderPptView() {
   if (state.ppt.outline) {
     refs.pptOutlineBox.textContent = `${state.ppt.outline.title} · ${state.ppt.outline.slides.length} 页`;
   } else {
-    refs.pptOutlineBox.textContent = "生成后会在这里显示大纲和每一页图片。";
+    refs.pptOutlineBox.textContent = "";
   }
 
   renderPptSlides();
   renderPptHistory();
   renderPptRecordView();
+}
+
+function getStyleTransferReferenceFiles() {
+  return [getStyleTransferGenerationFile("source"), getStyleTransferGenerationFile("style")].filter(Boolean);
+}
+
+function buildStyleTransferPrompt() {
+  const userNote = String(refs.styleTransferInstructionInput?.value || "").trim();
+  const parts = [
+    "Use the first reference image as the source image.",
+    "preserve every visible subject, object, pose, layout, composition, spatial relationship, and identity signal from the source image.",
+    "Use the second reference image only as the style reference.",
+    "The second reference image is the style authority; if the source image's visual style conflicts with it, follow the second reference image.",
+    "Transfer the style reference's realism level, camera/lens look, color grade, lighting, shading, texture, edge treatment, material finish, rendering style, and mood.",
+    "If the style reference is a real photograph, the final image must be photorealistic with natural skin texture, realistic anatomy, optical lens behavior, real lighting, and natural material response.",
+    "Do not keep anime, cartoon, comic, cel-shaded, line-art, CGI doll, or illustration residue from the source image unless those traits also exist in the style reference.",
+    "Do not copy subjects, objects, logos, text, or layout from the style reference image unless they also exist in the source image.",
+    "Return one polished final image with the source image's content faithfully migrated into the style reference's visual style.",
+  ];
+
+  if (userNote) {
+    parts.push(`Additional user note: ${userNote}`);
+  }
+
+  return parts.join(" ");
 }
 
 function createJob() {
@@ -7679,6 +8213,83 @@ function createJob() {
     size,
     quality: state.config?.defaults?.quality || "high",
     format: normalizeOutputFormat(refs.outputFormatInput.value || state.config?.defaults?.format || "png"),
+    baseUrl: state.config?.baseUrl || refs.baseUrlInput.value.trim(),
+    responsesModel: state.config?.responsesModel || refs.responsesModelInput.value.trim() || "gpt-5.4",
+    imageModel: "gpt-image-2",
+    reasoningEffort: refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
+    requestRetryCount: 0,
+    referenceFiles,
+    hasReferenceImage: referenceFiles.length > 0,
+    referenceImageName: referenceImageNames[0] || "",
+    referenceImageNames,
+    isRunning: false,
+    started: false,
+    statusStage: "queued",
+    statusText: "等待并发槽位",
+    previewUrl: "",
+  };
+}
+
+function createStyleTransferJob() {
+  const ratioOption = getRatioOption(refs.ratioInput.value || DEFAULT_UI_RATIO);
+  const referenceFiles = getStyleTransferReferenceFiles();
+  const sourceItem = state.styleTransfer.source;
+  const styleItem = state.styleTransfer.style;
+  const sizeSetting = getSelectedGenerationSize();
+  const size = sizeSetting === "auto" ? ratioOption?.baseSize || getDefaultGenerationSize(ratioOption?.value) : sizeSetting;
+
+  return {
+    id: `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: nowIso(),
+    mode: "style-transfer",
+    prompt: buildStyleTransferPrompt(),
+    ratio: ratioOption?.value || DEFAULT_UI_RATIO,
+    ratioLabel: ratioOption?.label || DEFAULT_UI_RATIO_LABEL,
+    sizeSetting,
+    size,
+    quality: state.config?.defaults?.quality || "high",
+    format: normalizeOutputFormat(refs.outputFormatInput.value || state.config?.defaults?.format || "png"),
+    baseUrl: state.config?.baseUrl || refs.baseUrlInput.value.trim(),
+    responsesModel: state.config?.responsesModel || refs.responsesModelInput.value.trim() || "gpt-5.4",
+    imageModel: "gpt-image-2",
+    reasoningEffort: refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
+    requestRetryCount: 0,
+    referenceFiles: getStyleTransferReferenceFiles(),
+    hasReferenceImage: referenceFiles.length > 0,
+    referenceImageName: sourceItem?.file?.name || "",
+    referenceImageNames: [sourceItem?.file?.name || "", styleItem?.file?.name || ""].filter(Boolean),
+    styleTransferSourceImageName: sourceItem?.file?.name || "",
+    styleTransferReferenceImageName: styleItem?.file?.name || "",
+    isRunning: false,
+    started: false,
+    statusStage: "queued",
+    statusText: "等待并发槽位",
+    previewUrl: "",
+  };
+}
+
+function getSelectedReferenceAnalysisGenerationSize() {
+  return normalizeGenerationSize(refs.referenceAnalysisRatioInput.value || DEFAULT_UI_RATIO, refs.referenceAnalysisSizeInput.value || "auto");
+}
+
+function createReferenceAnalysisJob() {
+  const ratioOption = getRatioOption(refs.referenceAnalysisRatioInput.value || DEFAULT_UI_RATIO);
+  const referenceFiles = state.referenceAnalysis.files.map(getReferenceAnalysisGenerationFile).filter(Boolean);
+  const referenceImageNames = state.referenceAnalysis.files.map((item) => item.file.name).filter(Boolean);
+  const sizeSetting = getSelectedReferenceAnalysisGenerationSize();
+  const size = sizeSetting === "auto" ? ratioOption?.baseSize || getDefaultGenerationSize(ratioOption?.value) : sizeSetting;
+
+  return {
+    id: `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: nowIso(),
+    mode: "reference-analysis",
+    prompt: String(state.referenceAnalysis.selectedPrompt || "").trim(),
+    ratio: ratioOption?.value || DEFAULT_UI_RATIO,
+    ratioLabel: ratioOption?.label || DEFAULT_UI_RATIO_LABEL,
+    sizeSetting,
+    size,
+    quality: state.config?.defaults?.quality || "high",
+    format: normalizeOutputFormat(state.config?.defaults?.format || "png"),
     baseUrl: state.config?.baseUrl || refs.baseUrlInput.value.trim(),
     responsesModel: state.config?.responsesModel || refs.responsesModelInput.value.trim() || "gpt-5.4",
     imageModel: "gpt-image-2",
@@ -8034,11 +8645,24 @@ function buildGenerationFormData(job) {
   formData.set("clientSessionId", state.clientSessionId);
   appendBrowserConfigToFormData(formData);
 
+  if (job.mode === "style-transfer") {
+    appendStyleTransferReferencesToFormData(formData, job);
+  } else {
+    job.referenceFiles.forEach((file) => {
+      formData.append("referenceImages", file);
+    });
+  }
+
+  return formData;
+}
+
+function appendStyleTransferReferencesToFormData(formData, job) {
+  formData.set("mode", "style-transfer");
+  formData.set("styleTransferSourceImageName", job.styleTransferSourceImageName);
+  formData.set("styleTransferReferenceImageName", job.styleTransferReferenceImageName);
   job.referenceFiles.forEach((file) => {
     formData.append("referenceImages", file);
   });
-
-  return formData;
 }
 
 function applyPromptAgentFile(fileList) {
@@ -8076,7 +8700,7 @@ async function buildReferenceAnalysisFormData() {
     refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
   );
   const analysisFiles = await Promise.all(
-    state.referenceFiles.map((item) => preparePromptAnalysisImageFile(item.file)),
+    state.referenceAnalysis.files.map((item) => preparePromptAnalysisImageFile(item.file)),
   );
   analysisFiles.forEach((file) => {
     formData.append("image", file);
@@ -8125,7 +8749,7 @@ async function analyzePromptAgentImage() {
 
 async function analyzeReferenceImages() {
   clearError();
-  if (state.referenceFiles.length === 0) {
+  if (state.referenceAnalysis.files.length === 0) {
     setReferenceAnalysisFeedback("图形分析需要上传参考图。", "error");
     return;
   }
@@ -8147,6 +8771,8 @@ async function analyzeReferenceImages() {
     state.referenceAnalysis.result = payload.item;
     state.referenceAnalysis.collapsed = false;
     state.referenceAnalysis.dirty = false;
+    state.referenceAnalysis.previewKey = "";
+    state.referenceAnalysis.selectedPrompt = "";
     state.promptAgent.history = [
       payload.item,
       ...state.promptAgent.history.filter((item) => item.id !== payload.item.id),
@@ -8171,10 +8797,52 @@ function applyReferenceAnalysisPrompt(index) {
     return;
   }
 
-  refs.promptInput.value = promptText;
-  updatePromptCounter();
-  setReferenceAnalysisFeedback("已覆盖当前提示词。", "success");
-  refs.promptInput.focus();
+  state.referenceAnalysis.selectedPrompt = promptText;
+  state.referenceAnalysis.collapsed = true;
+  renderReferenceAnalysis();
+  setReferenceAnalysisFeedback("已在融图分析中选用这条提示词。", "success");
+  refs.referenceAnalysisSelectedPromptPanel.scrollIntoView({ block: "nearest" });
+  refs.referenceAnalysisSelectedPrompt.focus();
+}
+
+async function startReferenceAnalysisGeneration() {
+  clearError();
+  const promptText = String(state.referenceAnalysis.selectedPrompt || "").trim();
+  if (!promptText) {
+    setReferenceAnalysisFeedback("请先选用一条融图分析提示词。", "error");
+    return;
+  }
+
+  if (state.referenceAnalysis.files.length === 0) {
+    setReferenceAnalysisFeedback("融图分析生成需要上传参考图。", "error");
+    return;
+  }
+
+  if (getQueuedJobCount() >= getMaxQueuedJobCount()) {
+    setReferenceAnalysisFeedback(`同一会话最多排队 ${getMaxQueuedJobCount()} 个生成任务。`, "error");
+    return;
+  }
+
+  await ensureReferenceAnalysisGenerationFilesReady();
+  const job = createReferenceAnalysisJob();
+  state.jobs.unshift(job);
+  state.referenceAnalysis.previewKey = makeJobPreviewKey(job.id);
+  state.selectedPreviewKey = makeJobPreviewKey(job.id);
+  recordJobQueued(job);
+  setReferenceAnalysisFeedback("已提交融图分析生成任务。", "success");
+  renderAll();
+  scheduleGenerationQueue();
+}
+
+async function copyReferenceAnalysisSelectedPrompt() {
+  const promptText = String(state.referenceAnalysis.selectedPrompt || "").trim();
+  if (!promptText) {
+    setReferenceAnalysisFeedback("没有可复制的已选提示词。", "error");
+    return;
+  }
+
+  await writeTextToClipboard(promptText, "当前浏览器不支持复制提示词。");
+  setReferenceAnalysisFeedback("已复制融图分析提示词。", "success");
 }
 
 function mapPromptAgentPrompt(itemId) {
@@ -8298,6 +8966,10 @@ async function runGeneration(job) {
         payload.item = attachChunkedImageToSavedItem(payload.item, finalImageChunks, finalImageDataUrl || job.previewUrl);
         if (payload.item) {
           upsertGalleryItem(payload.item);
+          if (job.mode === "reference-analysis") {
+            state.referenceAnalysis.previewKey = makeGalleryPreviewKey(payload.item.filename);
+            setReferenceAnalysisFeedback("融图分析图片已生成。", "success");
+          }
           state.selectedPreviewKey = makeGalleryPreviewKey(payload.item.filename);
         }
         handleActivitySuccess(job.id);
@@ -8368,6 +9040,29 @@ async function startGeneration(event) {
   event.preventDefault();
   clearError();
 
+  if (state.studioMode === "style-transfer") {
+    if (!state.styleTransfer.source?.file || !state.styleTransfer.style?.file) {
+      showError("请先上传原图和风格参考图。");
+      return;
+    }
+
+    if (getQueuedJobCount() >= getMaxQueuedJobCount()) {
+      showError(`同一会话最多排队 ${getMaxQueuedJobCount()} 个生成任务。`);
+      return;
+    }
+
+    await ensureStyleTransferGenerationFilesReady();
+    const job = createStyleTransferJob();
+    state.jobs.unshift(job);
+    state.selectedPreviewKey = makeJobPreviewKey(job.id);
+    recordJobQueued(job);
+    renderAll();
+    setActiveView("style-transfer");
+
+    scheduleGenerationQueue();
+    return;
+  }
+
   const prompt = refs.promptInput.value.trim();
   if (!prompt) {
     showError("提示词不能为空。");
@@ -8410,7 +9105,7 @@ function setActiveGlobalNavItem(item) {
     const isOpen = navItem === item;
     navItem.classList.toggle("is-nav-open", isOpen);
 
-    const button = navItem.querySelector(".view-tab");
+    const button = navItem.querySelector("[data-nav-menu]");
     if (button) {
       button.setAttribute("aria-expanded", String(isOpen));
     }
@@ -8424,7 +9119,7 @@ function setActiveGlobalNavItem(item) {
 
 function bindGlobalNavEvents() {
   refs.globalNavItems.forEach((item) => {
-    const button = item.querySelector(".view-tab");
+    const button = item.querySelector("[data-nav-menu]");
     if (!button) {
       return;
     }
@@ -8432,10 +9127,19 @@ function bindGlobalNavEvents() {
     button.addEventListener("pointerenter", () => setActiveGlobalNavItem(item));
     button.addEventListener("mouseenter", () => setActiveGlobalNavItem(item));
     button.addEventListener("focus", () => setActiveGlobalNavItem(item));
-    button.addEventListener("click", () => setActiveGlobalNavItem(item));
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setActiveGlobalNavItem(item);
+    });
   });
 
   refs.globalNav?.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target && target.closest("a[href^='#']")) {
+      setActiveGlobalNavItem(null);
+      return;
+    }
     event.stopPropagation();
   });
 
@@ -8475,6 +9179,21 @@ function handleGlobalNavAction(action) {
   }
 }
 
+function bindStyleTransferDropzone(dropzone, slot) {
+  dropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    dropzone.classList.add("dragover");
+  });
+  dropzone.addEventListener("dragleave", () => {
+    dropzone.classList.remove("dragover");
+  });
+  dropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    dropzone.classList.remove("dragover");
+    applyStyleTransferReferenceFile(slot, event.dataTransfer?.files);
+  });
+}
+
 function bindEvents() {
   bindGlobalNavEvents();
 
@@ -8485,7 +9204,10 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-nav-action]").forEach((button) => {
-    button.addEventListener("click", () => handleGlobalNavAction(button.dataset.navAction));
+    button.addEventListener("click", () => {
+      handleGlobalNavAction(button.dataset.navAction);
+      setActiveGlobalNavItem(null);
+    });
   });
 
   window.addEventListener("hashchange", () => {
@@ -8765,6 +9487,21 @@ function bindEvents() {
   refs.deletePromptTemplateButton.addEventListener("click", deletePromptTemplate);
   refs.promptInput.addEventListener("input", updatePromptCounter);
   refs.promptInput.addEventListener("keydown", handlePromptGenerationShortcut);
+  refs.styleTransferInstructionInput.addEventListener("keydown", handlePromptGenerationShortcut);
+  refs.sizeInput.addEventListener("change", (event) => {
+    syncGenerationSize(event.target.value);
+  });
+  refs.referenceAnalysisSizeInput.addEventListener("change", (event) => {
+    syncGenerationSize(event.target.value);
+  });
+  refs.styleTransferSourceInput.addEventListener("change", (event) => {
+    applyStyleTransferReferenceFile("source", event.target.files);
+  });
+  refs.styleTransferStyleInput.addEventListener("change", (event) => {
+    applyStyleTransferReferenceFile("style", event.target.files);
+  });
+  bindStyleTransferDropzone(refs.styleTransferSourceDropzone, "source");
+  bindStyleTransferDropzone(refs.styleTransferStyleDropzone, "style");
   refs.referenceInput.addEventListener("change", (event) => {
     applyReferenceFiles(event.target.files);
   });
@@ -8790,6 +9527,29 @@ function bindEvents() {
   });
   refs.referencePreviewBackdrop.addEventListener("click", closeReferencePreview);
   refs.referencePreviewClose.addEventListener("click", closeReferencePreview);
+  refs.referenceAnalysisInput.addEventListener("change", (event) => {
+    applyReferenceAnalysisFiles(event.target.files);
+  });
+  refs.referenceAnalysisGrid.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-reference-analysis-preview-id]");
+    if (!target) {
+      return;
+    }
+
+    openReferenceAnalysisPreview(target.dataset.referenceAnalysisPreviewId);
+  });
+  refs.referenceAnalysisDropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    refs.referenceAnalysisDropzone.classList.add("dragover");
+  });
+  refs.referenceAnalysisDropzone.addEventListener("dragleave", () => {
+    refs.referenceAnalysisDropzone.classList.remove("dragover");
+  });
+  refs.referenceAnalysisDropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    refs.referenceAnalysisDropzone.classList.remove("dragover");
+    applyReferenceAnalysisFiles(event.dataTransfer?.files);
+  });
   refs.referenceAnalyzeButton.addEventListener("click", () => {
     analyzeReferenceImages().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -8798,6 +9558,19 @@ function bindEvents() {
     });
   });
   refs.referenceAnalysisToggleButton.addEventListener("click", toggleReferenceAnalysisPanel);
+  refs.referenceAnalysisCopyPromptButton.addEventListener("click", () => {
+    copyReferenceAnalysisSelectedPrompt().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      setReferenceAnalysisFeedback(message, "error");
+    });
+  });
+  refs.referenceAnalysisGenerateButton.addEventListener("click", () => {
+    startReferenceAnalysisGeneration().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      setReferenceAnalysisFeedback(message, "error");
+      showError(message);
+    });
+  });
   refs.referenceAnalysisList.addEventListener("click", (event) => {
     const target = event.target.closest("[data-reference-analysis-prompt-index]");
     if (target) {
@@ -9041,8 +9814,13 @@ async function bootstrap() {
   renderRatioGrid();
   renderReasoningOptions();
   renderSizeOptions();
+  renderReferenceAnalysisRatioGrid();
+  renderReferenceAnalysisSizeOptions();
   updateGenerateButton();
   renderReferenceGrid();
+  renderReferenceAnalysisGrid();
+  renderReferenceAnalysis();
+  renderStyleTransferReferences();
   renderPromptTemplates();
   renderTimeline();
   renderStudio();

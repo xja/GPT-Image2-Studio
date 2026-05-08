@@ -44,6 +44,10 @@ const GENERATION_TASK_STORAGE_PREFIX = "generation-tasks/";
 const GENERATION_REQUEST_STORAGE_PREFIX = "generation-requests/";
 const SERVER_IMAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
 const FINAL_IMAGE_CHUNK_SIZE = 48 * 1024;
+const STYLE_TRANSFER_REFERENCE_IMAGE_LABELS = [
+  "Reference image 1: SOURCE image. Preserve content, identity, pose, composition, and layout only. Do not preserve its visual style.",
+  "Reference image 2: STYLE reference. This image is the style authority for final rendering, realism level, lighting, texture, color, and material finish.",
+];
 const SERVER_IMAGE_BUCKET_MISSING_MESSAGE = "服务器图片存储未配置 IMAGE_BUCKET";
 const GENERATION_QUEUE_MISSING_MESSAGE = "服务器异步生成队列未配置 GENERATION_QUEUE";
 const DEFAULT_CONFIG = {
@@ -976,6 +980,7 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
   const ratio = String(formData.get("ratio") || "4:5");
   const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
   const requestedFormatInput = String(formData.get("format") || "").trim().toLowerCase();
+  const generationMode = String(formData.get("mode") || "").trim() === "style-transfer" ? "style-transfer" : "";
   const config = normalizePrivateConfig(formData);
   const createdAt = new Date().toISOString();
 
@@ -1001,6 +1006,12 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     });
     return;
   }
+  if (generationMode === "style-transfer" && referenceImages.length < 2) {
+    await writeSseEvent(writer, "error", {
+      message: "风格迁移需要上传原图和风格参考图。",
+    });
+    return;
+  }
 
   const reasoningEffort = normalizeReasoningEffort(formData.get("reasoningEffort"));
   const ratioOption = resolveAspectRatioOption(ratio);
@@ -1023,6 +1034,7 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     apiKey: config.apiKey,
     prompt: finalPrompt,
     referenceImages,
+    referenceImageLabels: generationMode === "style-transfer" ? STYLE_TRANSFER_REFERENCE_IMAGE_LABELS : [],
     size: finalSize,
     quality: finalQuality,
     format: toApiOutputFormat(finalFormat),

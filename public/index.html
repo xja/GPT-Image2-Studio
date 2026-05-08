@@ -21,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260507-creation-record-lightbox-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260508-reference-analysis-scroll-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -40,17 +40,19 @@
         </div>
 
         <nav class="primary-nav global-nav" aria-label="全局导航">
-          <div class="view-tabs global-nav-list" role="tablist" aria-label="功能区导航">
+          <div class="view-tabs global-nav-list" aria-label="功能菜单导航">
             <div class="nav-item" data-nav-section="create">
-              <button class="view-tab active" data-view-tab="studio" type="button">
+              <button class="view-tab active" data-nav-menu="create" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="nav-menu-studio">
                 <span class="nav-tab-label">创作</span>
                 <span class="nav-tab-note">Studio</span>
               </button>
-              <div class="nav-flyout mega-menu" data-nav-subzone="studio">
+              <div class="nav-flyout mega-menu" id="nav-menu-studio" data-nav-subzone="studio" aria-hidden="true">
                 <div class="mega-menu-grid">
                   <section class="mega-menu-column mega-menu-primary" aria-label="创作区">
                     <span class="mega-menu-kicker">创作区</span>
                     <a class="mega-menu-link large" href="#studio">提示词生图</a>
+                    <a class="mega-menu-link" href="#style-transfer">风格迁移</a>
+                    <a class="mega-menu-link" href="#reference-analysis">融图分析</a>
                     <a class="mega-menu-link" href="#creation">套图模式</a>
                     <a class="mega-menu-link" href="#ppt">PPT生成</a>
                   </section>
@@ -62,11 +64,11 @@
               </div>
             </div>
             <div class="nav-item" data-nav-section="assets">
-              <button class="view-tab" data-view-tab="gallery" type="button">
+              <button class="view-tab" data-nav-menu="assets" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="nav-menu-gallery">
                 <span class="nav-tab-label">资产</span>
                 <span class="nav-tab-note">Gallery</span>
               </button>
-              <div class="nav-flyout mega-menu" data-nav-subzone="gallery">
+              <div class="nav-flyout mega-menu" id="nav-menu-gallery" data-nav-subzone="gallery" aria-hidden="true">
                 <div class="mega-menu-grid">
                   <section class="mega-menu-column mega-menu-primary" aria-label="资产区">
                     <span class="mega-menu-kicker">资产区</span>
@@ -82,11 +84,11 @@
               </div>
             </div>
             <div class="nav-item" data-nav-section="settings">
-              <button class="view-tab" data-nav-action="config" type="button" aria-haspopup="true">
+              <button class="view-tab" data-nav-menu="settings" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="nav-menu-settings">
                 <span class="nav-tab-label">配置</span>
                 <span class="nav-tab-note">Settings</span>
               </button>
-              <div class="nav-flyout mega-menu" data-nav-subzone="settings">
+              <div class="nav-flyout mega-menu" id="nav-menu-settings" data-nav-subzone="settings" aria-hidden="true">
                 <div class="mega-menu-grid">
                   <section class="mega-menu-column mega-menu-primary" aria-label="配置区">
                     <span class="mega-menu-kicker">配置区</span>
@@ -120,10 +122,6 @@
 
       <main class="view-root">
         <section class="view-panel studio-view" data-view-panel="studio">
-          <nav class="studio-mode-tabs" aria-label="创作模式">
-            <a class="studio-mode-tab active" href="#studio">提示词模式</a>
-            <a class="studio-mode-tab" href="#creation">套图模式</a>
-          </nav>
           <div class="studio-grid">
             <section class="studio-panel settings-panel">
               <form id="generateForm" class="settings-form">
@@ -131,7 +129,6 @@
                   <div class="field-heading">
                     <div>
                       <span>参考图</span>
-                      <small>Reference（可选，最多 6 张）</small>
                     </div>
                     <small id="referenceCount">0 / 6</small>
                   </div>
@@ -140,43 +137,64 @@
                     <input id="referenceInput" name="referenceImages" type="file" accept="image/*" multiple />
                     <div class="reference-icon" aria-hidden="true"></div>
                     <strong>拖入图片或点击上传</strong>
-                    <span>支持 JPG / PNG，建议尺寸至少 1024px</span>
                     <em>上传参考图</em>
                   </label>
 
                   <div class="reference-grid hidden" id="referenceGrid"></div>
-                  <div class="reference-analysis-actions">
-                    <button class="inline-button reference-analysis-button" id="referenceAnalyzeButton" type="button">
-                      融图分析
-                    </button>
-                    <p class="prompt-agent-feedback" id="referenceAnalysisFeedback"></p>
-                    <button
-                      id="referenceAnalysisToggleButton"
-                      class="reference-analysis-toggle hidden"
-                      type="button"
-                      aria-controls="referenceAnalysisList"
-                      aria-expanded="false"
-                    >
-                      折叠提示词
-                    </button>
-                  </div>
-                  <div class="reference-analysis-panel hidden" id="referenceAnalysisPanel">
-                    <div class="reference-analysis-head">
-                      <div>
-                        <span>编排提示词</span>
-                        <strong id="referenceAnalysisSummary">--</strong>
-                      </div>
-                      <small id="referenceAnalysisMeta">--</small>
-                    </div>
-                    <div class="reference-analysis-list" id="referenceAnalysisList"></div>
-                  </div>
                 </div>
 
-                <div class="field-group">
+                <div class="field-group style-transfer-block hidden" id="styleTransferBlock" aria-live="polite">
+                  <div class="field-heading">
+                    <div>
+                      <span>图片风格迁移</span>
+                    </div>
+                  </div>
+                  <div class="style-transfer-upload-grid">
+                    <div class="style-transfer-slot">
+                      <div class="field-head">
+                        <div>
+                          <span>原图</span>
+                        </div>
+                      </div>
+                      <label class="reference-dropzone style-transfer-dropzone" id="styleTransferSourceDropzone">
+                        <input id="styleTransferSourceInput" name="styleTransferSourceImage" type="file" accept="image/*" />
+                        <div class="reference-icon" aria-hidden="true"></div>
+                        <strong>上传原图</strong>
+                      </label>
+                      <div class="reference-grid style-transfer-grid hidden" id="styleTransferSourceGrid"></div>
+                    </div>
+
+                    <div class="style-transfer-slot">
+                      <div class="field-head">
+                        <div>
+                          <span>风格参考图</span>
+                        </div>
+                      </div>
+                      <label class="reference-dropzone style-transfer-dropzone" id="styleTransferStyleDropzone">
+                        <input id="styleTransferStyleInput" name="styleTransferReferenceImage" type="file" accept="image/*" />
+                        <div class="reference-icon" aria-hidden="true"></div>
+                        <strong>上传风格图</strong>
+                      </label>
+                      <div class="reference-grid style-transfer-grid hidden" id="styleTransferStyleGrid"></div>
+                    </div>
+                  </div>
+
+                  <label class="compact-field style-transfer-note">
+                    <span>补充说明（可选）</span>
+                    <textarea
+                      id="styleTransferInstructionInput"
+                      name="styleTransferInstruction"
+                      rows="3"
+                      maxlength="400"
+                      placeholder="例如：更接近日系动漫、保留人物衣服颜色、背景不要新增元素。"
+                    ></textarea>
+                  </label>
+                </div>
+
+                <div class="field-group" data-prompt-mode-block>
                   <div class="field-heading with-action">
                     <div>
                       <span>提示词</span>
-                      <small>Prompt</small>
                     </div>
                     <button class="icon-button" id="surprisePromptButton" type="button" title="提示词模板" aria-expanded="false">
                       ✦
@@ -207,7 +225,6 @@
                   <div class="field-heading">
                     <div>
                       <span>参数设置</span>
-                      <small>Parameters</small>
                     </div>
                   </div>
                   <div class="ratio-grid" id="ratioGrid"></div>
@@ -253,7 +270,6 @@
 
                 <div class="preview-canvas" id="previewCanvas">
                   <div class="preview-placeholder" id="previewPlaceholder">
-                    <p>Output Preview</p>
                     <h3>生成结果会在这里实时更新。</h3>
                     <span>生成过程会在右侧实时更新，底部胶片条可快速切换查看。</span>
                   </div>
@@ -286,7 +302,6 @@
                 <div class="panel-title between">
                   <div>
                     <h2>实时动态</h2>
-                    <p>Live Feed</p>
                   </div>
                   <span class="count-pill small" id="liveCount">0 / 5</span>
                 </div>
@@ -303,18 +318,112 @@
           </div>
         </section>
 
+        <section class="view-panel reference-analysis-view hidden" data-view-panel="reference-analysis">
+          <div class="reference-analysis-workspace">
+            <section class="studio-panel reference-analysis-upload-panel">
+              <div class="panel-title between">
+                <div>
+                  <h2>融图分析</h2>
+                </div>
+                <span class="count-pill small" id="referenceAnalysisCount">0 / 6</span>
+              </div>
+
+              <label class="reference-dropzone reference-analysis-dropzone" id="referenceAnalysisDropzone">
+                <input id="referenceAnalysisInput" name="referenceAnalysisImages" type="file" accept="image/*" multiple />
+                <div class="reference-icon" aria-hidden="true"></div>
+                <strong>上传待分析图片</strong>
+                <span>最多 6 张 JPG / PNG</span>
+                <em>新建分析集</em>
+              </label>
+
+              <div class="reference-grid hidden" id="referenceAnalysisGrid"></div>
+
+              <div class="reference-analysis-actions">
+                <button class="inline-button reference-analysis-button" id="referenceAnalyzeButton" type="button">
+                  融图分析
+                </button>
+                <p class="prompt-agent-feedback" id="referenceAnalysisFeedback"></p>
+                <button
+                  id="referenceAnalysisToggleButton"
+                  class="reference-analysis-toggle hidden"
+                  type="button"
+                  aria-controls="referenceAnalysisList"
+                  aria-expanded="false"
+                >
+                  折叠提示词
+                </button>
+              </div>
+
+              <div class="reference-analysis-params">
+                <div class="field-heading">
+                  <div>
+                    <span>生成参数</span>
+                  </div>
+                </div>
+                <div class="ratio-grid" id="referenceAnalysisRatioGrid"></div>
+                <input id="referenceAnalysisRatioInput" type="hidden" value="1:1" />
+                <label class="compact-field reference-analysis-size-field">
+                  <span>分辨率</span>
+                  <select id="referenceAnalysisSizeInput" name="referenceAnalysisSize"></select>
+                </label>
+                <button class="inline-button reference-analysis-generate-button" id="referenceAnalysisGenerateButton" type="button">
+                  开始生成
+                </button>
+              </div>
+            </section>
+
+            <section class="studio-panel reference-analysis-result-panel">
+              <div class="panel-title between">
+                <div>
+                  <h2>编排提示词</h2>
+                </div>
+              </div>
+
+              <div class="reference-analysis-empty" id="referenceAnalysisEmpty">等待分析结果</div>
+              <div class="reference-analysis-panel hidden" id="referenceAnalysisPanel">
+                <div class="reference-analysis-head">
+                  <div>
+                    <span>编排提示词</span>
+                    <strong id="referenceAnalysisSummary">--</strong>
+                  </div>
+                  <small id="referenceAnalysisMeta">--</small>
+                </div>
+                <div class="reference-analysis-list" id="referenceAnalysisList"></div>
+                <div class="reference-analysis-selected hidden" id="referenceAnalysisSelectedPromptPanel">
+                  <div class="reference-analysis-selected-head">
+                    <span>已选提示词</span>
+                    <div class="reference-analysis-selected-actions">
+                      <button class="inline-button" id="referenceAnalysisCopyPromptButton" type="button">复制</button>
+                    </div>
+                  </div>
+                  <div class="reference-analysis-generation" id="referenceAnalysisGenerationPanel">
+                    <div class="reference-analysis-generation-canvas" id="referenceAnalysisGenerationCanvas">
+                      <div class="reference-analysis-generation-placeholder" id="referenceAnalysisGenerationPlaceholder">
+                        生成图展示框
+                      </div>
+                      <img id="referenceAnalysisGenerationImage" alt="融图分析生成结果" />
+                    </div>
+                    <div class="reference-analysis-generation-bar">
+                      <span id="referenceAnalysisGenerationMeta">等待生成</span>
+                      <a class="inline-button disabled" id="referenceAnalysisGenerationDownloadButton" href="#" download aria-disabled="true">
+                        下载
+                      </a>
+                    </div>
+                  </div>
+                  <textarea id="referenceAnalysisSelectedPrompt" rows="6" readonly></textarea>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
         <section class="view-panel creation-view hidden" data-view-panel="creation">
-          <nav class="studio-mode-tabs" aria-label="创作模式">
-            <a class="studio-mode-tab" href="#studio">提示词模式</a>
-            <a class="studio-mode-tab active" href="#creation">套图模式</a>
-          </nav>
           <div class="creation-workspace">
             <section class="studio-panel creation-settings-panel">
               <form class="creation-form" id="creationForm">
                 <div class="panel-title between">
                   <div>
                     <h2>电商营销套图</h2>
-                    <p>单商品可生成 4、6、8、10 或 12 张营销图片，支持独立参考图和场景预设</p>
                   </div>
                   <span class="count-pill small" id="creationProgressText">0 / 4</span>
                 </div>
@@ -350,7 +459,6 @@
                   <div class="field-head">
                     <div>
                       <span>套图参考图</span>
-                      <small>只影响套图模式，用来锁定产品外观、包装和材质</small>
                     </div>
                     <small id="creationReferenceCount">0 / 6</small>
                   </div>
@@ -358,7 +466,6 @@
                     <input id="creationReferenceInput" name="creationReferenceImages" type="file" accept="image/*" multiple />
                     <div class="reference-icon" aria-hidden="true"></div>
                     <span>上传产品参考图</span>
-                    <small>支持拖入多张图片，和提示词模式不互通</small>
                   </label>
                   <div class="reference-grid creation-reference-grid hidden" id="creationReferenceGrid"></div>
                   <div
@@ -458,14 +565,10 @@
                     </select>
                   </label>
                 </div>
-                <p class="creation-scenario-hint" id="creationScenarioHint" aria-live="polite">
-                  覆盖首图、卖点、场景与信任证明，适合通用电商上架。
-                </p>
                 <section class="creation-role-picker" id="creationRolePicker" aria-label="套图图片类型">
                   <div class="field-head">
                     <div>
                       <span>图片类型</span>
-                      <small id="creationRoleHint">标准电商推荐，可手动增删</small>
                     </div>
                     <small id="creationRoleCount">4 / 12</small>
                   </div>
@@ -474,7 +577,6 @@
 
                 <div class="creation-plan-actions">
                   <button class="toolbar-button" id="creationPlanButton" type="button">预览计划</button>
-                  <small id="creationPlanMeta">生成前可先确认每张图的计划</small>
                 </div>
                 <button class="generate-button" id="creationGenerateButton" type="submit">生成营销套图</button>
                 <p class="ppt-feedback" id="creationFeedback"></p>
@@ -505,7 +607,6 @@
                 <div class="panel-title between">
                   <div>
                     <h2>PPT 演示文稿制作</h2>
-                    <p>上传文档、输入文本或主题，自动生成图片型 PPTX</p>
                   </div>
                   <span class="count-pill small" id="pptDeckCount">0 套</span>
                 </div>
@@ -514,7 +615,6 @@
                   <div class="field-heading">
                     <div>
                       <span>输入来源</span>
-                      <small>三选一或组合使用</small>
                     </div>
                   </div>
                   <div class="ppt-source-options" role="radiogroup" aria-label="PPT 输入来源">
@@ -537,7 +637,6 @@
                   <div class="field-heading">
                     <div>
                       <span>文档文件</span>
-                      <small>PDF / DOCX / PPTX / TXT / MD / CSV</small>
                     </div>
                     <small id="pptFileCount">0 个文件</small>
                   </div>
@@ -551,7 +650,6 @@
                     />
                     <div class="reference-icon" aria-hidden="true"></div>
                     <strong>拖入文档或点击上传</strong>
-                    <span>源文档只用于本次解析，不保存到本地历史。</span>
                     <em>上传文档</em>
                   </label>
                   <div class="ppt-file-list" id="pptFileList"></div>
@@ -646,8 +744,6 @@
                     <input id="pptAutoAdvanceInput" name="autoAdvanceSeconds" type="number" min="0" max="60" step="0.5" value="0" />
                   </label>
                 </div>
-                <p class="ppt-motion-note">渐进披露会把每个逻辑页导出为多步页面；切换效果会写入导出的 PPTX 播放设置。</p>
-
                 <button class="generate-button" id="pptGenerateButton" type="submit">生成 PPT 演示文稿</button>
                 <p class="ppt-feedback" id="pptFeedback"></p>
               </form>
@@ -668,7 +764,7 @@
               <div class="ppt-progress">
                 <div class="ppt-progress-bar" id="pptProgressBar"></div>
               </div>
-              <div class="ppt-outline-box" id="pptOutlineBox">生成后会在这里显示大纲和每一页图片。</div>
+              <div class="ppt-outline-box" id="pptOutlineBox"></div>
               <div class="ppt-slide-list" id="pptSlideList"></div>
             </section>
 
@@ -676,7 +772,6 @@
               <div class="panel-title between">
                 <div>
                   <h2>历史演示</h2>
-                  <p>Deck History</p>
                 </div>
                 <button class="toolbar-button" id="pptRefreshHistoryButton" type="button">刷新</button>
               </div>
@@ -808,7 +903,6 @@
             <div class="panel-title between">
               <div>
                 <h2>套图记录</h2>
-                <p>电商套图生成记录和 creation 文件夹历史</p>
               </div>
               <div class="creation-record-actions">
                 <label class="creation-record-search">
@@ -844,7 +938,6 @@
             <div class="panel-title between">
               <div>
                 <h2>PPT记录</h2>
-                <p>生成记录和文件夹历史</p>
               </div>
               <div class="ppt-record-actions">
                 <span class="count-pill" id="pptRecordCount">0 个</span>
@@ -965,7 +1058,6 @@
             <div class="prompt-agent-history-head">
               <div>
                 <h3>长期保留</h3>
-                <p>点击提示词可映射到 Studio 文本框。</p>
               </div>
               <span class="count-pill small" id="promptAgentHistoryCount">0 条</span>
             </div>
@@ -1117,6 +1209,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260507-creation-record-lightbox-1"></script>
+    <script type="module" src="/app.js?v=20260508-reference-analysis-scroll-1"></script>
   </body>
 </html>

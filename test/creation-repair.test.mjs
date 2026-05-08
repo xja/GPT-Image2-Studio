@@ -10,7 +10,7 @@ const demoSet = {
       itemId: "1-hero",
       status: "completed",
       filename: "01-hero.png",
-      relativePath: "05/2026-05-06/2026-05-06-creation/demo/01-hero.png",
+      relativePath: "2026-05/05-06/2026-05-06-creation/demo/01-hero.png",
     },
     {
       itemId: "2-benefit",
@@ -28,7 +28,7 @@ const demoSet = {
       itemId: "4-detail-trust",
       status: "completed",
       filename: "04-trust.png",
-      relativePath: "05/2026-05-06/2026-05-06-creation/demo/04-trust.png",
+      relativePath: "2026-05/05-06/2026-05-06-creation/demo/04-trust.png",
     },
   ],
 };
@@ -68,7 +68,7 @@ test("creation repair treats completed items without filenames as incomplete", (
           itemId: "1-hero",
           status: "completed",
           filename: "",
-          relativePath: "05/2026-05-06/2026-05-06-creation/demo/01-hero.png",
+          relativePath: "2026-05/05-06/2026-05-06-creation/demo/01-hero.png",
         },
       ],
     },
