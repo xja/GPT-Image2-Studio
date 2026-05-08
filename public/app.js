@@ -174,6 +174,7 @@ let galleryScrollObserver = null;
 let generationTaskPollTimer = 0;
 let promptCopyFeedbackTimer = 0;
 let previewLoadingShellNodes = null;
+let referenceAnalysisLoadingShellNodes = null;
 const galleryScrollDrag = {
   active: false,
   pointerId: null,
@@ -255,6 +256,7 @@ const state = {
   reasoningEfforts: [...DEFAULT_REASONING_EFFORTS],
   referenceAnalysis: {
     files: [],
+    autoCollapseOnApply: true,
     collapsed: false,
     dirty: false,
     previewKey: "",
@@ -484,11 +486,13 @@ const refs = {
   recentEmpty: document.querySelector("#recentEmpty"),
   recentList: document.querySelector("#recentList"),
   referenceCount: document.querySelector("#referenceCount"),
+  referenceAnalysisAutoCollapseButton: document.querySelector("#referenceAnalysisAutoCollapseButton"),
   referenceAnalysisCount: document.querySelector("#referenceAnalysisCount"),
   referenceAnalysisDropzone: document.querySelector("#referenceAnalysisDropzone"),
   referenceAnalysisEmpty: document.querySelector("#referenceAnalysisEmpty"),
   referenceAnalysisFeedback: document.querySelector("#referenceAnalysisFeedback"),
   referenceAnalysisGrid: document.querySelector("#referenceAnalysisGrid"),
+  referenceAnalysisHead: document.querySelector("#referenceAnalysisHead"),
   referenceAnalysisInput: document.querySelector("#referenceAnalysisInput"),
   referenceAnalysisList: document.querySelector("#referenceAnalysisList"),
   referenceAnalysisMeta: document.querySelector("#referenceAnalysisMeta"),
@@ -2503,9 +2507,47 @@ function openReferenceAnalysisPreview(referenceId) {
   refs.referencePreviewViewer.setAttribute("aria-hidden", "false");
 }
 
+function syncReferenceDropzoneCompact(dropzone, hasFiles) {
+  if (!dropzone) {
+    return;
+  }
+
+  dropzone.classList.toggle("is-compact-hidden", Boolean(hasFiles));
+}
+
+function createReferenceAddCard({ input, label, onFiles }) {
+  const card = document.createElement("div");
+  card.className = "reference-card reference-add-card";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "reference-add-button";
+  button.textContent = "+";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.addEventListener("click", () => input?.click());
+
+  card.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    card.classList.add("dragover");
+  });
+  card.addEventListener("dragleave", () => {
+    card.classList.remove("dragover");
+  });
+  card.addEventListener("drop", (event) => {
+    event.preventDefault();
+    card.classList.remove("dragover");
+    onFiles?.(event.dataTransfer?.files);
+  });
+
+  card.appendChild(button);
+  return card;
+}
+
 function renderReferenceAnalysisGrid() {
   refs.referenceAnalysisGrid.replaceChildren();
   refs.referenceAnalysisCount.textContent = `${state.referenceAnalysis.files.length} / ${state.limits.maxReferenceImages}`;
+  syncReferenceDropzoneCompact(refs.referenceAnalysisDropzone, state.referenceAnalysis.files.length > 0);
   refs.referenceAnalysisGrid.classList.toggle("hidden", state.referenceAnalysis.files.length === 0);
 
   state.referenceAnalysis.files.forEach((item) => {
@@ -2534,6 +2576,16 @@ function renderReferenceAnalysisGrid() {
 
     refs.referenceAnalysisGrid.appendChild(card);
   });
+
+  if (state.referenceAnalysis.files.length > 0 && state.referenceAnalysis.files.length < state.limits.maxReferenceImages) {
+    refs.referenceAnalysisGrid.appendChild(
+      createReferenceAddCard({
+        input: refs.referenceAnalysisInput,
+        label: "继续上传待分析图片",
+        onFiles: applyReferenceAnalysisFiles,
+      }),
+    );
+  }
 }
 
 function createStyleTransferReferenceItem(slot, file) {
@@ -2646,6 +2698,8 @@ function renderStyleTransferReferenceSlot(slot, grid) {
 }
 
 function renderStyleTransferReferences() {
+  syncReferenceDropzoneCompact(refs.styleTransferSourceDropzone, Boolean(getStyleTransferReferenceItem("source")));
+  syncReferenceDropzoneCompact(refs.styleTransferStyleDropzone, Boolean(getStyleTransferReferenceItem("style")));
   renderStyleTransferReferenceSlot("source", refs.styleTransferSourceGrid);
   renderStyleTransferReferenceSlot("style", refs.styleTransferStyleGrid);
 }
@@ -2653,6 +2707,7 @@ function renderStyleTransferReferences() {
 function renderReferenceGrid() {
   refs.referenceGrid.innerHTML = "";
   refs.referenceCount.textContent = `${state.referenceFiles.length} / ${state.limits.maxReferenceImages}`;
+  syncReferenceDropzoneCompact(refs.referenceDropzone, state.referenceFiles.length > 0);
   refs.referenceGrid.classList.toggle("hidden", state.referenceFiles.length === 0);
 
   state.referenceFiles.forEach((item) => {
@@ -2680,6 +2735,16 @@ function renderReferenceGrid() {
     card.appendChild(remove);
     refs.referenceGrid.appendChild(card);
   });
+
+  if (state.referenceFiles.length > 0 && state.referenceFiles.length < state.limits.maxReferenceImages) {
+    refs.referenceGrid.appendChild(
+      createReferenceAddCard({
+        input: refs.referenceInput,
+        label: "继续上传参考图",
+        onFiles: applyReferenceFiles,
+      }),
+    );
+  }
 }
 
 function getReferenceAnalysisPrompts(item = state.referenceAnalysis.result) {
@@ -2734,6 +2799,11 @@ function toggleReferenceAnalysisPanel() {
   renderReferenceAnalysis();
 }
 
+function toggleReferenceAnalysisAutoCollapse() {
+  state.referenceAnalysis.autoCollapseOnApply = !state.referenceAnalysis.autoCollapseOnApply;
+  renderReferenceAnalysisSelectedPrompt();
+}
+
 function createReferenceAnalysisCard(option, index) {
   const card = document.createElement("article");
   card.className = "reference-analysis-card";
@@ -2770,6 +2840,57 @@ function getReferenceAnalysisGenerationPreviewItem() {
   return null;
 }
 
+function setReferenceAnalysisGenerationPlaceholderText(message, hidden = false) {
+  referenceAnalysisLoadingShellNodes = null;
+  refs.referenceAnalysisGenerationPlaceholder.className = "reference-analysis-generation-placeholder";
+  refs.referenceAnalysisGenerationPlaceholder.classList.toggle("hidden", hidden);
+  refs.referenceAnalysisGenerationPlaceholder.textContent = message;
+}
+
+function renderReferenceAnalysisGenerationLoading(item) {
+  const placeholderState = {
+    ...getPreviewPlaceholderState({
+      item,
+      imageUrl: "",
+      prompt: item ? getDisplayPrompt(item) : "",
+      runningCount: state.jobs.length,
+      maxConcurrentTasks: state.limits.maxConcurrentTasksPerSession,
+    }),
+    eyebrow: "Reference Analysis",
+    title: "提示词模式生成中",
+    detail: item ? getDisplayPrompt(item) : "正在生成融图分析图片。",
+  };
+
+  if (
+    !referenceAnalysisLoadingShellNodes ||
+    !shouldReusePreviewLoadingShell(referenceAnalysisLoadingShellNodes.state || {}, placeholderState)
+  ) {
+    referenceAnalysisLoadingShellNodes = createPreviewLoadingShellNodes();
+  }
+
+  updatePreviewLoadingShell(referenceAnalysisLoadingShellNodes, placeholderState);
+  refs.referenceAnalysisGenerationPlaceholder.className =
+    "reference-analysis-generation-placeholder preview-placeholder preview-placeholder-loading";
+  refs.referenceAnalysisGenerationPlaceholder.classList.remove("hidden");
+
+  if (
+    refs.referenceAnalysisGenerationPlaceholder.firstChild !== referenceAnalysisLoadingShellNodes.eyebrow ||
+    refs.referenceAnalysisGenerationPlaceholder.lastChild !== referenceAnalysisLoadingShellNodes.shell
+  ) {
+    refs.referenceAnalysisGenerationPlaceholder.replaceChildren(
+      referenceAnalysisLoadingShellNodes.eyebrow,
+      referenceAnalysisLoadingShellNodes.shell,
+    );
+  }
+}
+
+function openReferenceAnalysisGeneratedPreview() {
+  const item = getReferenceAnalysisGenerationPreviewItem();
+  if (item && getImageUrl(item)) {
+    openLightbox(item);
+  }
+}
+
 function renderReferenceAnalysisGenerationPreview() {
   const item = getReferenceAnalysisGenerationPreviewItem();
   const imageUrl = item ? getImageUrl(item) : "";
@@ -2777,10 +2898,23 @@ function renderReferenceAnalysisGenerationPreview() {
 
   refs.referenceAnalysisGenerationCanvas.classList.toggle("has-image", Boolean(imageUrl));
   refs.referenceAnalysisGenerationCanvas.classList.toggle("is-running", isRunning && !imageUrl);
-  refs.referenceAnalysisGenerationPlaceholder.classList.toggle("hidden", Boolean(imageUrl));
-  refs.referenceAnalysisGenerationPlaceholder.textContent = isRunning
-    ? item?.statusText || "正在生成图片"
-    : "生成图展示框";
+  if (imageUrl) {
+    refs.referenceAnalysisGenerationCanvas.setAttribute("role", "button");
+    refs.referenceAnalysisGenerationCanvas.setAttribute("aria-label", "查看融图分析生成图");
+    refs.referenceAnalysisGenerationCanvas.tabIndex = 0;
+  } else {
+    refs.referenceAnalysisGenerationCanvas.removeAttribute("role");
+    refs.referenceAnalysisGenerationCanvas.removeAttribute("aria-label");
+    refs.referenceAnalysisGenerationCanvas.tabIndex = -1;
+  }
+
+  if (imageUrl) {
+    setReferenceAnalysisGenerationPlaceholderText("", true);
+  } else if (isRunning) {
+    renderReferenceAnalysisGenerationLoading(item);
+  } else {
+    setReferenceAnalysisGenerationPlaceholderText("生成图展示框");
+  }
 
   if (imageUrl) {
     refs.referenceAnalysisGenerationImage.src = imageUrl;
@@ -2817,6 +2951,8 @@ function renderReferenceAnalysisSelectedPrompt() {
     : isGenerating
       ? "生成中..."
       : "开始生成";
+  refs.referenceAnalysisAutoCollapseButton.classList.toggle("is-active", state.referenceAnalysis.autoCollapseOnApply);
+  refs.referenceAnalysisAutoCollapseButton.setAttribute("aria-pressed", String(state.referenceAnalysis.autoCollapseOnApply));
   renderReferenceAnalysisGenerationPreview();
 }
 
@@ -2838,6 +2974,7 @@ function renderReferenceAnalysis() {
     refs.referenceAnalysisToggleButton.disabled = true;
     refs.referenceAnalysisToggleButton.setAttribute("aria-expanded", "false");
     refs.referenceAnalysisToggleButton.textContent = "折叠提示词";
+    refs.referenceAnalysisHead.classList.remove("hidden");
     refs.referenceAnalysisList.classList.remove("hidden");
     return;
   }
@@ -2859,6 +2996,7 @@ function renderReferenceAnalysis() {
   refs.referenceAnalysisToggleButton.disabled = false;
   refs.referenceAnalysisToggleButton.setAttribute("aria-expanded", String(!state.referenceAnalysis.collapsed));
   refs.referenceAnalysisToggleButton.textContent = state.referenceAnalysis.collapsed ? "展开提示词" : "折叠提示词";
+  refs.referenceAnalysisHead.classList.toggle("hidden", state.referenceAnalysis.collapsed);
   refs.referenceAnalysisList.classList.toggle("hidden", state.referenceAnalysis.collapsed);
 
   if (roles.length > 0) {
@@ -6943,6 +7081,7 @@ function renderCreationReferenceGrid() {
 
   refs.creationReferenceGrid.innerHTML = "";
   refs.creationReferenceCount.textContent = `${state.creationReferenceFiles.length} / ${state.limits.maxReferenceImages}`;
+  syncReferenceDropzoneCompact(refs.creationReferenceDropzone, state.creationReferenceFiles.length > 0);
   refs.creationReferenceGrid.classList.toggle("hidden", state.creationReferenceFiles.length === 0);
 
   state.creationReferenceFiles.forEach((item) => {
@@ -7014,6 +7153,15 @@ function renderCreationReferenceGrid() {
 
     refs.creationReferenceGrid.appendChild(card);
   });
+  if (state.creationReferenceFiles.length > 0 && state.creationReferenceFiles.length < state.limits.maxReferenceImages) {
+    refs.creationReferenceGrid.appendChild(
+      createReferenceAddCard({
+        input: refs.creationReferenceInput,
+        label: "继续上传套图参考图",
+        onFiles: applyCreationReferenceFiles,
+      }),
+    );
+  }
   renderCreationReferenceRestoreList();
   renderCreationReferenceAnalysis();
 }
@@ -8798,7 +8946,9 @@ function applyReferenceAnalysisPrompt(index) {
   }
 
   state.referenceAnalysis.selectedPrompt = promptText;
-  state.referenceAnalysis.collapsed = true;
+  if (state.referenceAnalysis.autoCollapseOnApply) {
+    state.referenceAnalysis.collapsed = true;
+  }
   renderReferenceAnalysis();
   setReferenceAnalysisFeedback("已在融图分析中选用这条提示词。", "success");
   refs.referenceAnalysisSelectedPromptPanel.scrollIntoView({ block: "nearest" });
@@ -9558,6 +9708,7 @@ function bindEvents() {
     });
   });
   refs.referenceAnalysisToggleButton.addEventListener("click", toggleReferenceAnalysisPanel);
+  refs.referenceAnalysisAutoCollapseButton.addEventListener("click", toggleReferenceAnalysisAutoCollapse);
   refs.referenceAnalysisCopyPromptButton.addEventListener("click", () => {
     copyReferenceAnalysisSelectedPrompt().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -9703,6 +9854,21 @@ function bindEvents() {
     if (item && getImageUrl(item)) {
       openLightbox(item);
     }
+  });
+  refs.referenceAnalysisGenerationCanvas.addEventListener("click", openReferenceAnalysisGeneratedPreview);
+  refs.referenceAnalysisGenerationCanvas.addEventListener("keydown", (event) => {
+    const shouldOpenPreview = event.key === "Enter" || event.key === " ";
+    if (!shouldOpenPreview) {
+      return;
+    }
+
+    const item = getReferenceAnalysisGenerationPreviewItem();
+    if (!item || !getImageUrl(item)) {
+      return;
+    }
+
+    event.preventDefault();
+    openReferenceAnalysisGeneratedPreview();
   });
   refs.zoomOutButton.addEventListener("click", () => stepZoom(-0.1));
   refs.zoomInButton.addEventListener("click", () => stepZoom(0.1));

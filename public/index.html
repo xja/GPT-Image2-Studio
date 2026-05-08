@@ -21,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260508-reference-analysis-scroll-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260508-reference-remove-hover-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -347,7 +347,7 @@
                   id="referenceAnalysisToggleButton"
                   class="reference-analysis-toggle hidden"
                   type="button"
-                  aria-controls="referenceAnalysisList"
+                  aria-controls="referenceAnalysisHead referenceAnalysisList"
                   aria-expanded="false"
                 >
                   折叠提示词
@@ -369,6 +369,14 @@
                 <button class="inline-button reference-analysis-generate-button" id="referenceAnalysisGenerateButton" type="button">
                   开始生成
                 </button>
+                <button
+                  class="reference-analysis-auto-collapse is-active"
+                  id="referenceAnalysisAutoCollapseButton"
+                  type="button"
+                  aria-pressed="true"
+                >
+                  应用提示词后自动折叠
+                </button>
               </div>
             </section>
 
@@ -381,7 +389,7 @@
 
               <div class="reference-analysis-empty" id="referenceAnalysisEmpty">等待分析结果</div>
               <div class="reference-analysis-panel hidden" id="referenceAnalysisPanel">
-                <div class="reference-analysis-head">
+                <div class="reference-analysis-head" id="referenceAnalysisHead">
                   <div>
                     <span>编排提示词</span>
                     <strong id="referenceAnalysisSummary">--</strong>
@@ -1209,6 +1217,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260508-reference-analysis-scroll-1"></script>
+    <script type="module" src="/app.js?v=20260508-reference-remove-hover-1"></script>
   </body>
 </html>

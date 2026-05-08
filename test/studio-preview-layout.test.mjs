@@ -130,7 +130,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260508-reference-analysis-scroll-1/);
+  assert.match(html, /\/app\.js\?v=20260508-reference-remove-hover-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -178,6 +178,10 @@ test("reference preview cards do not render uploaded filenames", async () => {
   assert.doesNotMatch(app, /name\.textContent\s*=\s*item\.file\.name/);
   assert.doesNotMatch(app, /reference-card-meta/);
   assert.doesNotMatch(styles, /\.reference-card-meta/);
+  assert.match(styles, /\.reference-card\s*\{[^}]*padding:\s*0;[^}]*overflow:\s*hidden;/);
+  assert.match(styles, /\.reference-preview-button\s*\{[^}]*width:\s*100%;[^}]*aspect-ratio:\s*1\s*\/\s*1;[^}]*height:\s*auto;/);
+  assert.match(styles, /\.reference-preview-button img\s*\{[^}]*width:\s*100%;[^}]*height:\s*100%;[^}]*object-fit:\s*cover;/);
+  assert.match(styles, /\.reference-add-button\s*\{[^}]*width:\s*100%;[^}]*aspect-ratio:\s*1\s*\/\s*1;/);
 });
 
 test("reference thumbnail remove control is a top-right x button", async () => {
@@ -192,6 +196,19 @@ test("reference thumbnail remove control is a top-right x button", async () => {
     /\.reference-remove\s*\{[\s\S]*position:\s*absolute;[\s\S]*top:\s*6px;[\s\S]*right:\s*6px;[\s\S]*width:\s*24px;[\s\S]*height:\s*24px;/,
   );
   assert.doesNotMatch(app, /remove\.textContent = "移除";/);
+});
+
+test("reference thumbnail remove control appears only on the active thumbnail", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+
+  assert.match(
+    styles,
+    /@media\s*\(hover:\s*hover\)\s*and\s*\(pointer:\s*fine\)\s*\{[\s\S]*\.reference-remove\s*\{[\s\S]*opacity:\s*0;[\s\S]*pointer-events:\s*none;/,
+  );
+  assert.match(
+    styles,
+    /\.reference-card:hover\s*>\s*\.reference-remove,[\s\S]*\.reference-card:focus-within\s*>\s*\.reference-remove\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;/,
+  );
 });
 
 test("style transfer thumbnail remove control anchors to the thumbnail corner", async () => {
@@ -222,7 +239,7 @@ test("style transfer upload slots accept one image and align preview width to up
   assert.match(app, /if \(imageFiles\.length > 1\) \{[\s\S]*showError\("原图和风格参考图每个区域只能上传一张图片。"\);[\s\S]*return;/);
   assert.match(
     styles,
-    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot:has\(\.style-transfer-grid:not\(\.hidden\)\) \{[\s\S]*grid-template-rows:\s*minmax\(64px,\s*auto\)\s*64px\s*minmax\(132px,\s*auto\);/,
+    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot:has\(\.style-transfer-grid:not\(\.hidden\)\) \{[\s\S]*grid-template-rows:\s*minmax\(64px,\s*auto\)\s*minmax\(132px,\s*auto\);/,
   );
   assert.match(
     styles,
@@ -250,6 +267,7 @@ test("reference thumbnails render three per row and open a local preview viewer"
   assert.match(html, /id="referencePreviewViewer"[\s\S]*id="referencePreviewImage"/);
   assert.match(styles, /\.reference-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
   assert.match(styles, /\.reference-preview-button\s*\{/);
+  assert.match(styles, /\.reference-analysis-view \.reference-preview-button\s*\{[^}]*aspect-ratio:\s*1\s*\/\s*1;/);
   assert.match(app, /referencePreviewItem:\s*null/);
   assert.match(app, /function openReferencePreview\(referenceId\) \{/);
   assert.match(app, /refs\.referencePreviewImage\.src = item\.previewUrl;/);
@@ -311,11 +329,15 @@ test("style transfer panel aligns slot rows and clips its own background", async
   );
   assert.match(
     styles,
-    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot \{[\s\S]*grid-template-rows:\s*minmax\(64px,\s*auto\)\s*minmax\(86px,\s*auto\);/,
+    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot \{[\s\S]*grid-template-rows:\s*minmax\(64px,\s*auto\)\s*minmax\(132px,\s*auto\);/,
   );
   assert.match(
     styles,
-    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot:has\(\.style-transfer-grid:not\(\.hidden\)\) \{[\s\S]*grid-template-rows:\s*minmax\(64px,\s*auto\)\s*64px\s*minmax\(132px,\s*auto\);/,
+    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-dropzone \{[\s\S]*min-height:\s*132px;/,
+  );
+  assert.match(
+    styles,
+    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot:has\(\.style-transfer-grid:not\(\.hidden\)\) \{[\s\S]*grid-template-rows:\s*minmax\(64px,\s*auto\)\s*minmax\(132px,\s*auto\);/,
   );
   assert.match(
     styles,
@@ -660,7 +682,8 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(html, /data-view-panel="reference-analysis"/);
   assert.match(html, /id="referenceAnalysisDropzone"[\s\S]*id="referenceAnalysisGrid"/);
   assert.match(html, /id="referenceAnalysisGrid"[\s\S]*class="reference-analysis-actions"[\s\S]*class="reference-analysis-params"/);
-  assert.match(html, /id="referenceAnalysisRatioGrid"[\s\S]*id="referenceAnalysisSizeInput"[\s\S]*id="referenceAnalysisGenerateButton"/);
+  assert.match(html, /id="referenceAnalysisRatioGrid"[\s\S]*id="referenceAnalysisSizeInput"[\s\S]*id="referenceAnalysisGenerateButton"[\s\S]*id="referenceAnalysisAutoCollapseButton"/);
+  assert.match(html, /id="referenceAnalysisAutoCollapseButton"[\s\S]*aria-pressed="true"/);
   assert.match(html, /id="referenceAnalyzeButton"[\s\S]*融图分析/);
   assert.match(html, /id="referenceAnalysisSelectedPromptPanel"[\s\S]*id="referenceAnalysisGenerationCanvas"[\s\S]*id="referenceAnalysisSelectedPrompt"/);
   assert.match(html, /id="referenceAnalysisCopyPromptButton"/);
@@ -679,7 +702,7 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
     html.match(/<div class="reference-analysis-panel[\s\S]*?<div class="reference-analysis-list/)?.[0] || "";
   assert.match(referenceAnalysisActionsBlock, /id="referenceAnalysisToggleButton"/);
   assert.doesNotMatch(referenceAnalysisPanelHeadBlock, /id="referenceAnalysisToggleButton"/);
-  assert.match(html, /aria-controls="referenceAnalysisList"/);
+  assert.match(html, /aria-controls="referenceAnalysisHead referenceAnalysisList"/);
   assert.match(html, /id="referenceAnalysisToggleButton"[\s\S]*class="reference-analysis-toggle hidden"/);
   assert.match(styles, /\.reference-analysis-actions\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/);
   assert.match(styles, /\.reference-analysis-button\s*\{[\s\S]*width:\s*100%;/);
@@ -689,6 +712,11 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(styles, /\.reference-analysis-selected\s*\{/);
   assert.match(styles, /\.reference-analysis-generation\s*\{/);
   assert.match(styles, /\.reference-analysis-generation-canvas\s*\{/);
+  assert.match(styles, /\.reference-analysis-generation-canvas\.has-image\s*\{[\s\S]*cursor:\s*zoom-in;/);
+  assert.match(styles, /\.reference-analysis-generation-canvas\.has-image:focus-visible\s*\{/);
+  assert.match(styles, /\.reference-analysis-generation-placeholder\.preview-placeholder-loading\s*\{/);
+  assert.match(styles, /\.reference-analysis-auto-collapse\s*\{/);
+  assert.match(styles, /\.reference-analysis-auto-collapse\.is-active\s*\{/);
   assert.match(styles, /\.reference-analysis-roles\s*\{/);
   assert.match(styles, /\.reference-analysis-role\s*\{[\s\S]*width:\s*auto;/);
   assert.match(styles, /\.reference-analysis-toggle\s*\{/);
@@ -701,11 +729,14 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(app, /const CREATE_VIEW_IDS = new Set\(\["studio", "style-transfer", "reference-analysis", "creation", "ppt"\]\);/);
   assert.match(app, /referenceAnalysis:\s*\{/);
   assert.match(app, /files:\s*\[\]/);
+  assert.match(app, /autoCollapseOnApply:\s*true/);
   assert.match(app, /collapsed:\s*false/);
   assert.match(app, /previewKey:\s*""/);
   assert.match(app, /selectedPrompt:\s*""/);
   assert.match(app, /referenceAnalysisDropzone:\s*document\.querySelector\("#referenceAnalysisDropzone"\),/);
+  assert.match(app, /referenceAnalysisAutoCollapseButton:\s*document\.querySelector\("#referenceAnalysisAutoCollapseButton"\),/);
   assert.match(app, /referenceAnalysisGrid:\s*document\.querySelector\("#referenceAnalysisGrid"\),/);
+  assert.match(app, /referenceAnalysisHead:\s*document\.querySelector\("#referenceAnalysisHead"\),/);
   assert.match(app, /referenceAnalysisRatioGrid:\s*document\.querySelector\("#referenceAnalysisRatioGrid"\),/);
   assert.match(app, /referenceAnalysisSizeInput:\s*document\.querySelector\("#referenceAnalysisSizeInput"\),/);
   assert.match(app, /referenceAnalysisSelectedPrompt:\s*document\.querySelector\("#referenceAnalysisSelectedPrompt"\),/);
@@ -722,13 +753,29 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(app, /function renderReferenceAnalysisGrid\(\) \{/);
   assert.match(app, /function createReferenceAnalysisJob\(\) \{/);
   assert.match(app, /function renderReferenceAnalysisGenerationPreview\(\) \{/);
+  assert.match(app, /function openReferenceAnalysisGeneratedPreview\(\) \{[\s\S]*const item = getReferenceAnalysisGenerationPreviewItem\(\);[\s\S]*openLightbox\(item\);/);
+  assert.match(app, /refs\.referenceAnalysisGenerationCanvas\.setAttribute\("role", "button"\);/);
+  assert.match(app, /refs\.referenceAnalysisGenerationCanvas\.setAttribute\("aria-label", "查看融图分析生成图"\);/);
+  assert.match(app, /refs\.referenceAnalysisGenerationCanvas\.addEventListener\("click", openReferenceAnalysisGeneratedPreview\);/);
+  assert.match(app, /refs\.referenceAnalysisGenerationCanvas\.addEventListener\("keydown", \(event\) => \{[\s\S]*event\.key === "Enter"[\s\S]*event\.key === " "[\s\S]*openReferenceAnalysisGeneratedPreview\(\);/);
+  assert.match(app, /function renderReferenceAnalysisGenerationLoading\(item\) \{/);
+  assert.match(app, /let referenceAnalysisLoadingShellNodes = null;/);
+  assert.match(
+    app,
+    /renderReferenceAnalysisGenerationLoading\(item\)[\s\S]*createPreviewLoadingShellNodes\(\)[\s\S]*updatePreviewLoadingShell\(referenceAnalysisLoadingShellNodes, placeholderState\)/,
+  );
+  assert.match(app, /title:\s*"提示词模式生成中"/);
   assert.match(app, /function renderReferenceAnalysisSelectedPrompt\(\) \{/);
   assert.match(app, /function renderReferenceAnalysisRatioGrid\(\) \{/);
   assert.match(app, /function renderReferenceAnalysisSizeOptions\(\) \{/);
   assert.match(app, /function syncGenerationRatio\(value\) \{/);
   assert.match(app, /function syncGenerationSize\(value\) \{/);
   assert.match(app, /function toggleReferenceAnalysisPanel\(\) \{/);
+  assert.match(app, /function toggleReferenceAnalysisAutoCollapse\(\) \{/);
   assert.match(app, /refs\.referenceAnalysisList\.classList\.toggle\("hidden", state\.referenceAnalysis\.collapsed\);/);
+  assert.match(app, /refs\.referenceAnalysisHead\.classList\.toggle\("hidden", state\.referenceAnalysis\.collapsed\);/);
+  assert.match(app, /refs\.referenceAnalysisAutoCollapseButton\.classList\.toggle\("is-active", state\.referenceAnalysis\.autoCollapseOnApply\);/);
+  assert.match(app, /refs\.referenceAnalysisAutoCollapseButton\.setAttribute\("aria-pressed", String\(state\.referenceAnalysis\.autoCollapseOnApply\)\);/);
   assert.match(app, /refs\.referenceAnalysisToggleButton\.textContent = state\.referenceAnalysis\.collapsed \? "展开提示词" : "折叠提示词";/);
   assert.match(app, /roleGroup\.className = "reference-analysis-roles";/);
   assert.match(app, /async function buildReferenceAnalysisFormData\(\) \{/);
@@ -745,12 +792,13 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   const referenceApplyBody =
     app.match(/function applyReferenceAnalysisPrompt\(index\) \{[\s\S]*?\r?\n\}\r?\n\r?\nfunction mapPromptAgentPrompt/)?.[0] || "";
   assert.match(referenceApplyBody, /state\.referenceAnalysis\.selectedPrompt = promptText;/);
-  assert.match(referenceApplyBody, /state\.referenceAnalysis\.collapsed = true;/);
+  assert.match(referenceApplyBody, /if \(state\.referenceAnalysis\.autoCollapseOnApply\) \{[\s\S]*state\.referenceAnalysis\.collapsed = true;/);
   assert.match(referenceApplyBody, /renderReferenceAnalysis\(\);/);
   assert.doesNotMatch(referenceApplyBody, /refs\.promptInput\.value|setActiveView\("studio"\)|refs\.promptInput\.focus/);
   assert.match(app, /refs\.referenceAnalyzeButton\.disabled = state\.referenceAnalysis\.running;/);
   assert.match(app, /refs\.referenceAnalyzeButton\.textContent = state\.referenceAnalysis\.running \? "分析中\.\.\." : "融图分析";/);
   assert.match(app, /refs\.referenceAnalysisToggleButton\.addEventListener\("click", toggleReferenceAnalysisPanel\);/);
+  assert.match(app, /refs\.referenceAnalysisAutoCollapseButton\.addEventListener\("click", toggleReferenceAnalysisAutoCollapse\);/);
   assert.match(app, /refs\.referenceAnalysisGenerateButton\.addEventListener\("click", \(\) => \{[\s\S]*startReferenceAnalysisGeneration\(\)\.catch/);
   assert.match(app, /setReferenceAnalysisFeedback\("图形分析需要上传参考图。", "error"\);/);
   assert.match(app, /refs\.referenceAnalysisDropzone\.addEventListener\("dragover",[\s\S]*event\.preventDefault\(\);[\s\S]*classList\.add\("dragover"\);/);
@@ -765,7 +813,7 @@ test("direct prompt applications keep reference analysis independent", async () 
     app.match(/function applyReferenceAnalysisPrompt\(index\) \{[\s\S]*?\r?\n\}\r?\n\r?\nfunction mapPromptAgentPrompt/)?.[0] || "";
 
   assert.match(app, /function applyPromptTemplate\(templateId = ""\) \{[\s\S]*refs\.promptInput\.value = prompt;[\s\S]*updatePromptCounter\(\);/);
-  assert.match(referenceApplyBody, /state\.referenceAnalysis\.selectedPrompt = promptText;[\s\S]*state\.referenceAnalysis\.collapsed = true;[\s\S]*renderReferenceAnalysis\(\);/);
+  assert.match(referenceApplyBody, /state\.referenceAnalysis\.selectedPrompt = promptText;[\s\S]*if \(state\.referenceAnalysis\.autoCollapseOnApply\) \{[\s\S]*state\.referenceAnalysis\.collapsed = true;[\s\S]*renderReferenceAnalysis\(\);/);
   assert.doesNotMatch(referenceApplyBody, /refs\.promptInput\.value|updatePromptCounter\(\)|setActiveView\("studio"\)|refs\.promptInput\.focus/);
   assert.doesNotMatch(referenceApplyBody, /currentPrompt|includes\(promptText\)|`\\$\\{currentPrompt\\}\\n\\n\\$\\{promptText\\}`/);
   assert.match(app, /function mapPromptAgentPrompt\(itemId\) \{[\s\S]*refs\.promptInput\.value = promptText;[\s\S]*updatePromptCounter\(\);/);
@@ -802,6 +850,30 @@ test("studio layout consumes density variables for wide-screen adaptation withou
   assert.match(app, /document\.documentElement\.dataset\.uiLayout = layoutMode;/);
   assert.match(styles, /html\[data-ui-layout="stacked"\] \.studio-grid,/);
   assert.match(styles, /html\[data-ui-layout="narrow-desktop"\] \.studio-grid\s*\{/);
+});
+
+test("image upload zones collapse into compact thumbnail grids after files are present", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(styles, /\.reference-dropzone\.is-compact-hidden\s*\{[\s\S]*position:\s*absolute;[\s\S]*clip-path:\s*inset\(50%\);/);
+  assert.match(styles, /\.reference-add-card\s*\{/);
+  assert.match(styles, /\.reference-add-button\s*\{/);
+  assert.match(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot:has\(\.style-transfer-dropzone\.is-compact-hidden\)\s*\{[\s\S]*grid-template-rows:\s*minmax\(64px,\s*auto\)\s*minmax\(132px,\s*auto\);/);
+
+  assert.match(app, /function syncReferenceDropzoneCompact\(dropzone, hasFiles\) \{/);
+  assert.match(app, /function createReferenceAddCard\(\{ input, label, onFiles \}\) \{/);
+  assert.match(app, /syncReferenceDropzoneCompact\(refs\.referenceDropzone, state\.referenceFiles\.length > 0\);/);
+  assert.match(app, /syncReferenceDropzoneCompact\(refs\.referenceAnalysisDropzone, state\.referenceAnalysis\.files\.length > 0\);/);
+  assert.match(app, /syncReferenceDropzoneCompact\(refs\.creationReferenceDropzone, state\.creationReferenceFiles\.length > 0\);/);
+  assert.match(app, /syncReferenceDropzoneCompact\(refs\.styleTransferSourceDropzone, Boolean\(getStyleTransferReferenceItem\("source"\)\)\);/);
+  assert.match(app, /syncReferenceDropzoneCompact\(refs\.styleTransferStyleDropzone, Boolean\(getStyleTransferReferenceItem\("style"\)\)\);/);
+
+  assert.match(app, /refs\.referenceGrid\.appendChild\(\s*createReferenceAddCard\(\{[\s\S]*input:\s*refs\.referenceInput,[\s\S]*onFiles:\s*applyReferenceFiles/);
+  assert.match(app, /refs\.referenceAnalysisGrid\.appendChild\(\s*createReferenceAddCard\(\{[\s\S]*input:\s*refs\.referenceAnalysisInput,[\s\S]*onFiles:\s*applyReferenceAnalysisFiles/);
+  assert.match(app, /refs\.creationReferenceGrid\.appendChild\(\s*createReferenceAddCard\(\{[\s\S]*input:\s*refs\.creationReferenceInput,[\s\S]*onFiles:\s*applyCreationReferenceFiles/);
+  assert.doesNotMatch(app, /styleTransferSourceGrid\.appendChild\(\s*createReferenceAddCard/);
+  assert.doesNotMatch(app, /styleTransferStyleGrid\.appendChild\(\s*createReferenceAddCard/);
 });
 
 test("studio entry defaults to square ratio", async () => {
@@ -873,7 +945,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260508-reference-analysis-scroll-1/);
+  assert.match(html, /\/app\.js\?v=20260508-reference-remove-hover-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -1199,7 +1271,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260508-reference-analysis-scroll-1/);
+  assert.match(html, /app\.js\?v=20260508-reference-remove-hover-1/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
