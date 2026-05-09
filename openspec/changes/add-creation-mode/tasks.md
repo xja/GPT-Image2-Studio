@@ -170,3 +170,20 @@
 - [x] 28.1 Add failing layout tests for Creation record cards that hide inline prompts and use the shared lightbox for item details.
 - [x] 28.2 Move single-item prompt/path/download access into the lightbox while keeping the card-level View action.
 - [x] 28.3 Keep Creation record lightbox parameters aligned with saved relative paths and gallery-style enlarged image viewing.
+
+## 29. Fourth-Level Category Industry Templates
+
+- [x] 29.1 Add failing tests for a shared fourth-level category template module generated from `电商四级类目分级结构表.xlsx`.
+- [x] 29.2 Implement searchable category-coded Creation Mode industry templates with duplicate-name-safe category paths.
+- [x] 29.3 Inject category-specific prompt guidance into Creation Mode plans and persist category path metadata in creation records.
+- [x] 29.4 Let Creation reference-image smart analysis emit category hints and automatically switch to a matched fourth-level category template.
+- [x] 29.5 Update README/spec coverage and rerun targeted tests, full `npm test`, Pages build, and Chinese text encoding checks.
+
+## 30. Progressive Category Template Browser
+
+- [x] 30.1 Move the Creation Mode industry template control below the primary parameter grid.
+- [x] 30.2 Replace the flat industry-template dropdown with a first-level-to-fourth-level progressive category browser.
+- [x] 30.3 Keep category search next to the browser and return only fourth-level category templates.
+- [x] 30.4 Remove the previous broad industry templates from the visible Creation Mode template choices.
+- [x] 30.5 Change the category browser into a floating cascading dropdown that shows only the active level and current category name in the form.
+- [x] 30.6 Restrict category search to category codes plus third-level and fourth-level category names, excluding first-level and second-level name matches.

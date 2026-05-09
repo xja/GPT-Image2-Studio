@@ -50,6 +50,14 @@ import {
   upsertGenerationActivityEntry,
 } from "/lib/generation-activity-feed.mjs?v=20260504-vercel-static-lib-1";
 import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260504-vercel-static-lib-1";
+import {
+  CREATION_CATEGORY_TEMPLATE_OPTIONS,
+  CREATION_INDUSTRY_TEMPLATE_OPTIONS,
+  findCreationIndustryTemplateMatch,
+  getCreationIndustryTemplateRolePreset,
+  normalizeCreationIndustryTemplate,
+  searchCreationIndustryTemplates,
+} from "/lib/creation-category-templates.mjs?v=20260509-category-search-2";
 
 const SURPRISE_PROMPTS = [
   {
@@ -208,6 +216,11 @@ const state = {
     result: null,
     running: false,
   },
+  creationIndustryTemplateBrowser: {
+    level1: "",
+    level2: "",
+    level3: "",
+  },
   creationReferencePreviewItem: null,
   creationSelectedRoles: [],
   gallery: [],
@@ -259,6 +272,8 @@ const state = {
     autoCollapseOnApply: true,
     collapsed: false,
     dirty: false,
+    generationKeys: [],
+    generationItems: {},
     previewKey: "",
     result: null,
     running: false,
@@ -298,8 +313,17 @@ const refs = {
   creationFeedback: document.querySelector("#creationFeedback"),
   creationForm: document.querySelector("#creationForm"),
   creationGenerateButton: document.querySelector("#creationGenerateButton"),
+  creationDimensionSpecsInput: document.querySelector("#creationDimensionSpecsInput"),
   creationImageCountInput: document.querySelector("#creationImageCountInput"),
+  creationIndustryTemplateBrowser: document.querySelector("#creationIndustryTemplateBrowser"),
+  creationIndustryTemplateBackButton: document.querySelector("#creationIndustryTemplateBackButton"),
+  creationIndustryTemplateCurrent: document.querySelector("#creationIndustryTemplateCurrent"),
   creationIndustryTemplateInput: document.querySelector("#creationIndustryTemplateInput"),
+  creationIndustryTemplateLevels: document.querySelector("#creationIndustryTemplateLevels"),
+  creationIndustryTemplatePopover: document.querySelector("#creationIndustryTemplatePopover"),
+  creationIndustryTemplateSearchInput: document.querySelector("#creationIndustryTemplateSearchInput"),
+  creationIndustryTemplateStepLabel: document.querySelector("#creationIndustryTemplateStepLabel"),
+  creationIndustryTemplateTrigger: document.querySelector("#creationIndustryTemplateTrigger"),
   creationOutputFormatInput: document.querySelector("#creationOutputFormatInput"),
   creationPlanButton: document.querySelector("#creationPlanButton"),
   creationPromptEditorLayer: document.querySelector("#creationPromptEditorLayer"),
@@ -509,6 +533,8 @@ const refs = {
   referenceAnalysisGenerationImage: document.querySelector("#referenceAnalysisGenerationImage"),
   referenceAnalysisGenerationMeta: document.querySelector("#referenceAnalysisGenerationMeta"),
   referenceAnalysisGenerationPlaceholder: document.querySelector("#referenceAnalysisGenerationPlaceholder"),
+  referenceAnalysisGenerationStrip: document.querySelector("#referenceAnalysisGenerationStrip"),
+  referenceAnalysisThumbnailEmpty: document.querySelector("#referenceAnalysisThumbnailEmpty"),
   referenceAnalysisSummary: document.querySelector("#referenceAnalysisSummary"),
   referenceAnalysisToggleButton: document.querySelector("#referenceAnalysisToggleButton"),
   referenceAnalyzeButton: document.querySelector("#referenceAnalyzeButton"),
@@ -2827,17 +2853,194 @@ function createReferenceAnalysisCard(option, index) {
   return card;
 }
 
-function getReferenceAnalysisGenerationPreviewItem() {
-  const key = state.referenceAnalysis.previewKey || "";
+function getReferenceAnalysisGenerationItemByKey(key) {
   if (key.startsWith("job:")) {
-    return state.jobs.find((job) => job.id === key.slice(4)) || null;
+    return state.jobs.find((job) => job.id === key.slice(4) && job.mode === "reference-analysis") || null;
   }
 
   if (key.startsWith("file:")) {
-    return state.gallery.find((item) => item.filename === key.slice(5)) || null;
+    return state.referenceAnalysis.generationItems[key] || state.gallery.find((item) => item.filename === key.slice(5)) || null;
   }
 
   return null;
+}
+
+function storeReferenceAnalysisGenerationItem(item) {
+  const filename = String(item?.filename || "").trim();
+  if (!filename) {
+    return "";
+  }
+
+  const key = makeGalleryPreviewKey(filename);
+  const current = state.referenceAnalysis.generationItems[key] || {};
+  state.referenceAnalysis.generationItems[key] = {
+    ...current,
+    ...item,
+    mode: "reference-analysis",
+  };
+  return key;
+}
+
+function registerReferenceAnalysisGenerationKey(key) {
+  const nextKey = String(key || "").trim();
+  if (!nextKey) {
+    return;
+  }
+
+  state.referenceAnalysis.generationKeys = [
+    nextKey,
+    ...state.referenceAnalysis.generationKeys.filter((entry) => entry !== nextKey),
+  ];
+}
+
+function replaceReferenceAnalysisGenerationKey(oldKey, newKey) {
+  const currentKey = String(oldKey || "").trim();
+  const nextKey = String(newKey || "").trim();
+  if (!nextKey) {
+    return;
+  }
+
+  const keys = state.referenceAnalysis.generationKeys.filter((entry) => entry !== nextKey);
+  const index = keys.indexOf(currentKey);
+  if (index >= 0) {
+    keys[index] = nextKey;
+    state.referenceAnalysis.generationKeys = keys;
+    return;
+  }
+
+  state.referenceAnalysis.generationKeys = [nextKey, ...keys];
+}
+
+function removeReferenceAnalysisGenerationKey(key) {
+  const targetKey = String(key || "").trim();
+  if (!targetKey) {
+    return;
+  }
+
+  state.referenceAnalysis.generationKeys = state.referenceAnalysis.generationKeys.filter((entry) => entry !== targetKey);
+  if (state.referenceAnalysis.previewKey === targetKey) {
+    state.referenceAnalysis.previewKey = "";
+  }
+}
+
+function getReferenceAnalysisGenerationPreviewEntries() {
+  const entries = [];
+  const seen = new Set();
+  const addKey = (key) => {
+    const normalizedKey = String(key || "").trim();
+    if (!normalizedKey || seen.has(normalizedKey)) {
+      return;
+    }
+
+    const item = getReferenceAnalysisGenerationItemByKey(normalizedKey);
+    if (!item) {
+      return;
+    }
+
+    seen.add(normalizedKey);
+    entries.push({ key: normalizedKey, item });
+  };
+
+  state.referenceAnalysis.generationKeys.forEach(addKey);
+  sortGalleryItemsByCreatedAtDesc(state.jobs)
+    .filter((job) => job.mode === "reference-analysis")
+    .forEach((job) => addKey(makeJobPreviewKey(job.id)));
+
+  return entries;
+}
+
+function syncReferenceAnalysisGenerationPreviewKey() {
+  if (getReferenceAnalysisGenerationItemByKey(state.referenceAnalysis.previewKey || "")) {
+    return;
+  }
+
+  const fallback = getReferenceAnalysisGenerationPreviewEntries()[0];
+  state.referenceAnalysis.previewKey = fallback?.key || "";
+}
+
+function getReferenceAnalysisGenerationPreviewItem() {
+  syncReferenceAnalysisGenerationPreviewKey();
+  return getReferenceAnalysisGenerationItemByKey(state.referenceAnalysis.previewKey || "");
+}
+
+function setReferenceAnalysisGenerationPreviewKey(key) {
+  const nextKey = String(key || "").trim();
+  if (!getReferenceAnalysisGenerationItemByKey(nextKey)) {
+    return;
+  }
+
+  state.referenceAnalysis.previewKey = nextKey;
+  renderReferenceAnalysisSelectedPrompt();
+}
+
+function renderReferenceAnalysisGenerationStrip() {
+  const entries = getReferenceAnalysisGenerationPreviewEntries();
+  refs.referenceAnalysisGenerationStrip.replaceChildren();
+  refs.referenceAnalysisGenerationStrip.classList.toggle("hidden", entries.length === 0);
+  refs.referenceAnalysisThumbnailEmpty.classList.toggle("hidden", entries.length > 0);
+
+  entries.forEach(({ key, item }, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "reference-analysis-generation-thumb";
+    button.dataset.referenceAnalysisGenerationKey = key;
+    button.setAttribute("aria-pressed", String(key === state.referenceAnalysis.previewKey));
+    button.title = `切换到第 ${index + 1} 张融图结果`;
+    button.classList.toggle("active", key === state.referenceAnalysis.previewKey);
+    button.classList.toggle("is-running", Boolean(item?.isRunning || (item?.started && !item?.filename)));
+
+    const imageUrl = getImageUrl(item);
+    if (imageUrl) {
+      const image = document.createElement("img");
+      image.src = imageUrl;
+      image.alt = getDisplayPrompt(item);
+      image.loading = "lazy";
+      button.appendChild(image);
+    } else {
+      const ghost = document.createElement("span");
+      ghost.textContent = item?.isRunning || item?.started ? "生成中" : "等待";
+      button.appendChild(ghost);
+    }
+
+    refs.referenceAnalysisGenerationStrip.appendChild(button);
+  });
+}
+
+async function preserveReferenceAnalysisGenerationItemForDelete(item) {
+  if (!item?.filename) {
+    return;
+  }
+
+  const key = makeGalleryPreviewKey(item.filename);
+  const isTrackedReferenceAnalysisItem =
+    item.mode === "reference-analysis" ||
+    state.referenceAnalysis.generationKeys.includes(key) ||
+    Boolean(state.referenceAnalysis.generationItems[key]);
+  if (!isTrackedReferenceAnalysisItem) {
+    return;
+  }
+
+  const imageUrl = getImageUrl(item);
+  if (!imageUrl || String(imageUrl).startsWith("data:image/")) {
+    storeReferenceAnalysisGenerationItem(item);
+    return;
+  }
+
+  try {
+    const dataUrl = await fetchServerImageAsDataUrl(imageUrl);
+    if (dataUrl) {
+      storeReferenceAnalysisGenerationItem({
+        ...item,
+        imageUrl: dataUrl,
+        thumbnailUrl: dataUrl,
+      });
+      return;
+    }
+  } catch (_error) {
+    // Keep the existing item metadata if the image cannot be copied before deletion.
+  }
+
+  storeReferenceAnalysisGenerationItem(item);
 }
 
 function setReferenceAnalysisGenerationPlaceholderText(message, hidden = false) {
@@ -2934,25 +3137,24 @@ function renderReferenceAnalysisGenerationPreview() {
   refs.referenceAnalysisGenerationMeta.textContent = item
     ? [formatTime(item.createdAt), formatCanvasLabel(item.size), item.statusText || ""].filter(Boolean).join(" · ")
     : "等待生成";
+  renderReferenceAnalysisGenerationStrip();
 }
 
 function renderReferenceAnalysisSelectedPrompt() {
   const promptText = String(state.referenceAnalysis.selectedPrompt || "").trim();
-  const previewItem = getReferenceAnalysisGenerationPreviewItem();
-  const isGenerating = Boolean(previewItem?.isRunning || (previewItem?.started && !previewItem?.filename));
   refs.referenceAnalysisSelectedPromptPanel.classList.toggle("hidden", !promptText);
   refs.referenceAnalysisSelectedPrompt.value = promptText;
   refs.referenceAnalysisCopyPromptButton.disabled = !promptText;
   const preparingReference = hasPendingReferenceAnalysisGenerationFiles();
   refs.referenceAnalysisGenerateButton.disabled =
-    !promptText || preparingReference || isGenerating || getQueuedJobCount() >= getMaxQueuedJobCount();
+    !promptText || preparingReference || getQueuedJobCount() >= getMaxQueuedJobCount();
   refs.referenceAnalysisGenerateButton.textContent = preparingReference
     ? "处理参考图..."
-    : isGenerating
-      ? "生成中..."
+    : getQueuedJobCount() > 0
+      ? "继续生成"
       : "开始生成";
   refs.referenceAnalysisAutoCollapseButton.classList.toggle("is-active", state.referenceAnalysis.autoCollapseOnApply);
-  refs.referenceAnalysisAutoCollapseButton.setAttribute("aria-pressed", String(state.referenceAnalysis.autoCollapseOnApply));
+  refs.referenceAnalysisAutoCollapseButton.setAttribute("aria-checked", String(state.referenceAnalysis.autoCollapseOnApply));
   renderReferenceAnalysisGenerationPreview();
 }
 
@@ -4597,6 +4799,9 @@ function upsertGalleryItem(item) {
   const next = state.gallery.filter((entry) => entry.filename !== hydratedItem.filename);
   next.unshift(hydratedItem);
   state.gallery = sortGalleryItemsByCreatedAtDesc(next);
+  if (hydratedItem.mode === "reference-analysis") {
+    storeReferenceAnalysisGenerationItem(hydratedItem);
+  }
   resetGalleryHistoryPage();
   syncGalleryMetadataCache(state.gallery);
   void cacheBrowserGalleryItem(hydratedItem);
@@ -5552,14 +5757,11 @@ const CREATION_SCENARIO_LABELS = {
   "brand-story": "品牌故事",
 };
 
-const CREATION_INDUSTRY_TEMPLATE_LABELS = {
-  general: "通用电商",
-  apparel: "服饰鞋包",
-  beauty: "美妆个护",
-  food: "食品饮料",
-  electronics: "3C 数码",
-  home: "家居生活",
-};
+const CREATION_INDUSTRY_TEMPLATE_LABELS = Object.fromEntries(
+  CREATION_INDUSTRY_TEMPLATE_OPTIONS.map((template) => [template.value, template.label]),
+);
+const CREATION_INDUSTRY_TEMPLATE_LEVEL_LABELS = ["一级类目", "二级类目", "三级类目", "四级类目"];
+const CREATION_INDUSTRY_TEMPLATE_EMPTY_LABEL = "未选择四级类目";
 
 const CREATION_SCENARIO_ROLE_PRESETS = {
   standard: ["hero", "benefit", "scene", "detail-trust"],
@@ -5649,6 +5851,336 @@ function setCreationSelectValue(select, value, fallback = "") {
   select.value = hasOption ? normalizedValue : fallbackValue;
 }
 
+function setCreationIndustryTemplateBrowserPath(source = {}) {
+  state.creationIndustryTemplateBrowser = {
+    level1: String(source.level1Name || source.level1 || "").trim(),
+    level2: String(source.level2Name || source.level2 || "").trim(),
+    level3: String(source.level3Name || source.level3 || "").trim(),
+  };
+}
+
+function sortCreationIndustryTemplateRows(left, right) {
+  return (
+    (Number(left.level1Order) || 0) - (Number(right.level1Order) || 0) ||
+    (Number(left.level2Order) || 0) - (Number(right.level2Order) || 0) ||
+    (Number(left.level3Order) || 0) - (Number(right.level3Order) || 0) ||
+    (Number(left.level4Order) || 0) - (Number(right.level4Order) || 0) ||
+    String(left.categoryPath || left.label || "").localeCompare(String(right.categoryPath || right.label || ""), "zh-Hans-CN")
+  );
+}
+
+function filterCreationIndustryTemplateRowsForLevel(level, browserPath = state.creationIndustryTemplateBrowser) {
+  return CREATION_CATEGORY_TEMPLATE_OPTIONS.filter((template) => {
+    if (level > 1 && template.level1Name !== browserPath.level1) {
+      return false;
+    }
+    if (level > 2 && template.level2Name !== browserPath.level2) {
+      return false;
+    }
+    if (level > 3 && template.level3Name !== browserPath.level3) {
+      return false;
+    }
+    return true;
+  }).sort(sortCreationIndustryTemplateRows);
+}
+
+function getCreationIndustryTemplateLevelOptions(level, browserPath = state.creationIndustryTemplateBrowser) {
+  if (level === 2 && !browserPath.level1) {
+    return [];
+  }
+  if (level === 3 && (!browserPath.level1 || !browserPath.level2)) {
+    return [];
+  }
+  if (level === 4 && (!browserPath.level1 || !browserPath.level2 || !browserPath.level3)) {
+    return [];
+  }
+
+  const rows = filterCreationIndustryTemplateRowsForLevel(level, browserPath);
+  if (level === 4) {
+    return rows.map((template) => ({
+      count: 1,
+      name: template.label,
+      order: Number(template.level4Order) || 0,
+      template,
+    }));
+  }
+
+  const nameKey = `level${level}Name`;
+  const orderKey = `level${level}Order`;
+  const map = new Map();
+  rows.forEach((template) => {
+    const name = String(template[nameKey] || "").trim();
+    if (!name) {
+      return;
+    }
+
+    const entry = map.get(name) || {
+      categoryPath: getCreationIndustryTemplateLevelPath(level, name, browserPath),
+      count: 0,
+      name,
+      order: Number(template[orderKey]) || 0,
+    };
+    entry.count += 1;
+    map.set(name, entry);
+  });
+
+  return [...map.values()].sort((left, right) => {
+    return left.order - right.order || left.name.localeCompare(right.name, "zh-Hans-CN");
+  });
+}
+
+function updateCreationIndustryTemplateBrowserLevel(level, name) {
+  const key = `level${level}`;
+  const nextPath = { ...state.creationIndustryTemplateBrowser, [key]: String(name || "").trim() };
+  if (level <= 1) {
+    nextPath.level2 = "";
+  }
+  if (level <= 2) {
+    nextPath.level3 = "";
+  }
+  if (refs.creationIndustryTemplateInput) {
+    refs.creationIndustryTemplateInput.value = "general";
+  }
+  setCreationIndustryTemplateBrowserPath(nextPath);
+  if (refs.creationIndustryTemplateSearchInput) {
+    refs.creationIndustryTemplateSearchInput.value = "";
+  }
+  renderCreationIndustryTemplateBrowser();
+  setCreationIndustryTemplateBrowserOpen(true);
+}
+
+function getCreationIndustryTemplateLevelPath(level, name, browserPath = state.creationIndustryTemplateBrowser) {
+  if (level === 2) {
+    return [browserPath.level1, name].filter(Boolean).join(" > ");
+  }
+  if (level === 3) {
+    return [browserPath.level1, browserPath.level2, name].filter(Boolean).join(" > ");
+  }
+  return "";
+}
+
+function createCreationIndustryTemplateButton({
+  categoryPath = "",
+  level = 1,
+  name = "",
+  selected = false,
+  template = null,
+} = {}) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "creation-industry-option";
+  button.classList.toggle("is-selected", selected);
+  const title = document.createElement("strong");
+  const meta = document.createElement("small");
+  let metaText = categoryPath;
+
+  if (template) {
+    button.dataset.creationIndustryTemplateValue = template.value;
+    title.textContent = template.label;
+    metaText = template.categoryPath || template.code || "";
+    meta.textContent = metaText;
+    button.title = [template.label, metaText].filter(Boolean).join(" · ");
+    button.append(title, meta);
+    return button;
+  }
+
+  button.dataset.creationIndustryLevel = String(level);
+  button.dataset.creationIndustryName = name;
+  button.setAttribute("aria-expanded", selected ? "true" : "false");
+  title.textContent = name;
+  meta.textContent = metaText;
+  button.title = [name, metaText].filter(Boolean).join(" · ");
+  button.appendChild(title);
+  if (metaText) {
+    button.appendChild(meta);
+  }
+  return button;
+}
+
+function getCreationIndustryTemplateActiveLevel() {
+  const browserPath = state.creationIndustryTemplateBrowser;
+  if (!browserPath.level1) {
+    return 1;
+  }
+  if (!browserPath.level2) {
+    return 2;
+  }
+  if (!browserPath.level3) {
+    return 3;
+  }
+  return 4;
+}
+
+function focusCreationIndustryTemplateBrowserOnSelectedTemplate() {
+  const currentTemplate = getCreationSelectedIndustryTemplate();
+  if (!currentTemplate.categoryPath) {
+    return;
+  }
+
+  setCreationIndustryTemplateBrowserPath(currentTemplate);
+  if (refs.creationIndustryTemplateSearchInput) {
+    refs.creationIndustryTemplateSearchInput.value = "";
+  }
+}
+
+function goBackCreationIndustryTemplateLevel() {
+  const activeLevel = getCreationIndustryTemplateActiveLevel();
+  if (activeLevel <= 1) {
+    return;
+  }
+
+  const nextPath = { ...state.creationIndustryTemplateBrowser };
+  if (activeLevel === 2) {
+    nextPath.level1 = "";
+    nextPath.level2 = "";
+    nextPath.level3 = "";
+  } else if (activeLevel === 3) {
+    nextPath.level2 = "";
+    nextPath.level3 = "";
+  } else {
+    nextPath.level3 = "";
+  }
+
+  if (refs.creationIndustryTemplateInput) {
+    refs.creationIndustryTemplateInput.value = "general";
+  }
+  if (refs.creationIndustryTemplateSearchInput) {
+    refs.creationIndustryTemplateSearchInput.value = "";
+  }
+  setCreationIndustryTemplateBrowserPath(nextPath);
+  renderCreationIndustryTemplateBrowser();
+  setCreationIndustryTemplateBrowserOpen(true);
+}
+
+function getCreationIndustryTemplateDisplayName(currentTemplate = getCreationSelectedIndustryTemplate()) {
+  if (currentTemplate.categoryPath) {
+    return currentTemplate.label || CREATION_INDUSTRY_TEMPLATE_EMPTY_LABEL;
+  }
+  if (currentTemplate.value && currentTemplate.value !== "general") {
+    return currentTemplate.label || currentTemplate.value;
+  }
+  return (
+    state.creationIndustryTemplateBrowser.level3 ||
+    state.creationIndustryTemplateBrowser.level2 ||
+    state.creationIndustryTemplateBrowser.level1 ||
+    CREATION_INDUSTRY_TEMPLATE_EMPTY_LABEL
+  );
+}
+
+function setCreationIndustryTemplateBrowserOpen(open) {
+  const nextOpen = Boolean(open);
+  if (refs.creationIndustryTemplatePopover) {
+    refs.creationIndustryTemplatePopover.hidden = !nextOpen;
+  }
+  refs.creationIndustryTemplateTrigger?.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+  refs.creationIndustryTemplateBrowser?.classList.toggle("is-open", nextOpen);
+}
+
+function renderCreationIndustryTemplateCurrentLevel(level) {
+  const options = getCreationIndustryTemplateLevelOptions(level);
+  const currentTemplate = getCreationSelectedIndustryTemplate();
+  const selectedName = state.creationIndustryTemplateBrowser[`level${level}`] || "";
+  const list = document.createElement("div");
+  list.className = "creation-industry-option-list";
+
+  if (options.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "creation-industry-empty";
+    empty.textContent = "暂无下一级类目。";
+    list.appendChild(empty);
+  } else {
+    options.forEach((option) => {
+      const selected = option.template
+        ? currentTemplate.value === option.template.value
+        : selectedName === option.name;
+      list.appendChild(createCreationIndustryTemplateButton({ ...option, level, selected }));
+    });
+  }
+
+  return {
+    count: options.length,
+    label: CREATION_INDUSTRY_TEMPLATE_LEVEL_LABELS[level - 1],
+    node: list,
+  };
+}
+
+function renderCreationIndustryTemplateSearchResults(query) {
+  const results = searchCreationIndustryTemplates(query, { limit: 48, includeBase: false }).filter(
+    (template) => template.categoryPath,
+  );
+  const list = document.createElement("div");
+  list.className = "creation-industry-option-list";
+  if (results.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "creation-industry-empty";
+    empty.textContent = "没有匹配的四级类目。";
+    list.appendChild(empty);
+  } else {
+    results.forEach((template) => {
+      list.appendChild(
+        createCreationIndustryTemplateButton({
+          selected: getCreationSelectedIndustryTemplate().value === template.value,
+          template,
+        }),
+      );
+    });
+  }
+
+  return {
+    count: results.length,
+    label: "搜索结果",
+    node: list,
+  };
+}
+
+function renderCreationIndustryTemplateBrowser() {
+  if (!refs.creationIndustryTemplateLevels) {
+    return;
+  }
+
+  const currentTemplate = getCreationSelectedIndustryTemplate();
+  if (refs.creationIndustryTemplateCurrent) {
+    refs.creationIndustryTemplateCurrent.textContent = getCreationIndustryTemplateDisplayName(currentTemplate);
+  }
+
+  const query = String(refs.creationIndustryTemplateSearchInput?.value || "").trim();
+  const activeLevel = getCreationIndustryTemplateActiveLevel();
+  const viewModel = query
+    ? renderCreationIndustryTemplateSearchResults(query)
+    : renderCreationIndustryTemplateCurrentLevel(activeLevel);
+
+  refs.creationIndustryTemplateBrowser?.classList.toggle("is-searching", Boolean(query));
+  if (refs.creationIndustryTemplateStepLabel) {
+    refs.creationIndustryTemplateStepLabel.textContent = viewModel.label;
+  }
+  if (refs.creationIndustryTemplateBackButton) {
+    const canGoBack = !query && activeLevel > 1;
+    refs.creationIndustryTemplateBackButton.classList.toggle("hidden", !canGoBack);
+    refs.creationIndustryTemplateBackButton.disabled = !canGoBack;
+  }
+  refs.creationIndustryTemplateLevels.replaceChildren(viewModel.node);
+  if (query) {
+    setCreationIndustryTemplateBrowserOpen(true);
+  }
+}
+
+function setCreationIndustryTemplateValue(value, { searchText = "" } = {}) {
+  const normalizedTemplate = normalizeCreationIndustryTemplate(value);
+  const nextValue = normalizedTemplate.value || "general";
+  if (refs.creationIndustryTemplateInput) {
+    refs.creationIndustryTemplateInput.value = nextValue;
+  }
+  if (normalizedTemplate.categoryPath) {
+    setCreationIndustryTemplateBrowserPath(normalizedTemplate);
+  } else {
+    setCreationIndustryTemplateBrowserPath();
+  }
+  if (refs.creationIndustryTemplateSearchInput) {
+    refs.creationIndustryTemplateSearchInput.value = searchText;
+  }
+  renderCreationIndustryTemplateBrowser();
+}
+
 function setCreationImageCountValue(count) {
   if (!refs.creationImageCountInput) {
     return;
@@ -5667,11 +6199,7 @@ function getCreationSelectedScenario() {
 }
 
 function getCreationSelectedIndustryTemplate() {
-  const value = refs.creationIndustryTemplateInput?.value || "general";
-  return {
-    value,
-    label: CREATION_INDUSTRY_TEMPLATE_LABELS[value] || value,
-  };
+  return normalizeCreationIndustryTemplate(refs.creationIndustryTemplateInput?.value || "general");
 }
 
 function getDefaultCreationRoleIds(count = getCreationSelectedImageCount()) {
@@ -5705,7 +6233,7 @@ function getCreationScenarioRolePreset(scenarioValue = getCreationSelectedScenar
 }
 
 function getCreationIndustryRolePreset(industryValue = getCreationSelectedIndustryTemplate().value) {
-  return normalizeCreationRoleIds(CREATION_INDUSTRY_ROLE_PRESETS[industryValue] || []);
+  return normalizeCreationRoleIds(getCreationIndustryTemplateRolePreset(industryValue));
 }
 
 function getCreationRecommendedRolePreset({
@@ -5897,20 +6425,23 @@ function normalizeCreationSetForView(set = {}) {
         : items.some((item) => item.status === "generating" || item.status === "queued")
           ? "generating"
           : "planning");
+  const industryTemplate = normalizeCreationIndustryTemplate(set.industryTemplate || "general");
 
   return {
     setId: String(set.setId || ""),
     productName: String(set.productName || ""),
     productDescription: String(set.productDescription || ""),
     sellingPoints: Array.isArray(set.sellingPoints) ? set.sellingPoints.map((item) => String(item)).filter(Boolean) : [],
+    dimensionSpecs: String(set.dimensionSpecs || ""),
     targetLanguage: String(set.targetLanguage || "zh-CN"),
     targetLanguageLabel: String(set.targetLanguageLabel || ""),
     imageCount: Number(set.imageCount) || items.length || 4,
     selectedRoles: normalizeCreationRoleIds(set.selectedRoles || items.map((item) => item.role)),
     scenario: String(set.scenario || "standard"),
     scenarioLabel: String(set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || ""),
-    industryTemplate: String(set.industryTemplate || "general"),
-    industryTemplateLabel: String(set.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[set.industryTemplate] || ""),
+    industryTemplate: String(set.industryTemplate || industryTemplate.value || "general"),
+    industryTemplateLabel: String(set.industryTemplateLabel || industryTemplate.label || ""),
+    industryTemplatePath: String(set.industryTemplatePath || industryTemplate.categoryPath || ""),
     referenceImageNames: Array.isArray(set.referenceImageNames)
       ? set.referenceImageNames.map((item) => String(item)).filter(Boolean)
       : [],
@@ -6145,9 +6676,12 @@ function applyCreationSetToForm(set) {
   refs.creationProductNameInput.value = normalized.productName || "";
   refs.creationProductDescriptionInput.value = normalized.productDescription || "";
   refs.creationSellingPointsInput.value = normalized.sellingPoints.join("\n");
+  refs.creationDimensionSpecsInput.value = normalized.dimensionSpecs || "";
   setCreationSelectValue(refs.creationTargetLanguageInput, normalized.targetLanguage, "zh-CN");
   setCreationSelectValue(refs.creationScenarioInput, normalized.scenario, "standard");
-  setCreationSelectValue(refs.creationIndustryTemplateInput, normalized.industryTemplate, "general");
+  setCreationIndustryTemplateValue(normalized.industryTemplate, {
+    searchText: normalized.industryTemplatePath || "",
+  });
 
   const normalizedRoles = normalizeCreationRoleIds(
     normalized.selectedRoles.length > 0 ? normalized.selectedRoles : normalized.items.map((item) => item.role),
@@ -6261,13 +6795,14 @@ function renderCreationRecordDetail(set) {
     ["商品", set.productName || "未命名商品"],
     ["场景", set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || "标准电商"],
     ["行业", set.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[set.industryTemplate] || "通用电商"],
+    ["类目路径", set.industryTemplatePath || ""],
     ["语言", set.targetLanguageLabel || set.targetLanguage || "zh-CN"],
     ["进度", `${progress.completed}/${progress.total}`],
     ["参考图", set.referenceImageNames.length > 0 ? set.referenceImageNames.join("、") : "未使用"],
     ["参考用途", formatCreationReferenceRoleSummary(set.referenceImageRoles)],
   ];
 
-  detailItems.forEach(([label, value]) => {
+  detailItems.filter(([, value]) => value).forEach(([label, value]) => {
     const item = document.createElement("span");
     const strong = document.createElement("strong");
     strong.textContent = `${label}: `;
@@ -6415,10 +6950,11 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
   }
   card.appendChild(media);
 
-  if (!showRecordActions && !hideGenerationDetails) {
+  const shouldRenderPath = !imageUrl && !showRecordActions && !hideGenerationDetails;
+  if (shouldRenderPath) {
     const path = document.createElement("span");
     path.className = "creation-card-path";
-    path.textContent = item.relativePath || item.error || "";
+    path.textContent = item.error || "";
     path.title = path.textContent;
     path.hidden = !path.textContent;
     card.appendChild(path);
@@ -6519,6 +7055,7 @@ function getCreationRecordSearchText(set = {}) {
     set.scenarioLabel,
     set.industryTemplate,
     set.industryTemplateLabel,
+    set.industryTemplatePath,
     set.targetLanguage,
     set.targetLanguageLabel,
     ...(Array.isArray(set.sellingPoints) ? set.sellingPoints : []),
@@ -6907,6 +7444,7 @@ function renderCreationRecordArchiveDetail(set) {
     ["商品", set.productName || "未命名商品"],
     ["场景", set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || "标准电商"],
     ["行业", set.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[set.industryTemplate] || "通用电商"],
+    ["类目路径", set.industryTemplatePath || ""],
     ["语言", set.targetLanguageLabel || set.targetLanguage || "zh-CN"],
     ["进度", `${progress.completed}/${progress.total}`],
     ["创建时间", formatClock(set.createdAt)],
@@ -6914,7 +7452,7 @@ function renderCreationRecordArchiveDetail(set) {
     ["参考用途", formatCreationReferenceRoleSummary(set.referenceImageRoles)],
   ];
 
-  detailItems.forEach(([label, value]) => {
+  detailItems.filter(([, value]) => value).forEach(([label, value]) => {
     const item = document.createElement("span");
     const strong = document.createElement("strong");
     strong.textContent = `${label}: `;
@@ -7246,9 +7784,49 @@ function normalizeCreationReferenceAnalysisPayload(payload = {}) {
 
   return {
     summary: String(analysis?.summary || "已识别套图参考图用途").trim(),
+    categoryHint: String(analysis?.categoryHint || analysis?.category_hint || analysis?.category || "").trim(),
+    categoryPath: String(analysis?.categoryPath || analysis?.category_path || "").trim(),
     recommendations,
     risks: Array.isArray(analysis?.risks) ? analysis.risks.map((item) => String(item).trim()).filter(Boolean) : [],
   };
+}
+
+function getCreationReferenceAnalysisCategoryText(analysis = {}) {
+  const recommendationText = Array.isArray(analysis.recommendations)
+    ? analysis.recommendations.flatMap((entry) => [entry.filename, entry.roleLabel, entry.note])
+    : [];
+
+  return [
+    analysis.categoryHint,
+    analysis.categoryPath,
+    analysis.summary,
+    refs.creationProductNameInput?.value,
+    refs.creationProductDescriptionInput?.value,
+    refs.creationSellingPointsInput?.value,
+    ...recommendationText,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function applyCreationReferenceAnalysisCategoryMatch(analysis) {
+  const match = findCreationIndustryTemplateMatch(getCreationReferenceAnalysisCategoryText(analysis));
+  if (!match?.template) {
+    return null;
+  }
+
+  const template = match.template;
+  const previousValue = refs.creationIndustryTemplateInput?.value || "general";
+  analysis.categoryTemplateValue = template.value;
+  analysis.categoryTemplateLabel = template.label;
+  analysis.categoryTemplatePath = template.categoryPath || "";
+  setCreationIndustryTemplateValue(template.value, {
+    searchText: template.categoryPath || template.label,
+  });
+  if (previousValue !== template.value) {
+    syncCreationSelectedRolesToIndustry();
+  }
+  return template;
 }
 
 function applyCreationReferenceAnalysis(analysis) {
@@ -7256,7 +7834,35 @@ function applyCreationReferenceAnalysis(analysis) {
   state.creationReferenceAnalysis.result = normalized;
   state.creationReferenceAnalysis.applied = false;
   state.creationReferenceAnalysis.dirty = false;
+  const matchedTemplate = applyCreationReferenceAnalysisCategoryMatch(normalized);
   renderCreationReferenceAnalysis();
+  return matchedTemplate;
+}
+
+function getCreationReferenceAnalysisProductNameSuggestion(analysis = {}) {
+  const templateLabel = String(analysis.categoryTemplateLabel || "").trim();
+  if (templateLabel) {
+    return templateLabel;
+  }
+
+  return (
+    String(analysis.categoryTemplatePath || analysis.categoryPath || "")
+      .split(">")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .at(-1) || ""
+  );
+}
+
+function applyCreationReferenceAnalysisProductNameSuggestion(analysis = {}) {
+  const suggestion = getCreationReferenceAnalysisProductNameSuggestion(analysis);
+  if (!suggestion || !refs.creationProductNameInput) {
+    return false;
+  }
+
+  refs.creationProductNameInput.value = suggestion;
+  refs.creationProductNameInput.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
 }
 
 function applyCreationReferenceAnalysisRecommendations() {
@@ -7277,8 +7883,14 @@ function applyCreationReferenceAnalysisRecommendations() {
         }
       : item;
   });
+  const productNameApplied = applyCreationReferenceAnalysisProductNameSuggestion(analysis);
   state.creationReferenceAnalysis.applied = true;
-  setCreationReferenceAnalysisFeedback(`已应用 ${analysis.recommendations.length} 张参考图用途建议。`, "success");
+  setCreationReferenceAnalysisFeedback(
+    productNameApplied
+      ? `已应用 ${analysis.recommendations.length} 张参考图用途建议，商品名称已填入四级类目。`
+      : `已应用 ${analysis.recommendations.length} 张参考图用途建议。`,
+    "success",
+  );
   renderCreationReferenceGrid();
 }
 
@@ -7315,6 +7927,9 @@ function renderCreationReferenceAnalysis() {
   refs.creationReferenceAnalysisSummary.textContent = analysis.summary || "已识别套图参考图用途";
   refs.creationReferenceAnalysisMeta.textContent = [
     `${analysis.recommendations.length} 张建议`,
+    analysis.categoryTemplatePath || analysis.categoryPath || analysis.categoryHint
+      ? `类目: ${analysis.categoryTemplatePath || analysis.categoryPath || analysis.categoryHint}`
+      : "",
     state.creationReferenceAnalysis.applied ? "已应用" : "待应用",
     state.creationReferenceAnalysis.dirty ? "参考图已变化" : "",
   ]
@@ -7381,9 +7996,12 @@ async function analyzeCreationReferenceImages() {
       throw new Error(payload.message || "套图参考图识别失败。");
     }
 
-    applyCreationReferenceAnalysis(payload);
+    const matchedTemplate = applyCreationReferenceAnalysis(payload);
     const count = state.creationReferenceAnalysis.result?.recommendations?.length || 0;
-    setCreationReferenceAnalysisFeedback(`已识别 ${count} 张参考图用途建议，可点击应用建议。`, "success");
+    const categoryMessage = matchedTemplate
+      ? `，已切换到 ${matchedTemplate.categoryPath || matchedTemplate.label}`
+      : "";
+    setCreationReferenceAnalysisFeedback(`已识别 ${count} 张参考图用途建议${categoryMessage}，可点击应用建议。`, "success");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     setCreationReferenceAnalysisFeedback(message, "error");
@@ -7502,6 +8120,7 @@ function buildCreationPlanPreviewFormData() {
   formData.set("productName", refs.creationProductNameInput.value.trim());
   formData.set("productDescription", refs.creationProductDescriptionInput.value.trim());
   formData.set("sellingPoints", refs.creationSellingPointsInput.value.trim());
+  formData.set("dimensionSpecs", refs.creationDimensionSpecsInput.value.trim());
   formData.set("targetLanguage", targetLanguage.value);
   formData.set("imageCount", String(selectedRoles.length || getCreationSelectedImageCount()));
   formData.set("scenario", refs.creationScenarioInput.value);
@@ -7792,6 +8411,7 @@ async function previewCreationPlan() {
       scenarioLabel: plan.scenarioLabel || getCreationSelectedScenario().label,
       industryTemplate: plan.industryTemplate || getCreationSelectedIndustryTemplate().value,
       industryTemplateLabel: plan.industryTemplateLabel || getCreationSelectedIndustryTemplate().label,
+      industryTemplatePath: plan.industryTemplatePath || getCreationSelectedIndustryTemplate().categoryPath,
       selectedRoles: plan.selectedRoles || getCreationSelectedRoles(),
       referenceImageNames: state.creationReferenceFiles.map((item) => item.file?.name || "").filter(Boolean),
       referenceImageRoles: plan.referenceImageRoles || buildCreationReferenceRolePayload(),
@@ -7859,6 +8479,7 @@ async function startCreationGeneration(event) {
       scenarioLabel: scenario.label,
       industryTemplate: industryTemplate.value,
       industryTemplateLabel: industryTemplate.label,
+      industryTemplatePath: industryTemplate.categoryPath || "",
       selectedRoles,
       referenceImageNames: state.creationReferenceFiles.map((item) => item.file?.name || "").filter(Boolean),
       referenceImageRoles: buildCreationReferenceRolePayload(),
@@ -8480,6 +9101,9 @@ function cancelQueuedJob(jobId) {
   if (state.selectedPreviewKey === makeJobPreviewKey(canceledJob.id)) {
     state.selectedPreviewKey = "";
   }
+  if (canceledJob.mode === "reference-analysis") {
+    removeReferenceAnalysisGenerationKey(makeJobPreviewKey(canceledJob.id));
+  }
   handleActivityCanceled(canceledJob);
   scheduleGenerationQueue();
   renderAll();
@@ -8569,9 +9193,12 @@ function normalizeGenerationTaskSnapshot(task) {
   }
 
   const status = normalizeGenerationTaskStatus(task.status);
+  const mode = String(task.mode || task.generationMode || "").trim();
   return {
     ...task,
     id,
+    mode,
+    generationMode: String(task.generationMode || mode || ""),
     status,
     createdAt: String(task.createdAt || nowIso()),
     updatedAt: String(task.updatedAt || task.createdAt || nowIso()),
@@ -8586,12 +9213,30 @@ function normalizeGenerationTaskSnapshot(task) {
 }
 
 function applyGenerationTaskSnapshots(tasks, { render = true } = {}) {
-  const snapshots = (Array.isArray(tasks) ? tasks : []).map(normalizeGenerationTaskSnapshot).filter(Boolean);
-  const snapshotIds = new Set(snapshots.map((task) => task.id));
   const existingJobs = new Map(state.jobs.map((job) => [job.id, job]));
+  const snapshots = (Array.isArray(tasks) ? tasks : [])
+    .map(normalizeGenerationTaskSnapshot)
+    .filter(Boolean)
+    .map((snapshot) => {
+      const existing = existingJobs.get(snapshot.id);
+      return {
+        ...snapshot,
+        mode: snapshot.mode || existing?.mode || "",
+        generationMode: snapshot.generationMode || snapshot.mode || existing?.generationMode || existing?.mode || "",
+      };
+    });
+  const snapshotIds = new Set(snapshots.map((task) => task.id));
 
   snapshots.forEach((task) => {
     if (task.status === "completed" && task.item) {
+      if (task.mode === "reference-analysis") {
+        task.item.mode = "reference-analysis";
+        storeReferenceAnalysisGenerationItem(task.item);
+        replaceReferenceAnalysisGenerationKey(makeJobPreviewKey(task.id), makeGalleryPreviewKey(task.item.filename));
+        if (state.referenceAnalysis.previewKey === makeJobPreviewKey(task.id)) {
+          state.referenceAnalysis.previewKey = makeGalleryPreviewKey(task.item.filename);
+        }
+      }
       upsertGalleryItem(task.item);
       if (state.selectedPreviewKey === makeJobPreviewKey(task.id) && task.item.filename) {
         state.selectedPreviewKey = makeGalleryPreviewKey(task.item.filename);
@@ -8600,6 +9245,10 @@ function applyGenerationTaskSnapshots(tasks, { render = true } = {}) {
 
     if (task.status === "error" && state.selectedPreviewKey === makeJobPreviewKey(task.id)) {
       state.selectedPreviewKey = "";
+    }
+
+    if (task.status === "error" && task.mode === "reference-analysis") {
+      removeReferenceAnalysisGenerationKey(makeJobPreviewKey(task.id));
     }
 
     recordGenerationTaskActivity(task);
@@ -8717,6 +9366,7 @@ async function deleteGalleryItem(item) {
     return;
   }
 
+  await preserveReferenceAnalysisGenerationItemForDelete(item);
   const response = await fetch("/api/output/delete", {
     method: "POST",
     headers: {
@@ -8757,6 +9407,7 @@ async function clearHistory() {
     return;
   }
 
+  await Promise.all(state.gallery.map(preserveReferenceAnalysisGenerationItemForDelete));
   for (const item of [...state.gallery]) {
     const response = await fetch("/api/output/delete", {
       method: "POST",
@@ -8791,6 +9442,9 @@ function buildGenerationFormData(job) {
   formData.set("format", job.format);
   formData.set("reasoningEffort", job.reasoningEffort);
   formData.set("clientSessionId", state.clientSessionId);
+  if (job.mode) {
+    formData.set("mode", job.mode);
+  }
   appendBrowserConfigToFormData(formData);
 
   if (job.mode === "style-transfer") {
@@ -8975,6 +9629,7 @@ async function startReferenceAnalysisGeneration() {
 
   await ensureReferenceAnalysisGenerationFilesReady();
   const job = createReferenceAnalysisJob();
+  registerReferenceAnalysisGenerationKey(makeJobPreviewKey(job.id));
   state.jobs.unshift(job);
   state.referenceAnalysis.previewKey = makeJobPreviewKey(job.id);
   state.selectedPreviewKey = makeJobPreviewKey(job.id);
@@ -9115,11 +9770,14 @@ async function runGeneration(job) {
         terminalEventReceived = true;
         payload.item = attachChunkedImageToSavedItem(payload.item, finalImageChunks, finalImageDataUrl || job.previewUrl);
         if (payload.item) {
-          upsertGalleryItem(payload.item);
           if (job.mode === "reference-analysis") {
+            payload.item.mode = "reference-analysis";
+            storeReferenceAnalysisGenerationItem(payload.item);
+            replaceReferenceAnalysisGenerationKey(makeJobPreviewKey(job.id), makeGalleryPreviewKey(payload.item.filename));
             state.referenceAnalysis.previewKey = makeGalleryPreviewKey(payload.item.filename);
             setReferenceAnalysisFeedback("融图分析图片已生成。", "success");
           }
+          upsertGalleryItem(payload.item);
           state.selectedPreviewKey = makeGalleryPreviewKey(payload.item.filename);
         }
         handleActivitySuccess(job.id);
@@ -9153,6 +9811,9 @@ async function runGeneration(job) {
         const message = compactErrorMessage(payload.message, "生成请求失败");
         handleActivityFailure(job.id, message);
         showError(message);
+        if (job.mode === "reference-analysis") {
+          removeReferenceAnalysisGenerationKey(makeJobPreviewKey(job.id));
+        }
         removeJob(job.id);
         renderAll();
       }
@@ -9161,6 +9822,9 @@ async function runGeneration(job) {
       const message = "生成连接已中断，未收到完成事件。请稍后重试，或降低分辨率。";
       handleActivityFailure(job.id, message);
       showError(message);
+      if (job.mode === "reference-analysis") {
+        removeReferenceAnalysisGenerationKey(makeJobPreviewKey(job.id));
+      }
       removeJob(job.id);
       renderAll();
     }
@@ -9171,6 +9835,9 @@ async function runGeneration(job) {
     const message = error instanceof Error ? error.message : String(error);
     handleActivityFailure(job.id, message);
     showError(message);
+    if (job.mode === "reference-analysis") {
+      removeReferenceAnalysisGenerationKey(makeJobPreviewKey(job.id));
+    }
     removeJob(job.id);
     renderAll();
   } finally {
@@ -9480,7 +10147,41 @@ function bindEvents() {
   });
   refs.creationImageCountInput.addEventListener("change", syncCreationSelectedRolesToCount);
   refs.creationScenarioInput.addEventListener("change", syncCreationSelectedRolesToScenario);
-  refs.creationIndustryTemplateInput.addEventListener("change", syncCreationSelectedRolesToIndustry);
+  refs.creationIndustryTemplateTrigger.addEventListener("click", () => {
+    const shouldOpenCreationIndustryTemplateBrowser = refs.creationIndustryTemplatePopover?.hidden !== false;
+    if (shouldOpenCreationIndustryTemplateBrowser) {
+      focusCreationIndustryTemplateBrowserOnSelectedTemplate();
+    }
+    renderCreationIndustryTemplateBrowser();
+    setCreationIndustryTemplateBrowserOpen(shouldOpenCreationIndustryTemplateBrowser);
+  });
+  refs.creationIndustryTemplateBackButton.addEventListener("click", goBackCreationIndustryTemplateLevel);
+  refs.creationIndustryTemplateBrowser.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-creation-industry-template-value], [data-creation-industry-level]");
+    if (!target) {
+      return;
+    }
+
+    const templateValue = target.dataset.creationIndustryTemplateValue;
+    if (templateValue) {
+      const previousValue = refs.creationIndustryTemplateInput.value || "general";
+      setCreationIndustryTemplateValue(templateValue, { searchText: "" });
+      setCreationIndustryTemplateBrowserOpen(false);
+      if (previousValue !== refs.creationIndustryTemplateInput.value) {
+        syncCreationSelectedRolesToIndustry();
+      }
+      return;
+    }
+
+    updateCreationIndustryTemplateBrowserLevel(
+      Number.parseInt(target.dataset.creationIndustryLevel || "0", 10),
+      target.dataset.creationIndustryName,
+    );
+  });
+  refs.creationIndustryTemplateSearchInput.addEventListener("input", () => {
+    setCreationIndustryTemplateBrowserOpen(true);
+    renderCreationIndustryTemplateBrowser();
+  });
   refs.creationRatioInput.addEventListener("change", renderCreationSizeOptions);
   refs.creationRoleGrid.addEventListener("change", (event) => {
     const target = event.target.closest("[data-creation-role]");
@@ -9870,6 +10571,14 @@ function bindEvents() {
     event.preventDefault();
     openReferenceAnalysisGeneratedPreview();
   });
+  refs.referenceAnalysisGenerationStrip.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-reference-analysis-generation-key]");
+    if (!target) {
+      return;
+    }
+
+    setReferenceAnalysisGenerationPreviewKey(target.dataset.referenceAnalysisGenerationKey);
+  });
   refs.zoomOutButton.addEventListener("click", () => stepZoom(-0.1));
   refs.zoomInButton.addEventListener("click", () => stepZoom(0.1));
   refs.zoomResetButton.addEventListener("click", resetZoom);
@@ -9946,6 +10655,12 @@ function bindEvents() {
   });
 
   document.addEventListener("pointerdown", (event) => {
+    if (refs.creationIndustryTemplatePopover && !refs.creationIndustryTemplatePopover.hidden) {
+      if (!refs.creationIndustryTemplateBrowser.contains(event.target)) {
+        setCreationIndustryTemplateBrowserOpen(false);
+      }
+    }
+
     if (refs.promptTemplatePopover.classList.contains("hidden")) {
       return;
     }
@@ -9958,6 +10673,12 @@ function bindEvents() {
     }
 
     setPromptTemplatePopoverOpen(false);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && refs.creationIndustryTemplatePopover && !refs.creationIndustryTemplatePopover.hidden) {
+      setCreationIndustryTemplateBrowserOpen(false);
+    }
   });
 }
 
@@ -9982,6 +10703,7 @@ async function bootstrap() {
   renderSizeOptions();
   renderReferenceAnalysisRatioGrid();
   renderReferenceAnalysisSizeOptions();
+  renderCreationIndustryTemplateBrowser();
   updateGenerateButton();
   renderReferenceGrid();
   renderReferenceAnalysisGrid();

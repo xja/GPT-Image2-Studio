@@ -21,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260508-reference-remove-hover-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260509-category-ui-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -32,7 +32,7 @@
           </div>
           <div class="brand-copy">
             <div class="brand-title-row">
-              <h1>Image Studio</h1>
+              <h1>aEboli</h1>
               <span class="brand-ai-badge">AI</span>
             </div>
             <p>AI 图像生成工作流</p>
@@ -151,11 +151,6 @@
                   </div>
                   <div class="style-transfer-upload-grid">
                     <div class="style-transfer-slot">
-                      <div class="field-head">
-                        <div>
-                          <span>原图</span>
-                        </div>
-                      </div>
                       <label class="reference-dropzone style-transfer-dropzone" id="styleTransferSourceDropzone">
                         <input id="styleTransferSourceInput" name="styleTransferSourceImage" type="file" accept="image/*" />
                         <div class="reference-icon" aria-hidden="true"></div>
@@ -165,11 +160,6 @@
                     </div>
 
                     <div class="style-transfer-slot">
-                      <div class="field-head">
-                        <div>
-                          <span>风格参考图</span>
-                        </div>
-                      </div>
                       <label class="reference-dropzone style-transfer-dropzone" id="styleTransferStyleDropzone">
                         <input id="styleTransferStyleInput" name="styleTransferReferenceImage" type="file" accept="image/*" />
                         <div class="reference-icon" aria-hidden="true"></div>
@@ -373,12 +363,47 @@
                   class="reference-analysis-auto-collapse is-active"
                   id="referenceAnalysisAutoCollapseButton"
                   type="button"
-                  aria-pressed="true"
+                  role="switch"
+                  aria-checked="true"
                 >
-                  应用提示词后自动折叠
+                  <span class="reference-analysis-switch-label">应用提示词后自动折叠</span>
+                  <span class="reference-analysis-switch-track" aria-hidden="true">
+                    <span class="reference-analysis-switch-thumb"></span>
+                  </span>
                 </button>
               </div>
             </section>
+
+            <div class="reference-analysis-preview-column">
+              <section class="studio-panel reference-analysis-preview-panel">
+                <div class="reference-analysis-generation" id="referenceAnalysisGenerationPanel">
+                  <div class="reference-analysis-generation-canvas" id="referenceAnalysisGenerationCanvas">
+                    <div class="reference-analysis-generation-placeholder" id="referenceAnalysisGenerationPlaceholder">
+                      生成图展示框
+                    </div>
+                    <img id="referenceAnalysisGenerationImage" alt="融图分析生成结果" />
+                  </div>
+                </div>
+              </section>
+
+              <section class="studio-panel reference-analysis-thumbnail-panel">
+                <div class="reference-analysis-thumbnail-head">
+                  <div class="reference-analysis-thumbnail-title">
+                    <span>生成缩略图</span>
+                    <small id="referenceAnalysisGenerationMeta">等待生成</small>
+                  </div>
+                  <a class="inline-button disabled" id="referenceAnalysisGenerationDownloadButton" href="#" download aria-disabled="true">
+                    下载
+                  </a>
+                </div>
+                <div
+                  class="reference-analysis-generation-strip hidden"
+                  id="referenceAnalysisGenerationStrip"
+                  aria-label="融图分析生成缩略图"
+                ></div>
+                <div class="reference-analysis-thumbnail-empty" id="referenceAnalysisThumbnailEmpty">等待生成结果</div>
+              </section>
+            </div>
 
             <section class="studio-panel reference-analysis-result-panel">
               <div class="panel-title between">
@@ -402,20 +427,6 @@
                     <span>已选提示词</span>
                     <div class="reference-analysis-selected-actions">
                       <button class="inline-button" id="referenceAnalysisCopyPromptButton" type="button">复制</button>
-                    </div>
-                  </div>
-                  <div class="reference-analysis-generation" id="referenceAnalysisGenerationPanel">
-                    <div class="reference-analysis-generation-canvas" id="referenceAnalysisGenerationCanvas">
-                      <div class="reference-analysis-generation-placeholder" id="referenceAnalysisGenerationPlaceholder">
-                        生成图展示框
-                      </div>
-                      <img id="referenceAnalysisGenerationImage" alt="融图分析生成结果" />
-                    </div>
-                    <div class="reference-analysis-generation-bar">
-                      <span id="referenceAnalysisGenerationMeta">等待生成</span>
-                      <a class="inline-button disabled" id="referenceAnalysisGenerationDownloadButton" href="#" download aria-disabled="true">
-                        下载
-                      </a>
                     </div>
                   </div>
                   <textarea id="referenceAnalysisSelectedPrompt" rows="6" readonly></textarea>
@@ -446,9 +457,9 @@
                   <textarea
                     id="creationProductDescriptionInput"
                     name="productDescription"
-                    rows="4"
+                    rows="2"
                     maxlength="600"
-                    placeholder="写清商品是什么、适合谁、使用场景和质感。"
+                    placeholder="例如：透明手冲咖啡壶，适合办公室和露营，轻盈清透。"
                   ></textarea>
                 </label>
 
@@ -457,9 +468,20 @@
                   <textarea
                     id="creationSellingPointsInput"
                     name="sellingPoints"
-                    rows="3"
+                    rows="1"
                     maxlength="360"
-                    placeholder="每行或用逗号分隔，例如：轻便、易清洁、口感稳定"
+                    placeholder="例如：轻便、易清洁、口感稳定"
+                  ></textarea>
+                </label>
+
+                <label class="compact-field">
+                  <span>尺寸规格</span>
+                  <textarea
+                    id="creationDimensionSpecsInput"
+                    name="dimensionSpecs"
+                    rows="1"
+                    maxlength="360"
+                    placeholder="例如：高 14.5 cm，直径 11 cm，容量 350 ml"
                   ></textarea>
                 </label>
 
@@ -530,18 +552,6 @@
                   </label>
 
                   <label class="compact-field">
-                    <span>行业模板</span>
-                    <select id="creationIndustryTemplateInput" name="industryTemplate">
-                      <option value="general">通用电商</option>
-                      <option value="apparel">服饰鞋包</option>
-                      <option value="beauty">美妆个护</option>
-                      <option value="food">食品饮料</option>
-                      <option value="electronics">3C 数码</option>
-                      <option value="home">家居生活</option>
-                    </select>
-                  </label>
-
-                  <label class="compact-field">
                     <span>目标语言</span>
                     <select id="creationTargetLanguageInput" name="targetLanguage">
                       <option value="zh-CN">简体中文</option>
@@ -572,6 +582,46 @@
                       <option value="auto">自动</option>
                     </select>
                   </label>
+
+                  <section class="creation-industry-browser" id="creationIndustryTemplateBrowser" aria-label="行业模板">
+                    <input id="creationIndustryTemplateInput" name="industryTemplate" type="hidden" value="general" />
+                    <div class="creation-industry-browser-head">
+                      <div class="creation-industry-picker-field">
+                        <span>行业模板</span>
+                        <button
+                          class="creation-industry-trigger"
+                          id="creationIndustryTemplateTrigger"
+                          type="button"
+                          aria-expanded="false"
+                          aria-controls="creationIndustryTemplatePopover"
+                        >
+                          <strong id="creationIndustryTemplateCurrent">未选择四级类目</strong>
+                        </button>
+                      </div>
+                      <label class="creation-template-search-field">
+                        <span>搜索类目</span>
+                        <input
+                          class="creation-template-search"
+                          id="creationIndustryTemplateSearchInput"
+                          type="search"
+                          autocomplete="off"
+                        />
+                      </label>
+                    </div>
+                    <div class="creation-industry-popover" id="creationIndustryTemplatePopover" hidden>
+                      <div class="creation-industry-popover-head">
+                        <strong id="creationIndustryTemplateStepLabel">一级类目</strong>
+                        <button
+                          class="creation-industry-back-button hidden"
+                          id="creationIndustryTemplateBackButton"
+                          type="button"
+                        >
+                          返回上一级
+                        </button>
+                      </div>
+                      <div class="creation-industry-levels" id="creationIndustryTemplateLevels"></div>
+                    </div>
+                  </section>
                 </div>
                 <section class="creation-role-picker" id="creationRolePicker" aria-label="套图图片类型">
                   <div class="field-head">
@@ -1217,6 +1267,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260508-reference-remove-hover-1"></script>
+    <script type="module" src="/app.js?v=20260509-category-ui-2"></script>
   </body>
 </html>

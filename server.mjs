@@ -1228,6 +1228,7 @@ function buildCreationSetManifest({
     productName: plan.productName,
     productDescription: plan.productDescription,
     sellingPoints: plan.sellingPoints,
+    dimensionSpecs: plan.dimensionSpecs,
     targetLanguage: plan.targetLanguage,
     targetLanguageLabel: plan.targetLanguageLabel,
     imageCount: plan.imageCount,
@@ -1235,6 +1236,7 @@ function buildCreationSetManifest({
     scenarioLabel: plan.scenarioLabel,
     industryTemplate: plan.industryTemplate,
     industryTemplateLabel: plan.industryTemplateLabel,
+    industryTemplatePath: plan.industryTemplatePath,
     selectedRoles: plan.selectedRoles || items.map((item) => item.role).filter(Boolean),
     referenceImageNames,
     referenceImageRoles: plan.referenceImageRoles || referenceImageRoles,
@@ -1416,6 +1418,7 @@ async function handleCreationPlan(request, response) {
       productName: formData.get("productName"),
       productDescription: formData.get("productDescription"),
       sellingPoints: formData.get("sellingPoints"),
+      dimensionSpecs: formData.get("dimensionSpecs"),
       targetLanguage: formData.get("targetLanguage"),
       imageCount: formData.get("imageCount"),
       scenario: formData.get("scenario"),
@@ -1472,6 +1475,7 @@ async function handleCreationGenerate(request, response) {
       productName: formData.get("productName"),
       productDescription: formData.get("productDescription"),
       sellingPoints: formData.get("sellingPoints"),
+      dimensionSpecs: formData.get("dimensionSpecs"),
       targetLanguage: formData.get("targetLanguage"),
       imageCount: formData.get("imageCount"),
       scenario: formData.get("scenario"),
@@ -1816,6 +1820,7 @@ async function handleCreationRepair(request, response) {
       productName: existingSet.productName,
       productDescription: existingSet.productDescription,
       sellingPoints: existingSet.sellingPoints,
+      dimensionSpecs: existingSet.dimensionSpecs,
       targetLanguage: existingSet.targetLanguage,
       targetLanguageLabel: existingSet.targetLanguageLabel,
       imageCount: existingSet.imageCount,
@@ -1823,6 +1828,7 @@ async function handleCreationRepair(request, response) {
       scenarioLabel: existingSet.scenarioLabel,
       industryTemplate: existingSet.industryTemplate || "general",
       industryTemplateLabel: existingSet.industryTemplateLabel || "",
+      industryTemplatePath: existingSet.industryTemplatePath || "",
       referenceImageRoles,
     };
 
@@ -2118,7 +2124,8 @@ async function handleGenerate(request, response) {
     const ratio = String(formData.get("ratio") || "4:5");
     const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
     const requestedFormatInput = String(formData.get("format") || "").trim().toLowerCase();
-    const generationMode = String(formData.get("mode") || "").trim() === "style-transfer" ? "style-transfer" : "";
+    const generationModeInput = String(formData.get("mode") || "").trim();
+    const generationMode = ["style-transfer", "reference-analysis"].includes(generationModeInput) ? generationModeInput : "";
     const styleTransferSourceImageName = String(formData.get("styleTransferSourceImageName") || "").trim();
     const styleTransferReferenceImageName = String(formData.get("styleTransferReferenceImageName") || "").trim();
     clientSessionId = getClientSessionId(request, formData);
@@ -2131,6 +2138,8 @@ async function handleGenerate(request, response) {
         prompt,
         ratio,
         size: requestedSizeInput,
+        mode: generationMode,
+        generationMode,
         status: "running",
         statusStage: "uploading",
         statusText: "正在读取提交内容",
@@ -2226,6 +2235,7 @@ async function handleGenerate(request, response) {
       hasReferenceImage: referenceImages.length > 0,
       referenceImageNames: referenceImages.map((image) => image.filename),
       referenceImageName: referenceImages[0]?.filename || "",
+      mode: generationMode,
       generationMode,
       styleTransferSourceImageName,
       styleTransferReferenceImageName,

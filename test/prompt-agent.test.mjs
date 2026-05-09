@@ -128,6 +128,7 @@ test("prompt agent request can identify ecommerce creation reference roles", () 
 
   assert.match(input[0].content[0].text, /套图参考图识别/);
   assert.match(input[0].content[0].text, /商品主体|包装清单|材质细节/);
+  assert.match(input[0].content[0].text, /四级类目/);
   assert.deepEqual(input[0].content.slice(1), [
     {
       type: "input_text",
@@ -148,6 +149,31 @@ test("prompt agent request can identify ecommerce creation reference roles", () 
   ]);
   assert.equal(requestBody.text.format.name, "creation_reference_analysis_json");
   assert.ok(requestBody.text.format.schema.required.includes("reference_roles"));
+  assert.ok(requestBody.text.format.schema.required.includes("category_hint"));
+});
+
+test("prompt agent normalizes creation reference category hints", () => {
+  const result = extractPromptAgentJson({
+    output: [
+      {
+        content: [
+          {
+            type: "output_text",
+            text: JSON.stringify({
+              summary: "识别到手机正面和屏幕细节。",
+              category_hint: "智能手机",
+              category_path: "数码电子 > 手机通讯 > 手机 > 智能手机",
+              reference_roles: [{ index: 1, filename: "phone.png", role: "product", note: "手机主体。" }],
+              risks: [],
+            }),
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(result.category_hint, "智能手机");
+  assert.equal(result.category_path, "数码电子 > 手机通讯 > 手机 > 智能手机");
 });
 
 test("prompt agent labels every reference image so the model can compare all images", () => {

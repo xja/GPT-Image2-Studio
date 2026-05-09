@@ -130,7 +130,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260508-reference-remove-hover-1/);
+  assert.match(html, /\/app\.js\?v=20260509-category-ui-2/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -235,11 +235,14 @@ test("style transfer upload slots accept one image and align preview width to up
   assert.doesNotMatch(html, /id="styleTransferStyleInput"[^>]*\bmultiple\b/);
   assert.match(html, /id="styleTransferSourceDropzone"[\s\S]*<strong>[^<]+<\/strong>\s*<\/label>/);
   assert.match(html, /id="styleTransferStyleDropzone"[\s\S]*<strong>[^<]+<\/strong>\s*<\/label>/);
+  const styleTransferBlock = html.match(/<div class="field-group style-transfer-block hidden"[\s\S]*?<label class="compact-field style-transfer-note">/)?.[0] || "";
+  assert.doesNotMatch(styleTransferBlock, /<div class="field-head">[\s\S]*原图/);
+  assert.doesNotMatch(styleTransferBlock, /<div class="field-head">[\s\S]*风格参考图/);
   assert.match(app, /const imageFiles = \[\.\.\.\(fileList \|\| \[\]\)\]\.filter\(\(item\) => item\.type\.startsWith\("image\/"\)\);/);
   assert.match(app, /if \(imageFiles\.length > 1\) \{[\s\S]*showError\("原图和风格参考图每个区域只能上传一张图片。"\);[\s\S]*return;/);
   assert.match(
     styles,
-    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot:has\(\.style-transfer-grid:not\(\.hidden\)\) \{[\s\S]*grid-template-rows:\s*minmax\(64px,\s*auto\)\s*minmax\(132px,\s*auto\);/,
+    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot:has\(\.style-transfer-grid:not\(\.hidden\)\) \{[\s\S]*grid-template-rows:\s*minmax\(132px,\s*auto\);/,
   );
   assert.match(
     styles,
@@ -329,7 +332,7 @@ test("style transfer panel aligns slot rows and clips its own background", async
   );
   assert.match(
     styles,
-    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot \{[\s\S]*grid-template-rows:\s*minmax\(64px,\s*auto\)\s*minmax\(132px,\s*auto\);/,
+    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot \{[\s\S]*grid-template-rows:\s*minmax\(132px,\s*auto\);/,
   );
   assert.match(
     styles,
@@ -337,12 +340,9 @@ test("style transfer panel aligns slot rows and clips its own background", async
   );
   assert.match(
     styles,
-    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot:has\(\.style-transfer-grid:not\(\.hidden\)\) \{[\s\S]*grid-template-rows:\s*minmax\(64px,\s*auto\)\s*minmax\(132px,\s*auto\);/,
+    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot:has\(\.style-transfer-grid:not\(\.hidden\)\) \{[\s\S]*grid-template-rows:\s*minmax\(132px,\s*auto\);/,
   );
-  assert.match(
-    styles,
-    /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot \.field-head \{[\s\S]*min-height:\s*64px;/,
-  );
+  assert.doesNotMatch(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot \.field-head/);
   assert.match(
     styles,
     /html\[data-ui-layout="mobile"\] \.nav-item\[data-nav-section="settings"\] \.nav-flyout\.mega-menu \{[\s\S]*left:\s*auto;[\s\S]*right:\s*0;/,
@@ -393,6 +393,24 @@ test("reference analysis generation uploads prepared reference images", async ()
     app,
     /const referenceFiles = state\.referenceAnalysis\.files\.map\(\(item\) => item\.file\)\.filter\(Boolean\);/,
   );
+});
+
+test("reference analysis generation mode survives task polling snapshots", async () => {
+  const app = await readFile(appPath, "utf8");
+  const server = await readFile(serverPath, "utf8");
+
+  const formDataBody = app.match(/function buildGenerationFormData\(job\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(formDataBody, /if \(job\.mode\) \{[\s\S]*formData\.set\("mode", job\.mode\);[\s\S]*\}/);
+
+  assert.match(
+    server,
+    /const generationModeInput = String\(formData\.get\("mode"\) \|\| ""\)\.trim\(\);[\s\S]*const generationMode = \["style-transfer", "reference-analysis"\]\.includes\(generationModeInput\) \? generationModeInput : "";/,
+  );
+  assert.match(server, /generationTaskStore\.upsertTask\(clientSessionId,[\s\S]*mode:\s*generationMode,/);
+
+  const applySnapshotsBody = app.match(/function applyGenerationTaskSnapshots\(tasks, \{ render = true \} = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(applySnapshotsBody, /const existingJobs = new Map\(state\.jobs\.map\(\(job\) => \[job\.id, job\]\)\);/);
+  assert.match(applySnapshotsBody, /mode:\s*snapshot\.mode \|\| existing\?\.mode \|\| "",/);
 });
 
 test("prompt field can start generation with Ctrl+Enter", async () => {
@@ -683,16 +701,31 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(html, /id="referenceAnalysisDropzone"[\s\S]*id="referenceAnalysisGrid"/);
   assert.match(html, /id="referenceAnalysisGrid"[\s\S]*class="reference-analysis-actions"[\s\S]*class="reference-analysis-params"/);
   assert.match(html, /id="referenceAnalysisRatioGrid"[\s\S]*id="referenceAnalysisSizeInput"[\s\S]*id="referenceAnalysisGenerateButton"[\s\S]*id="referenceAnalysisAutoCollapseButton"/);
-  assert.match(html, /id="referenceAnalysisAutoCollapseButton"[\s\S]*aria-pressed="true"/);
+  assert.match(html, /id="referenceAnalysisAutoCollapseButton"[\s\S]*role="switch"[\s\S]*aria-checked="true"/);
+  assert.match(html, /class="reference-analysis-switch-label"[\s\S]*应用提示词后自动折叠/);
+  assert.match(html, /class="reference-analysis-switch-track"[\s\S]*class="reference-analysis-switch-thumb"/);
   assert.match(html, /id="referenceAnalyzeButton"[\s\S]*融图分析/);
-  assert.match(html, /id="referenceAnalysisSelectedPromptPanel"[\s\S]*id="referenceAnalysisGenerationCanvas"[\s\S]*id="referenceAnalysisSelectedPrompt"/);
+  const uploadPanelIndex = html.indexOf("reference-analysis-upload-panel");
+  const previewColumnIndex = html.indexOf("reference-analysis-preview-column");
+  const resultPanelIndex = html.indexOf("reference-analysis-result-panel");
+  assert.ok(uploadPanelIndex >= 0 && uploadPanelIndex < previewColumnIndex);
+  assert.ok(previewColumnIndex >= 0 && previewColumnIndex < resultPanelIndex);
+  const previewColumnBlock = html.slice(previewColumnIndex, resultPanelIndex);
+  assert.match(previewColumnBlock, /class="studio-panel reference-analysis-preview-panel"[\s\S]*id="referenceAnalysisGenerationCanvas"[\s\S]*id="referenceAnalysisGenerationImage"/);
+  assert.match(previewColumnBlock, /class="studio-panel reference-analysis-thumbnail-panel"[\s\S]*id="referenceAnalysisGenerationStrip"[\s\S]*id="referenceAnalysisThumbnailEmpty"/);
+  assert.doesNotMatch(previewColumnBlock, /id="referenceAnalysisSelectedPrompt"/);
+  const resultPanelBlock = html.slice(resultPanelIndex);
+  assert.match(resultPanelBlock, /id="referenceAnalysisPanel"[\s\S]*id="referenceAnalysisList"[\s\S]*id="referenceAnalysisSelectedPromptPanel"[\s\S]*id="referenceAnalysisSelectedPrompt"/);
+  assert.doesNotMatch(resultPanelBlock, /id="referenceAnalysisGenerationCanvas"|id="referenceAnalysisGenerationStrip"/);
   assert.match(html, /id="referenceAnalysisCopyPromptButton"/);
   assert.match(html, /id="referenceAnalysisGenerationImage"/);
   assert.match(html, /id="referenceAnalysisGenerationDownloadButton"/);
+  assert.match(html, /id="referenceAnalysisGenerationStrip"[\s\S]*aria-label="融图分析生成缩略图"/);
   const selectedPromptBlock =
     html.match(/<div class="reference-analysis-selected hidden"[\s\S]*?<textarea id="referenceAnalysisSelectedPrompt"[\s\S]*?<\/textarea>\s*<\/div>/)?.[0] ||
     "";
   assert.doesNotMatch(selectedPromptBlock, /id="referenceAnalysisGenerateButton"/);
+  assert.doesNotMatch(selectedPromptBlock, /id="referenceAnalysisGenerationCanvas"|id="referenceAnalysisGenerationStrip"/);
   assert.doesNotMatch(html, /id="referenceAnalyzeButton"[^>]*disabled/);
   assert.match(html, /id="referenceAnalysisPanel"[\s\S]*编排提示词/);
   assert.match(html, /id="referenceAnalysisList"/);
@@ -710,13 +743,27 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(styles, /\.reference-analysis-card\s*\{/);
   assert.match(styles, /\.reference-analysis-card p\s*\{[\s\S]*font-size:\s*var\(--type-body-size\);/);
   assert.match(styles, /\.reference-analysis-selected\s*\{/);
+  assert.match(styles, /\.reference-analysis-selected\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\);/);
+  assert.match(styles, /\.reference-analysis-selected textarea\s*\{[\s\S]*grid-column:\s*1 \/ -1;[\s\S]*width:\s*100%;/);
   assert.match(styles, /\.reference-analysis-generation\s*\{/);
   assert.match(styles, /\.reference-analysis-generation-canvas\s*\{/);
+  assert.match(styles, /\.reference-analysis-view\s+\.reference-analysis-workspace\s*\{[\s\S]*grid-template-columns:\s*minmax\(300px, 420px\) minmax\(280px, 0\.9fr\) minmax\(360px, 1fr\);/);
+  assert.match(styles, /\.reference-analysis-preview-column\s*\{[\s\S]*grid-template-rows:\s*minmax\(0, 1fr\) auto;[\s\S]*overflow:\s*hidden;/);
+  assert.match(styles, /\.reference-analysis-preview-panel\s*\{[\s\S]*display:\s*grid;[\s\S]*overflow:\s*hidden;/);
+  assert.match(styles, /\.reference-analysis-thumbnail-panel\s*\{[\s\S]*grid-template-rows:\s*auto minmax\(72px, auto\) auto;/);
+  assert.match(styles, /\.reference-analysis-thumbnail-empty\s*\{/);
   assert.match(styles, /\.reference-analysis-generation-canvas\.has-image\s*\{[\s\S]*cursor:\s*zoom-in;/);
   assert.match(styles, /\.reference-analysis-generation-canvas\.has-image:focus-visible\s*\{/);
   assert.match(styles, /\.reference-analysis-generation-placeholder\.preview-placeholder-loading\s*\{/);
-  assert.match(styles, /\.reference-analysis-auto-collapse\s*\{/);
-  assert.match(styles, /\.reference-analysis-auto-collapse\.is-active\s*\{/);
+  assert.match(styles, /\.reference-analysis-generation-strip\s*\{[\s\S]*grid-auto-flow:\s*column;[\s\S]*overflow-x:\s*auto;/);
+  assert.match(styles, /\.reference-analysis-generation-thumb\s*\{[\s\S]*width:\s*72px;[\s\S]*aspect-ratio:\s*1\s*\/\s*1;/);
+  assert.match(styles, /\.reference-analysis-generation-thumb\.active\s*\{[\s\S]*border-color:\s*rgba\(112, 226, 162, 0\.62\);/);
+  assert.match(styles, /\.reference-analysis-generation-thumb\.is-running\s*\{[\s\S]*border-color:\s*rgba\(112, 226, 162, 0\.42\);/);
+  assert.match(styles, /\.reference-analysis-auto-collapse\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) 52px;[\s\S]*text-align:\s*left;/);
+  assert.match(styles, /\.reference-analysis-switch-track\s*\{[\s\S]*width:\s*52px;[\s\S]*height:\s*30px;/);
+  assert.match(styles, /\.reference-analysis-switch-thumb\s*\{[\s\S]*transform:\s*translateX\(0\);/);
+  assert.match(styles, /\.reference-analysis-auto-collapse\.is-active \.reference-analysis-switch-track\s*\{[\s\S]*background:\s*#34c759;/);
+  assert.match(styles, /\.reference-analysis-auto-collapse\.is-active \.reference-analysis-switch-thumb\s*\{[\s\S]*transform:\s*translateX\(22px\);/);
   assert.match(styles, /\.reference-analysis-roles\s*\{/);
   assert.match(styles, /\.reference-analysis-role\s*\{[\s\S]*width:\s*auto;/);
   assert.match(styles, /\.reference-analysis-toggle\s*\{/);
@@ -731,6 +778,8 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(app, /files:\s*\[\]/);
   assert.match(app, /autoCollapseOnApply:\s*true/);
   assert.match(app, /collapsed:\s*false/);
+  assert.match(app, /generationKeys:\s*\[\]/);
+  assert.match(app, /generationItems:\s*\{\}/);
   assert.match(app, /previewKey:\s*""/);
   assert.match(app, /selectedPrompt:\s*""/);
   assert.match(app, /referenceAnalysisDropzone:\s*document\.querySelector\("#referenceAnalysisDropzone"\),/);
@@ -748,16 +797,28 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(app, /referenceAnalysisGenerationImage:\s*document\.querySelector\("#referenceAnalysisGenerationImage"\),/);
   assert.match(app, /referenceAnalysisGenerationMeta:\s*document\.querySelector\("#referenceAnalysisGenerationMeta"\),/);
   assert.match(app, /referenceAnalysisGenerationPlaceholder:\s*document\.querySelector\("#referenceAnalysisGenerationPlaceholder"\),/);
+  assert.match(app, /referenceAnalysisGenerationStrip:\s*document\.querySelector\("#referenceAnalysisGenerationStrip"\),/);
+  assert.match(app, /referenceAnalysisThumbnailEmpty:\s*document\.querySelector\("#referenceAnalysisThumbnailEmpty"\),/);
   assert.match(app, /referenceAnalysisToggleButton:\s*document\.querySelector\("#referenceAnalysisToggleButton"\),/);
   assert.match(app, /function applyReferenceAnalysisFiles\(fileList\) \{/);
   assert.match(app, /function renderReferenceAnalysisGrid\(\) \{/);
   assert.match(app, /function createReferenceAnalysisJob\(\) \{/);
+  assert.match(app, /function registerReferenceAnalysisGenerationKey\(key\) \{/);
+  assert.match(app, /function storeReferenceAnalysisGenerationItem\(item\) \{/);
+  assert.match(app, /function replaceReferenceAnalysisGenerationKey\(oldKey, newKey\) \{/);
+  assert.match(app, /function getReferenceAnalysisGenerationItemByKey\(key\) \{[\s\S]*state\.referenceAnalysis\.generationItems\[key\][\s\S]*state\.gallery\.find/);
+  assert.match(app, /function preserveReferenceAnalysisGenerationItemForDelete\(item\) \{[\s\S]*state\.referenceAnalysis\.generationKeys\.includes\(key\)/);
+  assert.match(app, /function getReferenceAnalysisGenerationPreviewEntries\(\) \{[\s\S]*state\.referenceAnalysis\.generationKeys[\s\S]*job\.mode === "reference-analysis"/);
+  assert.match(app, /function setReferenceAnalysisGenerationPreviewKey\(key\) \{/);
+  assert.match(app, /function renderReferenceAnalysisGenerationStrip\(\) \{/);
+  assert.match(app, /refs\.referenceAnalysisThumbnailEmpty\.classList\.toggle\("hidden", entries\.length > 0\);/);
   assert.match(app, /function renderReferenceAnalysisGenerationPreview\(\) \{/);
   assert.match(app, /function openReferenceAnalysisGeneratedPreview\(\) \{[\s\S]*const item = getReferenceAnalysisGenerationPreviewItem\(\);[\s\S]*openLightbox\(item\);/);
   assert.match(app, /refs\.referenceAnalysisGenerationCanvas\.setAttribute\("role", "button"\);/);
   assert.match(app, /refs\.referenceAnalysisGenerationCanvas\.setAttribute\("aria-label", "查看融图分析生成图"\);/);
   assert.match(app, /refs\.referenceAnalysisGenerationCanvas\.addEventListener\("click", openReferenceAnalysisGeneratedPreview\);/);
   assert.match(app, /refs\.referenceAnalysisGenerationCanvas\.addEventListener\("keydown", \(event\) => \{[\s\S]*event\.key === "Enter"[\s\S]*event\.key === " "[\s\S]*openReferenceAnalysisGeneratedPreview\(\);/);
+  assert.match(app, /refs\.referenceAnalysisGenerationStrip\.addEventListener\("click", \(event\) => \{[\s\S]*setReferenceAnalysisGenerationPreviewKey\(target\.dataset\.referenceAnalysisGenerationKey\);/);
   assert.match(app, /function renderReferenceAnalysisGenerationLoading\(item\) \{/);
   assert.match(app, /let referenceAnalysisLoadingShellNodes = null;/);
   assert.match(
@@ -775,7 +836,7 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(app, /refs\.referenceAnalysisList\.classList\.toggle\("hidden", state\.referenceAnalysis\.collapsed\);/);
   assert.match(app, /refs\.referenceAnalysisHead\.classList\.toggle\("hidden", state\.referenceAnalysis\.collapsed\);/);
   assert.match(app, /refs\.referenceAnalysisAutoCollapseButton\.classList\.toggle\("is-active", state\.referenceAnalysis\.autoCollapseOnApply\);/);
-  assert.match(app, /refs\.referenceAnalysisAutoCollapseButton\.setAttribute\("aria-pressed", String\(state\.referenceAnalysis\.autoCollapseOnApply\)\);/);
+  assert.match(app, /refs\.referenceAnalysisAutoCollapseButton\.setAttribute\("aria-checked", String\(state\.referenceAnalysis\.autoCollapseOnApply\)\);/);
   assert.match(app, /refs\.referenceAnalysisToggleButton\.textContent = state\.referenceAnalysis\.collapsed \? "展开提示词" : "折叠提示词";/);
   assert.match(app, /roleGroup\.className = "reference-analysis-roles";/);
   assert.match(app, /async function buildReferenceAnalysisFormData\(\) \{/);
@@ -788,7 +849,13 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(app, /button\.dataset\.referenceAnalysisPromptIndex = String\(index\);/);
   assert.match(app, /function applyReferenceAnalysisPrompt\(index\) \{/);
   assert.match(app, /async function startReferenceAnalysisGeneration\(\) \{/);
+  assert.match(app, /registerReferenceAnalysisGenerationKey\(makeJobPreviewKey\(job\.id\)\);/);
+  assert.match(app, /refs\.referenceAnalysisGenerateButton\.disabled =[\s\S]*!promptText \|\| preparingReference \|\| getQueuedJobCount\(\) >= getMaxQueuedJobCount\(\);/);
+  assert.doesNotMatch(app, /refs\.referenceAnalysisGenerateButton\.disabled =[\s\S]*isGenerating[\s\S]*getQueuedJobCount\(\) >= getMaxQueuedJobCount\(\);/);
   assert.match(app, /if \(job\.mode === "reference-analysis"\) \{[\s\S]*state\.referenceAnalysis\.previewKey = makeGalleryPreviewKey\(payload\.item\.filename\);/);
+  assert.match(app, /if \(job\.mode === "reference-analysis"\) \{[\s\S]*payload\.item\.mode = "reference-analysis";[\s\S]*storeReferenceAnalysisGenerationItem\(payload\.item\);[\s\S]*replaceReferenceAnalysisGenerationKey\(makeJobPreviewKey\(job\.id\), makeGalleryPreviewKey\(payload\.item\.filename\)\);/);
+  assert.match(app, /async function deleteGalleryItem\(item\) \{[\s\S]*preserveReferenceAnalysisGenerationItemForDelete\(item\);[\s\S]*state\.gallery = state\.gallery\.filter/);
+  assert.match(app, /async function clearHistory\(\) \{[\s\S]*await Promise\.all\(state\.gallery\.map\(preserveReferenceAnalysisGenerationItemForDelete\)\);[\s\S]*state\.gallery = \[\];/);
   const referenceApplyBody =
     app.match(/function applyReferenceAnalysisPrompt\(index\) \{[\s\S]*?\r?\n\}\r?\n\r?\nfunction mapPromptAgentPrompt/)?.[0] || "";
   assert.match(referenceApplyBody, /state\.referenceAnalysis\.selectedPrompt = promptText;/);
@@ -859,7 +926,7 @@ test("image upload zones collapse into compact thumbnail grids after files are p
   assert.match(styles, /\.reference-dropzone\.is-compact-hidden\s*\{[\s\S]*position:\s*absolute;[\s\S]*clip-path:\s*inset\(50%\);/);
   assert.match(styles, /\.reference-add-card\s*\{/);
   assert.match(styles, /\.reference-add-button\s*\{/);
-  assert.match(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot:has\(\.style-transfer-dropzone\.is-compact-hidden\)\s*\{[\s\S]*grid-template-rows:\s*minmax\(64px,\s*auto\)\s*minmax\(132px,\s*auto\);/);
+  assert.match(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot:has\(\.style-transfer-dropzone\.is-compact-hidden\)\s*\{[\s\S]*grid-template-rows:\s*minmax\(132px,\s*auto\);/);
 
   assert.match(app, /function syncReferenceDropzoneCompact\(dropzone, hasFiles\) \{/);
   assert.match(app, /function createReferenceAddCard\(\{ input, label, onFiles \}\) \{/);
@@ -945,7 +1012,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260508-reference-remove-hover-1/);
+  assert.match(html, /\/app\.js\?v=20260509-category-ui-2/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -1181,12 +1248,33 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(html, /id="creationScenarioInput"[\s\S]*value="social-seeding"/);
   assert.match(html, /id="creationScenarioInput"[\s\S]*value="livestream"/);
   assert.match(html, /id="creationScenarioInput"[\s\S]*value="gift-guide"/);
-  assert.match(html, /id="creationIndustryTemplateInput"[\s\S]*value="apparel"/);
-  assert.match(html, /id="creationIndustryTemplateInput"[\s\S]*value="beauty"/);
-  assert.match(html, /id="creationIndustryTemplateInput"[\s\S]*value="food"/);
-  assert.match(html, /id="creationIndustryTemplateInput"[\s\S]*value="electronics"/);
-  assert.match(html, /id="creationIndustryTemplateInput"[\s\S]*value="home"/);
-  assert.match(html, /<div class="creation-control-row creation-option-grid">[\s\S]*id="creationImageCountInput"[\s\S]*id="creationScenarioInput"[\s\S]*id="creationIndustryTemplateInput"[\s\S]*id="creationTargetLanguageInput"[\s\S]*id="creationOutputFormatInput"[\s\S]*id="creationRatioInput"[\s\S]*id="creationSizeInput"/);
+  assert.match(html, /id="creationIndustryTemplateInput"[\s\S]*type="hidden"[\s\S]*value="general"/);
+  assert.doesNotMatch(html, /value="apparel"/);
+  assert.doesNotMatch(html, /value="beauty"/);
+  assert.doesNotMatch(html, /value="food"/);
+  assert.doesNotMatch(html, /value="electronics"/);
+  assert.doesNotMatch(html, /value="home"/);
+  assert.match(html, /id="creationIndustryTemplateBrowser"/);
+  assert.match(html, /id="creationIndustryTemplateTrigger"[\s\S]*aria-controls="creationIndustryTemplatePopover"/);
+  assert.match(html, /id="creationIndustryTemplateCurrent"/);
+  assert.match(html, /id="creationIndustryTemplatePopover"[\s\S]*hidden/);
+  assert.match(html, /id="creationIndustryTemplateStepLabel"/);
+  assert.match(html, /id="creationIndustryTemplateBackButton"[\s\S]*返回上一级/);
+  assert.doesNotMatch(html, /id="creationIndustryTemplateOptionCount"/);
+  assert.match(html, /id="creationIndustryTemplateLevels"/);
+  const creationIndustrySearchInputId = html.indexOf('id="creationIndustryTemplateSearchInput"');
+  const creationIndustrySearchInputStart = html.lastIndexOf("<input", creationIndustrySearchInputId);
+  const creationIndustrySearchInputEnd = html.indexOf("/>", creationIndustrySearchInputId);
+  const creationIndustrySearchInput = html.slice(creationIndustrySearchInputStart, creationIndustrySearchInputEnd + 2);
+  assert.ok(creationIndustrySearchInput);
+  assert.doesNotMatch(creationIndustrySearchInput, /placeholder=/);
+  assert.doesNotMatch(html, /placeholder="搜索三级\/四级类目名或编码"/);
+  assert.match(html, /id="creationSellingPointsInput"[\s\S]*id="creationDimensionSpecsInput"[\s\S]*name="dimensionSpecs"[\s\S]*例如：高 14\.5 cm，直径 11 cm，容量 350 ml/);
+  assert.doesNotMatch(html, /写清商品是什么|每行或用逗号分隔|只用于尺寸规格图/);
+  assert.match(html, /id="creationProductDescriptionInput"[\s\S]*rows="2"/);
+  assert.match(html, /id="creationSellingPointsInput"[\s\S]*rows="1"/);
+  assert.match(html, /id="creationDimensionSpecsInput"[\s\S]*rows="1"/);
+  assert.match(html, /<div class="creation-control-row creation-option-grid">[\s\S]*id="creationImageCountInput"[\s\S]*id="creationScenarioInput"[\s\S]*id="creationTargetLanguageInput"[\s\S]*id="creationOutputFormatInput"[\s\S]*id="creationRatioInput"[\s\S]*id="creationSizeInput"[\s\S]*id="creationIndustryTemplateBrowser"/);
   assert.match(html, /<select id="creationRatioInput" name="ratio">[\s\S]*<option value="1:1">1:1<\/option>[\s\S]*<\/select>/);
   assert.match(html, /<select id="creationSizeInput" name="size">[\s\S]*<option value="auto">自动<\/option>[\s\S]*<\/select>/);
   assert.doesNotMatch(html, /id="creationScenarioHint"/);
@@ -1197,8 +1285,22 @@ test("creation mode has independent references count and scenario controls", asy
 
   assert.match(styles, /\.creation-reference-grid\s*\{/);
   assert.match(styles, /\.creation-reference-role\s*\{/);
+  assert.match(styles, /#creationProductNameInput,\s*#creationSellingPointsInput,\s*#creationDimensionSpecsInput\s*\{[\s\S]*height:\s*44px;/);
+  assert.match(styles, /#creationProductDescriptionInput\s*\{[\s\S]*height:\s*72px;/);
+  assert.match(styles, /#creationProductDescriptionInput,\s*#creationSellingPointsInput,\s*#creationDimensionSpecsInput\s*\{[\s\S]*overflow-y:\s*hidden;[\s\S]*resize:\s*vertical;/);
+  assert.doesNotMatch(styles, /#creationSellingPointsInput,\s*#creationDimensionSpecsInput\s*\{[^}]*resize:\s*none;/);
   assert.match(styles, /\.creation-reference-analysis-panel\s*\{/);
   assert.match(styles, /\.creation-reference-note\s*\{/);
+  assert.match(styles, /\.creation-template-search\s*\{/);
+  assert.match(styles, /\.creation-industry-browser\s*\{/);
+  assert.match(styles, /\.creation-industry-browser-head\s*\{[\s\S]*grid-template-columns:\s*minmax\(210px,\s*1fr\)\s*clamp\(128px,\s*28%,\s*180px\);/);
+  assert.match(styles, /\.creation-industry-trigger\s*\{/);
+  assert.match(styles, /\.creation-industry-popover\s*\{/);
+  assert.match(styles, /\.creation-industry-popover\[hidden\]\s*\{/);
+  assert.match(styles, /\.creation-industry-back-button\s*\{/);
+  assert.match(styles, /\.creation-industry-levels\s*\{/);
+  assert.match(styles, /\.creation-industry-option\s*\{/);
+  assert.doesNotMatch(styles, /\.creation-industry-levels\s*\{[\s\S]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\);/);
   assert.match(styles, /\.creation-option-grid\s*\{\s*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.creation-option-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\);/);
   assert.match(styles, /\.creation-role-picker\s*\{/);
@@ -1208,11 +1310,24 @@ test("creation mode has independent references count and scenario controls", asy
   assert.doesNotMatch(styles, /\.creation-card-brief\s*\{/);
 
   assert.match(app, /creationReferenceFiles:\s*\[\]/);
+  assert.match(app, /creationIndustryTemplateBrowser:\s*\{/);
   assert.match(app, /creationReferenceAnalysis:\s*\{/);
   assert.match(app, /creationReferenceAnalyzeButton: document\.querySelector\("#creationReferenceAnalyzeButton"\)/);
   assert.match(app, /creationReferenceApplyAnalysisButton: document\.querySelector\("#creationReferenceApplyAnalysisButton"\)/);
   assert.match(app, /creationReferenceAnalysisList: document\.querySelector\("#creationReferenceAnalysisList"\)/);
   assert.match(app, /creationReferenceAnalysisPanel: document\.querySelector\("#creationReferenceAnalysisPanel"\)/);
+  assert.match(app, /creationDimensionSpecsInput: document\.querySelector\("#creationDimensionSpecsInput"\)/);
+  assert.match(app, /creationIndustryTemplateBrowser: document\.querySelector\("#creationIndustryTemplateBrowser"\)/);
+  assert.match(app, /creationIndustryTemplateTrigger: document\.querySelector\("#creationIndustryTemplateTrigger"\)/);
+  assert.match(app, /creationIndustryTemplateCurrent: document\.querySelector\("#creationIndustryTemplateCurrent"\)/);
+  assert.match(app, /creationIndustryTemplatePopover: document\.querySelector\("#creationIndustryTemplatePopover"\)/);
+  assert.match(app, /creationIndustryTemplateStepLabel: document\.querySelector\("#creationIndustryTemplateStepLabel"\)/);
+  assert.match(app, /creationIndustryTemplateBackButton: document\.querySelector\("#creationIndustryTemplateBackButton"\)/);
+  assert.doesNotMatch(app, /creationIndustryTemplateOptionCount/);
+  assert.match(app, /creationIndustryTemplateLevels: document\.querySelector\("#creationIndustryTemplateLevels"\)/);
+  assert.match(app, /creationIndustryTemplateSearchInput: document\.querySelector\("#creationIndustryTemplateSearchInput"\)/);
+  assert.match(app, /CREATION_CATEGORY_TEMPLATE_OPTIONS/);
+  assert.match(app, /from "\/lib\/creation-category-templates\.mjs\?v=20260509-category-search-2"/);
   assert.match(app, /creationReferenceInput: document\.querySelector\("#creationReferenceInput"\)/);
   assert.match(app, /creationRoleGrid: document\.querySelector\("#creationRoleGrid"\)/);
   assert.match(app, /creationRoleCount: document\.querySelector\("#creationRoleCount"\)/);
@@ -1237,6 +1352,8 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function buildCreationReferenceAnalysisFormData\(\) \{/);
   assert.match(app, /function analyzeCreationReferenceImages\(\) \{/);
   assert.match(app, /function applyCreationReferenceAnalysis\(analysis\) \{/);
+  assert.match(app, /function applyCreationReferenceAnalysisCategoryMatch\(analysis\) \{/);
+  assert.match(app, /findCreationIndustryTemplateMatch/);
   assert.match(app, /function applyCreationReferenceAnalysisRecommendations\(\) \{/);
   assert.match(app, /state\.creationReferenceAnalysis\.applied = false;/);
   assert.match(app, /state\.creationReferenceAnalysis\.applied = true;/);
@@ -1247,12 +1364,35 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /creationIndustryTemplateInput: document\.querySelector\("#creationIndustryTemplateInput"\)/);
   assert.doesNotMatch(app, /const CREATION_SCENARIO_HINTS = \{/);
   assert.doesNotMatch(app, /const CREATION_INDUSTRY_TEMPLATE_HINTS = \{/);
-  assert.match(app, /const CREATION_INDUSTRY_ROLE_PRESETS = \{/);
+  assert.match(app, /const CREATION_INDUSTRY_TEMPLATE_LEVEL_LABELS = \[/);
+  assert.match(app, /function getCreationIndustryTemplateLevelOptions\(/);
+  assert.match(app, /categoryPath: getCreationIndustryTemplateLevelPath\(level, name, browserPath\)/);
+  assert.match(app, /function getCreationIndustryTemplateLevelPath\(level, name, browserPath = state\.creationIndustryTemplateBrowser\) \{/);
+  assert.match(app, /\[browserPath\.level1, name\]\.filter\(Boolean\)\.join\(" > "\)/);
+  assert.match(app, /\[browserPath\.level1, browserPath\.level2, name\]\.filter\(Boolean\)\.join\(" > "\)/);
+  assert.match(app, /function createCreationIndustryTemplateButton\(\{\s*categoryPath = ""/);
+  assert.match(app, /button\.title = \[name, metaText\]\.filter\(Boolean\)\.join\(" · "\)/);
+  assert.match(app, /function getCreationIndustryTemplateActiveLevel\(/);
+  assert.match(app, /function focusCreationIndustryTemplateBrowserOnSelectedTemplate\(\) \{/);
+  assert.match(app, /const currentTemplate = getCreationSelectedIndustryTemplate\(\);[\s\S]*if \(!currentTemplate\.categoryPath\) \{[\s\S]*return;[\s\S]*\}[\s\S]*setCreationIndustryTemplateBrowserPath\(currentTemplate\);/);
+  assert.match(app, /function goBackCreationIndustryTemplateLevel\(\) \{/);
+  assert.match(app, /function setCreationIndustryTemplateBrowserOpen\(/);
+  assert.doesNotMatch(app, /function renderCreationIndustryTemplateLevel\(/);
+  assert.match(app, /function renderCreationIndustryTemplateSearchResults\(/);
+  assert.match(app, /function renderCreationIndustryTemplateBrowser\(\) \{/);
+  assert.match(app, /searchCreationIndustryTemplates\(query, \{ limit: 48, includeBase: false \}\)/);
+  assert.match(app, /metaText = template\.categoryPath \|\| template\.code \|\| "";/);
+  assert.match(app, /button\.append\(title, meta\);/);
+  assert.doesNotMatch(app, /meta\.textContent = `\$\{template\.code\} \//);
+  assert.doesNotMatch(app, /个四级类目/);
+  assert.match(app, /currentTemplate\.value && currentTemplate\.value !== "general"/);
+  assert.match(app, /return currentTemplate\.label \|\| currentTemplate\.value;/);
   assert.match(app, /function getCreationPlanOverrides\(\) \{/);
   assert.match(app, /function canEditCreationItem\(/);
   assert.match(app, /function previewCreationPlan\(\) \{/);
   assert.match(app, /function resetCreationDraftPreview\(\) \{/);
   assert.match(app, /const file = getCreationReferenceGenerationFile\(item\);[\s\S]*formData\.append\("referenceImages", file\)/);
+  assert.match(app, /formData\.set\("dimensionSpecs", refs\.creationDimensionSpecsInput\.value\.trim\(\)\)/);
   assert.match(app, /formData\.set\("referenceImageRoles", JSON\.stringify\(buildCreationReferenceRolePayload\(\)\)\)/);
   assert.match(app, /formData\.set\("planOverrides", JSON\.stringify\(getCreationPlanOverrides\(\)\)\)/);
   assert.match(app, /fetch\("\/api\/creation\/reference\/analyze"/);
@@ -1265,16 +1405,39 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationImageCountInput\.addEventListener\("change", syncCreationSelectedRolesToCount\)/);
   assert.match(app, /refs\.creationRoleGrid\.addEventListener\("change"/);
   assert.match(app, /refs\.creationScenarioInput\.addEventListener\("change", syncCreationSelectedRolesToScenario\)/);
-  assert.match(app, /refs\.creationIndustryTemplateInput\.addEventListener\("change", syncCreationSelectedRolesToIndustry\)/);
+  assert.doesNotMatch(app, /refs\.creationIndustryTemplateInput\.addEventListener\("change", syncCreationSelectedRolesToIndustry\)/);
+  assert.match(app, /const shouldOpenCreationIndustryTemplateBrowser = refs\.creationIndustryTemplatePopover\?\.hidden !== false;/);
+  assert.match(app, /if \(shouldOpenCreationIndustryTemplateBrowser\) \{[\s\S]*focusCreationIndustryTemplateBrowserOnSelectedTemplate\(\);[\s\S]*\}[\s\S]*renderCreationIndustryTemplateBrowser\(\);[\s\S]*setCreationIndustryTemplateBrowserOpen\(shouldOpenCreationIndustryTemplateBrowser\);/);
+  assert.match(app, /refs\.creationIndustryTemplateBrowser\.addEventListener\("click"/);
+  assert.match(app, /refs\.creationIndustryTemplateBackButton\.addEventListener\("click", goBackCreationIndustryTemplateLevel\)/);
+  assert.match(app, /refs\.creationIndustryTemplateSearchInput\.addEventListener\("input"/);
+  assert.match(app, /setCreationIndustryTemplateBrowserOpen\(true\)/);
+  assert.match(app, /document\.addEventListener\("pointerdown"/);
+  assert.match(app, /document\.addEventListener\("keydown"/);
   assert.match(app, /refs\.creationRatioInput\.addEventListener\("change", renderCreationSizeOptions\)/);
   assert.match(app, /refs\.creationPlanButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260508-reference-remove-hover-1/);
+  assert.match(html, /app\.js\?v=20260509-category-ui-2/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
+});
+
+test("creation reference analysis apply fills product name from fourth-level category", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /function getCreationReferenceAnalysisProductNameSuggestion\(analysis = \{\}\) \{/);
+  assert.match(app, /analysis\.categoryTemplateLabel/);
+  assert.match(app, /analysis\.categoryTemplatePath \|\| analysis\.categoryPath/);
+  assert.match(app, /\.split\(">"\)\s*\.map\(\(part\) => part\.trim\(\)\)\s*\.filter\(Boolean\)\s*\.at\(-1\)/);
+  assert.match(app, /function applyCreationReferenceAnalysisProductNameSuggestion\(analysis = \{\}\) \{/);
+  assert.match(app, /refs\.creationProductNameInput\.value = suggestion;/);
+  assert.match(
+    app,
+    /const productNameApplied = applyCreationReferenceAnalysisProductNameSuggestion\(analysis\);[\s\S]*state\.creationReferenceAnalysis\.applied = true;/,
+  );
 });
 
 test("creation mode exposes record detail and item repair actions", async () => {
@@ -1290,7 +1453,9 @@ test("creation mode exposes record detail and item repair actions", async () => 
   assert.match(styles, /\.creation-card-actions\s*\{/);
   assert.match(styles, /\.creation-card-path\s*\{/);
   assert.match(styles, /\.creation-card\s*\{[\s\S]*position:\s*relative;[\s\S]*isolation:\s*isolate;/);
-  assert.match(styles, /\.creation-card-media\s*\{[\s\S]*aspect-ratio:\s*1\s*\/\s*1;/);
+  assert.match(styles, /\.creation-result-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(240px,\s*1fr\)\);/);
+  assert.match(styles, /\.creation-card-media\s*\{[\s\S]*width:\s*min\(100%,\s*280px\);[\s\S]*aspect-ratio:\s*1\s*\/\s*1;/);
+  assert.match(styles, /\.creation-card-actions \.mini-action\s*\{[\s\S]*height:\s*34px;/);
   assert.match(styles, /\.creation-card-editor\s*\{[\s\S]*position:\s*fixed;[\s\S]*right:\s*24px;[\s\S]*bottom:\s*24px;[\s\S]*z-index:\s*75;[\s\S]*width:\s*min\(520px,\s*calc\(100vw - 32px\)\);/);
   assert.match(styles, /\.creation-card-editor-head\s*\{/);
   assert.match(styles, /\.creation-card-editor-close\s*\{/);
@@ -1320,7 +1485,8 @@ test("creation mode exposes record detail and item repair actions", async () => 
   assert.match(app, /saveButton\.dataset\.creationSavePromptItemId = item\.itemId;/);
   assert.match(app, /textarea\.dataset\.creationPromptEditor = item\.itemId;/);
   assert.match(app, /path\.className = "creation-card-path";/);
-  assert.match(app, /path\.textContent = item\.relativePath \|\| item\.error \|\| "";/);
+  assert.match(app, /const shouldRenderPath = !imageUrl && !showRecordActions && !hideGenerationDetails;/);
+  assert.match(app, /path\.textContent = item\.error \|\| "";/);
   assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationRetryItemId/);
   assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationEditItemId/);
   assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationClosePromptEditor/);
@@ -1341,7 +1507,8 @@ test("creation generation cards replace plan details with loading animation", as
   assert.match(app, /card\.classList\.toggle\("is-generating", isLoadingCard\);/);
   assert.match(app, /status\.textContent = isLoadingCard \? "生成中" : getCreationStatusLabel\(item\.status\);/);
   assert.match(app, /media\.classList\.add\("is-loading"\);[\s\S]*media\.appendChild\(createCreationCardLoading\(\)\);/);
-  assert.match(app, /if \(!showRecordActions && !hideGenerationDetails\) \{/);
+  assert.match(app, /const shouldRenderPath = !imageUrl && !showRecordActions && !hideGenerationDetails;/);
+  assert.match(app, /if \(shouldRenderPath\) \{/);
   assert.match(app, /if \(showActions && !hideGenerationDetails\) \{/);
   assert.match(app, /state\.creation\.generationScope = "full";/);
   assert.match(app, /state\.creation\.generationScope = itemId \? "single" : "repair";/);
@@ -1488,9 +1655,10 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.match(app, /refs\.creationProductNameInput\.value = normalized\.productName \|\| "";/);
   assert.match(app, /refs\.creationProductDescriptionInput\.value = normalized\.productDescription \|\| "";/);
   assert.match(app, /refs\.creationSellingPointsInput\.value = normalized\.sellingPoints\.join\("\\n"\);/);
+  assert.match(app, /refs\.creationDimensionSpecsInput\.value = normalized\.dimensionSpecs \|\| "";/);
   assert.match(app, /setCreationSelectValue\(refs\.creationTargetLanguageInput, normalized\.targetLanguage, "zh-CN"\);/);
   assert.match(app, /setCreationSelectValue\(refs\.creationScenarioInput, normalized\.scenario, "standard"\);/);
-  assert.match(app, /setCreationSelectValue\(refs\.creationIndustryTemplateInput, normalized\.industryTemplate, "general"\);/);
+  assert.match(app, /setCreationIndustryTemplateValue\(normalized\.industryTemplate/);
   assert.match(app, /state\.creationSelectedRoles = normalizedRoles\.length > 0 \? normalizedRoles : getCreationRoleIdsForCount\(normalized\.imageCount\);/);
   assert.match(app, /state\.creationReferenceFiles = \[\];/);
   assert.match(app, /state\.creationReferenceAnalysis = createEmptyCreationReferenceAnalysisState\(\);/);
@@ -1511,7 +1679,7 @@ test("creation record cards open gallery-style lightbox details", async () => {
   assert.match(app, /const showRecordActions = options\.showRecordActions === true;/);
   assert.match(app, /card\.classList\.toggle\("is-record-card", showRecordActions\);/);
   assert.doesNotMatch(app, /creation-card-prompt/);
-  assert.match(app, /if \(!showRecordActions && !hideGenerationDetails\) \{[\s\S]*path\.className = "creation-card-path";[\s\S]*card\.appendChild\(path\);[\s\S]*\}/);
+  assert.match(app, /if \(shouldRenderPath\) \{[\s\S]*path\.className = "creation-card-path";[\s\S]*card\.appendChild\(path\);[\s\S]*\}/);
   assert.match(app, /media\.dataset\.creationRecordPreviewItemId = item\.itemId;/);
   assert.match(app, /function getCreationRecordItemById\(itemId, setId = ""\) \{/);
   assert.match(app, /function buildCreationRecordLightboxItem\(item, set\) \{/);

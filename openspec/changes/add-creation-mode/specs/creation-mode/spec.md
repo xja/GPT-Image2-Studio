@@ -12,7 +12,7 @@ The system SHALL expose Creation Mode as a separate tab under the creation works
 - **THEN** the prompt-mode activity feed and default gallery-visible history are not updated as if the images were prompt-mode single-image jobs
 
 ### Requirement: Creation Mode generates configurable ecommerce sets
-The system SHALL generate one set for one product with quick presets of 4, 6, 8, 10, or 12 ecommerce marketing roles and SHALL allow the user to customize which of the 12 image roles are generated for the current set. The system SHALL also allow the user to choose an industry template for general ecommerce, apparel, beauty, food, consumer electronics, or home/living products. When the user uses a preset without custom role changes and no non-general industry template is selected, the first four roles SHALL remain hero image, benefit image, lifestyle scene, and detail/trust image.
+The system SHALL generate one set for one product with quick presets of 4, 6, 8, 10, or 12 ecommerce marketing roles and SHALL allow the user to customize which of the 12 image roles are generated for the current set. The system SHALL also allow the user to choose an industry template for general ecommerce, apparel, beauty, food, consumer electronics, home/living products, or a searchable fourth-level ecommerce category template. When the user uses a preset without custom role changes and no non-general industry template is selected, the first four roles SHALL remain hero image, benefit image, lifestyle scene, and detail/trust image.
 
 #### Scenario: User starts a creation set
 - **WHEN** the user submits product information and a target language in Creation Mode
@@ -45,11 +45,34 @@ The system SHALL generate one set for one product with quick presets of 4, 6, 8,
 - **AND** the quick image count reflects the recommended role count when that count is supported
 - **AND** the user can still manually add or remove image roles before generation
 
-#### Scenario: User changes industry template
-- **WHEN** the user selects a Creation Mode industry template such as apparel, beauty, food, consumer electronics, or home/living
-- **THEN** the role picker updates to that industry's recommended image-role combination
-- **AND** the planned prompts include the selected industry template's visual and compliance guidance
-- **AND** the generation and plan-preview requests include the selected industry template
+#### Scenario: User chooses a category industry template progressively
+- **WHEN** the user opens the Creation Mode industry template browser
+- **THEN** the main form shows a single current-category control instead of occupying the form with multiple category columns
+- **AND** the system opens a floating dropdown that shows only first-level categories by default
+- **AND** choosing a first-level category keeps the dropdown open and replaces the list with matching second-level categories
+- **AND** choosing a second-level category replaces the list with matching third-level categories
+- **AND** choosing a third-level category replaces the list with matching fourth-level category templates
+- **AND** the main control displays the currently chosen category name while the user progresses through the hierarchy
+- **AND** previous broad industry template choices such as apparel, beauty, food, consumer electronics, or home/living are not shown as selectable templates
+- **WHEN** the user selects a fourth-level category template
+- **THEN** the role picker updates to that category template's recommended image-role combination
+- **AND** the planned prompts include the selected fourth-level category's path-specific visual and compliance guidance
+- **AND** the generation and plan-preview requests include the selected category-coded industry template
+
+#### Scenario: User searches third-level or fourth-level category templates
+- **WHEN** the user searches Creation Mode industry templates by third-level category name, fourth-level category name, or category code
+- **THEN** the system shows matching category templates named by their fourth-level category
+- **AND** the search results only contain fourth-level category templates, not the previous broad industry templates
+- **AND** the search does not return category templates for queries that only match first-level or second-level category names
+- **AND** duplicate fourth-level names remain distinguishable by their full category path
+- **AND** the selected category template is submitted using its unique category code
+- **AND** the planned prompts include category-path-specific visual guidance for that fourth-level category
+
+#### Scenario: Smart reference analysis selects a category template
+- **WHEN** Creation reference-image smart analysis identifies a product category with enough context to match a fourth-level category template
+- **THEN** the system switches the industry template control to that category template
+- **AND** the role picker updates to the matched category template's recommended role combination
+- **AND** the analysis feedback names the matched category path
 
 #### Scenario: Product information is missing
 - **WHEN** the user submits Creation Mode without product information
@@ -116,7 +139,7 @@ The system SHALL save Creation Mode generated images under `Pictures/YYYY-MM/MM-
 - **THEN** the same date folder contains creation, image, and ppt output folders
 
 ### Requirement: Creation records are set-based
-The system SHALL persist Creation Mode records as set manifests with set-level input, target language, marketing scenario, industry template, item roles, item statuses, prompts, image paths, and partial-failure status.
+The system SHALL persist Creation Mode records as set manifests with set-level input, target language, marketing scenario, industry template, industry template path when available, item roles, item statuses, prompts, image paths, and partial-failure status.
 
 #### Scenario: All items complete
 - **WHEN** all Creation Mode items save successfully

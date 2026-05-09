@@ -192,6 +192,27 @@ test("creation planner uses selected ecommerce role set when provided", () => {
   assert.ok(plan.items.every((item) => item.prompt.includes("Marketplace search scenario")));
 });
 
+test("creation planner only injects size specifications into the dimensions role", () => {
+  const plan = buildCreationPlan({
+    productName: "AeroPress Clear",
+    productDescription: "Transparent portable coffee brewer",
+    sellingPoints: "lightweight, easy to clean",
+    targetLanguage: "en",
+    selectedRoles: ["hero", "comparison", "dimensions"],
+    dimensionSpecs: "Height 145mm\nDiameter 110mm\nCapacity 350ml",
+  });
+
+  const heroPrompt = plan.items.find((item) => item.role === "hero").prompt;
+  const comparisonPrompt = plan.items.find((item) => item.role === "comparison").prompt;
+  const dimensionsPrompt = plan.items.find((item) => item.role === "dimensions").prompt;
+
+  assert.equal(plan.dimensionSpecs, "Height 145mm\nDiameter 110mm\nCapacity 350ml");
+  assert.match(dimensionsPrompt, /Dimension specifications for this size chart only: Height 145mm \/ Diameter 110mm \/ Capacity 350ml\./);
+  assert.match(dimensionsPrompt, /Use these exact specifications only in the dimensions\/specification image/);
+  assert.doesNotMatch(heroPrompt, /145mm|110mm|350ml/);
+  assert.doesNotMatch(comparisonPrompt, /145mm|110mm|350ml/);
+});
+
 test("creation planner exposes scenario-specific role presets", () => {
   assert.deepEqual(
     getCreationScenarioRolePreset("livestream").map((role) => role.role),
@@ -237,6 +258,67 @@ test("creation planner applies industry templates to default role sets and promp
   );
   assert.ok(plan.items.every((item) => item.prompt.includes("Beauty and personal care industry template")));
   assert.ok(plan.items.every((item) => item.prompt.includes("texture, swatches, skincare use, packaging, and benefit hierarchy")));
+});
+
+test("creation planner applies fourth-level category templates to role presets and prompts", () => {
+  const plan = buildCreationPlan({
+    productName: "Pocket X1",
+    productDescription: "Compact phone with bright screen and long battery life",
+    sellingPoints: "OLED display, slim body, reliable camera",
+    targetLanguage: "zh-CN",
+    imageCount: 6,
+    industryTemplate: "category:C06-001-001-001",
+  });
+
+  assert.equal(plan.industryTemplate, "category:C06-001-001-001");
+  assert.equal(plan.industryTemplateLabel, "智能手机");
+  assert.equal(plan.industryTemplatePath, "数码电子 > 手机通讯 > 手机 > 智能手机");
+  assert.deepEqual(plan.selectedRoles.slice(0, 4), ["hero", "benefit", "dimensions", "usage-steps"]);
+  assert.ok(
+    plan.items.every((item) =>
+      item.prompt.includes("Ecommerce category path: 数码电子 > 手机通讯 > 手机 > 智能手机"),
+    ),
+  );
+  assert.ok(plan.items.every((item) => item.prompt.includes("Category template: 智能手机")));
+});
+
+test("creation planner applies category role prompt instructions to matching set images", () => {
+  const selectedRoles = ["hero", "scene", "detail-trust", "dimensions", "usage-steps"];
+  const plan = buildCreationPlan({
+    productName: "Pocket X1",
+    productDescription: "智能手机，OLED 屏幕，长续航",
+    sellingPoints: "轻薄机身, 摄像头清晰, 快充",
+    targetLanguage: "zh-CN",
+    imageCount: 5,
+    industryTemplate: "category:C06-001-001-001",
+    selectedRoles,
+  });
+
+  const promptByRole = Object.fromEntries(plan.items.map((item) => [item.role, item.prompt]));
+  const categoryStrategy = [
+    "Category template: 智能手机",
+    "Ecommerce category path: 数码电子 > 手机通讯 > 手机 > 智能手机",
+    "Consumer electronics focus: show ports, screen or device details, dimensions, specifications, comparison proof",
+  ];
+
+  assert.deepEqual(plan.selectedRoles, selectedRoles);
+  assert.ok(selectedRoles.every((role) => promptByRole[role]));
+  assert.ok(
+    selectedRoles.every((role) => categoryStrategy.every((strategy) => promptByRole[role].includes(strategy))),
+  );
+  assert.match(promptByRole.scene, /通勤手持|桌面办公/);
+  assert.match(promptByRole["detail-trust"], /摄像头模组/);
+  assert.match(promptByRole["detail-trust"], /屏幕边框/);
+  assert.match(promptByRole.dimensions, /机身厚度/);
+  assert.match(promptByRole.dimensions, /握持尺度/);
+  assert.match(promptByRole["usage-steps"], /拍摄/);
+  assert.match(promptByRole["usage-steps"], /游戏/);
+  assert.match(promptByRole["usage-steps"], /充电/);
+  assert.match(promptByRole["usage-steps"], /连接/);
+  assert.deepEqual(
+    plan.items.filter((item) => /通勤手持|桌面办公/.test(item.prompt)).map((item) => item.role),
+    ["scene"],
+  );
 });
 
 test("creation planner normalizes supported industry templates", () => {
@@ -375,6 +457,8 @@ test("creation reference analysis normalizes role suggestions and prompt notes",
   });
 
   assert.equal(analysis.summary, "识别到产品正面、纹理细节和厨房使用场景。");
+  assert.equal(analysis.categoryHint, "");
+  assert.equal(analysis.categoryPath, "");
   assert.deepEqual(
     analysis.recommendations.map((entry) => [entry.filename, entry.role, entry.roleLabel, entry.note]),
     [
@@ -386,6 +470,22 @@ test("creation reference analysis normalizes role suggestions and prompt notes",
   assert.deepEqual(analysis.risks, ["包装信息不足"]);
   assert.ok(plan.items.every((item) => item.prompt.includes("texture.png = material and close-up detail")));
   assert.ok(plan.items.every((item) => item.prompt.includes("Analyst note: 磨砂纹理和边缘细节")));
+});
+
+test("creation reference analysis keeps category hints for template auto switching", () => {
+  const analysis = normalizeCreationReferenceAnalysis(
+    {
+      summary: "识别到手机正面和屏幕细节。",
+      category_hint: "智能手机",
+      category_path: "数码电子 > 手机通讯 > 手机 > 智能手机",
+      reference_roles: [{ index: 1, filename: "phone.png", role: "product", note: "手机主体和屏幕比例。" }],
+      risks: [],
+    },
+    ["phone.png"],
+  );
+
+  assert.equal(analysis.categoryHint, "智能手机");
+  assert.equal(analysis.categoryPath, "数码电子 > 手机通讯 > 手机 > 智能手机");
 });
 
 test("creation planner rejects missing product information", () => {

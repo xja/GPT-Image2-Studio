@@ -99,6 +99,9 @@ test("creation generation accepts references image count marketing scenario and 
   assert.match(server, /formData\.get\("imageCount"\)/);
   assert.match(server, /formData\.get\("scenario"\)/);
   assert.match(server, /formData\.get\("industryTemplate"\)/);
+  assert.match(server, /dimensionSpecs:\s*formData\.get\("dimensionSpecs"\)/);
+  assert.match(server, /dimensionSpecs:\s*plan\.dimensionSpecs/);
+  assert.match(server, /industryTemplatePath:\s*plan\.industryTemplatePath/);
   assert.match(server, /industryTemplate:\s*plan\.industryTemplate/);
   assert.match(server, /creationIndustryTemplate:\s*plan\.industryTemplate/);
   assert.match(server, /const referenceImages = await toReferenceImages/);
@@ -109,6 +112,9 @@ test("creation generation accepts references image count marketing scenario and 
   assert.match(worker, /formData\.get\("imageCount"\)/);
   assert.match(worker, /formData\.get\("scenario"\)/);
   assert.match(worker, /formData\.get\("industryTemplate"\)/);
+  assert.match(worker, /dimensionSpecs:\s*formData\.get\("dimensionSpecs"\)/);
+  assert.match(worker, /dimensionSpecs:\s*plan\.dimensionSpecs/);
+  assert.match(worker, /industryTemplatePath:\s*plan\.industryTemplatePath/);
   assert.match(worker, /industryTemplate:\s*plan\.industryTemplate/);
   assert.match(worker, /const referenceImages = await toReferenceImages/);
   assert.match(worker, /referenceImageNames:\s*referenceImages\.map/);
@@ -156,10 +162,13 @@ test("local creation plan preview exposes an independent route and shared overri
   assert.match(server, /applyCreationPlanOverrides/);
   assert.match(server, /async function handleCreationPlan/);
   assert.match(server, /url\.pathname === "\/api\/creation\/plan"/);
+  assert.match(server, /dimensionSpecs:\s*plan\.dimensionSpecs/);
   assert.match(previewHandler, /buildCreationPlan/);
+  assert.match(previewHandler, /dimensionSpecs:\s*formData\.get\("dimensionSpecs"\)/);
   assert.match(previewHandler, /formData\.get\("planOverrides"\)/);
   assert.match(previewHandler, /sendJson\(response,\s*200,\s*\{\s*ok:\s*true,\s*plan/);
   assert.doesNotMatch(previewHandler, /mergeRequestPrivateConfig/);
+  assert.match(generateHandler, /dimensionSpecs:\s*formData\.get\("dimensionSpecs"\)/);
   assert.match(generateHandler, /formData\.get\("planOverrides"\)/);
   assert.match(generateHandler, /applyCreationPlanOverrides\(plan,/);
 });
@@ -176,6 +185,8 @@ test("creation repair route regenerates selected set items", async () => {
   assert.match(server, /formData\.get\("promptOverride"\)/);
   assert.match(server, /formData\.get\("marketingCopyOverride"\)/);
   assert.match(server, /const repairItems = selectCreationRepairItems/);
+  assert.match(server, /dimensionSpecs:\s*existingSet\.dimensionSpecs/);
+  assert.match(server, /industryTemplatePath:\s*existingSet\.industryTemplatePath/);
   assert.match(server, /applyCreationRepairOverrides/);
   assert.match(server, /filename:\s*item\.filename \|\| buildCreationImageFilename/);
   assert.match(server, /prompt:\s*repairItem\.prompt/);
