@@ -108,10 +108,22 @@ test("creation category templates search by category code and third or fourth le
 
 test("creation category template auto matching avoids duplicate fourth-level names without parent context", () => {
   assert.equal(findCreationIndustryTemplateMatch("手套"), null);
+  assert.equal(findCreationIndustryTemplateMatch("苹果手机"), null);
 
   const matched = findCreationIndustryTemplateMatch("医药健康 医疗器械 医用耗材 手套");
   assert.equal(matched.template.value, "category:C15-001-004-002");
   assert.equal(matched.template.categoryPath, "医药健康 > 医疗器械 > 医用耗材 > 手套");
+});
+
+test("creation category template auto matching requires unambiguous category context", () => {
+  assert.equal(findCreationIndustryTemplateMatch("Apple iPhone 苹果手机"), null);
+  assert.equal(findCreationIndustryTemplateMatch("手机"), null);
+
+  const directCode = findCreationIndustryTemplateMatch("C06-001-001-001");
+  assert.equal(directCode.template.value, "category:C06-001-001-001");
+
+  const fullPath = findCreationIndustryTemplateMatch("数码电子 手机通讯 手机 智能手机");
+  assert.equal(fullPath.template.value, "category:C06-001-001-001");
 });
 
 test("representative fourth-level category templates expose inherited targeted prompt strategy fields", () => {

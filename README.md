@@ -20,6 +20,13 @@
 
 ## 功能更新
 
+### v0.1.2
+
+- 套图模式新增 1577 个四级电商类目模板，支持悬浮级联选择、三级/四级类目名或编码搜索，并把类目路径和拍摄重点写入套图计划。
+- 套图参考图智能识别可输出类目线索，并在匹配到明确四级类目时自动切换行业模板；模糊词会被拦截，避免错误切换到相似类目。
+- 前端改为按需加载四级类目模板，进入套图模式或打开类目选择器时再加载大体积模板模块，减少首屏加载压力。
+- README、OpenSpec、计划文档和测试同步覆盖 v0.1.2 的套图类目模板行为。
+
 - 新增套图模式：在创作工作台下独立于提示词/参考图模式，单个商品可用 4、6、8、10 或 12 张作为快捷模板；切换营销场景会自动带出推荐图片角色组合，也会为同一图片角色注入不同的场景专属提示词策略；行业模板入口放在下方，主界面只显示当前选择的类目名，点开后用悬浮下拉层从一级逐级进入二级、三级和四级类目，也可按三级/四级类目名或编码搜索 1577 个细分类目模板，旧的基础行业模板不再作为可选项展示；选中四级类目后会自动调整默认角色组合并注入类目拍摄重点；也可从 12 个电商图片角色中自选本次生成组合；可选择目标语言和标准电商、详情页转化、社媒种草、新品发布、活动促销、直播电商、礼品推荐、平台搜索、品牌故事等营销场景，并上传只用于套图的产品参考图；套图参考图可手动标注商品主体、包装清单、材质细节、使用场景、风格参考等用途，也可以智能识别每张图的推荐用途、生成备注和类目线索，识别到明确四级类目时会主动切换模板；复用历史套图后，重传的参考图既会自动匹配历史文件，也可以手动绑定到指定历史参考图；生成前可以先预览每张图的电商计划，并在正式生成前微调单张提示词；套图记录支持单张提示词微调后重生成、补图和补齐未完成项。
 - 新增 PPT 生成工作流：支持 PDF / DOCX / PPTX / TXT / MD / CSV 文件、文本材料或主题输入生成演示文稿。
 - PPT 页面按 16:9 幻灯片图像生成，可补齐失败页，并支持在单页上涂抹标注后重新生成。
@@ -284,7 +291,7 @@ npm run build:installer
 安装包产物位于：
 
 ```text
-artifacts/windows-installer/<build-id>/GPT-Image2-Studio-Setup-v0.1.1.exe
+artifacts/windows-installer/<build-id>/GPT-Image2-Studio-Setup-v0.1.2.exe
 ```
 
 安装后默认写入：
@@ -300,7 +307,7 @@ artifacts/windows-installer/<build-id>/GPT-Image2-Studio-Setup-v0.1.1.exe
 源码仓库建议保持私有或按需公开。发布 Release 时上传安装包：
 
 ```powershell
-gh release create v0.1.1 artifacts/windows-installer/<build-id>/GPT-Image2-Studio-Setup-v0.1.1.exe --title "GPT-Image2-Studio v0.1.1" --notes-file docs/windows-installer.md
+gh release create v0.1.2 artifacts/windows-installer/<build-id>/GPT-Image2-Studio-Setup-v0.1.2.exe --title "GPT-Image2-Studio v0.1.2" --notes-file docs/windows-installer.md
 ```
 
 发布前请确认 `.local/`、除 `.env.example` 外的 `.env*`、`output/`、`artifacts/` 和日志文件没有进入提交。

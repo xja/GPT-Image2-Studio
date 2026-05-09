@@ -19872,6 +19872,47 @@ function hasParentContext(text, template) {
     .some((part) => compactText.includes(part));
 }
 
+function hasStrongParentContext(text, template) {
+  const compactText = compactSearchText(text);
+  const compactLabel = compactSearchText(template.label);
+  if (!compactLabel || !compactText.includes(compactLabel)) {
+    return false;
+  }
+
+  const parentMatchCount = [template.level1Name, template.level2Name, template.level3Name]
+    .map(compactSearchText)
+    .filter(Boolean)
+    .filter((part) => compactText.includes(part)).length;
+
+  return parentMatchCount >= 2;
+}
+
+function isDirectCategoryTemplateMatch(text, template) {
+  const normalizedQuery = normalizeSearchText(text);
+  const compactText = compactSearchText(text);
+  const normalizedValue = normalizeSearchText(template.value);
+  const normalizedCode = normalizeSearchText(template.code);
+  const normalizedPath = normalizeSearchText(template.categoryPath);
+  const normalizedLabel = normalizeSearchText(template.label);
+
+  if (normalizedValue && (normalizedQuery === normalizedValue || normalizedQuery.includes(normalizedValue))) {
+    return true;
+  }
+  if (normalizedCode && (normalizedQuery === normalizedCode || normalizedQuery.includes(normalizedCode))) {
+    return true;
+  }
+  if (normalizedPath && (normalizedQuery === normalizedPath || compactText.includes(compactSearchText(template.categoryPath)))) {
+    return true;
+  }
+
+  const isDuplicateLabel = (CATEGORY_LABEL_COUNTS.get(template.label) || 0) > 1;
+  if (normalizedLabel && normalizedQuery === normalizedLabel && !isDuplicateLabel) {
+    return true;
+  }
+
+  return hasStrongParentContext(text, template);
+}
+
 export function findCreationIndustryTemplateMatch(text = "") {
   const query = cleanString(text);
   if (!query) {
@@ -19886,6 +19927,9 @@ export function findCreationIndustryTemplateMatch(text = "") {
   const best = ranked[0];
   const isDuplicateLabel = (CATEGORY_LABEL_COUNTS.get(best.template.label) || 0) > 1;
   if (isDuplicateLabel && !hasParentContext(query, best.template)) {
+    return null;
+  }
+  if (!isDirectCategoryTemplateMatch(query, best.template)) {
     return null;
   }
 

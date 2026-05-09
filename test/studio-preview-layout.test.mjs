@@ -1326,8 +1326,11 @@ test("creation mode has independent references count and scenario controls", asy
   assert.doesNotMatch(app, /creationIndustryTemplateOptionCount/);
   assert.match(app, /creationIndustryTemplateLevels: document\.querySelector\("#creationIndustryTemplateLevels"\)/);
   assert.match(app, /creationIndustryTemplateSearchInput: document\.querySelector\("#creationIndustryTemplateSearchInput"\)/);
-  assert.match(app, /CREATION_CATEGORY_TEMPLATE_OPTIONS/);
-  assert.match(app, /from "\/lib\/creation-category-templates\.mjs\?v=20260509-category-search-2"/);
+  assert.match(app, /creationCategoryTemplatesModule:\s*null/);
+  assert.match(app, /async function loadCreationCategoryTemplatesModule\(\) \{/);
+  assert.match(app, /const CREATION_CATEGORY_TEMPLATE_MODULE_URL = "\/lib\/creation-category-templates\.mjs\?v=20260509-category-search-2";/);
+  assert.match(app, /import\(CREATION_CATEGORY_TEMPLATE_MODULE_URL\)/);
+  assert.doesNotMatch(app, /from "\/lib\/creation-category-templates\.mjs\?v=20260509-category-search-2"/);
   assert.match(app, /creationReferenceInput: document\.querySelector\("#creationReferenceInput"\)/);
   assert.match(app, /creationRoleGrid: document\.querySelector\("#creationRoleGrid"\)/);
   assert.match(app, /creationRoleCount: document\.querySelector\("#creationRoleCount"\)/);
@@ -1351,7 +1354,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function applyCreationReferenceFiles\(fileList\) \{/);
   assert.match(app, /function buildCreationReferenceAnalysisFormData\(\) \{/);
   assert.match(app, /function analyzeCreationReferenceImages\(\) \{/);
-  assert.match(app, /function applyCreationReferenceAnalysis\(analysis\) \{/);
+  assert.match(app, /async function applyCreationReferenceAnalysis\(analysis\) \{/);
   assert.match(app, /function applyCreationReferenceAnalysisCategoryMatch\(analysis\) \{/);
   assert.match(app, /findCreationIndustryTemplateMatch/);
   assert.match(app, /function applyCreationReferenceAnalysisRecommendations\(\) \{/);

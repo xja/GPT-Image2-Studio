@@ -50,15 +50,6 @@ import {
   upsertGenerationActivityEntry,
 } from "/lib/generation-activity-feed.mjs?v=20260504-vercel-static-lib-1";
 import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260504-vercel-static-lib-1";
-import {
-  CREATION_CATEGORY_TEMPLATE_OPTIONS,
-  CREATION_INDUSTRY_TEMPLATE_OPTIONS,
-  findCreationIndustryTemplateMatch,
-  getCreationIndustryTemplateRolePreset,
-  normalizeCreationIndustryTemplate,
-  searchCreationIndustryTemplates,
-} from "/lib/creation-category-templates.mjs?v=20260509-category-search-2";
-
 const SURPRISE_PROMPTS = [
   {
     name: "清晨通勤",
@@ -196,6 +187,7 @@ const state = {
   aspectRatios: [],
   clientSessionId: "",
   config: null,
+  creationCategoryTemplatesModule: null,
   creation: {
     currentSet: null,
     editingItemId: "",
@@ -1918,6 +1910,9 @@ function setActiveView(view) {
 
   if (view === "studio" || view === "style-transfer") {
     setStudioGenerationMode(view === "style-transfer" ? "style-transfer" : "prompt");
+  }
+  if (view === "creation") {
+    ensureCreationCategoryTemplatesReady({ render: true });
   }
   syncGalleryLayoutMode();
   scheduleStudioHeightSync();
@@ -5757,8 +5752,17 @@ const CREATION_SCENARIO_LABELS = {
   "brand-story": "品牌故事",
 };
 
+const CREATION_CATEGORY_TEMPLATE_MODULE_URL = "/lib/creation-category-templates.mjs?v=20260509-category-search-2";
+const CREATION_BASE_INDUSTRY_TEMPLATE_OPTIONS = [
+  { value: "general", label: "通用电商", categoryPath: "", rolePreset: [] },
+  { value: "apparel", label: "服饰鞋包", categoryPath: "", rolePreset: ["hero", "scene", "material-closeup", "dimensions", "benefit", "social-proof", "review-qa", "promotion"] },
+  { value: "beauty", label: "美妆个护", categoryPath: "", rolePreset: ["hero", "benefit", "material-closeup", "usage-steps", "detail-trust", "social-proof", "package", "review-qa"] },
+  { value: "food", label: "食品饮料", categoryPath: "", rolePreset: ["hero", "benefit", "scene", "package", "material-closeup", "social-proof", "promotion", "review-qa"] },
+  { value: "electronics", label: "3C 数码", categoryPath: "", rolePreset: ["hero", "benefit", "dimensions", "usage-steps", "detail-trust", "comparison", "package", "review-qa"] },
+  { value: "home", label: "家居生活", categoryPath: "", rolePreset: ["hero", "scene", "dimensions", "material-closeup", "usage-steps", "benefit", "comparison", "review-qa"] },
+];
 const CREATION_INDUSTRY_TEMPLATE_LABELS = Object.fromEntries(
-  CREATION_INDUSTRY_TEMPLATE_OPTIONS.map((template) => [template.value, template.label]),
+  CREATION_BASE_INDUSTRY_TEMPLATE_OPTIONS.map((template) => [template.value, template.label]),
 );
 const CREATION_INDUSTRY_TEMPLATE_LEVEL_LABELS = ["一级类目", "二级类目", "三级类目", "四级类目"];
 const CREATION_INDUSTRY_TEMPLATE_EMPTY_LABEL = "未选择四级类目";
@@ -5851,6 +5855,95 @@ function setCreationSelectValue(select, value, fallback = "") {
   select.value = hasOption ? normalizedValue : fallbackValue;
 }
 
+let creationCategoryTemplatesModulePromise = null;
+
+function getFallbackCreationIndustryTemplate(value) {
+  const normalizedValue = String(value || "").trim();
+  const fallback =
+    CREATION_BASE_INDUSTRY_TEMPLATE_OPTIONS.find((template) => template.value === normalizedValue) ||
+    CREATION_BASE_INDUSTRY_TEMPLATE_OPTIONS[0];
+
+  return {
+    ...fallback,
+    rolePreset: Array.isArray(fallback.rolePreset) ? [...fallback.rolePreset] : [],
+  };
+}
+
+function normalizeCreationIndustryTemplate(value) {
+  const module = state.creationCategoryTemplatesModule;
+  if (module?.normalizeCreationIndustryTemplate) {
+    return module.normalizeCreationIndustryTemplate(value);
+  }
+
+  const normalizedValue = String(value || "").trim();
+  if (normalizedValue.startsWith("category:")) {
+    return {
+      value: normalizedValue,
+      label: normalizedValue.replace(/^category:/, ""),
+      categoryPath: "",
+      rolePreset: [],
+    };
+  }
+
+  return getFallbackCreationIndustryTemplate(normalizedValue);
+}
+
+function getCreationCategoryTemplateOptions() {
+  return state.creationCategoryTemplatesModule?.CREATION_CATEGORY_TEMPLATE_OPTIONS || [];
+}
+
+function getCreationIndustryTemplateRolePreset(value) {
+  const module = state.creationCategoryTemplatesModule;
+  if (module?.getCreationIndustryTemplateRolePreset) {
+    return module.getCreationIndustryTemplateRolePreset(value);
+  }
+
+  return normalizeCreationIndustryTemplate(value).rolePreset || [];
+}
+
+function searchCreationIndustryTemplates(query, options) {
+  return state.creationCategoryTemplatesModule?.searchCreationIndustryTemplates?.(query, options) || [];
+}
+
+function findCreationIndustryTemplateMatch(text) {
+  return state.creationCategoryTemplatesModule?.findCreationIndustryTemplateMatch?.(text) || null;
+}
+
+async function loadCreationCategoryTemplatesModule() {
+  if (state.creationCategoryTemplatesModule) {
+    return state.creationCategoryTemplatesModule;
+  }
+
+  if (!creationCategoryTemplatesModulePromise) {
+    creationCategoryTemplatesModulePromise = import(CREATION_CATEGORY_TEMPLATE_MODULE_URL)
+      .then((module) => {
+        state.creationCategoryTemplatesModule = module;
+        return module;
+      })
+      .catch((error) => {
+        creationCategoryTemplatesModulePromise = null;
+        throw error;
+      });
+  }
+
+  return creationCategoryTemplatesModulePromise;
+}
+
+async function ensureCreationCategoryTemplatesReady({ render = false } = {}) {
+  try {
+    const module = await loadCreationCategoryTemplatesModule();
+    if (render) {
+      renderCreationIndustryTemplateBrowser();
+      renderCreationRolePicker();
+    }
+    return module;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setCreationFeedback(`类目模板加载失败：${message}`, "error");
+    return null;
+  }
+}
+
 function setCreationIndustryTemplateBrowserPath(source = {}) {
   state.creationIndustryTemplateBrowser = {
     level1: String(source.level1Name || source.level1 || "").trim(),
@@ -5870,7 +5963,7 @@ function sortCreationIndustryTemplateRows(left, right) {
 }
 
 function filterCreationIndustryTemplateRowsForLevel(level, browserPath = state.creationIndustryTemplateBrowser) {
-  return CREATION_CATEGORY_TEMPLATE_OPTIONS.filter((template) => {
+  return getCreationCategoryTemplateOptions().filter((template) => {
     if (level > 1 && template.level1Name !== browserPath.level1) {
       return false;
     }
@@ -6083,7 +6176,12 @@ function renderCreationIndustryTemplateCurrentLevel(level) {
   const list = document.createElement("div");
   list.className = "creation-industry-option-list";
 
-  if (options.length === 0) {
+  if (!state.creationCategoryTemplatesModule) {
+    const loading = document.createElement("p");
+    loading.className = "creation-industry-empty";
+    loading.textContent = "正在载入类目模板...";
+    list.appendChild(loading);
+  } else if (options.length === 0) {
     const empty = document.createElement("p");
     empty.className = "creation-industry-empty";
     empty.textContent = "暂无下一级类目。";
@@ -6110,7 +6208,12 @@ function renderCreationIndustryTemplateSearchResults(query) {
   );
   const list = document.createElement("div");
   list.className = "creation-industry-option-list";
-  if (results.length === 0) {
+  if (!state.creationCategoryTemplatesModule) {
+    const loading = document.createElement("p");
+    loading.className = "creation-industry-empty";
+    loading.textContent = "正在载入类目模板...";
+    list.appendChild(loading);
+  } else if (results.length === 0) {
     const empty = document.createElement("p");
     empty.className = "creation-industry-empty";
     empty.textContent = "没有匹配的四级类目。";
@@ -7809,7 +7912,8 @@ function getCreationReferenceAnalysisCategoryText(analysis = {}) {
     .join(" ");
 }
 
-function applyCreationReferenceAnalysisCategoryMatch(analysis) {
+async function applyCreationReferenceAnalysisCategoryMatch(analysis) {
+  await loadCreationCategoryTemplatesModule();
   const match = findCreationIndustryTemplateMatch(getCreationReferenceAnalysisCategoryText(analysis));
   if (!match?.template) {
     return null;
@@ -7829,12 +7933,12 @@ function applyCreationReferenceAnalysisCategoryMatch(analysis) {
   return template;
 }
 
-function applyCreationReferenceAnalysis(analysis) {
+async function applyCreationReferenceAnalysis(analysis) {
   const normalized = normalizeCreationReferenceAnalysisPayload(analysis);
   state.creationReferenceAnalysis.result = normalized;
   state.creationReferenceAnalysis.applied = false;
   state.creationReferenceAnalysis.dirty = false;
-  const matchedTemplate = applyCreationReferenceAnalysisCategoryMatch(normalized);
+  const matchedTemplate = await applyCreationReferenceAnalysisCategoryMatch(normalized);
   renderCreationReferenceAnalysis();
   return matchedTemplate;
 }
@@ -7996,7 +8100,7 @@ async function analyzeCreationReferenceImages() {
       throw new Error(payload.message || "套图参考图识别失败。");
     }
 
-    const matchedTemplate = applyCreationReferenceAnalysis(payload);
+    const matchedTemplate = await applyCreationReferenceAnalysis(payload);
     const count = state.creationReferenceAnalysis.result?.recommendations?.length || 0;
     const categoryMessage = matchedTemplate
       ? `，已切换到 ${matchedTemplate.categoryPath || matchedTemplate.label}`
@@ -10147,9 +10251,10 @@ function bindEvents() {
   });
   refs.creationImageCountInput.addEventListener("change", syncCreationSelectedRolesToCount);
   refs.creationScenarioInput.addEventListener("change", syncCreationSelectedRolesToScenario);
-  refs.creationIndustryTemplateTrigger.addEventListener("click", () => {
+  refs.creationIndustryTemplateTrigger.addEventListener("click", async () => {
     const shouldOpenCreationIndustryTemplateBrowser = refs.creationIndustryTemplatePopover?.hidden !== false;
     if (shouldOpenCreationIndustryTemplateBrowser) {
+      await ensureCreationCategoryTemplatesReady();
       focusCreationIndustryTemplateBrowserOnSelectedTemplate();
     }
     renderCreationIndustryTemplateBrowser();
@@ -10180,6 +10285,7 @@ function bindEvents() {
   });
   refs.creationIndustryTemplateSearchInput.addEventListener("input", () => {
     setCreationIndustryTemplateBrowserOpen(true);
+    ensureCreationCategoryTemplatesReady({ render: true });
     renderCreationIndustryTemplateBrowser();
   });
   refs.creationRatioInput.addEventListener("change", renderCreationSizeOptions);
