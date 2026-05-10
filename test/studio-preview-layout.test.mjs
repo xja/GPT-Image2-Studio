@@ -140,7 +140,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260510-mobile-pad-layout-2/);
+  assert.match(html, /\/app\.js\?v=20260511-article-workspace-preview-2/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -153,11 +153,11 @@ test("scrollable surfaces use subtle themed scrollbars instead of default browse
   assert.match(styles, /--scrollbar-size:\s*10px;/);
   assert.match(
     styles,
-    /\.settings-form,\s*[\r\n]+\s*\.timeline-list,\s*[\r\n]+\s*\.recent-list,\s*[\r\n]+\s*\.filmstrip,\s*[\r\n]+\s*\.drawer-panel,\s*[\r\n]+\s*\.lightbox-dialog,\s*[\r\n]+\s*textarea\s*\{[\s\S]*scrollbar-width:\s*thin;[\s\S]*scrollbar-color:\s*var\(--scrollbar-thumb-color,\s*rgba\(132,\s*147,\s*255,\s*0\.42\)\)\s*var\(--scrollbar-track-color,\s*rgba\(255,\s*255,\s*255,\s*0\.06\)\);/,
+    /\.settings-form,[\s\S]*\.lightbox-dialog,[\s\S]*\.article-illustration-form,[\s\S]*\.article-board-sections,[\s\S]*textarea\s*\{[\s\S]*scrollbar-width:\s*thin;[\s\S]*scrollbar-color:\s*var\(--scrollbar-thumb-color,\s*rgba\(132,\s*147,\s*255,\s*0\.42\)\)\s*var\(--scrollbar-track-color,\s*rgba\(255,\s*255,\s*255,\s*0\.06\)\);/,
   );
   assert.match(
     styles,
-    /\.settings-form::-webkit-scrollbar,\s*[\r\n]+\s*\.timeline-list::-webkit-scrollbar,\s*[\r\n]+\s*\.recent-list::-webkit-scrollbar,\s*[\r\n]+\s*\.filmstrip::-webkit-scrollbar,\s*[\r\n]+\s*\.drawer-panel::-webkit-scrollbar,\s*[\r\n]+\s*\.lightbox-dialog::-webkit-scrollbar,\s*[\r\n]+\s*textarea::-webkit-scrollbar\s*\{[\s\S]*width:\s*var\(--scrollbar-size,\s*10px\);[\s\S]*height:\s*var\(--scrollbar-size,\s*10px\);/,
+    /\.settings-form::-webkit-scrollbar,[\s\S]*\.lightbox-dialog::-webkit-scrollbar,[\s\S]*\.article-illustration-form::-webkit-scrollbar,[\s\S]*\.article-board-sections::-webkit-scrollbar,[\s\S]*textarea::-webkit-scrollbar\s*\{[\s\S]*width:\s*var\(--scrollbar-size,\s*10px\);[\s\S]*height:\s*var\(--scrollbar-size,\s*10px\);/,
   );
   assert.match(styles, /\.settings-form::-webkit-scrollbar-thumb,[\s\S]*background:\s*linear-gradient\(180deg,\s*rgba\(156,\s*170,\s*255,\s*0\.58\),\s*rgba\(111,\s*124,\s*255,\s*0\.34\)\);/);
 });
@@ -314,7 +314,7 @@ test("style transfer mode exposes independent source and style uploads", async (
   assert.match(html, /id="styleTransferInstructionInput"/);
   assert.match(styles, /\.style-transfer-block\s*\{/);
   assert.match(styles, /\.style-transfer-upload-grid\s*\{/);
-  assert.match(app, /const CREATE_VIEW_IDS = new Set\(\["studio", "style-transfer", "reference-analysis", "creation", "ppt"\]\);/);
+  assert.match(app, /const CREATE_VIEW_IDS = new Set\(\["studio", "style-transfer", "reference-analysis", "creation", "article-illustration", "ppt"\]\);/);
   assert.match(app, /studioMode:\s*"prompt"/);
   assert.match(app, /function setStudioGenerationMode\(mode = "prompt"\)/);
   assert.match(app, /function getViewFromHash\(\) \{[\s\S]*"#style-transfer"[\s\S]*return "style-transfer";/);
@@ -786,7 +786,7 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(styles, /\.reference-analysis-result-panel\s*\{[\s\S]*overflow-y:\s*auto;/);
   assert.match(styles, /\.reference-analysis-params\s*\{/);
   assert.match(styles, /\.reference-analysis-view\s+\.reference-grid\s*\{/);
-  assert.match(app, /const CREATE_VIEW_IDS = new Set\(\["studio", "style-transfer", "reference-analysis", "creation", "ppt"\]\);/);
+  assert.match(app, /const CREATE_VIEW_IDS = new Set\(\["studio", "style-transfer", "reference-analysis", "creation", "article-illustration", "ppt"\]\);/);
   assert.match(app, /referenceAnalysis:\s*\{/);
   assert.match(app, /files:\s*\[\]/);
   assert.match(app, /autoCollapseOnApply:\s*true/);
@@ -1033,7 +1033,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260510-mobile-pad-layout-2/);
+  assert.match(html, /\/app\.js\?v=20260511-article-workspace-preview-2/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -1443,7 +1443,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260510-mobile-pad-layout-2/);
+  assert.match(html, /app\.js\?v=20260511-article-workspace-preview-2/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
@@ -1714,7 +1714,9 @@ test("creation record cards open gallery-style lightbox details", async () => {
   assert.match(app, /async function copyLightboxCreationRecordFullPath\(\) \{/);
   assert.match(app, /actions\.className = "creation-card-actions creation-record-card-actions";/);
   assert.match(app, /previewButton\.dataset\.creationRecordPreviewItemId = item\.itemId;/);
-  assert.match(app, /refs\.lightboxDelete\.hidden = Boolean\(fresh\.isCreationRecordItem\);/);
+  assert.match(app, /const isArticleRecordItem = Boolean\(fresh\.isArticleRecordItem\);/);
+  assert.match(app, /const isRecordItem = isCreationRecordItem \|\| isArticleRecordItem;/);
+  assert.match(app, /refs\.lightboxDelete\.hidden = Boolean\(isRecordItem\);/);
   assert.match(app, /refs\.lightboxCopyPathButton\.addEventListener\("click",/);
   assert.match(app, /refs\.lightboxCopyFullPathButton\.addEventListener\("click",/);
   assert.match(app, /refs\.creationRecordResultGrid\.addEventListener\("click",[\s\S]*creationRecordPreviewItemId/);

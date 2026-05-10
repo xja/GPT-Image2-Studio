@@ -122,6 +122,9 @@ const DEFAULT_GALLERY_CONTROLS = {
 
 const GALLERY_COLUMN_PRESETS = [6, 9, 12, 15, 18];
 const DEFAULT_GALLERY_COLUMN_PRESET = 12;
+const ARTICLE_RECORD_COLUMN_PRESETS = [2, 4, 6, 8];
+const DEFAULT_ARTICLE_RECORD_COLUMN_PRESET = 4;
+const DEFAULT_ARTICLE_ILLUSTRATION_STYLE_PRESET = "realist-magazine";
 const DEFAULT_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
 const DEFAULT_UI_RATIO = "1:1";
 const DEFAULT_UI_RATIO_LABEL = "方形 1:1";
@@ -161,8 +164,8 @@ const GALLERY_REFERENCE_LABELS = {
 };
 const STACKED_STUDIO_LAYOUT_MODES = new Set(["stacked", "tablet", "mobile"]);
 const PPT_SOURCE_MODES = new Set(["upload", "text", "topic"]);
-const CREATE_VIEW_IDS = new Set(["studio", "style-transfer", "reference-analysis", "creation", "ppt"]);
-const ASSET_VIEW_IDS = new Set(["gallery", "ppt-record", "creation-record"]);
+const CREATE_VIEW_IDS = new Set(["studio", "style-transfer", "reference-analysis", "creation", "article-illustration", "ppt"]);
+const ASSET_VIEW_IDS = new Set(["gallery", "article-record", "ppt-record", "creation-record"]);
 
 let studioHeightSyncFrame = 0;
 let studioHeightObserver = null;
@@ -188,6 +191,18 @@ const state = {
   aspectRatios: [],
   clientSessionId: "",
   config: null,
+  articleIllustration: {
+    currentSet: null,
+    feedback: "",
+    files: [],
+    generating: false,
+    planning: false,
+    recordQuery: "",
+    recordColumnPreset: DEFAULT_ARTICLE_RECORD_COLUMN_PRESET,
+    recordSetId: "",
+    referenceGenerating: false,
+    sets: [],
+  },
   creationCategoryTemplatesModule: null,
   creation: {
     currentSet: null,
@@ -304,6 +319,38 @@ const refs = {
   configStatus: document.querySelector("#configStatus"),
   connectionLabel: document.querySelector("#connectionLabel"),
   connectionStatus: document.querySelector("#connectionStatus"),
+  articleIllustrationContentTypeInput: document.querySelector("#articleIllustrationContentTypeInput"),
+  articleIllustrationCount: document.querySelector("#articleIllustrationCount"),
+  articleIllustrationDropzone: document.querySelector("#articleIllustrationDropzone"),
+  articleIllustrationFeedback: document.querySelector("#articleIllustrationFeedback"),
+  articleIllustrationFileCount: document.querySelector("#articleIllustrationFileCount"),
+  articleIllustrationFileList: document.querySelector("#articleIllustrationFileList"),
+  articleIllustrationForm: document.querySelector("#articleIllustrationForm"),
+  articleIllustrationGenerateButton: document.querySelector("#articleIllustrationGenerateButton"),
+  articleIllustrationPlanButton: document.querySelector("#articleIllustrationPlanButton"),
+  articleIllustrationReferenceButton: document.querySelector("#articleIllustrationReferenceButton"),
+  articleIllustrationReferenceList: document.querySelector("#articleIllustrationReferenceList"),
+  articleIllustrationSetMeta: document.querySelector("#articleIllustrationSetMeta"),
+  articleIllustrationSourceFilesInput: document.querySelector("#articleIllustrationSourceFilesInput"),
+  articleIllustrationSourceLength: document.querySelector("#articleIllustrationSourceLength"),
+  articleIllustrationSourceTextInput: document.querySelector("#articleIllustrationSourceTextInput"),
+  articleIllustrationStoryboardList: document.querySelector("#articleIllustrationStoryboardList"),
+  articleIllustrationStyleBibleInput: document.querySelector("#articleIllustrationStyleBibleInput"),
+  articleIllustrationStylePresetInput: document.querySelector("#articleIllustrationStylePresetInput"),
+  articleIllustrationSupplementInput: document.querySelector("#articleIllustrationSupplementInput"),
+  articleIllustrationTitleInput: document.querySelector("#articleIllustrationTitleInput"),
+  articleReferenceSectionCount: document.querySelector("#articleReferenceSectionCount"),
+  articleRecordContinueButton: document.querySelector("#articleRecordContinueButton"),
+  articleRecordCopyCaptionsButton: document.querySelector("#articleRecordCopyCaptionsButton"),
+  articleRecordCopyPromptsButton: document.querySelector("#articleRecordCopyPromptsButton"),
+  articleRecordCount: document.querySelector("#articleRecordCount"),
+  articleRecordColumnButtons: [...document.querySelectorAll("[data-article-record-column-preset]")],
+  articleRecordDetail: document.querySelector("#articleRecordDetail"),
+  articleRecordFeedback: document.querySelector("#articleRecordFeedback"),
+  articleRecordList: document.querySelector("#articleRecordList"),
+  articleRecordRefreshButton: document.querySelector("#articleRecordRefreshButton"),
+  articleRecordSearchInput: document.querySelector("#articleRecordSearchInput"),
+  articleStoryboardSectionCount: document.querySelector("#articleStoryboardSectionCount"),
   creationFeedback: document.querySelector("#creationFeedback"),
   creationForm: document.querySelector("#creationForm"),
   creationGenerateButton: document.querySelector("#creationGenerateButton"),
@@ -1538,8 +1585,14 @@ function getViewFromHash() {
   if (window.location.hash === "#creation") {
     return "creation";
   }
+  if (window.location.hash === "#article-illustration") {
+    return "article-illustration";
+  }
   if (window.location.hash === "#gallery") {
     return "gallery";
+  }
+  if (window.location.hash === "#article-record") {
+    return "article-record";
   }
   if (window.location.hash === "#creation-record") {
     return "creation-record";
@@ -1559,8 +1612,12 @@ function syncHash(view) {
         ? "#style-transfer"
         : view === "reference-analysis"
           ? "#reference-analysis"
+          : view === "article-illustration"
+            ? "#article-illustration"
           : view === "gallery"
             ? "#gallery"
+            : view === "article-record"
+              ? "#article-record"
             : view === "creation-record"
               ? "#creation-record"
               : view === "ppt-record"
@@ -1794,6 +1851,8 @@ function syncLightboxZoomState() {
 
 function syncLightboxCreationRecordActions(fresh = {}) {
   const isCreationRecordItem = Boolean(fresh.isCreationRecordItem);
+  const isArticleRecordItem = Boolean(fresh.isArticleRecordItem);
+  const isRecordItem = isCreationRecordItem || isArticleRecordItem;
   const hasRelativePath = Boolean(String(fresh.relativePath || "").trim());
 
   refs.lightboxCopyPathButton?.classList.toggle("hidden", !isCreationRecordItem);
@@ -1805,8 +1864,8 @@ function syncLightboxCreationRecordActions(fresh = {}) {
     refs.lightboxCopyFullPathButton.disabled = !isCreationRecordItem || !hasRelativePath;
   }
   if (refs.lightboxDelete) {
-    refs.lightboxDelete.hidden = Boolean(fresh.isCreationRecordItem);
-    refs.lightboxDelete.disabled = isCreationRecordItem || !fresh.filename;
+    refs.lightboxDelete.hidden = Boolean(isRecordItem);
+    refs.lightboxDelete.disabled = isRecordItem || !fresh.filename;
   }
 }
 
@@ -4556,6 +4615,25 @@ function renderGalleryColumnPresetButtons() {
   });
 }
 
+function normalizeArticleRecordColumnPreset(value) {
+  const preset = Number(value);
+  return ARTICLE_RECORD_COLUMN_PRESETS.includes(preset) ? preset : DEFAULT_ARTICLE_RECORD_COLUMN_PRESET;
+}
+
+function getArticleRecordColumnCount() {
+  return normalizeArticleRecordColumnPreset(state.articleIllustration.recordColumnPreset);
+}
+
+function renderArticleRecordColumnPresetButtons() {
+  const columnPreset = getArticleRecordColumnCount();
+  state.articleIllustration.recordColumnPreset = columnPreset;
+  refs.articleRecordColumnButtons.forEach((button) => {
+    const isActive = normalizeArticleRecordColumnPreset(button.dataset.articleRecordColumnPreset) === columnPreset;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
 function getVisibleGalleryItems(overrides = {}) {
   return filterGalleryItems(state.gallery, getGalleryFilterSnapshot(overrides));
 }
@@ -4762,6 +4840,8 @@ function renderAll() {
   renderStudio();
   renderReferenceAnalysisGrid();
   renderReferenceAnalysis();
+  renderArticleIllustrationView();
+  renderArticleRecordView();
   renderCreationView();
   renderCreationRecordView();
   renderPptView();
@@ -6501,6 +6581,998 @@ async function writeTextToClipboard(text, failureMessage = "当前浏览器不�
     textarea.remove();
     activeElement?.focus?.();
   }
+}
+
+function setArticleIllustrationFeedback(message = "", kind = "") {
+  if (!refs.articleIllustrationFeedback) {
+    return;
+  }
+
+  refs.articleIllustrationFeedback.textContent = message || "";
+  refs.articleIllustrationFeedback.dataset.state = kind || "";
+  state.articleIllustration.feedback = message || "";
+}
+
+function setArticleRecordFeedback(message = "", kind = "") {
+  if (!refs.articleRecordFeedback) {
+    return;
+  }
+
+  refs.articleRecordFeedback.textContent = message || "";
+  refs.articleRecordFeedback.dataset.state = kind || "";
+}
+
+function getArticleItemStatusLabel(status) {
+  const labels = {
+    planned: "待生成",
+    queued: "排队中",
+    generating: "生成中",
+    reference_generating: "参考图生成中",
+    in_progress: "部分完成",
+    partial_failed: "部分失败",
+    completed: "已完成",
+    failed: "失败",
+  };
+  return labels[String(status || "")] || "待生成";
+}
+
+function parsePositiveInteger(value, fallback = 0) {
+  const number = Number.parseInt(String(value || ""), 10);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function formatChineseNumber(value) {
+  const number = parsePositiveInteger(value, 0);
+  const digits = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+  if (number <= 0) {
+    return "";
+  }
+  if (number < 10) {
+    return digits[number];
+  }
+  if (number === 10) {
+    return "十";
+  }
+  if (number < 20) {
+    return `十${digits[number % 10]}`;
+  }
+  if (number < 100) {
+    const tens = Math.floor(number / 10);
+    const ones = number % 10;
+    return `${digits[tens]}十${ones ? digits[ones] : ""}`;
+  }
+  return String(number);
+}
+
+function normalizeArticleItemForView(item = {}, fallbackIndex = 0) {
+  const imageUrl = String(item.imageUrl || item.thumbnailUrl || "");
+  return {
+    itemId: String(item.itemId || `article-item-${fallbackIndex + 1}`),
+    slotIndex: Number(item.slotIndex) || fallbackIndex + 1,
+    itemKind: String(item.itemKind || "storyboard"),
+    cardId: String(item.cardId || ""),
+    title: String(item.title || `插图 ${fallbackIndex + 1}`),
+    paragraphIndex: parsePositiveInteger(item.paragraphIndex, 0),
+    timelineIndex: parsePositiveInteger(item.timelineIndex, 0),
+    narrativeBeat: String(item.narrativeBeat || ""),
+    prompt: String(item.prompt || ""),
+    originalText: String(item.originalText || ""),
+    captionText: String(item.captionText || ""),
+    modelTextHint: String(item.modelTextHint || ""),
+    referencedCardIds: Array.isArray(item.referencedCardIds) ? item.referencedCardIds.map(String).filter(Boolean) : [],
+    emotion: String(item.emotion || ""),
+    rhythm: String(item.rhythm || ""),
+    status: String(item.status || (imageUrl ? "completed" : "planned")),
+    filename: String(item.filename || ""),
+    relativePath: String(item.relativePath || ""),
+    imageUrl,
+    thumbnailUrl: String(item.thumbnailUrl || imageUrl),
+    error: String(item.error || ""),
+  };
+}
+
+function getArticleItemKindSortValue(item) {
+  return item?.itemKind === "reference-card" ? 0 : 1;
+}
+
+function orderArticleItemsForView(items = []) {
+  let storyboardOrdinal = 0;
+  return [...items]
+    .sort((left, right) => {
+      const leftKind = getArticleItemKindSortValue(left);
+      const rightKind = getArticleItemKindSortValue(right);
+      const leftTimeline = leftKind === 0 ? 0 : left.timelineIndex || left.slotIndex;
+      const rightTimeline = rightKind === 0 ? 0 : right.timelineIndex || right.slotIndex;
+      const leftParagraph = leftKind === 0 ? 0 : left.paragraphIndex || leftTimeline;
+      const rightParagraph = rightKind === 0 ? 0 : right.paragraphIndex || rightTimeline;
+      return (
+        leftKind - rightKind ||
+        leftTimeline - rightTimeline ||
+        leftParagraph - rightParagraph ||
+        left.slotIndex - right.slotIndex ||
+        left.title.localeCompare(right.title) ||
+        left.itemId.localeCompare(right.itemId)
+      );
+    })
+    .map((item, index) => {
+      if (item.itemKind === "reference-card") {
+        return {
+          ...item,
+          paragraphIndex: 0,
+          timelineIndex: 0,
+          slotIndex: index + 1,
+        };
+      }
+      storyboardOrdinal += 1;
+      return {
+        ...item,
+        paragraphIndex: item.paragraphIndex || storyboardOrdinal,
+        timelineIndex: item.timelineIndex || storyboardOrdinal,
+        slotIndex: index + 1,
+      };
+    });
+}
+
+function normalizeArticleSetForView(set = {}) {
+  const items = orderArticleItemsForView(
+    (Array.isArray(set.items) ? set.items : []).map((item, index) => normalizeArticleItemForView(item, index)),
+  );
+  return {
+    setId: String(set.setId || ""),
+    title: String(set.title || "未命名文章"),
+    sourceSummary: String(set.sourceSummary || ""),
+    contentType: String(set.contentType || "mixed"),
+    stylePreset: String(set.stylePreset || DEFAULT_ARTICLE_ILLUSTRATION_STYLE_PRESET),
+    styleBible: String(set.styleBible || ""),
+    recommendedImageCount: Number(set.recommendedImageCount) || items.length,
+    articleBundle: set.articleBundle || null,
+    characters: Array.isArray(set.characters) ? set.characters : [],
+    scenes: Array.isArray(set.scenes) ? set.scenes : [],
+    referenceCards: Array.isArray(set.referenceCards) ? set.referenceCards : [],
+    createdAt: String(set.createdAt || nowIso()),
+    updatedAt: String(set.updatedAt || set.createdAt || nowIso()),
+    status: String(set.status || "planned"),
+    relativeDir: String(set.relativeDir || ""),
+    items,
+  };
+}
+
+function createArticleImageOrderBadge(item) {
+  const badge = document.createElement("span");
+  badge.className = `article-image-order-badge ${item.itemKind === "reference-card" ? "reference" : "storyboard"}`;
+  badge.textContent = String(item.slotIndex || 0).padStart(2, "0");
+  badge.title = item.itemKind === "reference-card" ? "参考图排序" : "正文插图排序";
+  return badge;
+}
+
+function getArticleParagraphLabel(item) {
+  if (item.itemKind === "reference-card") {
+    return "参考图";
+  }
+  const paragraphIndex = parsePositiveInteger(item.paragraphIndex || item.timelineIndex || item.slotIndex, 0);
+  return paragraphIndex ? `第${formatChineseNumber(paragraphIndex)}段` : "正文段落";
+}
+
+function getArticleTimelineLabel(item) {
+  if (item.itemKind === "reference-card") {
+    return "";
+  }
+  const timelineIndex = parsePositiveInteger(item.timelineIndex || item.paragraphIndex || item.slotIndex, 0);
+  return timelineIndex ? `时间线 ${String(timelineIndex).padStart(2, "0")}` : "";
+}
+
+function getArticleCardHeadingLabel(item) {
+  if (item.itemKind === "reference-card") {
+    return `${String(item.slotIndex).padStart(2, "0")} · 参考图`;
+  }
+  return `${String(item.slotIndex).padStart(2, "0")} · ${getArticleParagraphLabel(item)}`;
+}
+
+function appendArticleRecordMetaPill(container, text, variant = "") {
+  if (!text) {
+    return;
+  }
+  const pill = document.createElement("span");
+  pill.className = `article-record-card-kind ${variant}`.trim();
+  pill.textContent = text;
+  container.appendChild(pill);
+}
+
+function getArticleCurrentSet() {
+  return state.articleIllustration.currentSet ? normalizeArticleSetForView(state.articleIllustration.currentSet) : null;
+}
+
+function upsertArticleSet(set) {
+  const normalized = normalizeArticleSetForView(set);
+  if (!normalized.setId) {
+    return;
+  }
+
+  state.articleIllustration.currentSet = normalized;
+  const nextSets = state.articleIllustration.sets.filter((entry) => entry.setId !== normalized.setId);
+  nextSets.unshift(normalized);
+  state.articleIllustration.sets = nextSets.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  renderArticleIllustrationView();
+  renderArticleRecordView();
+}
+
+function updateArticleCurrentItem(itemId, patch = {}) {
+  const currentSet = getArticleCurrentSet();
+  if (!currentSet) {
+    return;
+  }
+
+  state.articleIllustration.currentSet = normalizeArticleSetForView({
+    ...currentSet,
+    updatedAt: nowIso(),
+    items: currentSet.items.map((item) => (item.itemId === itemId ? { ...item, ...patch } : item)),
+  });
+}
+
+function getArticleProgressSummary(set = getArticleCurrentSet()) {
+  const items = Array.isArray(set?.items) ? set.items : [];
+  const total = items.length || Number(set?.recommendedImageCount) || 0;
+  const completed = items.filter((item) => item.status === "completed").length;
+  const failed = items.filter((item) => item.status === "failed").length;
+  const references = items.filter((item) => item.itemKind === "reference-card");
+  const referenceCompleted = references.filter((item) => item.status === "completed").length;
+  return { total, completed, failed, references: references.length, referenceCompleted };
+}
+
+function formatArticleDisplayText(value, fallback = "未命名文章") {
+  const text = String(value || "").trim();
+  return text && !/^[?？\s]+$/.test(text) ? text : fallback;
+}
+
+function syncArticlePlanEditsFromDom() {
+  const currentSet = getArticleCurrentSet();
+  if (!currentSet) {
+    return null;
+  }
+
+  const styleBible = refs.articleIllustrationStyleBibleInput?.value || currentSet.styleBible;
+  const nextItems = currentSet.items.map((item) => {
+    const selector = `[data-article-item-id="${CSS.escape(item.itemId)}"]`;
+    const root = [
+      refs.articleIllustrationReferenceList,
+      refs.articleIllustrationStoryboardList,
+      refs.articleRecordDetail,
+    ]
+      .filter(Boolean)
+      .map((container) => container.querySelector(selector))
+      .find(Boolean);
+    if (!root) {
+      return item;
+    }
+
+    return {
+      ...item,
+      title: root.querySelector("[data-article-item-title]")?.value || item.title,
+      prompt: root.querySelector("[data-article-item-prompt]")?.value || item.prompt,
+      captionText: root.querySelector("[data-article-item-caption]")?.value || item.captionText,
+      modelTextHint: root.querySelector("[data-article-item-text-hint]")?.value || item.modelTextHint,
+    };
+  });
+
+  state.articleIllustration.currentSet = normalizeArticleSetForView({
+    ...currentSet,
+    styleBible,
+    items: nextItems,
+    updatedAt: nowIso(),
+  });
+  return getArticleCurrentSet();
+}
+
+function applyArticleIllustrationFiles(fileList) {
+  const files = [...(fileList || [])];
+  state.articleIllustration.files.forEach((file) => {
+    if (file.previewUrl) {
+      URL.revokeObjectURL(file.previewUrl);
+    }
+  });
+  state.articleIllustration.files = files.map((file, index) => ({
+    id: `article-source-${Date.now()}-${index}`,
+    file,
+  }));
+  renderArticleIllustrationFiles();
+}
+
+function renderArticleIllustrationFiles() {
+  if (!refs.articleIllustrationFileList) {
+    return;
+  }
+
+  refs.articleIllustrationFileList.replaceChildren();
+  refs.articleIllustrationFileCount.textContent = `${state.articleIllustration.files.length} 个文件`;
+  state.articleIllustration.files.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "article-file-item";
+    const name = document.createElement("span");
+    name.textContent = item.file?.name || "未命名文件";
+    const meta = document.createElement("small");
+    meta.textContent = formatFileSize(item.file?.size || 0);
+    row.append(name, meta);
+    refs.articleIllustrationFileList.appendChild(row);
+  });
+}
+
+function updateArticleSourceLength() {
+  if (!refs.articleIllustrationSourceLength || !refs.articleIllustrationSourceTextInput) {
+    return;
+  }
+
+  const length = Array.from(refs.articleIllustrationSourceTextInput.value || "").length;
+  refs.articleIllustrationSourceLength.textContent = `${length} 字`;
+}
+
+function createArticleStoryboardCard(item) {
+  const card = document.createElement("article");
+  card.className = "article-story-card";
+  card.dataset.status = item.status || "planned";
+  card.dataset.articleItemId = item.itemId;
+  card.dataset.itemKind = item.itemKind;
+
+  const head = document.createElement("div");
+  head.className = "article-card-head";
+  const title = document.createElement("strong");
+  title.textContent = getArticleCardHeadingLabel(item);
+  const status = document.createElement("span");
+  status.textContent = getArticleItemStatusLabel(item.status);
+  head.append(title, status);
+  card.appendChild(head);
+
+  const imageUrl = item.imageUrl || item.thumbnailUrl;
+  const media = document.createElement(imageUrl ? "button" : "div");
+  media.className = "article-card-image";
+  if (imageUrl) {
+    media.type = "button";
+    media.classList.add("article-card-image-button");
+    media.dataset.articlePreviewItemId = item.itemId;
+    media.setAttribute("aria-label", `${item.title || "文章插图"} 查看大图`);
+  }
+  media.appendChild(createArticleImageOrderBadge(item));
+  if (imageUrl) {
+    const img = document.createElement("img");
+    img.src = imageUrl;
+    img.alt = item.title || "文章插图";
+    media.appendChild(img);
+  } else {
+    const placeholder = document.createElement("span");
+    placeholder.className = "article-card-image-placeholder";
+    placeholder.textContent = item.error || (item.itemKind === "reference-card" ? "参考图会用于后续一致性" : "确认后生成");
+    media.appendChild(placeholder);
+  }
+  card.appendChild(media);
+
+  const titleField = document.createElement("textarea");
+  titleField.rows = 1;
+  titleField.className = "article-caption-field";
+  titleField.dataset.articleItemTitle = "true";
+  titleField.value = item.title || "";
+  titleField.placeholder = "标题";
+  card.appendChild(titleField);
+
+  const promptField = document.createElement("textarea");
+  promptField.dataset.articleItemPrompt = "true";
+  promptField.value = item.prompt || "";
+  promptField.placeholder = "标准生图提示词";
+  card.appendChild(promptField);
+
+  const captionField = document.createElement("textarea");
+  captionField.rows = 2;
+  captionField.className = "article-caption-field";
+  captionField.dataset.articleItemCaption = "true";
+  captionField.value = item.captionText || "";
+  captionField.placeholder = "准确题注 / 原文句子";
+  card.appendChild(captionField);
+
+  const hintField = document.createElement("textarea");
+  hintField.rows = 2;
+  hintField.className = "article-caption-field";
+  hintField.dataset.articleItemTextHint = "true";
+  hintField.value = item.modelTextHint || "";
+  hintField.placeholder = "对话用漫画对话框/旁白框呈现，不要直接印在画面物体上";
+  card.appendChild(hintField);
+
+  const actions = document.createElement("div");
+  actions.className = "article-card-actions";
+  const copyPromptButton = document.createElement("button");
+  copyPromptButton.className = "mini-action";
+  copyPromptButton.type = "button";
+  copyPromptButton.dataset.articleCopyPromptItemId = item.itemId;
+  copyPromptButton.textContent = "复制提示词";
+  const copyCaptionButton = document.createElement("button");
+  copyCaptionButton.className = "mini-action";
+  copyCaptionButton.type = "button";
+  copyCaptionButton.dataset.articleCopyCaptionItemId = item.itemId;
+  copyCaptionButton.textContent = "复制题注";
+  const retryButton = document.createElement("button");
+  retryButton.className = "mini-action";
+  retryButton.type = "button";
+  retryButton.dataset.articleRetryItemId = item.itemId;
+  retryButton.textContent = item.status === "completed" ? "重生成" : "补图";
+  actions.append(copyPromptButton, copyCaptionButton, retryButton);
+  card.appendChild(actions);
+
+  return card;
+}
+
+function createArticleRecordCard(item, setId = "") {
+  const card = document.createElement("article");
+  card.className = "article-record-image-card article-story-card";
+  card.dataset.status = item.status || "planned";
+  card.dataset.articleItemId = item.itemId;
+  card.dataset.itemKind = item.itemKind;
+
+  const head = document.createElement("div");
+  head.className = "article-card-head";
+  const title = document.createElement("strong");
+  title.textContent = getArticleCardHeadingLabel(item);
+  const status = document.createElement("span");
+  status.textContent = getArticleItemStatusLabel(item.status);
+  head.append(title, status);
+  card.appendChild(head);
+
+  const imageUrl = item.imageUrl || item.thumbnailUrl;
+  const media = document.createElement(imageUrl ? "button" : "div");
+  media.className = "article-card-image";
+  if (imageUrl) {
+    media.type = "button";
+    media.classList.add("article-card-image-button");
+    media.dataset.articleRecordPreviewItemId = item.itemId;
+    media.dataset.articleRecordPreviewSetId = setId;
+    media.setAttribute("aria-label", `${item.title || "文章插图"} 查看大图`);
+  }
+  media.appendChild(createArticleImageOrderBadge(item));
+  if (imageUrl) {
+    const img = document.createElement("img");
+    img.src = imageUrl;
+    img.alt = item.title || "文章插图";
+    media.appendChild(img);
+  } else {
+    const placeholder = document.createElement("span");
+    placeholder.className = "article-card-image-placeholder";
+    placeholder.textContent = item.error || (item.itemKind === "reference-card" ? "参考图会用于后续一致性" : "确认后生成");
+    media.appendChild(placeholder);
+  }
+  card.appendChild(media);
+
+  const body = document.createElement("div");
+  body.className = "article-record-card-body";
+  const meta = document.createElement("div");
+  meta.className = "article-record-card-meta";
+  appendArticleRecordMetaPill(meta, getArticleParagraphLabel(item));
+  appendArticleRecordMetaPill(meta, getArticleTimelineLabel(item), "timeline");
+  const titleText = document.createElement("div");
+  titleText.className = "article-record-card-title";
+  titleText.textContent = item.title || "";
+  const caption = document.createElement("p");
+  caption.className = "article-record-card-caption";
+  caption.textContent = item.captionText || item.originalText || item.prompt || "暂无题注";
+  body.append(meta, titleText, caption);
+  card.appendChild(body);
+
+  const actions = document.createElement("div");
+  actions.className = "article-card-actions";
+  const copyPromptButton = document.createElement("button");
+  copyPromptButton.className = "mini-action";
+  copyPromptButton.type = "button";
+  copyPromptButton.dataset.articleCopyPromptItemId = item.itemId;
+  copyPromptButton.textContent = "复制提示词";
+  const copyCaptionButton = document.createElement("button");
+  copyCaptionButton.className = "mini-action";
+  copyCaptionButton.type = "button";
+  copyCaptionButton.dataset.articleCopyCaptionItemId = item.itemId;
+  copyCaptionButton.textContent = "复制题注";
+  const retryButton = document.createElement("button");
+  retryButton.className = "mini-action";
+  retryButton.type = "button";
+  retryButton.dataset.articleRetryItemId = item.itemId;
+  retryButton.textContent = item.status === "completed" ? "重生成" : "补图";
+  actions.append(copyPromptButton, copyCaptionButton, retryButton);
+  card.appendChild(actions);
+
+  return card;
+}
+
+function renderArticleIllustrationView() {
+  if (!refs.articleIllustrationStoryboardList) {
+    return;
+  }
+
+  renderArticleIllustrationFiles();
+  updateArticleSourceLength();
+  const currentSet = getArticleCurrentSet();
+  const progress = getArticleProgressSummary(currentSet);
+  const busy = state.articleIllustration.planning || state.articleIllustration.generating || state.articleIllustration.referenceGenerating;
+  const referenceItems = currentSet?.items?.filter((item) => item.itemKind === "reference-card") || [];
+  const storyboardItems = currentSet?.items?.filter((item) => item.itemKind !== "reference-card") || [];
+
+  refs.articleIllustrationPlanButton.textContent = state.articleIllustration.planning ? "解析中..." : "解析文章";
+  refs.articleIllustrationPlanButton.disabled = busy;
+  refs.articleIllustrationReferenceButton.disabled =
+    busy || !currentSet || progress.references === 0 || progress.referenceCompleted === progress.references;
+  refs.articleIllustrationReferenceButton.textContent = state.articleIllustration.referenceGenerating ? "参考图生成中..." : "生成参考图";
+  refs.articleIllustrationGenerateButton.disabled = busy || !currentSet;
+  refs.articleIllustrationGenerateButton.textContent = state.articleIllustration.generating ? "生成中..." : "确认并生成插图";
+  refs.articleIllustrationCount.textContent = `${progress.completed} / ${progress.total || 0} 张`;
+  refs.articleReferenceSectionCount.textContent = `${referenceItems.length} 张`;
+  refs.articleStoryboardSectionCount.textContent = `${storyboardItems.length} 张`;
+  refs.articleIllustrationSetMeta.textContent = currentSet
+    ? `${formatArticleDisplayText(currentSet.title)} · ${currentSet.contentType} · ${currentSet.stylePreset} · ${getArticleItemStatusLabel(currentSet.status)}`
+    : "等待解析";
+  if (currentSet && document.activeElement !== refs.articleIllustrationStyleBibleInput) {
+    refs.articleIllustrationStyleBibleInput.value = currentSet.styleBible || "";
+  }
+
+  refs.articleIllustrationReferenceList.replaceChildren();
+  referenceItems.forEach((item) => {
+    refs.articleIllustrationReferenceList.appendChild(createArticleStoryboardCard(item));
+  });
+  if (referenceItems.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "article-reference-card";
+    empty.textContent = currentSet ? "本次计划没有单独参考图。" : "解析后会显示人物和高频场景参考图。";
+    refs.articleIllustrationReferenceList.appendChild(empty);
+  }
+
+  refs.articleIllustrationStoryboardList.replaceChildren();
+  if (storyboardItems.length === 0) {
+    const empty = document.createElement("article");
+    empty.className = "article-story-card";
+    empty.textContent = currentSet ? "正文插图会显示在参考图之后。" : "先输入文章并解析，模型会生成可编辑的分镜表。";
+    refs.articleIllustrationStoryboardList.appendChild(empty);
+    return;
+  }
+  storyboardItems.forEach((item) => {
+    refs.articleIllustrationStoryboardList.appendChild(createArticleStoryboardCard(item));
+  });
+}
+
+function buildArticleIllustrationPlanFormData() {
+  const formData = new FormData();
+  formData.set("title", refs.articleIllustrationTitleInput.value.trim());
+  formData.set("sourceText", refs.articleIllustrationSourceTextInput.value.trim());
+  formData.set("supplementalPrompt", refs.articleIllustrationSupplementInput.value.trim());
+  formData.set("contentType", refs.articleIllustrationContentTypeInput.value || "auto");
+  formData.set("stylePreset", refs.articleIllustrationStylePresetInput.value || DEFAULT_ARTICLE_ILLUSTRATION_STYLE_PRESET);
+  formData.set("reasoningEffort", refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh");
+  state.articleIllustration.files.forEach((item) => {
+    if (item.file) {
+      formData.append("sourceFiles", item.file);
+    }
+  });
+  appendBrowserConfigToFormData(formData);
+  return formData;
+}
+
+function buildArticleIllustrationGenerateFormData({ itemIds = [], regenerate = false } = {}) {
+  const currentSet = syncArticlePlanEditsFromDom();
+  const formData = new FormData();
+  formData.set("setId", currentSet?.setId || "");
+  formData.set("styleBible", currentSet?.styleBible || "");
+  formData.set("items", JSON.stringify(currentSet?.items || []));
+  formData.set("ratio", "3:2");
+  formData.set("size", "auto");
+  formData.set("format", "png");
+  formData.set("reasoningEffort", refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh");
+  formData.set("clientSessionId", state.clientSessionId);
+  if (itemIds.length > 0) {
+    formData.set("itemIds", JSON.stringify(itemIds));
+  }
+  if (regenerate) {
+    formData.set("regenerate", "1");
+  }
+  appendBrowserConfigToFormData(formData);
+  return formData;
+}
+
+function handleArticleIllustrationStreamEvent(eventName, payload = {}) {
+  if (eventName === "references_started" || eventName === "set_started") {
+    if (payload.set) {
+      upsertArticleSet(payload.set);
+    }
+    setArticleIllustrationFeedback(eventName === "references_started" ? "正在生成重点参考图..." : "正在生成文章插图...", "busy");
+    return;
+  }
+
+  if (eventName === "item_started") {
+    updateArticleCurrentItem(payload.itemId, { status: "generating", error: "" });
+    setArticleIllustrationFeedback(`正在生成：${payload.title || payload.itemId}`, "busy");
+    renderArticleIllustrationView();
+    return;
+  }
+
+  if (eventName === "item_partial_image" || eventName === "item_final_image") {
+    updateArticleCurrentItem(payload.itemId, {
+      status: "generating",
+      imageUrl: payload.dataUrl,
+      thumbnailUrl: payload.dataUrl,
+    });
+    renderArticleIllustrationView();
+    return;
+  }
+
+  if (eventName === "item_saved") {
+    if (payload.set) {
+      upsertArticleSet(payload.set);
+    } else if (payload.item) {
+      updateArticleCurrentItem(payload.item.itemId, payload.item);
+    }
+    setArticleIllustrationFeedback("已保存一张文章插图。", "success");
+    renderArticleIllustrationView();
+    return;
+  }
+
+  if (eventName === "item_failed") {
+    if (payload.set) {
+      upsertArticleSet(payload.set);
+    } else if (payload.itemId) {
+      updateArticleCurrentItem(payload.itemId, { status: "failed", error: payload.message || "" });
+    }
+    setArticleIllustrationFeedback(payload.message || "文章插图生成失败。", "error");
+    renderArticleIllustrationView();
+    return;
+  }
+
+  if (eventName === "complete") {
+    if (payload.set) {
+      upsertArticleSet(payload.set);
+    }
+    setArticleIllustrationFeedback("文章插图任务已完成。", "success");
+    renderArticleIllustrationView();
+    return;
+  }
+
+  if (eventName === "error") {
+    const message = compactErrorMessage(payload.message, "文章插图请求失败");
+    setArticleIllustrationFeedback(message, "error");
+    showError(message);
+  }
+}
+
+async function runArticleIllustrationStream(response) {
+  await consumeSse(response.body, async (eventName, payload) => {
+    handleArticleIllustrationStreamEvent(eventName, payload);
+  });
+}
+
+async function previewArticleIllustrationPlan() {
+  if (state.articleIllustration.planning || state.articleIllustration.generating) {
+    return;
+  }
+
+  clearError();
+  setArticleIllustrationFeedback("");
+  if (!refs.articleIllustrationSourceTextInput.value.trim() && state.articleIllustration.files.length === 0 && !refs.articleIllustrationSupplementInput.value.trim()) {
+    const message = "请先粘贴文章正文、上传文本文件，或填写补充说明。";
+    setArticleIllustrationFeedback(message, "error");
+    showError(message);
+    return;
+  }
+
+  state.articleIllustration.planning = true;
+  setArticleIllustrationFeedback("正在解析整篇文章...", "busy");
+  renderArticleIllustrationView();
+
+  try {
+    const response = await fetch("/api/article-illustration/plan", {
+      method: "POST",
+      body: buildArticleIllustrationPlanFormData(),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.message || "文章插图解析失败");
+    }
+
+    state.articleIllustration.currentSet = normalizeArticleSetForView(payload.set || payload.plan || {});
+    if (refs.articleIllustrationStyleBibleInput) {
+      refs.articleIllustrationStyleBibleInput.value = state.articleIllustration.currentSet.styleBible || "";
+    }
+    upsertArticleSet(state.articleIllustration.currentSet);
+    setArticleIllustrationFeedback("已生成分镜、风格圣经和参考图计划，可编辑后继续。", "success");
+  } catch (error) {
+    const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "文章插图解析失败");
+    setArticleIllustrationFeedback(message, "error");
+    showError(message);
+  } finally {
+    state.articleIllustration.planning = false;
+    renderArticleIllustrationView();
+  }
+}
+
+async function generateArticleIllustrations({ referenceOnly = false, itemIds = [], regenerate = false } = {}) {
+  if (state.articleIllustration.generating || state.articleIllustration.referenceGenerating) {
+    return;
+  }
+
+  const currentSet = getArticleCurrentSet();
+  if (!currentSet?.setId) {
+    const message = "请先解析文章，确认分镜后再生成。";
+    setArticleIllustrationFeedback(message, "error");
+    showError(message);
+    return;
+  }
+
+  clearError();
+  state.articleIllustration.generating = !referenceOnly;
+  state.articleIllustration.referenceGenerating = referenceOnly;
+  setArticleIllustrationFeedback(referenceOnly ? "正在生成重点参考图..." : "正在生成正式插图...", "busy");
+  renderArticleIllustrationView();
+
+  try {
+    const requestOptions = {
+      method: "POST",
+      body: buildArticleIllustrationGenerateFormData({ itemIds, regenerate }),
+    };
+    const response = referenceOnly
+      ? await fetch("/api/article-illustration/generate-references", requestOptions)
+      : await fetch("/api/article-illustration/generate", requestOptions);
+    if (!response.ok || !response.body) {
+      throw new Error(referenceOnly ? "参考图生成请求失败" : "文章插图生成请求失败");
+    }
+
+    await runArticleIllustrationStream(response);
+    await loadArticleIllustrationSets();
+  } catch (error) {
+    const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "文章插图生成请求失败");
+    setArticleIllustrationFeedback(message, "error");
+    showError(message);
+  } finally {
+    state.articleIllustration.generating = false;
+    state.articleIllustration.referenceGenerating = false;
+    renderArticleIllustrationView();
+  }
+}
+
+async function loadArticleIllustrationSets() {
+  const response = await fetch("/api/article-illustration/sets", {
+    cache: "no-store",
+  });
+  if (response.status === 404) {
+    state.articleIllustration.sets = [];
+    state.articleIllustration.recordSetId = "";
+    renderArticleRecordView();
+    return;
+  }
+  if (!response.ok) {
+    throw new Error("读取文章插图记录失败");
+  }
+
+  const payload = await response.json();
+  const nextSets = Array.isArray(payload) ? payload.map(normalizeArticleSetForView).filter(Boolean) : [];
+  const currentSetId = state.articleIllustration.currentSet?.setId || "";
+  state.articleIllustration.sets = nextSets;
+  if (currentSetId) {
+    const matched = nextSets.find((set) => set.setId === currentSetId);
+    if (matched) {
+      state.articleIllustration.currentSet = matched;
+    }
+  }
+  if (state.articleIllustration.recordSetId && !nextSets.some((set) => set.setId === state.articleIllustration.recordSetId)) {
+    state.articleIllustration.recordSetId = "";
+  }
+  renderArticleIllustrationView();
+  renderArticleRecordView();
+}
+
+function getArticleRecordSearchText(set = {}) {
+  return [
+    set.title,
+    set.sourceSummary,
+    set.contentType,
+    set.stylePreset,
+    set.styleBible,
+    ...(Array.isArray(set.characters) ? set.characters.map((item) => item.name) : []),
+    ...(Array.isArray(set.scenes) ? set.scenes.map((item) => item.name) : []),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function filterArticleRecordSets() {
+  const query = String(state.articleIllustration.recordQuery || "").trim().toLowerCase();
+  if (!query) {
+    return state.articleIllustration.sets;
+  }
+  return state.articleIllustration.sets.filter((set) => getArticleRecordSearchText(set).includes(query));
+}
+
+function getArticleRecordSelectedSet() {
+  const filtered = filterArticleRecordSets();
+  return (
+    filtered.find((set) => set.setId === state.articleIllustration.recordSetId) ||
+    filtered[0] ||
+    null
+  );
+}
+
+function getArticleRecordItemById(itemId, setId = "") {
+  const selectedSet = setId
+    ? state.articleIllustration.sets.find((set) => set.setId === setId) ||
+      (state.articleIllustration.currentSet?.setId === setId ? state.articleIllustration.currentSet : null)
+    : getArticleRecordSelectedSet() || getArticleCurrentSet();
+  if (!selectedSet || !itemId) {
+    return null;
+  }
+
+  const item = selectedSet.items.find((entry) => entry.itemId === itemId) || null;
+  return item ? { item, set: selectedSet } : null;
+}
+
+function buildArticleRecordLightboxItem(item, set) {
+  const relativeFilename = String(item.relativePath || "").split(/[\\/]/).filter(Boolean).pop() || "";
+  return {
+    ...item,
+    id: `article-record:${set.setId}:${item.itemId || item.filename || relativeFilename}`,
+    articleItemId: item.itemId || "",
+    articleSetId: set.setId || "",
+    filename: item.filename || relativeFilename || "article-illustration.png",
+    createdAt: item.generationCompletedAt || set.updatedAt || set.createdAt || nowIso(),
+    prompt: item.prompt || item.captionText || item.title || "",
+    imageModel: item.imageModel || "gpt-image-2",
+    isArticleRecordItem: true,
+  };
+}
+
+function openArticleRecordItemPreview(itemId, setId = "") {
+  const record = getArticleRecordItemById(itemId, setId);
+  if (!record?.item || !getImageUrl(record.item)) {
+    setArticleRecordFeedback("当前单张还没有可查看的大图。", "error");
+    return;
+  }
+
+  openLightbox(buildArticleRecordLightboxItem(record.item, record.set));
+}
+
+function openArticleIllustrationItemPreview(itemId) {
+  const currentSet = syncArticlePlanEditsFromDom() || getArticleCurrentSet();
+  const item = currentSet?.items?.find((entry) => entry.itemId === itemId);
+  if (!currentSet || !item || !getImageUrl(item)) {
+    setArticleIllustrationFeedback("当前单张还没有可查看的大图。", "error");
+    return;
+  }
+
+  openLightbox(buildArticleRecordLightboxItem(item, currentSet));
+}
+
+function buildArticlePromptText(set = getArticleRecordSelectedSet()) {
+  if (!set) {
+    return "";
+  }
+  return set.items
+    .map((item) => [`# ${getArticleCardHeadingLabel(item)} ${getArticleTimelineLabel(item)} ${item.title}`.trim(), item.prompt].filter(Boolean).join("\n"))
+    .join("\n\n");
+}
+
+function buildArticleCaptionText(set = getArticleRecordSelectedSet()) {
+  if (!set) {
+    return "";
+  }
+  return set.items
+    .map((item) => [`# ${getArticleCardHeadingLabel(item)} ${getArticleTimelineLabel(item)} ${item.title}`.trim(), item.captionText || item.originalText].filter(Boolean).join("\n"))
+    .join("\n\n");
+}
+
+function renderArticleRecordList() {
+  if (!refs.articleRecordList) {
+    return;
+  }
+  const filteredSets = filterArticleRecordSets();
+  const selectedSet = getArticleRecordSelectedSet();
+  refs.articleRecordList.replaceChildren();
+  filteredSets.forEach((set) => {
+    const button = document.createElement("button");
+    button.className = `article-record-card ${selectedSet?.setId === set.setId ? "active" : ""}`;
+    button.type = "button";
+    button.dataset.articleRecordSetId = set.setId;
+    const title = document.createElement("strong");
+    title.textContent = formatArticleDisplayText(set.title);
+    const meta = document.createElement("small");
+    const progress = getArticleProgressSummary(set);
+    meta.textContent = `${progress.completed}/${progress.total} · ${set.stylePreset} · ${formatClock(set.createdAt)}`;
+    button.append(title, meta);
+    refs.articleRecordList.appendChild(button);
+  });
+}
+
+function renderArticleRecordDetail(set) {
+  if (!refs.articleRecordDetail) {
+    return;
+  }
+  const columnCount = getArticleRecordColumnCount();
+  refs.articleRecordDetail.dataset.recordColumns = String(columnCount);
+  refs.articleRecordDetail.replaceChildren();
+  if (!set) {
+    const empty = document.createElement("div");
+    empty.className = "article-record-summary";
+    empty.textContent = "还没有文章插图记录。";
+    refs.articleRecordDetail.appendChild(empty);
+    return;
+  }
+
+  const progress = getArticleProgressSummary(set);
+  const summary = document.createElement("div");
+  summary.className = "article-record-summary";
+  [
+    ["标题", formatArticleDisplayText(set.title)],
+    ["类型", set.contentType],
+    ["风格", set.stylePreset],
+    ["进度", `${progress.completed}/${progress.total}`],
+  ].forEach(([label, value]) => {
+    const item = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = `${label}: `;
+    item.append(strong, document.createTextNode(value || "--"));
+    summary.appendChild(item);
+  });
+  refs.articleRecordDetail.appendChild(summary);
+
+  const referenceItems = (Array.isArray(set.items) ? set.items : []).filter((item) => item.itemKind === "reference-card");
+  const storyboardItems = (Array.isArray(set.items) ? set.items : []).filter((item) => item.itemKind !== "reference-card");
+  const sections = document.createElement("div");
+  sections.className = "article-record-sections";
+
+  const appendRecordSection = (items, titleText, descriptionText, emptyText) => {
+    const section = document.createElement("section");
+    section.className = "article-record-section";
+    const head = document.createElement("div");
+    head.className = "article-record-section-head";
+    const copy = document.createElement("div");
+    const title = document.createElement("h3");
+    title.textContent = titleText;
+    const description = document.createElement("p");
+    description.textContent = descriptionText;
+    copy.append(title, description);
+    const count = document.createElement("span");
+    count.className = "count-pill small";
+    count.textContent = `${items.length} 张`;
+    head.append(copy, count);
+
+    const grid = document.createElement("div");
+    grid.className = "article-record-image-grid";
+    grid.style.setProperty("--article-record-columns", String(columnCount));
+    if (items.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "article-record-empty";
+      empty.textContent = emptyText;
+      grid.appendChild(empty);
+    } else {
+      items.forEach((item) => {
+        grid.appendChild(createArticleRecordCard(item, set.setId));
+      });
+    }
+
+    section.append(head, grid);
+    sections.appendChild(section);
+  };
+
+  appendRecordSection(referenceItems, "参考图", "人物和高频场景集中在这里，后续插图用它们保持一致性。", "本组记录没有单独参考图。");
+  appendRecordSection(storyboardItems, "正文插图", "按正文阅读顺序排列，和参考图分开查看。", "本组记录没有正文插图。");
+  refs.articleRecordDetail.appendChild(sections);
+}
+
+function renderArticleRecordView() {
+  if (!refs.articleRecordList) {
+    return;
+  }
+
+  const filteredSets = filterArticleRecordSets();
+  const selectedSet = getArticleRecordSelectedSet();
+  if (refs.articleRecordSearchInput && refs.articleRecordSearchInput.value !== state.articleIllustration.recordQuery) {
+    refs.articleRecordSearchInput.value = state.articleIllustration.recordQuery;
+  }
+  refs.articleRecordCount.textContent = state.articleIllustration.recordQuery
+    ? `${filteredSets.length} / ${state.articleIllustration.sets.length} 套`
+    : `${state.articleIllustration.sets.length} 套`;
+  refs.articleRecordCopyPromptsButton.disabled = !buildArticlePromptText(selectedSet);
+  refs.articleRecordCopyCaptionsButton.disabled = !buildArticleCaptionText(selectedSet);
+  refs.articleRecordContinueButton.disabled = !selectedSet?.items?.some((item) => item.status === "failed");
+
+  renderArticleRecordColumnPresetButtons();
+  renderArticleRecordList();
+  state.articleIllustration.recordSetId = selectedSet?.setId || "";
+  renderArticleRecordDetail(selectedSet);
 }
 
 function normalizeCreationItemForView(item = {}, fallbackIndex = 0) {
@@ -10171,6 +11243,159 @@ function bindEvents() {
     saveConfig(event).catch((error) => showError(error.message));
   });
   refs.generateForm.addEventListener("submit", startGeneration);
+  refs.articleIllustrationPlanButton.addEventListener("click", () => {
+    previewArticleIllustrationPlan().catch((error) => setArticleIllustrationFeedback(error.message, "error"));
+  });
+  refs.articleIllustrationReferenceButton.addEventListener("click", () => {
+    generateArticleIllustrations({ referenceOnly: true }).catch((error) =>
+      setArticleIllustrationFeedback(error.message, "error"),
+    );
+  });
+  refs.articleIllustrationGenerateButton.addEventListener("click", () => {
+    generateArticleIllustrations().catch((error) => setArticleIllustrationFeedback(error.message, "error"));
+  });
+  refs.articleIllustrationSourceFilesInput.addEventListener("change", (event) => {
+    applyArticleIllustrationFiles(event.target.files);
+  });
+  refs.articleIllustrationDropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    refs.articleIllustrationDropzone.classList.add("dragover");
+  });
+  refs.articleIllustrationDropzone.addEventListener("dragleave", () => {
+    refs.articleIllustrationDropzone.classList.remove("dragover");
+  });
+  refs.articleIllustrationDropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    refs.articleIllustrationDropzone.classList.remove("dragover");
+    applyArticleIllustrationFiles(event.dataTransfer?.files);
+  });
+  function handleArticleIllustrationCardClick(event) {
+    const previewButton = event.target.closest("[data-article-preview-item-id]");
+    if (previewButton) {
+      openArticleIllustrationItemPreview(previewButton.dataset.articlePreviewItemId);
+      return;
+    }
+
+    const retryButton = event.target.closest("[data-article-retry-item-id]");
+    if (retryButton) {
+      generateArticleIllustrations({
+        itemIds: [retryButton.dataset.articleRetryItemId],
+        regenerate: true,
+      }).catch((error) => setArticleIllustrationFeedback(error.message, "error"));
+      return;
+    }
+
+    const copyPromptButton = event.target.closest("[data-article-copy-prompt-item-id]");
+    if (copyPromptButton) {
+      const currentSet = syncArticlePlanEditsFromDom();
+      const item = currentSet?.items?.find((entry) => entry.itemId === copyPromptButton.dataset.articleCopyPromptItemId);
+      writeTextToClipboard(item?.prompt || "", "当前浏览器不支持复制文章插图提示词。").catch((error) =>
+        setArticleIllustrationFeedback(error.message, "error"),
+      );
+      return;
+    }
+
+    const copyCaptionButton = event.target.closest("[data-article-copy-caption-item-id]");
+    if (copyCaptionButton) {
+      const currentSet = syncArticlePlanEditsFromDom();
+      const item = currentSet?.items?.find((entry) => entry.itemId === copyCaptionButton.dataset.articleCopyCaptionItemId);
+      writeTextToClipboard(item?.captionText || item?.originalText || "", "当前浏览器不支持复制文章题注。").catch((error) =>
+        setArticleIllustrationFeedback(error.message, "error"),
+      );
+    }
+  }
+  refs.articleIllustrationReferenceList.addEventListener("click", handleArticleIllustrationCardClick);
+  refs.articleIllustrationStoryboardList.addEventListener("click", handleArticleIllustrationCardClick);
+  refs.articleRecordRefreshButton.addEventListener("click", () => {
+    loadArticleIllustrationSets().catch((error) => setArticleRecordFeedback(error.message, "error"));
+  });
+  refs.articleRecordSearchInput.addEventListener("input", (event) => {
+    state.articleIllustration.recordQuery = event.target.value;
+    renderArticleRecordView();
+  });
+  refs.articleRecordColumnButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const columnPreset = normalizeArticleRecordColumnPreset(button.dataset.articleRecordColumnPreset);
+      if (columnPreset === state.articleIllustration.recordColumnPreset) {
+        return;
+      }
+      state.articleIllustration.recordColumnPreset = columnPreset;
+      renderArticleRecordView();
+    });
+  });
+  refs.articleIllustrationSourceTextInput.addEventListener("input", updateArticleSourceLength);
+  refs.articleRecordList.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-article-record-set-id]");
+    if (!target) {
+      return;
+    }
+    state.articleIllustration.recordSetId = target.dataset.articleRecordSetId;
+    renderArticleRecordView();
+  });
+  refs.articleRecordDetail.addEventListener("click", (event) => {
+    const previewButton = event.target.closest("[data-article-record-preview-item-id]");
+    if (previewButton) {
+      openArticleRecordItemPreview(
+        previewButton.dataset.articleRecordPreviewItemId,
+        previewButton.dataset.articleRecordPreviewSetId,
+      );
+      return;
+    }
+
+    const retryButton = event.target.closest("[data-article-retry-item-id]");
+    if (retryButton) {
+      const selectedSet = getArticleRecordSelectedSet();
+      if (selectedSet) {
+        state.articleIllustration.currentSet = normalizeArticleSetForView(selectedSet);
+        setActiveView("article-illustration");
+        generateArticleIllustrations({
+          itemIds: [retryButton.dataset.articleRetryItemId],
+          regenerate: true,
+        }).catch((error) => setArticleIllustrationFeedback(error.message, "error"));
+      }
+      return;
+    }
+
+    const copyPromptButton = event.target.closest("[data-article-copy-prompt-item-id]");
+    if (copyPromptButton) {
+      const selectedSet = getArticleRecordSelectedSet();
+      const item = selectedSet?.items?.find((entry) => entry.itemId === copyPromptButton.dataset.articleCopyPromptItemId);
+      writeTextToClipboard(item?.prompt || "", "当前浏览器不支持复制文章插图提示词。").catch((error) =>
+        setArticleRecordFeedback(error.message, "error"),
+      );
+      return;
+    }
+
+    const copyCaptionButton = event.target.closest("[data-article-copy-caption-item-id]");
+    if (copyCaptionButton) {
+      const selectedSet = getArticleRecordSelectedSet();
+      const item = selectedSet?.items?.find((entry) => entry.itemId === copyCaptionButton.dataset.articleCopyCaptionItemId);
+      writeTextToClipboard(item?.captionText || item?.originalText || "", "当前浏览器不支持复制文章题注。").catch((error) =>
+        setArticleRecordFeedback(error.message, "error"),
+      );
+    }
+  });
+  refs.articleRecordCopyPromptsButton.addEventListener("click", () => {
+    writeTextToClipboard(buildArticlePromptText(), "当前浏览器不支持复制文章插图提示词。").catch((error) =>
+      setArticleRecordFeedback(error.message, "error"),
+    );
+  });
+  refs.articleRecordCopyCaptionsButton.addEventListener("click", () => {
+    writeTextToClipboard(buildArticleCaptionText(), "当前浏览器不支持复制文章题注。").catch((error) =>
+      setArticleRecordFeedback(error.message, "error"),
+    );
+  });
+  refs.articleRecordContinueButton.addEventListener("click", () => {
+    const selectedSet = getArticleRecordSelectedSet();
+    const failedIds = selectedSet?.items?.filter((item) => item.status === "failed").map((item) => item.itemId) || [];
+    if (selectedSet && failedIds.length > 0) {
+      state.articleIllustration.currentSet = normalizeArticleSetForView(selectedSet);
+      setActiveView("article-illustration");
+      generateArticleIllustrations({ itemIds: failedIds }).catch((error) =>
+        setArticleIllustrationFeedback(error.message, "error"),
+      );
+    }
+  });
   refs.creationForm.addEventListener("submit", startCreationGeneration);
   refs.creationPlanButton.addEventListener("click", () => {
     previewCreationPlan().catch((error) => setCreationFeedback(error.message, "error"));
@@ -10834,6 +12059,8 @@ async function bootstrap() {
   renderPromptTemplates();
   renderTimeline();
   renderStudio();
+  renderArticleIllustrationView();
+  renderArticleRecordView();
   renderCreationView();
   renderPptView();
   renderGalleryView();
@@ -10844,6 +12071,7 @@ async function bootstrap() {
   try {
     await loadConfig();
     await loadGallery();
+    await loadArticleIllustrationSets();
     await loadCreationSets();
     await loadGenerationTasks();
     await loadPromptAgentHistory();

@@ -21,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260510-mobile-pad-layout-2" />
+    <link rel="stylesheet" href="/styles.css?v=20260511-article-workspace-preview-2" />
   </head>
   <body>
     <div class="app-shell">
@@ -54,6 +54,7 @@
                     <a class="mega-menu-link" href="#style-transfer">风格迁移</a>
                     <a class="mega-menu-link" href="#reference-analysis">融图分析</a>
                     <a class="mega-menu-link" href="#creation">套图模式</a>
+                    <a class="mega-menu-link" href="#article-illustration">文章插图</a>
                     <a class="mega-menu-link" href="#ppt">PPT生成</a>
                   </section>
                   <section class="mega-menu-column" aria-label="创作工具">
@@ -73,6 +74,7 @@
                   <section class="mega-menu-column mega-menu-primary" aria-label="资产区">
                     <span class="mega-menu-kicker">资产区</span>
                     <a class="mega-menu-link large" href="#gallery">瀑布画廊</a>
+                    <a class="mega-menu-link" href="#article-record">文章插图记录</a>
                     <a class="mega-menu-link" href="#creation-record">套图记录</a>
                     <a class="mega-menu-link" href="#ppt-record">PPT记录</a>
                   </section>
@@ -414,6 +416,143 @@
                   </div>
                   <textarea id="referenceAnalysisSelectedPrompt" rows="6" readonly></textarea>
                 </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view-panel article-illustration-view hidden" data-view-panel="article-illustration">
+          <div class="article-illustration-workspace">
+            <section class="studio-panel article-input-panel">
+              <form class="article-illustration-form" id="articleIllustrationForm">
+                <div class="panel-title between">
+                  <div>
+                    <h2>文章插图</h2>
+                    <p>先解析整篇文章，再确认分镜与风格后批量生成。</p>
+                  </div>
+                  <span class="count-pill small" id="articleIllustrationCount">0 张</span>
+                </div>
+
+                <label class="compact-field">
+                  <span>文章标题</span>
+                  <input id="articleIllustrationTitleInput" name="title" type="text" maxlength="100" placeholder="可留空，模型会从正文中提炼" />
+                </label>
+
+                <label class="compact-field article-source-field">
+                  <div class="article-source-heading">
+                    <span>正文 / 多段材料</span>
+                    <output class="article-field-count" id="articleIllustrationSourceLength" for="articleIllustrationSourceTextInput">0 字</output>
+                  </div>
+                  <textarea
+                    id="articleIllustrationSourceTextInput"
+                    name="sourceText"
+                    rows="10"
+                    placeholder="粘贴完整文章、多个自然段或不同来源的材料。模型会先整体阅读，再按节奏建议插图数量。"
+                  ></textarea>
+                </label>
+
+                <div class="article-file-block">
+                  <div class="field-heading">
+                    <div>
+                      <span>文本文件</span>
+                    </div>
+                    <small id="articleIllustrationFileCount">0 个文件</small>
+                  </div>
+                  <label class="reference-dropzone article-file-dropzone" id="articleIllustrationDropzone">
+                    <input id="articleIllustrationSourceFilesInput" name="sourceFiles" type="file" accept=".txt,.md,.csv,.json" multiple />
+                    <div class="reference-icon" aria-hidden="true"></div>
+                    <strong>拖入文本文件或点击上传</strong>
+                    <em>TXT / MD / CSV / JSON</em>
+                  </label>
+                  <div class="article-file-list" id="articleIllustrationFileList"></div>
+                </div>
+
+                <label class="compact-field">
+                  <span>补充说明</span>
+                  <textarea
+                    id="articleIllustrationSupplementInput"
+                    name="supplementalPrompt"
+                    rows="3"
+                    maxlength="900"
+                    placeholder="可说明人物设定、不能改变的细节、情绪节奏、参考方向或禁用元素。"
+                  ></textarea>
+                </label>
+
+                <div class="article-control-grid">
+                  <label class="compact-field">
+                    <span>内容类型</span>
+                    <select id="articleIllustrationContentTypeInput" name="contentType">
+                      <option value="auto">自动判断</option>
+                      <option value="narrative">叙事故事</option>
+                      <option value="article">图文文章</option>
+                      <option value="mixed">混合通用</option>
+                    </select>
+                  </label>
+
+                  <label class="compact-field">
+                    <span>生成风格</span>
+                    <select id="articleIllustrationStylePresetInput" name="stylePreset">
+                      <option value="realist-magazine" selected>杂志写实</option>
+                      <option value="editorial-watercolor">编辑水彩</option>
+                      <option value="cinematic-editorial">电影感插画</option>
+                      <option value="picture-book">绘本质感</option>
+                      <option value="ink-wash">淡墨叙事</option>
+                      <option value="documentary-realism">纪实摄影感</option>
+                      <option value="historical-realism">历史写实</option>
+                      <option value="gongbi-heritage">工笔国风</option>
+                      <option value="graphic-novel">图像小说</option>
+                      <option value="noir-comic">黑白漫画</option>
+                      <option value="vintage-newsprint">旧报刊版画</option>
+                      <option value="surreal-editorial">超现实社论</option>
+                      <option value="anime-storyboard">动画分镜</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label class="compact-field article-style-bible-field">
+                  <span>风格圣经</span>
+                  <textarea id="articleIllustrationStyleBibleInput" rows="4" placeholder="解析后可在这里微调全局风格、情绪、节奏和一致性约束。"></textarea>
+                </label>
+
+                <button class="toolbar-button" id="articleIllustrationPlanButton" type="button">解析文章</button>
+                <p class="ppt-feedback" id="articleIllustrationFeedback"></p>
+              </form>
+            </section>
+
+            <section class="studio-panel article-plan-panel">
+              <div class="panel-title between">
+                <div>
+                  <h2>分镜与设定</h2>
+                  <p id="articleIllustrationSetMeta">等待解析</p>
+                </div>
+                <div class="article-plan-actions">
+                  <button class="toolbar-button" id="articleIllustrationReferenceButton" type="button" disabled>生成参考图</button>
+                  <button class="generate-button" id="articleIllustrationGenerateButton" type="button" disabled>确认并生成插图</button>
+                </div>
+              </div>
+
+              <div class="article-board-sections">
+                <section class="article-board-section article-reference-section">
+                  <div class="article-board-section-head">
+                    <div>
+                      <h3>参考图</h3>
+                      <p>先放人物与高频场景，保证后续一致性。</p>
+                    </div>
+                    <span class="count-pill small" id="articleReferenceSectionCount">0 张</span>
+                  </div>
+                  <div class="article-reference-list" id="articleIllustrationReferenceList"></div>
+                </section>
+
+                <section class="article-board-section article-storyboard-section">
+                  <div class="article-board-section-head">
+                    <div>
+                      <h3>正文插图</h3>
+                      <p>按阅读顺序排列，参考图放在前面。</p>
+                    </div>
+                    <span class="count-pill small" id="articleStoryboardSectionCount">0 张</span>
+                  </div>
+                  <div class="article-storyboard-list" id="articleIllustrationStoryboardList"></div>
+                </section>
               </div>
             </section>
           </div>
@@ -939,6 +1078,71 @@
           </section>
         </section>
 
+        <section class="view-panel article-record-view hidden" data-view-panel="article-record">
+          <section class="studio-panel article-record-panel">
+            <div class="panel-title between">
+              <div>
+                <h2>文章插图记录</h2>
+              </div>
+              <div class="article-record-actions">
+                <label class="creation-record-search">
+                  <span>搜索</span>
+                  <input id="articleRecordSearchInput" type="search" placeholder="标题、风格、正文摘要" autocomplete="off" />
+                </label>
+                <span class="count-pill" id="articleRecordCount">0 套</span>
+                <div class="gallery-column-switch article-record-column-switch" role="group" aria-label="文章插图记录列数">
+                  <span class="gallery-column-label">列</span>
+                  <button
+                    class="gallery-column-button"
+                    type="button"
+                    data-article-record-column-preset="2"
+                    aria-label="显示 2 列"
+                    aria-pressed="false"
+                  >
+                    2
+                  </button>
+                  <button
+                    class="gallery-column-button active"
+                    type="button"
+                    data-article-record-column-preset="4"
+                    aria-label="显示 4 列"
+                    aria-pressed="true"
+                  >
+                    4
+                  </button>
+                  <button
+                    class="gallery-column-button"
+                    type="button"
+                    data-article-record-column-preset="6"
+                    aria-label="显示 6 列"
+                    aria-pressed="false"
+                  >
+                    6
+                  </button>
+                  <button
+                    class="gallery-column-button"
+                    type="button"
+                    data-article-record-column-preset="8"
+                    aria-label="显示 8 列"
+                    aria-pressed="false"
+                  >
+                    8
+                  </button>
+                </div>
+                <button class="toolbar-button" id="articleRecordCopyPromptsButton" type="button" disabled>复制提示词</button>
+                <button class="toolbar-button" id="articleRecordCopyCaptionsButton" type="button" disabled>复制题注</button>
+                <button class="toolbar-button" id="articleRecordContinueButton" type="button" disabled>继续失败项</button>
+                <button class="toolbar-button" id="articleRecordRefreshButton" type="button">刷新记录</button>
+                <p class="prompt-agent-feedback creation-record-feedback" id="articleRecordFeedback" aria-live="polite"></p>
+              </div>
+            </div>
+            <div class="article-record-browser">
+              <div class="article-record-list" id="articleRecordList"></div>
+              <article class="article-record-detail" id="articleRecordDetail" aria-live="polite" tabindex="-1"></article>
+            </div>
+          </section>
+        </section>
+
         <section class="view-panel creation-record-view hidden" data-view-panel="creation-record">
           <section class="studio-panel creation-record-panel">
             <div class="panel-title between">
@@ -1266,6 +1470,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260510-mobile-pad-layout-2"></script>
+    <script type="module" src="/app.js?v=20260511-article-workspace-preview-2"></script>
   </body>
 </html>

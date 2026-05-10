@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { homedir, tmpdir } from "node:os";
@@ -65,6 +65,13 @@ import {
 } from "./lib/creation-planner.mjs";
 import { applyCreationRepairOverrides, selectCreationRepairItems } from "./lib/creation-repair.mjs";
 import { buildCreationRelativeDir, createCreationSetStore } from "./lib/creation-store.mjs";
+import {
+  buildArticleBundle,
+  buildArticleImagePrompt,
+  DEFAULT_ARTICLE_ILLUSTRATION_STYLE_PRESET,
+  generateArticleIllustrationPlan,
+} from "./lib/article-illustration-planner.mjs";
+import { buildArticleRelativeDir, createArticleIllustrationSetStore } from "./lib/article-illustration-store.mjs";
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(rootDir, "public");
@@ -80,11 +87,14 @@ const promptAgentStore = createPromptAgentStore({ rootDir: localDataRootDir });
 const generationTaskStore = createGenerationTaskStore();
 const pptDeckStore = createPptDeckStore({ outputDir, publicBasePath: "/output" });
 const creationSetStore = createCreationSetStore({ outputDir, publicBasePath: "/output" });
+const articleIllustrationSetStore = createArticleIllustrationSetStore({ outputDir, publicBasePath: "/output" });
 const port = Number(process.env.PORT || 3600);
 const activeTasksBySession = new Map();
 const PPT_SOURCE_EXTENSIONS = new Set([".pdf", ".docx", ".pptx", ".txt", ".md", ".csv"]);
+const ARTICLE_SOURCE_EXTENSIONS = new Set([".txt", ".md", ".csv", ".json"]);
 const PPT_SLIDE_SIZE = "2048x1152";
 const PPT_SLIDE_FORMAT = "png";
+const ARTICLE_ILLUSTRATION_FORMAT = "png";
 const MOCK_IMAGE_GENERATION_ENABLED = process.env.IMAGE_STUDIO_MOCK_IMAGE_GENERATION === "1";
 const MOCK_IMAGE_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==";
@@ -398,6 +408,7 @@ async function handleOpenOutput(response) {
     mkdir(join(todayOutputDir, `${todayDateFolder}-image`), { recursive: true }),
     mkdir(join(todayOutputDir, `${todayDateFolder}-ppt`), { recursive: true }),
     mkdir(join(todayOutputDir, `${todayDateFolder}-creation`), { recursive: true }),
+    mkdir(join(todayOutputDir, `${todayDateFolder}-article`), { recursive: true }),
   ]);
   openDirectory(todayOutputDir);
   sendJson(response, 200, {
@@ -589,6 +600,29 @@ async function toPptSourceDocuments(files) {
         mimeType: file.type || "application/octet-stream",
         buffer,
         base64: buffer.toString("base64"),
+      };
+    }),
+  );
+}
+
+async function toArticleTextSources(files) {
+  const validFiles = files.filter(
+    (file) => file && typeof file === "object" && typeof file.arrayBuffer === "function" && file.size > 0,
+  );
+
+  return Promise.all(
+    validFiles.map(async (file, index) => {
+      const filename = String(file.name || `article-source-${index + 1}.txt`).trim();
+      const extension = extname(filename).toLowerCase();
+      if (!ARTICLE_SOURCE_EXTENSIONS.has(extension)) {
+        throw new Error("文章插图第一版仅支持 TXT / MD / CSV / JSON 文本文件。");
+      }
+
+      const buffer = Buffer.from(await file.arrayBuffer());
+      return {
+        filename,
+        mimeType: file.type || "text/plain",
+        text: buffer.toString("utf8").replace(/^\uFEFF/, ""),
       };
     }),
   );
@@ -1257,6 +1291,642 @@ function buildCreationImageFilename({ item, createdAt, setId, format }) {
     idSource: `${setId}-${item.itemId}`,
   });
   return `${String(item.slotIndex).padStart(2, "0")}-${filenameToken}-${baseName}`;
+}
+
+function parseStringArrayJson(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  } catch {
+    return raw
+      .split(/[,\n]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+}
+
+function updateArticleItems(items, itemId, patch = {}) {
+  return items.map((item) => (item.itemId === itemId ? { ...item, ...patch } : item));
+}
+
+function getArticleSetStatus(items) {
+  if (!items.length) {
+    return "planned";
+  }
+
+  const generatingCount = items.filter((item) => item.status === "generating").length;
+  const completedCount = items.filter((item) => item.status === "completed").length;
+  const failedCount = items.filter((item) => item.status === "failed").length;
+
+  if (generatingCount > 0) {
+    return "generating";
+  }
+
+  if (completedCount === items.length) {
+    return "completed";
+  }
+
+  if (failedCount === items.length) {
+    return "failed";
+  }
+
+  if (failedCount > 0) {
+    return "partial_failed";
+  }
+
+  if (completedCount > 0) {
+    return "in_progress";
+  }
+
+  return "planned";
+}
+
+function syncArticleReferenceCardsFromItems(referenceCards = [], items = []) {
+  return referenceCards.map((card) => {
+    const cardItem = items.find((item) => item.itemKind === "reference-card" && item.cardId === card.cardId);
+    if (!cardItem) {
+      return card;
+    }
+
+    return {
+      ...card,
+      itemId: cardItem.itemId,
+      relativePath: cardItem.relativePath || card.relativePath || "",
+      imageUrl: cardItem.imageUrl || card.imageUrl || "",
+    };
+  });
+}
+
+function buildArticleSetManifest({
+  setId,
+  plan,
+  articleBundle,
+  createdAt,
+  updatedAt,
+  status,
+  relativeDir,
+  items,
+}) {
+  return {
+    setId,
+    title: plan.title,
+    sourceSummary: plan.sourceSummary || articleBundle?.sourceSummary || "",
+    contentType: plan.contentType,
+    stylePreset: plan.stylePreset,
+    styleBible: plan.styleBible,
+    recommendedImageCount: plan.recommendedImageCount || items.length,
+    articleBundle: articleBundle || null,
+    characters: plan.characters || [],
+    scenes: plan.scenes || [],
+    referenceCards: syncArticleReferenceCardsFromItems(plan.referenceCards || [], items),
+    createdAt,
+    updatedAt: updatedAt || createdAt,
+    status,
+    relativeDir,
+    items,
+  };
+}
+
+function normalizeArticleFilenameToken(value, fallback = "article") {
+  const sanitized = String(value || "")
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 34);
+  return sanitized || fallback;
+}
+
+function buildArticleImageFilename({ item, createdAt, setId, format }) {
+  const filenameToken = normalizeArticleFilenameToken(
+    item.itemKind === "reference-card" ? `ref-${item.cardId || item.itemId}` : item.title || item.itemId,
+    item.itemKind === "reference-card" ? "reference" : "illustration",
+  );
+  const baseName = createTimestampedFilename({
+    format,
+    prompt: `${item.title} ${item.prompt}`,
+    createdAt,
+    idSource: `${setId}-${item.itemId}`,
+  });
+  return `${String(item.slotIndex).padStart(2, "0")}-${filenameToken}-${baseName}`;
+}
+
+async function getArticleReferenceImagesForItem(items = [], item = {}) {
+  if (item.itemKind === "reference-card") {
+    return [];
+  }
+
+  const referencedCardIds = new Set(Array.isArray(item.referencedCardIds) ? item.referencedCardIds : []);
+  const completedReferenceItems = items.filter(
+    (entry) =>
+      entry.itemKind === "reference-card" &&
+      entry.status === "completed" &&
+      entry.relativePath &&
+      (!referencedCardIds.size || referencedCardIds.has(entry.cardId)),
+  );
+  const selectedReferenceItems = completedReferenceItems.slice(0, MAX_REFERENCE_IMAGES);
+
+  const referenceImages = [];
+  for (const referenceItem of selectedReferenceItems) {
+    const absolutePath = resolveSafeOutputPath(referenceItem.relativePath);
+    if (!absolutePath) {
+      continue;
+    }
+    const buffer = await readFile(absolutePath);
+    referenceImages.push({
+      filename: referenceItem.filename || basename(absolutePath),
+      mimeType: getMimeType(absolutePath),
+      buffer,
+      base64: buffer.toString("base64"),
+    });
+  }
+
+  return referenceImages;
+}
+
+function buildArticleReferenceImageLabels(referenceImages = []) {
+  return referenceImages.map(
+    (image, index) =>
+      `Reference card ${index + 1}: ${image.filename}. Preserve only character identity, recurring scene geography, lighting, palette, and visual continuity from this reference.`,
+  );
+}
+
+async function handleArticleIllustrationSetsGet(response) {
+  sendJson(response, 200, await articleIllustrationSetStore.listManifests(), {
+    "Cache-Control": "no-store",
+  });
+}
+
+async function handleArticleIllustrationPlan(request, response) {
+  try {
+    const formData = await readFormDataBody(request);
+    const sourceFiles = await toArticleTextSources([
+      ...formData.getAll("sourceFiles"),
+      ...formData.getAll("sourceFile"),
+    ]);
+    const articleBundle = buildArticleBundle({
+      title: formData.get("title"),
+      sourceText: formData.get("sourceText"),
+      sourceFiles,
+      supplementalPrompt: formData.get("supplementalPrompt"),
+    });
+    const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
+    if (!config.apiKey) {
+      return sendJson(response, 400, {
+        message: "当前未保存 API Key，请先在配置中保存。",
+      });
+    }
+
+    const reasoningEffort = normalizeReasoningEffort(
+      formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    );
+    const plan = await generateArticleIllustrationPlan({
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      responsesModel: config.responsesModel,
+      reasoningEffort,
+      bundle: articleBundle,
+      contentType: formData.get("contentType") || "auto",
+      stylePreset: formData.get("stylePreset") || DEFAULT_ARTICLE_ILLUSTRATION_STYLE_PRESET,
+    });
+    const setId = `article-set-${randomUUID()}`;
+    const createdAt = new Date().toISOString();
+    const articleRelativeDir = buildArticleRelativeDir({
+      createdAt,
+      title: plan.title || articleBundle.title,
+      setId,
+    });
+    const items = plan.items.map((item) => ({
+      ...item,
+      status: "planned",
+      filename: "",
+      relativePath: "",
+      imageUrl: "",
+      thumbnailUrl: "",
+      error: "",
+    }));
+    const setManifest = await articleIllustrationSetStore.saveManifest(
+      buildArticleSetManifest({
+        setId,
+        plan,
+        articleBundle,
+        createdAt,
+        status: "planned",
+        relativeDir: articleRelativeDir,
+        items,
+      }),
+    );
+
+    return sendJson(response, 200, {
+      ok: true,
+      plan,
+      set: setManifest,
+    });
+  } catch (error) {
+    return sendJson(response, 400, {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function handleArticleIllustrationGenerate(request, response, { referenceOnly = false } = {}) {
+  response.writeHead(200, {
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "Content-Type": "text/event-stream; charset=utf-8",
+  });
+
+  let setId = "";
+  let setManifest = null;
+  let items = [];
+  let plan = null;
+  let createdAt = new Date().toISOString();
+  let articleRelativeDir = "";
+
+  try {
+    const formData = await readFormDataBody(request);
+    setId = String(formData.get("setId") || "").trim();
+    if (!setId) {
+      throw new Error("缺少文章插图记录 ID。");
+    }
+
+    setManifest = await articleIllustrationSetStore.readManifest(setId);
+    createdAt = setManifest.createdAt || new Date().toISOString();
+    articleRelativeDir =
+      setManifest.relativeDir ||
+      buildArticleRelativeDir({
+        createdAt,
+        title: setManifest.title,
+        setId,
+      });
+    items = Array.isArray(setManifest.items) ? setManifest.items : [];
+    const styleBibleOverride = String(formData.get("styleBible") || "").trim();
+    if (styleBibleOverride) {
+      setManifest = {
+        ...setManifest,
+        styleBible: styleBibleOverride,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    const itemOverrides = (() => {
+      const raw = String(formData.get("items") || "").trim();
+      if (!raw) {
+        return [];
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    })();
+    if (itemOverrides.length > 0) {
+      const overridesById = new Map(
+        itemOverrides
+          .map((override) => [String(override?.itemId || "").trim(), override])
+          .filter(([itemId]) => itemId),
+      );
+      items = items.map((item) => {
+        const override = overridesById.get(item.itemId);
+        if (!override) {
+          return item;
+        }
+        return {
+          ...item,
+          title: String(override.title || item.title || "").trim(),
+          paragraphIndex: Number(override.paragraphIndex) || Number(item.paragraphIndex) || 0,
+          timelineIndex: Number(override.timelineIndex) || Number(item.timelineIndex) || 0,
+          narrativeBeat: String(override.narrativeBeat || item.narrativeBeat || "").trim(),
+          prompt: String(override.prompt || item.prompt || "").trim(),
+          captionText: String(override.captionText || item.captionText || "").trim(),
+          modelTextHint: String(override.modelTextHint || item.modelTextHint || "").trim(),
+        };
+      });
+    }
+    plan = {
+      title: setManifest.title,
+      sourceSummary: setManifest.sourceSummary,
+      contentType: setManifest.contentType,
+      stylePreset: setManifest.stylePreset,
+      styleBible: setManifest.styleBible,
+      recommendedImageCount: setManifest.recommendedImageCount || items.length,
+      characters: setManifest.characters || [],
+      scenes: setManifest.scenes || [],
+      referenceCards: setManifest.referenceCards || [],
+      items,
+    };
+
+    const requestedItemIds = new Set(parseStringArrayJson(formData.get("itemIds")));
+    const regenerate = String(formData.get("regenerate") || "") === "1";
+    const targetItems = items.filter((item) => {
+      if (referenceOnly && item.itemKind !== "reference-card") {
+        return false;
+      }
+      if (requestedItemIds.size && !requestedItemIds.has(item.itemId)) {
+        return false;
+      }
+      return regenerate || item.status !== "completed" || !item.relativePath;
+    });
+
+    const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
+    if (!config.apiKey) {
+      writeSseEvent(response, "error", {
+        message: "当前未保存 API Key，请先在配置中保存。",
+      });
+      return;
+    }
+
+    const clientSessionId = getClientSessionId(request, formData);
+    const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || "3:2"));
+    const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
+    const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
+    if (requestedSize !== requestedSizeInput && requestedSizeInput !== "") {
+      throw new Error(`当前比例 ${ratioOption.value} 不支持分辨率 ${requestedSizeInput}`);
+    }
+
+    const finalSize = requestedSize === "auto" ? getDefaultGenerationSize(ratioOption.value) : requestedSize;
+    const finalQuality = config.defaults?.quality || "high";
+    const finalFormat = normalizeOutputFormat(String(formData.get("format") || config.defaults?.format || ARTICLE_ILLUSTRATION_FORMAT));
+    const reasoningEffort = normalizeReasoningEffort(
+      formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    );
+
+    setManifest = await articleIllustrationSetStore.saveManifest(
+      buildArticleSetManifest({
+        setId,
+        plan,
+        articleBundle: setManifest.articleBundle,
+        createdAt,
+        updatedAt: new Date().toISOString(),
+        status: referenceOnly ? "reference_generating" : "generating",
+        relativeDir: articleRelativeDir,
+        items,
+      }),
+    );
+
+    writeSseEvent(response, referenceOnly ? "references_started" : "set_started", {
+      set: setManifest,
+      targetCount: targetItems.length,
+    });
+
+    if (targetItems.length === 0) {
+      const finalSet = await articleIllustrationSetStore.saveManifest(
+        buildArticleSetManifest({
+          setId,
+          plan,
+          articleBundle: setManifest.articleBundle,
+          createdAt,
+          updatedAt: new Date().toISOString(),
+          status: getArticleSetStatus(items),
+          relativeDir: articleRelativeDir,
+          items,
+        }),
+      );
+      writeSseEvent(response, "complete", { set: finalSet });
+      return;
+    }
+
+    for (const item of targetItems) {
+      const taskId = `${setId}-${item.itemId}`;
+      const generationStartedAt = new Date().toISOString();
+      const generationStartedAtMs = Date.now();
+      let finalBase64 = "";
+      let slotClaimed = false;
+
+      try {
+        if (!claimSessionTaskSlot(clientSessionId, taskId)) {
+          throw new Error(`同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
+        }
+        slotClaimed = true;
+        items = updateArticleItems(items, item.itemId, {
+          status: "generating",
+          error: "",
+          generationStartedAt,
+        });
+        writeSseEvent(response, "item_started", {
+          setId,
+          itemId: item.itemId,
+          itemKind: item.itemKind,
+          title: item.title,
+        });
+
+        const referenceImages = await getArticleReferenceImagesForItem(items, item);
+        const referenceCards = (plan.referenceCards || []).filter((card) => {
+          if (item.itemKind === "reference-card") {
+            return card.cardId === item.cardId;
+          }
+          return !item.referencedCardIds?.length || item.referencedCardIds.includes(card.cardId);
+        });
+        const prompt = appendRatioHintToPrompt(
+          buildArticleImagePrompt({ plan, item, referenceCards }),
+          ratioOption,
+        );
+        const generationResult = await requestStudioImageGeneration({
+          baseUrl: config.baseUrl,
+          apiKey: config.apiKey,
+          prompt,
+          referenceImages,
+          referenceImageLabels: buildArticleReferenceImageLabels(referenceImages),
+          size: finalSize,
+          quality: finalQuality,
+          format: toApiOutputFormat(finalFormat),
+          responsesModel: config.responsesModel,
+          reasoningEffort,
+          async onEvent(event) {
+            if (event.type === "status") {
+              writeSseEvent(response, "item_status", {
+                setId,
+                itemId: item.itemId,
+                stage: event.stage,
+                message: event.message,
+              });
+            }
+
+            if (event.type === "partial_image") {
+              writeSseEvent(response, "item_partial_image", {
+                setId,
+                itemId: item.itemId,
+                dataUrl: event.dataUrl,
+              });
+            }
+
+            if (event.type === "final_image") {
+              finalBase64 = event.base64;
+              writeSseEvent(response, "item_final_image", {
+                setId,
+                itemId: item.itemId,
+                dataUrl: `data:${toOutputFormatMimeType(finalFormat)};base64,${normalizeBase64(event.base64)}`,
+              });
+            }
+          },
+        });
+
+        finalBase64 = finalBase64 || generationResult.finalImageBase64;
+        if (!finalBase64) {
+          throw new Error("上游响应结束，但没有拿到最终文章插图。");
+        }
+
+        const generationCompletedAt = new Date().toISOString();
+        const generationDurationMs = Math.max(0, Date.now() - generationStartedAtMs);
+        const savedSize = generationResult.effectiveSize || finalSize;
+        const filename = buildArticleImageFilename({
+          item,
+          createdAt,
+          setId,
+          format: finalFormat,
+        });
+        const saved = await saveGeneratedAsset({
+          outputDir,
+          relativeDir: articleRelativeDir,
+          filename,
+          imageBuffer: Buffer.from(normalizeBase64(finalBase64), "base64"),
+          metadata: {
+            prompt,
+            createdAt,
+            baseUrl: config.baseUrl,
+            responsesModel: config.responsesModel,
+            imageModel: "gpt-image-2",
+            ratio: ratioOption.value,
+            ratioLabel: ratioOption.label,
+            size: savedSize,
+            quality: finalQuality,
+            format: finalFormat,
+            reasoningEffort,
+            generationStartedAt,
+            generationCompletedAt,
+            generationDurationMs,
+            assetKind: "article-illustration-image",
+            articleSetId: setId,
+            articleItemId: item.itemId,
+            articleItemKind: item.itemKind,
+            articleTitle: setManifest.title,
+            articleContentType: setManifest.contentType,
+            articleStylePreset: setManifest.stylePreset,
+            articleCaptionText: item.captionText || "",
+            articleModelTextHint: item.modelTextHint || "",
+            hasReferenceImage: referenceImages.length > 0,
+            referenceImageNames: referenceImages.map((image) => image.filename),
+            galleryVisible: false,
+          },
+        });
+        const imageUrl = buildPublicAssetUrl("/output", saved.relativePath, saved.createdAt);
+
+        items = updateArticleItems(items, item.itemId, {
+          status: "completed",
+          filename,
+          relativePath: saved.relativePath,
+          imageUrl,
+          thumbnailUrl: imageUrl,
+          generationStartedAt,
+          generationCompletedAt,
+          generationDurationMs,
+          size: savedSize,
+          format: finalFormat,
+        });
+        plan = {
+          ...plan,
+          referenceCards: syncArticleReferenceCardsFromItems(plan.referenceCards || [], items),
+          items,
+        };
+        setManifest = await articleIllustrationSetStore.saveManifest(
+          buildArticleSetManifest({
+            setId,
+            plan,
+            articleBundle: setManifest.articleBundle,
+            createdAt,
+            updatedAt: generationCompletedAt,
+            status: getArticleSetStatus(items),
+            relativeDir: articleRelativeDir,
+            items,
+          }),
+        );
+
+        writeSseEvent(response, "item_saved", {
+          setId,
+          item: setManifest.items.find((entry) => entry.itemId === item.itemId),
+          set: setManifest,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        items = updateArticleItems(items, item.itemId, {
+          status: "failed",
+          error: message,
+        });
+        plan = {
+          ...plan,
+          referenceCards: syncArticleReferenceCardsFromItems(plan.referenceCards || [], items),
+          items,
+        };
+        setManifest = await articleIllustrationSetStore.saveManifest(
+          buildArticleSetManifest({
+            setId,
+            plan,
+            articleBundle: setManifest.articleBundle,
+            createdAt,
+            updatedAt: new Date().toISOString(),
+            status: getArticleSetStatus(items),
+            relativeDir: articleRelativeDir,
+            items,
+          }),
+        );
+        writeSseEvent(response, "item_failed", {
+          setId,
+          itemId: item.itemId,
+          message,
+          set: setManifest,
+        });
+      } finally {
+        if (slotClaimed) {
+          releaseSessionTaskSlot(clientSessionId, taskId);
+        }
+      }
+    }
+
+    plan = {
+      ...plan,
+      referenceCards: syncArticleReferenceCardsFromItems(plan.referenceCards || [], items),
+      items,
+    };
+    const finalSet = await articleIllustrationSetStore.saveManifest(
+      buildArticleSetManifest({
+        setId,
+        plan,
+        articleBundle: setManifest.articleBundle,
+        createdAt,
+        updatedAt: new Date().toISOString(),
+        status: getArticleSetStatus(items),
+        relativeDir: articleRelativeDir,
+        items,
+      }),
+    );
+    writeSseEvent(response, "complete", { set: finalSet });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (setId && setManifest && plan) {
+      await articleIllustrationSetStore.saveManifest(
+        buildArticleSetManifest({
+          setId,
+          plan,
+          articleBundle: setManifest.articleBundle,
+          createdAt,
+          updatedAt: new Date().toISOString(),
+          status: getArticleSetStatus(items),
+          relativeDir: articleRelativeDir,
+          items,
+        }),
+      );
+    }
+    writeSseEvent(response, "error", { message });
+  } finally {
+    if (!response.destroyed && !response.writableEnded) {
+      response.end();
+    }
+  }
 }
 
 async function handleCreationSetsGet(response) {
@@ -2432,6 +3102,22 @@ async function routeRequest(request, response) {
 
   if (request.method === "GET" && url.pathname === "/api/creation/sets") {
     return handleCreationSetsGet(response);
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/article-illustration/sets") {
+    return handleArticleIllustrationSetsGet(response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/article-illustration/plan") {
+    return handleArticleIllustrationPlan(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/article-illustration/generate-references") {
+    return handleArticleIllustrationGenerate(request, response, { referenceOnly: true });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/article-illustration/generate") {
+    return handleArticleIllustrationGenerate(request, response);
   }
 
   if (request.method === "POST" && url.pathname === "/api/creation/sets/open-folder") {
