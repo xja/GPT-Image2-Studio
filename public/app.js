@@ -3,7 +3,7 @@ import {
   formatImageModelLabel,
   formatRecentOutputMeta,
 } from "/lib/studio-formatters.mjs";
-import { getPreviewPlaceholderState } from "/lib/preview-placeholder-state.mjs";
+import { getPreviewPlaceholderState } from "/lib/preview-placeholder-state.mjs?v=20260510-activity-log-1";
 import {
   buildGalleryReferenceFilterOptions,
   buildGallerySections,
@@ -131,6 +131,7 @@ const BROWSER_CONFIG_STORAGE_KEY = "image-studio-browser-config-v1";
 const THEME_STORAGE_KEY = "image-studio-ui-theme-v1";
 const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";
 const BROWSER_IMAGE_CACHE_DB_NAME = "image-studio-browser-image-cache-v1";
+const CONNECTION_STATUS_ENTRY_LABEL = "API 和 log";
 const BROWSER_IMAGE_CACHE_STORE_NAME = "generated-images";
 const PROMPT_ANALYSIS_IMAGE_MAX_EDGE = 1024;
 const PROMPT_ANALYSIS_IMAGE_COMPRESS_THRESHOLD_BYTES = 900 * 1024;
@@ -299,6 +300,7 @@ const refs = {
   configDrawer: document.querySelector("#configDrawer"),
   configFeedback: document.querySelector("#configFeedback"),
   configForm: document.querySelector("#configForm"),
+  configGenerationLogPanel: document.querySelector("#configGenerationLogPanel"),
   configStatus: document.querySelector("#configStatus"),
   connectionLabel: document.querySelector("#connectionLabel"),
   connectionStatus: document.querySelector("#connectionStatus"),
@@ -1718,7 +1720,9 @@ function clearError() {
 
 function setConnectionState(kind, label) {
   refs.connectionStatus.dataset.state = kind;
-  refs.connectionLabel.textContent = label;
+  refs.connectionStatus.title = label;
+  refs.connectionStatus.setAttribute("aria-label", `${label}，打开 API 和 log`);
+  refs.connectionLabel.textContent = CONNECTION_STATUS_ENTRY_LABEL;
 }
 
 function syncConnectionState() {
@@ -1739,6 +1743,13 @@ function syncConnectionState() {
 function setDrawerOpen(open) {
   refs.configDrawer.classList.toggle("open", open);
   refs.configDrawer.setAttribute("aria-hidden", String(!open));
+}
+
+function openConfigGenerationLog() {
+  setDrawerOpen(true);
+  window.requestAnimationFrame(() => {
+    refs.configGenerationLogPanel?.scrollIntoView({ block: "start", behavior: "smooth" });
+  });
 }
 
 function setLightboxOpen(open) {
@@ -3350,7 +3361,7 @@ function restoreSettingsFormScrollTop(scrollTop) {
 }
 
 function syncStudioHeight() {
-  if (!refs.settingsPanel || !refs.previewPanel || !refs.sideColumn || !refs.viewRoot) {
+  if (!refs.settingsPanel || !refs.previewPanel || !refs.viewRoot) {
     return;
   }
 
@@ -10087,6 +10098,11 @@ function handleGlobalNavAction(action) {
 
   if (action === "config") {
     setDrawerOpen(true);
+    return;
+  }
+
+  if (action === "activity-log") {
+    openConfigGenerationLog();
     return;
   }
 

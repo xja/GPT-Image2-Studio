@@ -21,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260509-category-ui-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260510-mobile-pad-layout-2" />
   </head>
   <body>
     <div class="app-shell">
@@ -93,6 +93,7 @@
                   <section class="mega-menu-column mega-menu-primary" aria-label="配置区">
                     <span class="mega-menu-kicker">配置区</span>
                     <button class="mega-menu-action large" type="button" data-nav-action="config">配置 API</button>
+                    <button class="mega-menu-action" type="button" data-nav-action="activity-log">生成日志</button>
                     <button class="mega-menu-action" type="button" data-nav-action="theme">主题颜色</button>
                   </section>
                 </div>
@@ -101,10 +102,10 @@
           </div>
         </nav>
 
-        <div class="topbar-api-check" aria-label="API 检测">
-          <button class="header-pill status-ready" id="connectionStatus" data-state="idle" type="button" aria-label="打开 API 配置">
+        <div class="topbar-api-check" aria-label="API 和 log">
+          <button class="header-pill status-ready" id="connectionStatus" data-state="idle" type="button" aria-label="打开 API 和 log">
             <span class="status-dot"></span>
-            <span id="connectionLabel">正在读取配置</span>
+            <span id="connectionLabel">API 和 log</span>
           </button>
         </div>
 
@@ -261,7 +262,7 @@
                 <div class="preview-canvas" id="previewCanvas">
                   <div class="preview-placeholder" id="previewPlaceholder">
                     <h3>生成结果会在这里实时更新。</h3>
-                    <span>生成过程会在右侧实时更新，底部胶片条可快速切换查看。</span>
+                    <span>生成日志可在配置中查看，底部胶片条可快速切换查看。</span>
                   </div>
                   <img id="previewImage" alt="当前预览" />
                 </div>
@@ -287,24 +288,6 @@
               </div>
             </section>
 
-            <aside class="side-column">
-              <section class="studio-panel live-panel">
-                <div class="panel-title between">
-                  <div>
-                    <h2>实时动态</h2>
-                  </div>
-                  <span class="count-pill small" id="liveCount">0 / 5</span>
-                </div>
-
-                <div class="error-banner hidden" id="errorBanner"></div>
-                <ol class="timeline-list" id="timelineList"></ol>
-                <button class="timeline-new-indicator hidden" id="timelineNewIndicator" type="button" aria-label="查看新动态">
-                  <span aria-hidden="true">↑</span>
-                  <strong id="timelineNewCount">0</strong>
-                </button>
-              </section>
-
-            </aside>
           </div>
         </section>
 
@@ -1191,6 +1174,22 @@
           <button class="generate-button" type="submit">保存配置</button>
           <p class="config-note" id="configFeedback">API Key 只保存在当前浏览器，不会写入源码或 Cloudflare 环境变量。</p>
         </form>
+
+        <section class="config-log-panel live-panel" id="configGenerationLogPanel" aria-label="生成日志">
+          <div class="panel-title between">
+            <div>
+              <h2>生成日志</h2>
+            </div>
+            <span class="count-pill small" id="liveCount">0 / 5</span>
+          </div>
+
+          <div class="error-banner hidden" id="errorBanner"></div>
+          <ol class="timeline-list" id="timelineList"></ol>
+          <button class="timeline-new-indicator hidden" id="timelineNewIndicator" type="button" aria-label="查看新动态">
+            <span aria-hidden="true">↑</span>
+            <strong id="timelineNewCount">0</strong>
+          </button>
+        </section>
       </div>
     </aside>
 
@@ -1267,6 +1266,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260509-category-ui-2"></script>
+    <script type="module" src="/app.js?v=20260510-mobile-pad-layout-2"></script>
   </body>
 </html>

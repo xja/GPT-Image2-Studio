@@ -90,20 +90,30 @@ test("filmstrip thumbnails stay square, fill the available rail, and keep labels
   assert.match(app, /label: formatFilmstripSizeLabel\(item\) \|\| formatClock\(item\.createdAt\)/);
 });
 
-test("studio right column keeps only live feed and shows timeline ratio before resolution", async () => {
+test("generation activity moves into settings while studio workspace reflows to two columns", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
   assert.doesNotMatch(html, /<section class="studio-panel recent-panel">/);
   assert.doesNotMatch(html, /id="recentList"|id="recentEmpty"|id="clearHistoryButton"|id="focusGalleryButton"/);
-  assert.match(styles, /\.side-column\s*\{[\s\S]*grid-template-rows:\s*minmax\(0,\s*1fr\);/);
-  assert.match(styles, /\.live-panel\s*\{[\s\S]*height:\s*100%;/);
+  assert.doesNotMatch(html, /<aside class="side-column">/);
+  assert.match(html, /data-nav-action="activity-log"[\s\S]*生成日志/);
+  assert.match(
+    html,
+    /<form class="config-form" id="configForm">[\s\S]*<\/form>\s*<section class="config-log-panel live-panel" id="configGenerationLogPanel" aria-label="生成日志">[\s\S]*id="timelineList"/,
+  );
+  assert.match(styles, /\.studio-grid\s*\{[\s\S]*grid-template-columns:\s*var\(--studio-grid-left,\s*392px\)\s*minmax\(0,\s*1fr\);/);
+  assert.match(styles, /html\[data-ui-layout="narrow-desktop"\] \.studio-grid\s*\{[\s\S]*grid-template-columns:\s*360px\s*minmax\(0,\s*1fr\);/);
+  assert.match(styles, /\.config-log-panel\.live-panel\s*\{[\s\S]*min-height:\s*320px;[\s\S]*height:\s*min\(52svh,\s*520px\);/);
   assert.match(styles, /\.timeline-copy\s*\{[\s\S]*display:\s*contents;/);
   assert.match(styles, /\.timeline-copy > span\s*\{[\s\S]*grid-column:\s*2\s*\/\s*-1;[\s\S]*grid-row:\s*2;/);
   assert.match(styles, /\.timeline-ratio\s*\{[\s\S]*grid-column:\s*3;[\s\S]*grid-row:\s*1;/);
   assert.match(styles, /\.timeline-resolution\s*\{[\s\S]*grid-column:\s*4;[\s\S]*grid-row:\s*1;/);
   assert.match(styles, /\.timeline-item time\s*\{[\s\S]*grid-column:\s*5;[\s\S]*grid-row:\s*1;/);
+  assert.match(app, /configGenerationLogPanel:\s*document\.querySelector\("#configGenerationLogPanel"\),/);
+  assert.match(app, /function openConfigGenerationLog\(\) \{[\s\S]*setDrawerOpen\(true\);[\s\S]*refs\.configGenerationLogPanel\?\.scrollIntoView/);
+  assert.match(app, /if \(action === "activity-log"\) \{[\s\S]*openConfigGenerationLog\(\);[\s\S]*return;/);
   assert.match(app, /function formatCompactRatioLabel\(ratio\) \{[\s\S]*return \/\^\\d\+:\\d\+\$\/\.test\(normalized\) \? normalized : "";/);
   assert.match(app, /const ratio = document\.createElement\("span"\);[\s\S]*ratio\.className = "timeline-ratio";[\s\S]*ratio\.textContent = formatCompactRatioLabel\(item\.ratio\);[\s\S]*row\.appendChild\(ratio\);[\s\S]*const resolution = document\.createElement\("span"\);[\s\S]*resolution\.className = "timeline-resolution";[\s\S]*resolution\.textContent = formatCompactSizeLabel\(item\.size\);[\s\S]*row\.appendChild\(resolution\);[\s\S]*row\.appendChild\(time\);/);
   assert.match(app, /ratio: formatCompactRatioLabel\(task\?\.ratio\),/);
@@ -130,7 +140,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260509-category-ui-2/);
+  assert.match(html, /\/app\.js\?v=20260510-mobile-pad-layout-2/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -345,7 +355,7 @@ test("style transfer panel aligns slot rows and clips its own background", async
   assert.doesNotMatch(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot \.field-head/);
   assert.match(
     styles,
-    /html\[data-ui-layout="mobile"\] \.nav-item\[data-nav-section="settings"\] \.nav-flyout\.mega-menu \{[\s\S]*left:\s*auto;[\s\S]*right:\s*0;/,
+    /html\[data-ui-layout="tablet"\] \.nav-flyout\.mega-menu,[\s\S]*html\[data-ui-layout="mobile"\] \.nav-item\[data-nav-section="settings"\] \.nav-flyout\.mega-menu\s*\{[\s\S]*position:\s*fixed;[\s\S]*left:\s*10px;[\s\S]*right:\s*10px;[\s\S]*max-height:\s*calc\(100dvh - 112px\);/,
   );
 });
 
@@ -553,7 +563,7 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.doesNotMatch(settingsMenu, /模型与密钥|浏览器本地配置|切换明暗主题|data-nav-action="output"|data-nav-action="prompt-agent"/);
   assert.doesNotMatch(settingsMenu, /data-view-tab=/);
   assert.doesNotMatch(html, /<div class="topbar-actions" aria-label="状态与工具">/);
-  assert.match(html, /<div class="topbar-api-check" aria-label="API 检测">[\s\S]*<button class="header-pill status-ready" id="connectionStatus" data-state="idle" type="button" aria-label="打开 API 配置">[\s\S]*id="connectionLabel"[\s\S]*<\/button>/);
+  assert.match(html, /<div class="topbar-api-check" aria-label="API 和 log">[\s\S]*<button class="header-pill status-ready" id="connectionStatus" data-state="idle" type="button" aria-label="打开 API 和 log">[\s\S]*<span id="connectionLabel">API 和 log<\/span>/);
   assert.match(html, /<div class="topbar-ghost-actions" aria-hidden="true">[\s\S]*id="configStatus"[\s\S]*id="themeToggleButton"[\s\S]*id="openOutputButton"[\s\S]*id="openPromptAgentButton"[\s\S]*id="openConfigButton"/);
   assert.doesNotMatch(html, /nav-switch-panel|nav-switch-list|nav-switch-link|小区 · 界面切换/);
   assert.match(styles, /\.topbar\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(0,\s*1fr\);/);
@@ -576,6 +586,9 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.match(app, /function handleGlobalNavAction\(action\) \{/);
   assert.match(app, /const activeNavSection = CREATE_VIEW_IDS\.has\(view\) \? "create" : ASSET_VIEW_IDS\.has\(view\) \? "assets" : "";/);
   assert.match(app, /refs\.connectionStatus\.addEventListener\("click",\s*\(\) => setDrawerOpen\(true\)\);/);
+  assert.match(app, /const CONNECTION_STATUS_ENTRY_LABEL = "API 和 log";/);
+  assert.match(app, /refs\.connectionStatus\.setAttribute\("aria-label", `\$\{label\}，打开 API 和 log`\);/);
+  assert.match(app, /refs\.connectionLabel\.textContent = CONNECTION_STATUS_ENTRY_LABEL;/);
   assert.match(app, /globalNavItems:\s*\[\.\.\.document\.querySelectorAll\("\[data-nav-section\]"\)\]/);
   assert.match(app, /function setActiveGlobalNavItem\(item\) \{[\s\S]*refs\.globalNavItems\.forEach\(\(navItem\) => \{[\s\S]*const isOpen = navItem === item;[\s\S]*navItem\.classList\.toggle\("is-nav-open",\s*isOpen\);/);
   assert.match(app, /button\.addEventListener\("pointerenter",\s*\(\) => setActiveGlobalNavItem\(item\)\);/);
@@ -903,7 +916,7 @@ test("studio layout consumes density variables for wide-screen adaptation withou
   assert.match(styles, /\.app-shell\s*\{[\s\S]*min\(var\(--app-shell-max-width,\s*1680px\),\s*calc\(100vw - 20px\)\);[\s\S]*padding:\s*var\(--app-shell-padding-top,\s*8px\)\s*0\s*var\(--app-shell-padding-bottom,\s*10px\);/);
   assert.match(styles, /\.topbar\s*\{[\s\S]*gap:\s*var\(--topbar-gap,\s*18px\);[\s\S]*padding:\s*var\(--topbar-padding,\s*6px 10px 14px\);/);
   assert.match(styles, /\.view-root\s*\{[\s\S]*min-height:\s*calc\(100svh - var\(--view-root-offset,\s*88px\)\);[\s\S]*height:\s*calc\(100svh - var\(--view-root-offset,\s*88px\)\);/);
-  assert.match(styles, /\.studio-grid\s*\{[\s\S]*grid-template-columns:\s*var\(--studio-grid-left,\s*392px\)\s*minmax\(0,\s*1fr\)\s*var\(--studio-grid-right,\s*328px\);[\s\S]*gap:\s*var\(--studio-grid-gap,\s*14px\);/);
+  assert.match(styles, /\.studio-grid\s*\{[\s\S]*grid-template-columns:\s*var\(--studio-grid-left,\s*392px\)\s*minmax\(0,\s*1fr\);[\s\S]*gap:\s*var\(--studio-grid-gap,\s*14px\);/);
   assert.match(styles, /\.studio-panel,\s*[\r\n]+\s*\.drawer-panel,\s*[\r\n]+\s*\.lightbox-dialog\s*\{[\s\S]*padding:\s*var\(--panel-padding,\s*12px\);/);
   assert.match(styles, /\.settings-form\s*\{[\s\S]*gap:\s*calc\(var\(--field-gap,\s*6px\) \+ 6px\);/);
   assert.match(styles, /textarea,\s*[\r\n]+\s*input,\s*[\r\n]+\s*select\s*\{[\s\S]*padding:\s*var\(--input-padding-y,\s*10px\)\s*var\(--input-padding-x,\s*12px\);/);
@@ -952,19 +965,27 @@ test("studio entry defaults to square ratio", async () => {
   assert.doesNotMatch(app, /\|\| "4:5"/);
 });
 
-test("mobile and Pad studio layout keeps panels inside the viewport column", async () => {
+test("mobile and Pad studio layout uses dedicated compact workbench layouts", async () => {
   const styles = await readFile(stylesPath, "utf8");
 
   assert.match(styles, /html,\s*[\r\n]+body\s*\{[\s\S]*overflow-x:\s*clip;/);
   assert.match(
     styles,
-    /html\[data-ui-layout="stacked"\] \.studio-grid,\s*[\r\n]+html\[data-ui-layout="tablet"\] \.studio-grid,\s*[\r\n]+html\[data-ui-layout="mobile"\] \.studio-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\);/,
+    /html\[data-ui-layout="tablet"\] \.app-shell,\s*[\r\n]+html\[data-ui-layout="mobile"\] \.app-shell\s*\{[\s\S]*height:\s*100dvh;[\s\S]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);[\s\S]*overflow:\s*hidden;/,
   );
   assert.match(
     styles,
-    /html\[data-ui-layout="tablet"\] \.settings-panel,[\s\S]*html\[data-ui-layout="mobile"\] \.settings-form\s*\{[\s\S]*min-width:\s*0;[\s\S]*max-width:\s*100%;/,
+    /html\[data-ui-layout="tablet"\] \.studio-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*minmax\(320px,\s*380px\);[\s\S]*grid-template-areas:\s*"preview settings";[\s\S]*height:\s*100%;[\s\S]*overflow:\s*hidden;/,
   );
-  assert.match(styles, /html\[data-ui-layout="tablet"\] \.app-shell,\s*[\r\n]+html\[data-ui-layout="mobile"\] \.app-shell\s*\{[\s\S]*width:\s*min\(calc\(100% - 12px\),\s*1680px\);/);
+  assert.match(
+    styles,
+    /html\[data-ui-layout="mobile"\] \.studio-grid\s*\{[\s\S]*grid-template-rows:\s*minmax\(220px,\s*42%\)\s*minmax\(0,\s*1fr\);[\s\S]*"preview"[\s\S]*"settings";[\s\S]*height:\s*100%;[\s\S]*overflow:\s*hidden;/,
+  );
+  assert.match(styles, /html\[data-ui-layout="tablet"\] \.preview-panel,[\s\S]*html\[data-ui-layout="mobile"\] \.preview-panel\s*\{[\s\S]*grid-area:\s*preview;[\s\S]*height:\s*100%;/);
+  assert.match(styles, /html\[data-ui-layout="tablet"\] \.settings-form,[\s\S]*html\[data-ui-layout="mobile"\] \.settings-form\s*\{[\s\S]*height:\s*100%;[\s\S]*overflow:\s*auto;/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.ratio-grid\s*\{[\s\S]*display:\s*flex;[\s\S]*overflow-x:\s*auto;/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.reference-dropzone\s*\{[\s\S]*min-height:\s*48px;[\s\S]*grid-template-columns:\s*30px\s*minmax\(0,\s*1fr\);/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.filmstrip-item span\s*\{[\s\S]*display:\s*none;/);
 });
 
 test("studio columns use synchronized desktop height so wide screens do not leave a dead zone under the workspace", async () => {
@@ -974,10 +995,10 @@ test("studio columns use synchronized desktop height so wide screens do not leav
 
   assert.match(styles, /\.settings-panel\s*\{[\s\S]*height:\s*var\(--studio-column-height,\s*auto\);/);
   assert.match(styles, /\.preview-panel\s*\{[\s\S]*height:\s*var\(--studio-column-height,\s*auto\);/);
-  assert.match(styles, /\.side-column\s*\{[\s\S]*height:\s*var\(--studio-column-height,\s*auto\);/);
   assert.match(studioGridBlock, /min-height:\s*0;/);
   assert.match(studioGridBlock, /height:\s*100%;/);
   assert.doesNotMatch(studioGridBlock, /calc\(100% - 48px\)/);
+  assert.doesNotMatch(app, /!refs\.settingsPanel \|\| !refs\.previewPanel \|\| !refs\.sideColumn \|\| !refs\.viewRoot/);
   assert.match(
     app,
     /const viewRootRect = refs\.viewRoot\.getBoundingClientRect\(\);[\s\S]*const availableHeight = Math\.max\(600,\s*Math\.floor\(window\.innerHeight - viewRootRect\.top - 12\)\);[\s\S]*const resolvedHeight = availableHeight;/,
@@ -1012,7 +1033,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260509-category-ui-2/);
+  assert.match(html, /\/app\.js\?v=20260510-mobile-pad-layout-2/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -1422,7 +1443,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260509-category-ui-2/);
+  assert.match(html, /app\.js\?v=20260510-mobile-pad-layout-2/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
