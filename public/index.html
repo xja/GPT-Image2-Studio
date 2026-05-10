@@ -13,6 +13,13 @@
         } catch {
           document.documentElement.dataset.theme = "dark";
         }
+
+        const width = Math.min(window.innerWidth || 0, window.outerWidth || window.innerWidth || 0);
+        if (width > 0 && width <= 640) {
+          document.documentElement.dataset.uiLayout = "mobile";
+        } else if (width > 0 && width <= 1024) {
+          document.documentElement.dataset.uiLayout = "tablet";
+        }
       })();
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -21,7 +28,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles.css?v=20260511-article-workspace-preview-2" />
+    <link rel="stylesheet" href="./styles.css?v=20260511-article-workspace-preview-2" />
   </head>
   <body>
     <div class="app-shell">
@@ -104,10 +111,10 @@
           </div>
         </nav>
 
-        <div class="topbar-api-check" aria-label="API 和 log">
-          <button class="header-pill status-ready" id="connectionStatus" data-state="idle" type="button" aria-label="打开 API 和 log">
+        <div class="topbar-api-check" aria-label="API、LOG">
+          <button class="header-pill status-ready" id="connectionStatus" data-state="idle" type="button" aria-label="待填写API、LOG，打开 API、LOG">
             <span class="status-dot"></span>
-            <span id="connectionLabel">API 和 log</span>
+            <span id="connectionLabel">待填写API、LOG</span>
           </button>
         </div>
 
@@ -128,13 +135,18 @@
           <div class="studio-grid">
             <section class="studio-panel settings-panel">
               <form id="generateForm" class="settings-form">
-                <div class="field-group reference-field-group">
-                  <div class="field-heading">
+                <details
+                  class="field-group reference-field-group adaptive-section"
+                  id="referenceAdaptiveSection"
+                  data-adaptive-section="reference"
+                  data-compact-open="false"
+                >
+                  <summary class="field-heading adaptive-section-summary">
                     <div>
                       <span>参考图</span>
                     </div>
                     <small id="referenceCount">0 / 6</small>
-                  </div>
+                  </summary>
 
                   <label class="reference-dropzone" id="referenceDropzone">
                     <input id="referenceInput" name="referenceImages" type="file" accept="image/*" multiple />
@@ -144,7 +156,7 @@
                   </label>
 
                   <div class="reference-grid hidden" id="referenceGrid"></div>
-                </div>
+                </details>
 
                 <div class="field-group style-transfer-block hidden" id="styleTransferBlock" aria-live="polite">
                   <div class="field-heading">
@@ -214,12 +226,17 @@
                   开始生成
                 </button>
 
-                <div class="field-group parameter-settings">
-                  <div class="field-heading">
+                <details
+                  class="field-group parameter-settings adaptive-section"
+                  id="parameterAdaptiveSection"
+                  data-adaptive-section="parameters"
+                  data-compact-open="false"
+                >
+                  <summary class="field-heading adaptive-section-summary">
                     <div>
                       <span>参数设置</span>
                     </div>
-                  </div>
+                  </summary>
                   <div class="ratio-grid" id="ratioGrid"></div>
                   <input id="ratioInput" name="ratio" type="hidden" value="1:1" />
                   <div class="advanced-content">
@@ -247,7 +264,7 @@
                       </div>
                     </div>
                   </div>
-                </div>
+                </details>
               </form>
 
             </section>
@@ -1470,6 +1487,6 @@
       </div>
     </aside>
 
-    <script type="module" src="/app.js?v=20260511-article-workspace-preview-2"></script>
+    <script type="module" src="./app.js?v=20260511-article-workspace-preview-2"></script>
   </body>
 </html>

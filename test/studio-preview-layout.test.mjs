@@ -140,7 +140,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260511-article-workspace-preview-2/);
+  assert.match(html, /\.\/app\.js\?v=20260511-article-workspace-preview-2/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -173,7 +173,7 @@ test("reference upload appears above prompt and generate action below prompt", a
 
   assert.match(
     html,
-    /<form id="generateForm" class="settings-form">[\s\S]*<div class="field-group reference-field-group">[\s\S]*id="referenceDropzone"[\s\S]*<\/div>[\s\S]*id="promptInput"[\s\S]*<button[\s\S]*class="generate-button"[\s\S]*id="generateButton"[\s\S]*type="submit"/,
+    /<form id="generateForm" class="settings-form">[\s\S]*<details[\s\S]*class="field-group reference-field-group adaptive-section"[\s\S]*id="referenceDropzone"[\s\S]*<\/details>[\s\S]*id="promptInput"[\s\S]*<button[\s\S]*class="generate-button"[\s\S]*id="generateButton"[\s\S]*type="submit"/,
   );
   assert.doesNotMatch(html, /class="generate-note"/);
   assert.doesNotMatch(html, /支持最多 20 个任务排队/);
@@ -466,11 +466,11 @@ test("generation loading shell uses light DOM and transform-only motion", async 
 test("studio panels start without redundant title blocks and merge parameters under ratio controls", async () => {
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
-  const promptParameterSettings = html.match(/<div class="field-group parameter-settings">[\s\S]*?(?=<\/form>)/)?.[0] || "";
+  const promptParameterSettings = html.match(/<details[\s\S]*class="field-group parameter-settings adaptive-section"[\s\S]*?(?=<\/form>)/)?.[0] || "";
 
-  assert.match(html, /<div class="field-group parameter-settings">[\s\S]*<span>参数设置<\/span>[\s\S]*<div class="ratio-grid" id="ratioGrid"><\/div>[\s\S]*<div class="advanced-content">/);
+  assert.match(html, /<details[\s\S]*class="field-group parameter-settings adaptive-section"[\s\S]*id="parameterAdaptiveSection"[\s\S]*<div class="ratio-grid" id="ratioGrid"><\/div>[\s\S]*<div class="advanced-content">/);
   assert.doesNotMatch(promptParameterSettings, /<small>Parameters<\/small>/);
-  assert.match(html, /<div class="field-group parameter-settings">[\s\S]*<label class="compact-field">[\s\S]*<span>推理强度<\/span>[\s\S]*<label class="compact-field">[\s\S]*<span>分辨率<\/span>[\s\S]*<label class="compact-field">[\s\S]*<span>输出格式<\/span>/);
+  assert.match(html, /<details[\s\S]*class="field-group parameter-settings adaptive-section"[\s\S]*<label class="compact-field">[\s\S]*id="reasoningEffortInput"[\s\S]*<label class="compact-field">[\s\S]*id="sizeInput"[\s\S]*<label class="compact-field">[\s\S]*id="outputFormatInput"/);
   assert.match(html, /<div class="advanced-controls">[\s\S]*<label class="compact-field">[\s\S]*<span>输出格式<\/span>[\s\S]*<\/label>[\s\S]*<div class="parameter-meta" aria-label="工具模型与质量">[\s\S]*<span>工具模型<\/span>[\s\S]*<strong>gpt-image-2<\/strong>[\s\S]*<span>质量<\/span>[\s\S]*<strong>High<\/strong>[\s\S]*<\/div>[\s\S]*<\/div>/);
   assert.doesNotMatch(html, /<p>工具模型：/);
   assert.doesNotMatch(html, /<p>质量：/);
@@ -563,7 +563,7 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.doesNotMatch(settingsMenu, /模型与密钥|浏览器本地配置|切换明暗主题|data-nav-action="output"|data-nav-action="prompt-agent"/);
   assert.doesNotMatch(settingsMenu, /data-view-tab=/);
   assert.doesNotMatch(html, /<div class="topbar-actions" aria-label="状态与工具">/);
-  assert.match(html, /<div class="topbar-api-check" aria-label="API 和 log">[\s\S]*<button class="header-pill status-ready" id="connectionStatus" data-state="idle" type="button" aria-label="打开 API 和 log">[\s\S]*<span id="connectionLabel">API 和 log<\/span>/);
+  assert.match(html, /<div class="topbar-api-check" aria-label="API、LOG">[\s\S]*<button class="header-pill status-ready" id="connectionStatus" data-state="idle" type="button" aria-label="待填写API、LOG，打开 API、LOG">[\s\S]*<span id="connectionLabel">待填写API、LOG<\/span>/);
   assert.match(html, /<div class="topbar-ghost-actions" aria-hidden="true">[\s\S]*id="configStatus"[\s\S]*id="themeToggleButton"[\s\S]*id="openOutputButton"[\s\S]*id="openPromptAgentButton"[\s\S]*id="openConfigButton"/);
   assert.doesNotMatch(html, /nav-switch-panel|nav-switch-list|nav-switch-link|小区 · 界面切换/);
   assert.match(styles, /\.topbar\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(0,\s*1fr\);/);
@@ -586,9 +586,11 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.match(app, /function handleGlobalNavAction\(action\) \{/);
   assert.match(app, /const activeNavSection = CREATE_VIEW_IDS\.has\(view\) \? "create" : ASSET_VIEW_IDS\.has\(view\) \? "assets" : "";/);
   assert.match(app, /refs\.connectionStatus\.addEventListener\("click",\s*\(\) => setDrawerOpen\(true\)\);/);
-  assert.match(app, /const CONNECTION_STATUS_ENTRY_LABEL = "API 和 log";/);
-  assert.match(app, /refs\.connectionStatus\.setAttribute\("aria-label", `\$\{label\}，打开 API 和 log`\);/);
-  assert.match(app, /refs\.connectionLabel\.textContent = CONNECTION_STATUS_ENTRY_LABEL;/);
+  assert.match(app, /const CONNECTION_STATUS_ENTRY_LABEL = "API、LOG";/);
+  assert.match(app, /const CONNECTION_STATUS_EMPTY_LABEL = "待填写API、LOG";/);
+  assert.match(app, /refs\.connectionStatus\.setAttribute\("aria-label", `\$\{entryLabel\}，打开 API、LOG`\);/);
+  assert.match(app, /refs\.connectionLabel\.textContent = entryLabel;/);
+  assert.match(app, /setConnectionState\("idle", "请先配置 API", CONNECTION_STATUS_EMPTY_LABEL\);/);
   assert.match(app, /globalNavItems:\s*\[\.\.\.document\.querySelectorAll\("\[data-nav-section\]"\)\]/);
   assert.match(app, /function setActiveGlobalNavItem\(item\) \{[\s\S]*refs\.globalNavItems\.forEach\(\(navItem\) => \{[\s\S]*const isOpen = navItem === item;[\s\S]*navItem\.classList\.toggle\("is-nav-open",\s*isOpen\);/);
   assert.match(app, /button\.addEventListener\("pointerenter",\s*\(\) => setActiveGlobalNavItem\(item\)\);/);
@@ -966,8 +968,18 @@ test("studio entry defaults to square ratio", async () => {
 });
 
 test("mobile and Pad studio layout uses dedicated compact workbench layouts", async () => {
+  const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+  const referenceAdaptiveSection = html.match(/<details[\s\S]*id="referenceAdaptiveSection"[\s\S]*?<\/details>/)?.[0] || "";
+  const parameterAdaptiveSection = html.match(/<details[\s\S]*id="parameterAdaptiveSection"[\s\S]*?<\/details>/)?.[0] || "";
 
+  assert.match(html, /id="referenceAdaptiveSection"[\s\S]*data-adaptive-section="reference"[\s\S]*data-compact-open="false"[\s\S]*<summary class="field-heading adaptive-section-summary">/);
+  assert.match(html, /id="parameterAdaptiveSection"[\s\S]*data-adaptive-section="parameters"[\s\S]*data-compact-open="false"[\s\S]*<summary class="field-heading adaptive-section-summary">/);
+  assert.match(html, /dataset\.uiLayout = "mobile";[\s\S]*dataset\.uiLayout = "tablet";/);
+  assert.match(html, /\.\/styles\.css\?v=20260511-article-workspace-preview-2/);
+  assert.doesNotMatch(referenceAdaptiveSection, /\sopen(?:\s|>)/);
+  assert.doesNotMatch(parameterAdaptiveSection, /\sopen(?:\s|>)/);
   assert.match(styles, /html,\s*[\r\n]+body\s*\{[\s\S]*overflow-x:\s*clip;/);
   assert.match(
     styles,
@@ -986,6 +998,17 @@ test("mobile and Pad studio layout uses dedicated compact workbench layouts", as
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.ratio-grid\s*\{[\s\S]*display:\s*flex;[\s\S]*overflow-x:\s*auto;/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.reference-dropzone\s*\{[\s\S]*min-height:\s*48px;[\s\S]*grid-template-columns:\s*30px\s*minmax\(0,\s*1fr\);/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.filmstrip-item span\s*\{[\s\S]*display:\s*none;/);
+  assert.match(styles, /html\[data-ui-layout="tablet"\] \.adaptive-section,[\s\S]*html\[data-ui-layout="mobile"\] \.adaptive-section\s*\{[\s\S]*border-radius:\s*14px;/);
+  assert.match(styles, /html\[data-ui-layout="tablet"\] \.adaptive-section-summary,[\s\S]*html\[data-ui-layout="mobile"\] \.adaptive-section-summary\s*\{[\s\S]*min-height:\s*44px;[\s\S]*cursor:\s*pointer;/);
+  assert.match(styles, /html\[data-ui-layout="tablet"\] \.adaptive-section\[open\] > \.adaptive-section-summary::after,[\s\S]*html\[data-ui-layout="mobile"\] \.adaptive-section\[open\] > \.adaptive-section-summary::after\s*\{/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.advanced-controls\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\);/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.preview-toolbar\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\);/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.zoom-controls\s*\{[\s\S]*grid-template-columns:\s*34px\s*minmax\(52px,\s*1fr\)\s*34px\s*minmax\(54px,\s*0\.9fr\);/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.preview-actions\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
+  assert.match(app, /const ADAPTIVE_COLLAPSIBLE_LAYOUTS = new Set\(\["tablet", "mobile"\]\);/);
+  assert.match(app, /function syncAdaptiveWorkbenchSections\(layoutMode = getCurrentStudioLayoutMode\(\)\) \{/);
+  assert.match(app, /section\.open = section\.dataset\.compactOpen === "true";/);
+  assert.match(app, /function bindAdaptiveWorkbenchSections\(\) \{/);
 });
 
 test("studio columns use synchronized desktop height so wide screens do not leave a dead zone under the workspace", async () => {

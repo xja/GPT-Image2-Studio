@@ -134,7 +134,8 @@ const BROWSER_CONFIG_STORAGE_KEY = "image-studio-browser-config-v1";
 const THEME_STORAGE_KEY = "image-studio-ui-theme-v1";
 const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";
 const BROWSER_IMAGE_CACHE_DB_NAME = "image-studio-browser-image-cache-v1";
-const CONNECTION_STATUS_ENTRY_LABEL = "API 和 log";
+const CONNECTION_STATUS_ENTRY_LABEL = "API、LOG";
+const CONNECTION_STATUS_EMPTY_LABEL = "待填写API、LOG";
 const BROWSER_IMAGE_CACHE_STORE_NAME = "generated-images";
 const PROMPT_ANALYSIS_IMAGE_MAX_EDGE = 1024;
 const PROMPT_ANALYSIS_IMAGE_COMPRESS_THRESHOLD_BYTES = 900 * 1024;
@@ -163,6 +164,7 @@ const GALLERY_REFERENCE_LABELS = {
   "without-reference": "无参考图",
 };
 const STACKED_STUDIO_LAYOUT_MODES = new Set(["stacked", "tablet", "mobile"]);
+const ADAPTIVE_COLLAPSIBLE_LAYOUTS = new Set(["tablet", "mobile"]);
 const PPT_SOURCE_MODES = new Set(["upload", "text", "topic"]);
 const CREATE_VIEW_IDS = new Set(["studio", "style-transfer", "reference-analysis", "creation", "article-illustration", "ppt"]);
 const ASSET_VIEW_IDS = new Set(["gallery", "article-record", "ppt-record", "creation-record"]);
@@ -170,6 +172,8 @@ const ASSET_VIEW_IDS = new Set(["gallery", "article-record", "ppt-record", "crea
 let studioHeightSyncFrame = 0;
 let studioHeightObserver = null;
 let studioDensitySyncFrame = 0;
+let adaptiveSectionSyncing = false;
+let adaptiveSectionLayoutMode = "";
 let galleryPanelHeightSyncFrame = 0;
 let galleryPanelHeightObserver = null;
 let galleryScrollSyncFrame = 0;
@@ -1775,11 +1779,11 @@ function clearError() {
   refs.errorBanner.classList.add("hidden");
 }
 
-function setConnectionState(kind, label) {
+function setConnectionState(kind, label, entryLabel = CONNECTION_STATUS_ENTRY_LABEL) {
   refs.connectionStatus.dataset.state = kind;
   refs.connectionStatus.title = label;
-  refs.connectionStatus.setAttribute("aria-label", `${label}，打开 API 和 log`);
-  refs.connectionLabel.textContent = CONNECTION_STATUS_ENTRY_LABEL;
+  refs.connectionStatus.setAttribute("aria-label", `${entryLabel}，打开 API、LOG`);
+  refs.connectionLabel.textContent = entryLabel;
 }
 
 function syncConnectionState() {
@@ -1794,7 +1798,7 @@ function syncConnectionState() {
     return;
   }
 
-  setConnectionState("idle", "请先配置 API");
+  setConnectionState("idle", "请先配置 API", CONNECTION_STATUS_EMPTY_LABEL);
 }
 
 function setDrawerOpen(open) {
@@ -1879,6 +1883,57 @@ function getCurrentStudioLayoutMode() {
   );
 }
 
+function isAdaptiveCompactLayout(layoutMode = getCurrentStudioLayoutMode()) {
+  return ADAPTIVE_COLLAPSIBLE_LAYOUTS.has(layoutMode);
+}
+
+function getAdaptiveWorkbenchSections() {
+  return [...document.querySelectorAll("[data-adaptive-section]")].filter((section) => section.tagName === "DETAILS");
+}
+
+function syncAdaptiveWorkbenchSections(layoutMode = getCurrentStudioLayoutMode()) {
+  const isCompactLayout = isAdaptiveCompactLayout(layoutMode);
+  const layoutChanged = adaptiveSectionLayoutMode !== layoutMode;
+  const sections = getAdaptiveWorkbenchSections();
+
+  adaptiveSectionSyncing = true;
+  sections.forEach((section) => {
+    if (!isCompactLayout) {
+      section.open = true;
+      section.dataset.adaptiveUserToggled = "false";
+      return;
+    }
+
+    if (layoutChanged && section.dataset.adaptiveUserToggled !== "true") {
+      section.open = section.dataset.compactOpen === "true";
+    }
+  });
+  adaptiveSectionLayoutMode = layoutMode;
+
+  window.setTimeout(() => {
+    adaptiveSectionSyncing = false;
+  }, 0);
+}
+
+function bindAdaptiveWorkbenchSections() {
+  getAdaptiveWorkbenchSections().forEach((section) => {
+    const summary = section.querySelector("summary");
+    summary?.addEventListener("click", (event) => {
+      if (!isAdaptiveCompactLayout()) {
+        event.preventDefault();
+        section.open = true;
+      }
+    });
+
+    section.addEventListener("toggle", () => {
+      if (adaptiveSectionSyncing || !isAdaptiveCompactLayout()) {
+        return;
+      }
+      section.dataset.adaptiveUserToggled = "true";
+    });
+  });
+}
+
 function getGalleryLayoutWidth() {
   return Math.max(
     refs.galleryPanel?.clientWidth || 0,
@@ -1911,6 +1966,7 @@ function syncStudioDensity() {
 
   document.documentElement.dataset.uiDensity = settings.mode;
   document.documentElement.dataset.uiLayout = layoutMode;
+  syncAdaptiveWorkbenchSections(layoutMode);
 
   for (const name of ALL_VARIABLE_NAMES) {
     document.documentElement.style.removeProperty(name);
@@ -11205,6 +11261,7 @@ function bindStyleTransferDropzone(dropzone, slot) {
 
 function bindEvents() {
   bindGlobalNavEvents();
+  bindAdaptiveWorkbenchSections();
 
   refs.viewTabs.forEach((button) => {
     button.addEventListener("click", () => {

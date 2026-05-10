@@ -2416,6 +2416,23 @@ textarea::-webkit-scrollbar-corner {
   font-weight: 600;
 }
 
+.adaptive-section > summary {
+  list-style: none;
+}
+
+.adaptive-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.adaptive-section-summary {
+  cursor: default;
+}
+
+.adaptive-section-summary::after {
+  content: "";
+  display: none;
+}
+
 .icon-button {
   width: 34px;
   height: 34px;
@@ -6612,6 +6629,74 @@ html[data-ui-layout="mobile"] .parameter-settings {
   order: 5;
 }
 
+html[data-ui-layout="tablet"] .adaptive-section,
+html[data-ui-layout="mobile"] .adaptive-section {
+  display: block;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(145, 159, 255, 0.16);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)),
+    rgba(255, 255, 255, 0.018);
+}
+
+html[data-ui-layout="tablet"] .adaptive-section-summary,
+html[data-ui-layout="mobile"] .adaptive-section-summary {
+  min-height: 44px;
+  padding: 10px 12px;
+  cursor: pointer;
+  align-items: center;
+  min-width: 0;
+}
+
+html[data-ui-layout="tablet"] .adaptive-section-summary::after,
+html[data-ui-layout="mobile"] .adaptive-section-summary::after {
+  display: block;
+  width: 9px;
+  height: 9px;
+  margin-left: auto;
+  border-right: 2px solid rgba(237, 241, 255, 0.62);
+  border-bottom: 2px solid rgba(237, 241, 255, 0.62);
+  transform: rotate(45deg) translate(-1px, -1px);
+  transition: transform 160ms ease;
+  flex: 0 0 auto;
+}
+
+html[data-ui-layout="tablet"] .adaptive-section-summary > div,
+html[data-ui-layout="mobile"] .adaptive-section-summary > div {
+  min-width: 0;
+}
+
+html[data-ui-layout="tablet"] .adaptive-section-summary small,
+html[data-ui-layout="mobile"] .adaptive-section-summary small {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+html[data-ui-layout="tablet"] .adaptive-section[open] > .adaptive-section-summary::after,
+html[data-ui-layout="mobile"] .adaptive-section[open] > .adaptive-section-summary::after {
+  transform: rotate(225deg) translate(-1px, -1px);
+}
+
+html[data-ui-layout="tablet"] .reference-field-group > .reference-dropzone,
+html[data-ui-layout="mobile"] .reference-field-group > .reference-dropzone,
+html[data-ui-layout="tablet"] .reference-field-group > .reference-grid,
+html[data-ui-layout="mobile"] .reference-field-group > .reference-grid {
+  margin: 0 10px 10px;
+}
+
+html[data-ui-layout="tablet"] .parameter-settings > .ratio-grid,
+html[data-ui-layout="mobile"] .parameter-settings > .ratio-grid {
+  margin: 0 10px 8px;
+}
+
+html[data-ui-layout="tablet"] .parameter-settings > .advanced-content,
+html[data-ui-layout="mobile"] .parameter-settings > .advanced-content {
+  margin: 0 10px 10px;
+}
+
 html[data-ui-layout="tablet"] .reference-dropzone {
   min-height: 92px;
 }
@@ -6621,8 +6706,13 @@ html[data-ui-layout="tablet"] .ratio-grid {
 }
 
 html[data-ui-layout="tablet"] .advanced-controls,
-html[data-ui-layout="mobile"] .advanced-controls {
+html[data-ui-layout="tablet"] .advanced-controls {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+html[data-ui-layout="mobile"] .advanced-controls {
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -6860,26 +6950,37 @@ html[data-ui-layout="mobile"] .preview-placeholder span {
 
 html[data-ui-layout="mobile"] .preview-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
-  align-items: center;
+  align-items: stretch;
   margin-top: 6px;
 }
 
 html[data-ui-layout="mobile"] .zoom-controls,
 html[data-ui-layout="mobile"] .preview-actions {
   gap: 4px;
-  flex-wrap: nowrap;
+  width: 100%;
+  display: grid;
+}
+
+html[data-ui-layout="mobile"] .zoom-controls {
+  grid-template-columns: 34px minmax(52px, 1fr) 34px minmax(54px, 0.9fr);
+}
+
+html[data-ui-layout="mobile"] .preview-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 html[data-ui-layout="mobile"] .toolbar-button {
   min-height: 34px;
-  padding-inline: 10px;
+  min-width: 0;
+  padding-inline: 8px;
   border-radius: 10px;
+  white-space: nowrap;
 }
 
 html[data-ui-layout="mobile"] .zoom-label {
-  min-width: 48px;
+  min-width: 0;
 }
 
 html[data-ui-layout="mobile"] .filmstrip-row {
