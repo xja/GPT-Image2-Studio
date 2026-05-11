@@ -14,7 +14,34 @@
           document.documentElement.dataset.theme = "dark";
         }
 
-        const width = Math.min(window.innerWidth || 0, window.outerWidth || window.innerWidth || 0);
+        const innerWidth = window.innerWidth || 0;
+        const innerHeight = window.innerHeight || 0;
+        const outerWidth = window.outerWidth || innerWidth || 0;
+        const shorterSide = Math.min(innerWidth, innerHeight);
+        const longerSide = Math.max(innerWidth, innerHeight);
+        const deviceScale = window.devicePixelRatio || 1;
+        const coarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches || false;
+        const isPhonePhysicalSize =
+          coarsePointer &&
+          shorterSide >= 720 &&
+          shorterSide <= 1600 &&
+          longerSide >= 1300 &&
+          longerSide <= 3600 &&
+          longerSide / shorterSide >= 1.65;
+        const isTabletPhysicalSize =
+          coarsePointer &&
+          shorterSide >= 1200 &&
+          shorterSide <= 2200 &&
+          longerSide >= 1600 &&
+          longerSide <= 3000 &&
+          longerSide / shorterSide >= 1.2 &&
+          longerSide / shorterSide < 1.65;
+        const inferredScale = deviceScale >= 1.5 ? deviceScale : isPhonePhysicalSize && shorterSide >= 1080 ? 3 : 2;
+        const physicalTouchWidth = isPhonePhysicalSize || isTabletPhysicalSize ? Math.round(innerWidth / inferredScale) : 0;
+        const width =
+          physicalTouchWidth >= 320 && physicalTouchWidth <= 1480
+            ? physicalTouchWidth
+            : Math.min(innerWidth, outerWidth || innerWidth);
         if (width > 0 && width <= 640) {
           document.documentElement.dataset.uiLayout = "mobile";
         } else if (width > 0 && width <= 1024) {
@@ -28,7 +55,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260511-article-workspace-preview-2" />
+    <link rel="stylesheet" href="./styles.css?v=20260511-device-layout-config-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -1487,6 +1514,6 @@
       </div>
     </aside>
 
-    <script type="module" src="./app.js?v=20260511-article-workspace-preview-2"></script>
+    <script type="module" src="./app.js?v=20260511-device-layout-config-1"></script>
   </body>
 </html>

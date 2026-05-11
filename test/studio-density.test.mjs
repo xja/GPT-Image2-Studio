@@ -109,6 +109,71 @@ test("studio layout mode honors mobile and Pad emulation viewport widths", () =>
   );
 });
 
+test("studio layout mode maps high-density phone physical pixels to mobile", () => {
+  const physicalPhone = {
+    width: 1200,
+    height: 2608,
+    outerWidth: 1200,
+    devicePixelRatio: 3,
+    coarsePointer: true,
+  };
+
+  assert.equal(getStudioLayoutMode(physicalPhone), "mobile");
+  assert.equal(getStudioDensitySettings(physicalPhone).layoutMode, "mobile");
+  assert.equal(
+    getStudioLayoutMode({
+      width: 1200,
+      height: 2608,
+      outerWidth: 1200,
+      coarsePointer: true,
+    }),
+    "mobile",
+  );
+  assert.equal(
+    getStudioLayoutMode({
+      width: 1200,
+      height: 2608,
+      outerWidth: 1200,
+      devicePixelRatio: 1,
+      coarsePointer: false,
+    }),
+    "stacked",
+  );
+});
+
+test("studio layout mode maps physical Pad pixels without collapsing desktop retina windows", () => {
+  assert.equal(
+    getStudioLayoutMode({
+      width: 1668,
+      height: 2388,
+      outerWidth: 1668,
+      devicePixelRatio: 2,
+      coarsePointer: true,
+    }),
+    "tablet",
+  );
+  assert.equal(
+    getStudioLayoutMode({
+      width: 2388,
+      height: 1668,
+      outerWidth: 2388,
+      devicePixelRatio: 2,
+      coarsePointer: true,
+    }),
+    "stacked",
+  );
+  assert.equal(
+    getStudioLayoutMode({
+      width: 1440,
+      height: 900,
+      outerWidth: 1440,
+      devicePixelRatio: 2,
+      coarsePointer: false,
+    }),
+    "narrow-desktop",
+  );
+});
+
 test("studio layout mode keeps narrow desktop gutters on medium windows", () => {
   assert.equal(
     getStudioLayoutMode({

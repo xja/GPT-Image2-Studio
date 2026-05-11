@@ -107,7 +107,7 @@ test("generation activity moves into settings while studio workspace reflows to 
   assert.match(styles, /html\[data-ui-layout="narrow-desktop"\] \.studio-grid\s*\{[\s\S]*grid-template-columns:\s*360px\s*minmax\(0,\s*1fr\);/);
   assert.match(styles, /\.config-log-panel\.live-panel\s*\{[\s\S]*min-height:\s*320px;[\s\S]*height:\s*min\(52svh,\s*520px\);/);
   assert.match(styles, /\.timeline-copy\s*\{[\s\S]*display:\s*contents;/);
-  assert.match(styles, /\.timeline-copy > span\s*\{[\s\S]*grid-column:\s*2\s*\/\s*-1;[\s\S]*grid-row:\s*2;/);
+  assert.match(styles, /\.timeline-copy > span\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1;/);
   assert.match(styles, /\.timeline-ratio\s*\{[\s\S]*grid-column:\s*3;[\s\S]*grid-row:\s*1;/);
   assert.match(styles, /\.timeline-resolution\s*\{[\s\S]*grid-column:\s*4;[\s\S]*grid-row:\s*1;/);
   assert.match(styles, /\.timeline-item time\s*\{[\s\S]*grid-column:\s*5;[\s\S]*grid-row:\s*1;/);
@@ -115,6 +115,7 @@ test("generation activity moves into settings while studio workspace reflows to 
   assert.match(app, /function openConfigGenerationLog\(\) \{[\s\S]*setDrawerOpen\(true\);[\s\S]*refs\.configGenerationLogPanel\?\.scrollIntoView/);
   assert.match(app, /if \(action === "activity-log"\) \{[\s\S]*openConfigGenerationLog\(\);[\s\S]*return;/);
   assert.match(app, /function formatCompactRatioLabel\(ratio\) \{[\s\S]*return \/\^\\d\+:\\d\+\$\/\.test\(normalized\) \? normalized : "";/);
+  assert.doesNotMatch(app, /title\.textContent = item\.title;[\s\S]*copy\.appendChild\(title\);/);
   assert.match(app, /const ratio = document\.createElement\("span"\);[\s\S]*ratio\.className = "timeline-ratio";[\s\S]*ratio\.textContent = formatCompactRatioLabel\(item\.ratio\);[\s\S]*row\.appendChild\(ratio\);[\s\S]*const resolution = document\.createElement\("span"\);[\s\S]*resolution\.className = "timeline-resolution";[\s\S]*resolution\.textContent = formatCompactSizeLabel\(item\.size\);[\s\S]*row\.appendChild\(resolution\);[\s\S]*row\.appendChild\(time\);/);
   assert.match(app, /ratio: formatCompactRatioLabel\(task\?\.ratio\),/);
   assert.match(app, /size: formatCompactSizeLabel\(task\?\.size\),/);
@@ -140,7 +141,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\.\/app\.js\?v=20260511-article-workspace-preview-2/);
+  assert.match(html, /\.\/app\.js\?v=20260511-device-layout-config-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -977,7 +978,8 @@ test("mobile and Pad studio layout uses dedicated compact workbench layouts", as
   assert.match(html, /id="referenceAdaptiveSection"[\s\S]*data-adaptive-section="reference"[\s\S]*data-compact-open="false"[\s\S]*<summary class="field-heading adaptive-section-summary">/);
   assert.match(html, /id="parameterAdaptiveSection"[\s\S]*data-adaptive-section="parameters"[\s\S]*data-compact-open="false"[\s\S]*<summary class="field-heading adaptive-section-summary">/);
   assert.match(html, /dataset\.uiLayout = "mobile";[\s\S]*dataset\.uiLayout = "tablet";/);
-  assert.match(html, /\.\/styles\.css\?v=20260511-article-workspace-preview-2/);
+  assert.match(html, /devicePixelRatio[\s\S]*isPhonePhysicalSize[\s\S]*isTabletPhysicalSize[\s\S]*physicalTouchWidth/);
+  assert.match(html, /\.\/styles\.css\?v=20260511-device-layout-config-1/);
   assert.doesNotMatch(referenceAdaptiveSection, /\sopen(?:\s|>)/);
   assert.doesNotMatch(parameterAdaptiveSection, /\sopen(?:\s|>)/);
   assert.match(styles, /html,\s*[\r\n]+body\s*\{[\s\S]*overflow-x:\s*clip;/);
@@ -1006,6 +1008,8 @@ test("mobile and Pad studio layout uses dedicated compact workbench layouts", as
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.zoom-controls\s*\{[\s\S]*grid-template-columns:\s*34px\s*minmax\(52px,\s*1fr\)\s*34px\s*minmax\(54px,\s*0\.9fr\);/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.preview-actions\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
   assert.match(app, /const ADAPTIVE_COLLAPSIBLE_LAYOUTS = new Set\(\["tablet", "mobile"\]\);/);
+  assert.match(app, /studio-density\.mjs\?v=20260511-device-layout-config-1/);
+  assert.match(app, /function getStudioViewportMetrics\(\) \{[\s\S]*coarsePointer:\s*window\.matchMedia\?\.\("\(pointer: coarse\)"\)\?\.matches \|\| false,/);
   assert.match(app, /function syncAdaptiveWorkbenchSections\(layoutMode = getCurrentStudioLayoutMode\(\)\) \{/);
   assert.match(app, /section\.open = section\.dataset\.compactOpen === "true";/);
   assert.match(app, /function bindAdaptiveWorkbenchSections\(\) \{/);
@@ -1056,7 +1060,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260511-article-workspace-preview-2/);
+  assert.match(html, /\/app\.js\?v=20260511-device-layout-config-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -1466,7 +1470,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260511-article-workspace-preview-2/);
+  assert.match(html, /app\.js\?v=20260511-device-layout-config-1/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
@@ -1710,6 +1714,35 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.match(app, /state\.creationReferenceFiles = \[\];/);
   assert.match(app, /state\.creationReferenceAnalysis = createEmptyCreationReferenceAnalysisState\(\);/);
   assert.doesNotMatch(app, /state\.creation\.currentSet = selectedSet \? normalizeCreationSetForView\(selectedSet\) : null;/);
+});
+
+test("asset views define compact tablet and mobile layouts", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+
+  assert.match(
+    styles,
+    /html\[data-ui-layout="tablet"\] \.gallery-column-switch,[\s\S]*html\[data-ui-layout="mobile"\] \.gallery-column-switch\s*\{[\s\S]*display:\s*none;/,
+  );
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.gallery-toolbar-head\s*\{[\s\S]*"actions reset"[\s\S]*"meta meta";/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.gallery-filter-row\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/);
+  assert.match(
+    styles,
+    /html\[data-ui-layout="tablet"\] \.article-record-panel,[\s\S]*html\[data-ui-layout="mobile"\] \.ppt-record-panel\s*\{[\s\S]*height:\s*var\(--gallery-panel-height\);[\s\S]*grid-template-rows:\s*auto\s*minmax\(0,\s*1fr\);[\s\S]*overflow:\s*hidden;/,
+  );
+  assert.match(
+    styles,
+    /html\[data-ui-layout="tablet"\] \.article-record-browser,[\s\S]*html\[data-ui-layout="tablet"\] \.ppt-record-browser\s*\{[\s\S]*grid-template-columns:\s*minmax\(220px,\s*280px\)\s*minmax\(0,\s*1fr\);/,
+  );
+  assert.match(
+    styles,
+    /html\[data-ui-layout="mobile"\] \.article-record-browser,[\s\S]*html\[data-ui-layout="mobile"\] \.ppt-record-browser\s*\{[\s\S]*grid-template-rows:\s*clamp\(104px,\s*18svh,\s*148px\)\s*minmax\(0,\s*1fr\);/,
+  );
+  assert.match(
+    styles,
+    /html\[data-ui-layout="mobile"\] \.article-record-list,[\s\S]*html\[data-ui-layout="mobile"\] \.ppt-record-list\s*\{[\s\S]*grid-auto-flow:\s*column;[\s\S]*overflow-x:\s*auto;[\s\S]*overflow-y:\s*hidden;/,
+  );
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.ppt-record-card-actions\s*\{[\s\S]*display:\s*none;/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.creation-record-result-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/);
 });
 
 test("creation record cards open gallery-style lightbox details", async () => {

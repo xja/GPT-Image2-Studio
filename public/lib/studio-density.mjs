@@ -154,7 +154,73 @@ function normalizeDensityViewport({ width = 0, height = 0, devicePixelRatio = 1 
   };
 }
 
-function resolveLayoutViewportWidth({ width = 0, outerWidth = 0 } = {}) {
+function normalizePositiveNumber(value) {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function resolvePhysicalTouchScale({
+  width = 0,
+  height = 0,
+  devicePixelRatio = 1,
+  coarsePointer = false,
+} = {}) {
+  const viewportWidth = normalizePositiveNumber(width);
+  const viewportHeight = normalizePositiveNumber(height);
+
+  if (!viewportWidth || !viewportHeight) {
+    return 0;
+  }
+
+  const shorterSide = Math.min(viewportWidth, viewportHeight);
+  const longerSide = Math.max(viewportWidth, viewportHeight);
+  const aspectRatio = longerSide / shorterSide;
+  const explicitScale = normalizePositiveNumber(devicePixelRatio);
+
+  const isPhonePhysicalSize =
+    coarsePointer &&
+    aspectRatio >= 1.65 &&
+    shorterSide >= 720 &&
+    shorterSide <= 1600 &&
+    longerSide >= 1300 &&
+    longerSide <= 3600;
+  if (isPhonePhysicalSize) {
+    return explicitScale >= 1.5 ? explicitScale : shorterSide >= 1080 ? 3 : 2;
+  }
+
+  const isTabletPhysicalSize =
+    coarsePointer &&
+    aspectRatio >= 1.2 &&
+    aspectRatio < 1.65 &&
+    shorterSide >= 1200 &&
+    shorterSide <= 2200 &&
+    longerSide >= 1600 &&
+    longerSide <= 3000;
+  if (isTabletPhysicalSize) {
+    return explicitScale >= 1.5 ? explicitScale : 2;
+  }
+
+  return 0;
+}
+
+function resolvePhysicalTouchLayoutWidth(viewport = {}) {
+  const scale = resolvePhysicalTouchScale(viewport);
+  const viewportWidth = normalizePositiveNumber(viewport.width);
+
+  if (!scale || !viewportWidth) {
+    return 0;
+  }
+
+  const cssWidth = Math.round(viewportWidth / scale);
+  return cssWidth >= 320 && cssWidth <= 1480 ? cssWidth : 0;
+}
+
+function resolveLayoutViewportWidth(viewport = {}) {
+  const { width = 0, outerWidth = 0 } = viewport;
+  const physicalTouchWidth = resolvePhysicalTouchLayoutWidth(viewport);
+  if (physicalTouchWidth) {
+    return physicalTouchWidth;
+  }
+
   if (Number.isFinite(width) && width > 0 && width <= 1024) {
     return width;
   }
@@ -166,8 +232,9 @@ function resolveLayoutViewportWidth({ width = 0, outerWidth = 0 } = {}) {
   return width;
 }
 
-function resolveZoomOutCompensation({ width = 0, outerWidth = 0, visualScale = 1 } = {}) {
-  const layoutWidth = resolveLayoutViewportWidth({ width, outerWidth });
+function resolveZoomOutCompensation(viewport = {}) {
+  const { width = 0, visualScale = 1 } = viewport;
+  const layoutWidth = resolveLayoutViewportWidth(viewport);
   if (width <= 0 || layoutWidth <= 0) {
     return 1;
   }

@@ -49,7 +49,7 @@ import {
   sortGenerationActivityFeed,
   upsertGenerationActivityEntry,
 } from "/lib/generation-activity-feed.mjs?v=20260504-vercel-static-lib-1";
-import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260504-vercel-static-lib-1";
+import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260511-device-layout-config-1";
 const SURPRISE_PROMPTS = [
   {
     name: "清晨通勤",
@@ -1873,13 +1873,21 @@ function syncLightboxCreationRecordActions(fresh = {}) {
   }
 }
 
+function getStudioViewportMetrics() {
+  return {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio,
+    outerWidth: window.outerWidth,
+    visualScale: window.visualViewport?.scale || 1,
+    coarsePointer: window.matchMedia?.("(pointer: coarse)")?.matches || false,
+  };
+}
+
 function getCurrentStudioLayoutMode() {
   return (
     document.documentElement.dataset.uiLayout ||
-    getStudioLayoutMode({
-      width: window.innerWidth,
-      outerWidth: window.outerWidth,
-    })
+    getStudioLayoutMode(getStudioViewportMetrics())
   );
 }
 
@@ -1952,17 +1960,9 @@ function syncGalleryLayoutMode() {
 }
 
 function syncStudioDensity() {
-  const settings = getStudioDensitySettings({
-    width: window.innerWidth,
-    height: window.innerHeight,
-    devicePixelRatio: window.devicePixelRatio,
-    outerWidth: window.outerWidth,
-    visualScale: window.visualViewport?.scale || 1,
-  });
-  const layoutMode = settings.layoutMode || getStudioLayoutMode({
-    width: window.innerWidth,
-    outerWidth: window.outerWidth,
-  });
+  const viewportMetrics = getStudioViewportMetrics();
+  const settings = getStudioDensitySettings(viewportMetrics);
+  const layoutMode = settings.layoutMode || getStudioLayoutMode(viewportMetrics);
 
   document.documentElement.dataset.uiDensity = settings.mode;
   document.documentElement.dataset.uiLayout = layoutMode;
@@ -4238,10 +4238,6 @@ function renderTimeline() {
 
     const copy = document.createElement("div");
     copy.className = "timeline-copy";
-
-    const title = document.createElement("strong");
-    title.textContent = item.title;
-    copy.appendChild(title);
 
     const detail = document.createElement("span");
     detail.textContent = item.detail;
