@@ -292,7 +292,15 @@ const GALLERY_REFERENCE_LABELS = {
 const STACKED_STUDIO_LAYOUT_MODES = new Set(["stacked", "tablet", "mobile"]);
 const ADAPTIVE_COLLAPSIBLE_LAYOUTS = new Set(["tablet", "mobile"]);
 const PPT_SOURCE_MODES = new Set(["upload", "text", "topic"]);
-const CREATE_VIEW_IDS = new Set(["studio", "style-transfer", "reference-analysis", "creation", "article-illustration", "ppt"]);
+const CREATE_VIEW_IDS = new Set([
+  "studio",
+  "style-transfer",
+  "reference-analysis",
+  "image-decomposition",
+  "creation",
+  "article-illustration",
+  "ppt",
+]);
 const ASSET_VIEW_IDS = new Set(["gallery", "article-record", "ppt-record", "creation-record"]);
 
 let studioHeightSyncFrame = 0;
@@ -309,6 +317,7 @@ let creationRecordRefreshPromise = null;
 let promptCopyFeedbackTimer = 0;
 let previewLoadingShellNodes = null;
 let referenceAnalysisLoadingShellNodes = null;
+let imageDecompositionLoadingShellNodes = null;
 const galleryScrollDrag = {
   active: false,
   pointerId: null,
@@ -418,8 +427,19 @@ const state = {
     running: false,
     selectedPrompt: "",
   },
+  imageDecomposition: {
+    file: null,
+    feedback: "",
+    language: "zh-CN",
+    customLanguage: "",
+    featureCardsEnabled: false,
+    generationKeys: [],
+    generationItems: {},
+    previewKey: "",
+  },
   referenceCompressionRunning: false,
   referenceFiles: [],
+  imageDecompositionPreviewItem: null,
   referenceAnalysisPreviewItem: null,
   referencePreviewItem: null,
   selectedPromptTemplateId: "",
@@ -713,6 +733,27 @@ const refs = {
   referenceAnalysisThumbnailEmpty: document.querySelector("#referenceAnalysisThumbnailEmpty"),
   referenceAnalysisSummary: document.querySelector("#referenceAnalysisSummary"),
   referenceAnalysisToggleButton: document.querySelector("#referenceAnalysisToggleButton"),
+  imageDecompositionCount: document.querySelector("#imageDecompositionCount"),
+  imageDecompositionCustomLanguageField: document.querySelector("#imageDecompositionCustomLanguageField"),
+  imageDecompositionCustomLanguageInput: document.querySelector("#imageDecompositionCustomLanguageInput"),
+  imageDecompositionDropzone: document.querySelector("#imageDecompositionDropzone"),
+  imageDecompositionFeedback: document.querySelector("#imageDecompositionFeedback"),
+  imageDecompositionFeatureCardsInput: document.querySelector("#imageDecompositionFeatureCardsInput"),
+  imageDecompositionGenerateButton: document.querySelector("#imageDecompositionGenerateButton"),
+  imageDecompositionGenerationCanvas: document.querySelector("#imageDecompositionGenerationCanvas"),
+  imageDecompositionGenerationDownloadButton: document.querySelector("#imageDecompositionGenerationDownloadButton"),
+  imageDecompositionGenerationImage: document.querySelector("#imageDecompositionGenerationImage"),
+  imageDecompositionGenerationLightboxButton: document.querySelector("#imageDecompositionGenerationLightboxButton"),
+  imageDecompositionGenerationMeta: document.querySelector("#imageDecompositionGenerationMeta"),
+  imageDecompositionGenerationPlaceholder: document.querySelector("#imageDecompositionGenerationPlaceholder"),
+  imageDecompositionGenerationStrip: document.querySelector("#imageDecompositionGenerationStrip"),
+  imageDecompositionGrid: document.querySelector("#imageDecompositionGrid"),
+  imageDecompositionInput: document.querySelector("#imageDecompositionInput"),
+  imageDecompositionLanguageInput: document.querySelector("#imageDecompositionLanguageInput"),
+  imageDecompositionRatioGrid: document.querySelector("#imageDecompositionRatioGrid"),
+  imageDecompositionRatioInput: document.querySelector("#imageDecompositionRatioInput"),
+  imageDecompositionSizeInput: document.querySelector("#imageDecompositionSizeInput"),
+  imageDecompositionThumbnailEmpty: document.querySelector("#imageDecompositionThumbnailEmpty"),
   referenceAnalyzeButton: document.querySelector("#referenceAnalyzeButton"),
   referenceDropzone: document.querySelector("#referenceDropzone"),
   referenceGrid: document.querySelector("#referenceGrid"),
@@ -1723,6 +1764,9 @@ function getViewFromHash() {
   if (window.location.hash === "#reference-analysis") {
     return "reference-analysis";
   }
+  if (window.location.hash === "#image-decomposition") {
+    return "image-decomposition";
+  }
   if (window.location.hash === "#creation") {
     return "creation";
   }
@@ -1753,6 +1797,8 @@ function syncHash(view) {
         ? "#style-transfer"
         : view === "reference-analysis"
           ? "#reference-analysis"
+          : view === "image-decomposition"
+            ? "#image-decomposition"
           : view === "article-illustration"
             ? "#article-illustration"
           : view === "gallery"
@@ -2439,6 +2485,10 @@ function getReferenceAnalysisGenerationFile(item) {
   return item?.generationFile || item?.file;
 }
 
+function getImageDecompositionGenerationFile(item = state.imageDecomposition.file) {
+  return item?.generationFile || item?.file;
+}
+
 function hasPendingReferenceGenerationFiles() {
   return state.referenceFiles.some((item) => item.generationFilePromise);
 }
@@ -2449,6 +2499,10 @@ function hasPendingCreationReferenceGenerationFiles() {
 
 function hasPendingReferenceAnalysisGenerationFiles() {
   return state.referenceAnalysis.files.some((item) => item.generationFilePromise);
+}
+
+function hasPendingImageDecompositionGenerationFiles() {
+  return Boolean(state.imageDecomposition.file?.generationFilePromise);
 }
 
 function startReferenceGenerationCompression(item) {
@@ -2504,6 +2558,33 @@ function startReferenceAnalysisGenerationCompression(item) {
 
   renderReferenceAnalysisGrid();
   renderReferenceAnalysis();
+  return item.generationFilePromise;
+}
+
+function startImageDecompositionGenerationCompression(item) {
+  if (!item?.file) {
+    return null;
+  }
+
+  item.generationFile = item.file;
+  item.generationCompressed = false;
+  item.generationFilePromise = prepareGenerationReferenceImageFile(item.file)
+    .then((preparedFile) => {
+      item.generationFile = preparedFile || item.file;
+      item.generationCompressed = Boolean(preparedFile && preparedFile !== item.file);
+      return item.generationFile;
+    })
+    .catch(() => {
+      item.generationFile = item.file;
+      item.generationCompressed = false;
+      return item.file;
+    })
+    .finally(() => {
+      item.generationFilePromise = null;
+      renderImageDecompositionView();
+    });
+
+  renderImageDecompositionView();
   return item.generationFilePromise;
 }
 
@@ -2633,6 +2714,19 @@ async function ensureReferenceAnalysisGenerationFilesReady() {
   }
 }
 
+async function ensureImageDecompositionGenerationFilesReady() {
+  const pending = [state.imageDecomposition.file?.generationFilePromise].filter(Boolean);
+  if (pending.length === 0) {
+    return;
+  }
+
+  try {
+    await Promise.allSettled(pending);
+  } finally {
+    renderImageDecompositionView();
+  }
+}
+
 function resetReferenceFiles() {
   closeReferencePreview();
   state.referenceFiles.forEach(revokeReferencePreview);
@@ -2658,6 +2752,7 @@ function closeReferencePreview() {
   state.referencePreviewItem = null;
   state.creationReferencePreviewItem = null;
   state.referenceAnalysisPreviewItem = null;
+  state.imageDecompositionPreviewItem = null;
   state.styleTransferPreviewItem = null;
   refs.referencePreviewViewer.classList.remove("open");
   refs.referencePreviewViewer.setAttribute("aria-hidden", "true");
@@ -2780,6 +2875,551 @@ function removeReferenceAnalysisFile(referenceId) {
   markReferenceAnalysisDirty();
   renderReferenceAnalysisGrid();
   renderReferenceAnalysis();
+}
+
+function createImageDecompositionItem(file) {
+  return {
+    id: `image-decomposition-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    fingerprint: buildReferenceFingerprint(file),
+    file,
+    generationFile: file,
+    generationFilePromise: null,
+    generationCompressed: false,
+    previewUrl: URL.createObjectURL(file),
+  };
+}
+
+function setImageDecompositionFeedback(message = "", kind = "") {
+  refs.imageDecompositionFeedback.textContent = message ? compactErrorMessage(message, "图片拆解失败") : "";
+  refs.imageDecompositionFeedback.dataset.state = kind;
+}
+
+function getImageDecompositionGenerationItemByKey(key) {
+  if (String(key || "").startsWith("job:")) {
+    return state.jobs.find((job) => job.id === String(key).slice(4) && job.mode === "image-decomposition") || null;
+  }
+
+  if (String(key || "").startsWith("file:")) {
+    return state.imageDecomposition.generationItems[key] || state.gallery.find((item) => item.filename === String(key).slice(5)) || null;
+  }
+
+  return null;
+}
+
+function storeImageDecompositionGenerationItem(item) {
+  const filename = String(item?.filename || "").trim();
+  if (!filename) {
+    return "";
+  }
+
+  const key = makeGalleryPreviewKey(filename);
+  const current = state.imageDecomposition.generationItems[key] || {};
+  state.imageDecomposition.generationItems[key] = {
+    ...current,
+    ...item,
+    mode: "image-decomposition",
+  };
+  return key;
+}
+
+function registerImageDecompositionGenerationKey(key) {
+  const nextKey = String(key || "").trim();
+  if (!nextKey) {
+    return;
+  }
+
+  state.imageDecomposition.generationKeys = [
+    nextKey,
+    ...state.imageDecomposition.generationKeys.filter((entry) => entry !== nextKey),
+  ];
+}
+
+function replaceImageDecompositionGenerationKey(oldKey, newKey) {
+  const currentKey = String(oldKey || "").trim();
+  const nextKey = String(newKey || "").trim();
+  if (!nextKey) {
+    return;
+  }
+
+  const keys = state.imageDecomposition.generationKeys.filter((entry) => entry !== nextKey);
+  const index = keys.indexOf(currentKey);
+  if (index >= 0) {
+    keys[index] = nextKey;
+    state.imageDecomposition.generationKeys = keys;
+    return;
+  }
+
+  state.imageDecomposition.generationKeys = [nextKey, ...keys];
+}
+
+function removeImageDecompositionGenerationKey(key) {
+  const targetKey = String(key || "").trim();
+  if (!targetKey) {
+    return;
+  }
+
+  state.imageDecomposition.generationKeys = state.imageDecomposition.generationKeys.filter((entry) => entry !== targetKey);
+  if (state.imageDecomposition.previewKey === targetKey) {
+    state.imageDecomposition.previewKey = "";
+  }
+}
+
+function getImageDecompositionGenerationPreviewEntries() {
+  const entries = [];
+  const seen = new Set();
+  const addKey = (key) => {
+    const normalizedKey = String(key || "").trim();
+    if (!normalizedKey || seen.has(normalizedKey)) {
+      return;
+    }
+
+    const item = getImageDecompositionGenerationItemByKey(normalizedKey);
+    if (!item) {
+      return;
+    }
+
+    seen.add(normalizedKey);
+    entries.push({ key: normalizedKey, item });
+  };
+
+  state.imageDecomposition.generationKeys.forEach(addKey);
+  sortGalleryItemsByCreatedAtDesc(state.jobs)
+    .filter((job) => job.mode === "image-decomposition")
+    .forEach((job) => addKey(makeJobPreviewKey(job.id)));
+  sortGalleryItemsByCreatedAtDesc(state.gallery)
+    .filter(
+      (item) =>
+        item.mode === "image-decomposition" ||
+        item.generationMode === "image-decomposition" ||
+        item.assetKind === "image-decomposition",
+    )
+    .forEach((item) => addKey(makeGalleryPreviewKey(item.filename)));
+
+  return entries;
+}
+
+function syncImageDecompositionGenerationPreviewKey() {
+  if (getImageDecompositionGenerationItemByKey(state.imageDecomposition.previewKey || "")) {
+    return;
+  }
+
+  const fallback = getImageDecompositionGenerationPreviewEntries()[0];
+  state.imageDecomposition.previewKey = fallback?.key || "";
+}
+
+function getImageDecompositionGenerationPreviewItem() {
+  syncImageDecompositionGenerationPreviewKey();
+  return getImageDecompositionGenerationItemByKey(state.imageDecomposition.previewKey || "");
+}
+
+function setImageDecompositionGenerationPreviewKey(key) {
+  const nextKey = String(key || "").trim();
+  if (!getImageDecompositionGenerationItemByKey(nextKey)) {
+    return;
+  }
+
+  state.imageDecomposition.previewKey = nextKey;
+  renderImageDecompositionGenerationPreview();
+}
+
+function setImageDecompositionGenerationPlaceholderText(message, hidden = false) {
+  imageDecompositionLoadingShellNodes = null;
+  refs.imageDecompositionGenerationPlaceholder.className = "image-decomposition-generation-placeholder preview-placeholder";
+  refs.imageDecompositionGenerationPlaceholder.classList.toggle("hidden", hidden);
+  refs.imageDecompositionGenerationPlaceholder.replaceChildren();
+  if (!message) {
+    return;
+  }
+
+  const title = document.createElement("h3");
+  title.textContent = message;
+  refs.imageDecompositionGenerationPlaceholder.appendChild(title);
+
+  const detail = document.createElement("span");
+  detail.textContent = "上传一张源图后开始生成，底部胶片条可快速切换结果。";
+  refs.imageDecompositionGenerationPlaceholder.appendChild(detail);
+}
+
+function renderImageDecompositionGenerationLoading(item) {
+  const placeholderState = {
+    ...getPreviewPlaceholderState({
+      item,
+      imageUrl: "",
+      prompt: item ? getDisplayPrompt(item) : "",
+      runningCount: state.jobs.length,
+      maxConcurrentTasks: state.limits.maxConcurrentTasksPerSession,
+    }),
+    eyebrow: "Image Decomposition",
+    title: "拆解信息图生成中",
+    detail: item?.statusText || "正在生成图片",
+  };
+
+  if (
+    !imageDecompositionLoadingShellNodes ||
+    !shouldReusePreviewLoadingShell(imageDecompositionLoadingShellNodes.state || {}, placeholderState)
+  ) {
+    imageDecompositionLoadingShellNodes = createPreviewLoadingShellNodes();
+  }
+
+  updatePreviewLoadingShell(imageDecompositionLoadingShellNodes, placeholderState);
+  refs.imageDecompositionGenerationPlaceholder.className =
+    "image-decomposition-generation-placeholder preview-placeholder preview-placeholder-loading";
+  refs.imageDecompositionGenerationPlaceholder.classList.remove("hidden");
+
+  if (
+    refs.imageDecompositionGenerationPlaceholder.firstChild !== imageDecompositionLoadingShellNodes.eyebrow ||
+    refs.imageDecompositionGenerationPlaceholder.lastChild !== imageDecompositionLoadingShellNodes.shell
+  ) {
+    refs.imageDecompositionGenerationPlaceholder.replaceChildren(
+      imageDecompositionLoadingShellNodes.eyebrow,
+      imageDecompositionLoadingShellNodes.shell,
+    );
+  }
+}
+
+function openImageDecompositionGeneratedPreview() {
+  const item = getImageDecompositionGenerationPreviewItem();
+  if (item && getImageUrl(item)) {
+    openLightbox(item);
+  }
+}
+
+function renderImageDecompositionGenerationPreview() {
+  const item = getImageDecompositionGenerationPreviewItem();
+  const imageUrl = item ? getImageUrl(item) : "";
+  const isRunning = Boolean(item?.isRunning || (item?.started && !item?.filename));
+
+  refs.imageDecompositionGenerationCanvas.classList.toggle("has-image", Boolean(imageUrl));
+  refs.imageDecompositionGenerationCanvas.classList.toggle("is-running", isRunning && !imageUrl);
+  if (imageUrl) {
+    refs.imageDecompositionGenerationCanvas.setAttribute("role", "button");
+    refs.imageDecompositionGenerationCanvas.setAttribute("aria-label", "查看图片拆解生成图");
+    refs.imageDecompositionGenerationCanvas.tabIndex = 0;
+  } else {
+    refs.imageDecompositionGenerationCanvas.removeAttribute("role");
+    refs.imageDecompositionGenerationCanvas.removeAttribute("aria-label");
+    refs.imageDecompositionGenerationCanvas.tabIndex = -1;
+  }
+
+  if (imageUrl) {
+    setImageDecompositionGenerationPlaceholderText("", true);
+  } else if (isRunning) {
+    renderImageDecompositionGenerationLoading(item);
+  } else {
+    setImageDecompositionGenerationPlaceholderText("拆解信息图会显示在这里");
+  }
+
+  if (imageUrl) {
+    refs.imageDecompositionGenerationImage.src = imageUrl;
+    refs.imageDecompositionGenerationImage.alt = getDisplayPrompt(item) || "图片拆解生成结果";
+    refs.imageDecompositionGenerationImage.classList.add("is-mounted", "is-visible");
+    refs.imageDecompositionGenerationDownloadButton.href = imageUrl;
+    refs.imageDecompositionGenerationDownloadButton.download = item.filename || "image-decomposition.png";
+    refs.imageDecompositionGenerationDownloadButton.classList.remove("disabled");
+    refs.imageDecompositionGenerationDownloadButton.setAttribute("aria-disabled", "false");
+    refs.imageDecompositionGenerationLightboxButton.disabled = false;
+  } else {
+    refs.imageDecompositionGenerationImage.removeAttribute("src");
+    refs.imageDecompositionGenerationImage.classList.remove("is-mounted", "is-visible");
+    refs.imageDecompositionGenerationDownloadButton.href = "#";
+    refs.imageDecompositionGenerationDownloadButton.removeAttribute("download");
+    refs.imageDecompositionGenerationDownloadButton.classList.add("disabled");
+    refs.imageDecompositionGenerationDownloadButton.setAttribute("aria-disabled", "true");
+    refs.imageDecompositionGenerationLightboxButton.disabled = true;
+  }
+
+  refs.imageDecompositionGenerationMeta.textContent = item
+    ? [formatTime(item.createdAt), formatCanvasLabel(item.size), item.statusText || ""].filter(Boolean).join(" · ")
+    : "等待生成";
+  renderImageDecompositionGenerationStrip();
+}
+
+function renderImageDecompositionGenerationStrip() {
+  const entries = getImageDecompositionGenerationPreviewEntries();
+  refs.imageDecompositionGenerationStrip.replaceChildren();
+  refs.imageDecompositionGenerationStrip.classList.toggle("hidden", entries.length === 0);
+  refs.imageDecompositionThumbnailEmpty.classList.toggle("hidden", entries.length > 0);
+
+  entries.forEach(({ key, item }, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "filmstrip-item image-decomposition-generation-thumb";
+    button.dataset.imageDecompositionGenerationKey = key;
+    button.setAttribute("aria-pressed", String(key === state.imageDecomposition.previewKey));
+    button.title = `切换到第 ${index + 1} 张图片拆解结果`;
+    button.classList.toggle("active", key === state.imageDecomposition.previewKey);
+    button.classList.toggle("is-running", Boolean(item?.isRunning || (item?.started && !item?.filename)));
+
+    const imageUrl = getImageUrl(item);
+    if (imageUrl) {
+      const image = document.createElement("img");
+      image.src = imageUrl;
+      image.alt = getDisplayPrompt(item);
+      image.loading = "lazy";
+      button.appendChild(image);
+    } else {
+      const ghost = document.createElement("div");
+      ghost.className = "filmstrip-ghost";
+      ghost.textContent = item?.isRunning || item?.started ? "生成中" : "等待";
+      button.appendChild(ghost);
+    }
+
+    const caption = document.createElement("span");
+    caption.textContent = formatFilmstripSizeLabel(item) || item?.statusText || formatClock(item?.createdAt);
+    button.appendChild(caption);
+
+    const shell = document.createElement("div");
+    shell.className = "filmstrip-entry";
+    shell.appendChild(button);
+    refs.imageDecompositionGenerationStrip.appendChild(shell);
+  });
+}
+
+async function preserveImageDecompositionGenerationItemForDelete(item) {
+  if (!item?.filename) {
+    return;
+  }
+
+  const key = makeGalleryPreviewKey(item.filename);
+  const isTrackedImageDecompositionItem =
+    item.mode === "image-decomposition" ||
+    item.assetKind === "image-decomposition" ||
+    state.imageDecomposition.generationKeys.includes(key) ||
+    Boolean(state.imageDecomposition.generationItems[key]);
+  if (!isTrackedImageDecompositionItem) {
+    return;
+  }
+
+  const imageUrl = getImageUrl(item);
+  if (!imageUrl || String(imageUrl).startsWith("data:image/")) {
+    storeImageDecompositionGenerationItem(item);
+    return;
+  }
+
+  try {
+    const dataUrl = await fetchServerImageAsDataUrl(imageUrl);
+    if (dataUrl) {
+      storeImageDecompositionGenerationItem({
+        ...item,
+        imageUrl: dataUrl,
+        thumbnailUrl: dataUrl,
+      });
+      return;
+    }
+  } catch (_error) {
+    // Keep existing metadata if the image cannot be copied before deletion.
+  }
+
+  storeImageDecompositionGenerationItem(item);
+}
+
+function createImageDecompositionGenerationFile(item) {
+  return item?.generationFile || item?.file;
+}
+
+function syncImageDecompositionLanguageUI() {
+  const isCustom = refs.imageDecompositionLanguageInput.value === "custom";
+  refs.imageDecompositionCustomLanguageField.classList.toggle("hidden", !isCustom);
+  refs.imageDecompositionCustomLanguageInput.disabled = !isCustom;
+}
+
+function renderImageDecompositionSource() {
+  const item = state.imageDecomposition.file;
+  refs.imageDecompositionCount.textContent = item ? "1 / 1" : "0 / 1";
+  syncReferenceDropzoneCompact(refs.imageDecompositionDropzone, Boolean(item));
+  refs.imageDecompositionGrid.classList.toggle("hidden", !item);
+  refs.imageDecompositionGrid.replaceChildren();
+
+  if (!item) {
+    return;
+  }
+
+  const card = document.createElement("div");
+  card.className = "reference-card";
+
+  const previewButton = document.createElement("button");
+  previewButton.type = "button";
+  previewButton.className = "reference-preview-button";
+  previewButton.dataset.imageDecompositionPreviewId = item.id;
+  previewButton.setAttribute("aria-label", "放大查看源图");
+
+  const image = document.createElement("img");
+  image.src = item.previewUrl;
+  image.alt = "源图预览";
+  previewButton.appendChild(image);
+  card.appendChild(previewButton);
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "reference-remove";
+  remove.textContent = "x";
+  remove.setAttribute("aria-label", "移除源图");
+  remove.addEventListener("click", () => removeImageDecompositionFile());
+  card.appendChild(remove);
+
+  refs.imageDecompositionGrid.appendChild(card);
+}
+
+function createImageDecompositionGenerationItem(file) {
+  return createImageDecompositionItem(file);
+}
+
+function applyImageDecompositionFile(fileList) {
+  const incomingFiles = [...(fileList || [])].filter((file) => file.type.startsWith("image/"));
+  if (incomingFiles.length === 0) {
+    return;
+  }
+
+  if (incomingFiles.length !== 1) {
+    setImageDecompositionFeedback("图片拆解模式一次只能上传一张源图。", "error");
+    return;
+  }
+
+  const file = incomingFiles[0];
+  if (state.imageDecomposition.file?.fingerprint === buildReferenceFingerprint(file)) {
+    return;
+  }
+
+  const nextItem = createImageDecompositionGenerationItem(file);
+  startImageDecompositionGenerationCompression(nextItem);
+  if (state.imageDecomposition.file) {
+    revokeReferencePreview(state.imageDecomposition.file);
+  }
+  state.imageDecomposition.file = nextItem;
+  refs.imageDecompositionInput.value = "";
+  setImageDecompositionFeedback("", "");
+  renderImageDecompositionView();
+}
+
+function removeImageDecompositionFile() {
+  const target = state.imageDecomposition.file;
+  if (!target) {
+    return;
+  }
+
+  if (state.imageDecompositionPreviewItem?.id === target.id) {
+    closeReferencePreview();
+  }
+
+  revokeReferencePreview(target);
+  state.imageDecomposition.file = null;
+  refs.imageDecompositionInput.value = "";
+  renderImageDecompositionView();
+}
+
+function openImageDecompositionPreview(referenceId) {
+  const item = state.imageDecomposition.file;
+  if (item?.id !== referenceId || !item.previewUrl) {
+    return;
+  }
+
+  state.imageDecompositionPreviewItem = item;
+  refs.referencePreviewImage.src = item.previewUrl;
+  refs.referencePreviewViewer.classList.add("open");
+  refs.referencePreviewViewer.setAttribute("aria-hidden", "false");
+}
+
+function syncImageDecompositionRatio(value) {
+  const nextValue = getRatioOption(value)?.value || DEFAULT_UI_RATIO;
+  refs.imageDecompositionRatioInput.value = nextValue;
+  renderImageDecompositionRatioGrid();
+  renderImageDecompositionSizeOptions();
+}
+
+function renderImageDecompositionRatioGrid() {
+  renderRatioGrid(refs.imageDecompositionRatioGrid, refs.imageDecompositionRatioInput, syncImageDecompositionRatio);
+}
+
+function renderImageDecompositionSizeOptions() {
+  renderSizeOptions(refs.imageDecompositionSizeInput, refs.imageDecompositionRatioInput);
+}
+
+function syncImageDecompositionSize(value) {
+  const ratioValue = refs.imageDecompositionRatioInput.value || DEFAULT_UI_RATIO;
+  refs.imageDecompositionSizeInput.value = normalizeGenerationSize(ratioValue, value || "auto");
+}
+
+function createImageDecompositionJob() {
+  const ratioOption = getRatioOption(refs.imageDecompositionRatioInput.value || DEFAULT_UI_RATIO);
+  const sourceItem = state.imageDecomposition.file;
+  const sizeSetting = normalizeGenerationSize(ratioOption.value, refs.imageDecompositionSizeInput.value || "auto");
+  const size = sizeSetting === "auto" ? ratioOption?.baseSize || getDefaultGenerationSize(ratioOption?.value) : sizeSetting;
+
+  return {
+    id: `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: nowIso(),
+    mode: "image-decomposition",
+    prompt: "图片拆解信息图",
+    targetLanguage: refs.imageDecompositionLanguageInput.value,
+    customTargetLanguage: refs.imageDecompositionCustomLanguageInput.value.trim(),
+    featureCardsEnabled: refs.imageDecompositionFeatureCardsInput.value === "on",
+    ratio: ratioOption?.value || DEFAULT_UI_RATIO,
+    ratioLabel: ratioOption?.label || DEFAULT_UI_RATIO_LABEL,
+    sizeSetting,
+    size,
+    quality: state.config?.defaults?.quality || "high",
+    format: normalizeOutputFormat(refs.outputFormatInput.value || state.config?.defaults?.format || "png"),
+    baseUrl: state.config?.baseUrl || refs.baseUrlInput.value.trim(),
+    responsesModel: state.config?.responsesModel || refs.responsesModelInput.value.trim() || "gpt-5.4",
+    imageModel: "gpt-image-2",
+    reasoningEffort: refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
+    requestRetryCount: 0,
+    referenceFiles: sourceItem ? [createImageDecompositionGenerationFile(sourceItem)] : [],
+    hasReferenceImage: Boolean(sourceItem),
+    referenceImageName: sourceItem?.file?.name || "",
+    referenceImageNames: sourceItem?.file?.name ? [sourceItem.file.name] : [],
+    isRunning: false,
+    started: false,
+    statusStage: "queued",
+    statusText: "等待排队",
+    previewUrl: "",
+  };
+}
+
+async function startImageDecompositionGeneration() {
+  clearError();
+
+  if (!state.imageDecomposition.file?.file) {
+    setImageDecompositionFeedback("请先上传一张源图。", "error");
+    return;
+  }
+
+  const targetLanguage = String(refs.imageDecompositionLanguageInput.value || "").trim();
+  const customLanguage = String(refs.imageDecompositionCustomLanguageInput.value || "").trim();
+  if (targetLanguage === "custom" && !customLanguage) {
+    setImageDecompositionFeedback("请填写自定义语言。", "error");
+    return;
+  }
+
+  if (getQueuedJobCount() >= getMaxQueuedJobCount()) {
+    setImageDecompositionFeedback(`同一会话最多排队 ${getMaxQueuedJobCount()} 个生成任务。`, "error");
+    return;
+  }
+
+  await ensureImageDecompositionGenerationFilesReady();
+  const job = createImageDecompositionJob();
+  registerImageDecompositionGenerationKey(makeJobPreviewKey(job.id));
+  state.jobs.unshift(job);
+  state.imageDecomposition.previewKey = makeJobPreviewKey(job.id);
+  state.selectedPreviewKey = makeJobPreviewKey(job.id);
+  recordJobQueued(job);
+  setImageDecompositionFeedback("图片拆解任务已提交，正在生成...", "busy");
+  renderAll();
+  setActiveView("image-decomposition");
+  scheduleGenerationQueue();
+}
+
+function renderImageDecompositionView() {
+  syncImageDecompositionLanguageUI();
+  renderImageDecompositionSource();
+  renderImageDecompositionGenerationPreview();
+  refs.imageDecompositionGenerateButton.disabled =
+    !state.imageDecomposition.file || hasPendingImageDecompositionGenerationFiles() || getQueuedJobCount() >= getMaxQueuedJobCount();
+  refs.imageDecompositionGenerateButton.textContent = hasPendingImageDecompositionGenerationFiles()
+    ? "处理中..."
+    : getQueuedJobCount() > 0
+      ? "继续生成"
+      : "开始拆解";
 }
 
 function openReferenceAnalysisPreview(referenceId) {
@@ -3786,7 +4426,8 @@ function syncStudioHeight() {
 
   const settingsScrollTop = getSettingsFormScrollTop();
 
-  const isStudioLikeView = state.activeView === "studio" || state.activeView === "style-transfer";
+  const isStudioLikeView =
+    state.activeView === "studio" || state.activeView === "style-transfer" || state.activeView === "image-decomposition";
   if (STACKED_STUDIO_LAYOUT_MODES.has(getCurrentStudioLayoutMode()) || !isStudioLikeView) {
     document.documentElement.style.removeProperty("--studio-column-height");
     restoreSettingsFormScrollTop(settingsScrollTop);
@@ -4083,7 +4724,7 @@ function bindGalleryScrollSync() {
   }
 }
 
-function renderRatioGrid(ratioGrid = refs.ratioGrid, ratioInput = refs.ratioInput) {
+function renderRatioGrid(ratioGrid = refs.ratioGrid, ratioInput = refs.ratioInput, onSelect = syncGenerationRatio) {
   if (!ratioGrid || !ratioInput) {
     return;
   }
@@ -4103,7 +4744,7 @@ function renderRatioGrid(ratioGrid = refs.ratioGrid, ratioInput = refs.ratioInpu
     button.appendChild(title);
 
     button.addEventListener("click", () => {
-      syncGenerationRatio(option.value);
+      onSelect(option.value);
     });
 
     ratioGrid.appendChild(button);
@@ -4140,9 +4781,16 @@ function syncConfigUi(config) {
   if (refs.referenceAnalysisSizeInput) {
     refs.referenceAnalysisSizeInput.value = refs.sizeInput.value || "auto";
   }
+  if (refs.imageDecompositionRatioInput && !refs.imageDecompositionRatioInput.value) {
+    refs.imageDecompositionRatioInput.value = DEFAULT_UI_RATIO;
+  }
+  if (refs.imageDecompositionSizeInput && !refs.imageDecompositionSizeInput.value) {
+    refs.imageDecompositionSizeInput.value = "auto";
+  }
 
   renderRatioGrid();
   renderReferenceAnalysisRatioGrid();
+  renderImageDecompositionRatioGrid();
   renderReasoningOptions();
   renderOutputFormatOptions();
   refs.creationOutputFormatInput.value = normalizeOutputFormat(
@@ -4150,10 +4798,12 @@ function syncConfigUi(config) {
   );
   renderSizeOptions();
   renderReferenceAnalysisSizeOptions();
+  renderImageDecompositionSizeOptions();
   renderCreationRatioOptions();
   syncConnectionState();
   updateGenerateButton();
   renderReferenceGrid();
+  renderImageDecompositionView();
 }
 
 function ensureSelectedPreview() {
@@ -5196,6 +5846,7 @@ function renderAll() {
   renderStudio();
   renderReferenceAnalysisGrid();
   renderReferenceAnalysis();
+  renderImageDecompositionView();
   renderArticleIllustrationView();
   renderArticleRecordView();
   renderCreationView();
@@ -5243,6 +5894,9 @@ function upsertGalleryItem(item) {
   state.gallery = sortGalleryItemsByCreatedAtDesc(next);
   if (hydratedItem.mode === "reference-analysis") {
     storeReferenceAnalysisGenerationItem(hydratedItem);
+  }
+  if (hydratedItem.mode === "image-decomposition" || hydratedItem.assetKind === "image-decomposition") {
+    storeImageDecompositionGenerationItem(hydratedItem);
   }
   resetGalleryHistoryPage();
   syncGalleryMetadataCache(state.gallery);
@@ -10704,6 +11358,9 @@ function cancelQueuedJob(jobId) {
   if (canceledJob.mode === "reference-analysis") {
     removeReferenceAnalysisGenerationKey(makeJobPreviewKey(canceledJob.id));
   }
+  if (canceledJob.mode === "image-decomposition") {
+    removeImageDecompositionGenerationKey(makeJobPreviewKey(canceledJob.id));
+  }
   handleActivityCanceled(canceledJob);
   scheduleGenerationQueue();
   renderAll();
@@ -10837,6 +11494,14 @@ function applyGenerationTaskSnapshots(tasks, { render = true } = {}) {
           state.referenceAnalysis.previewKey = makeGalleryPreviewKey(task.item.filename);
         }
       }
+      if (task.mode === "image-decomposition") {
+        task.item.mode = "image-decomposition";
+        storeImageDecompositionGenerationItem(task.item);
+        replaceImageDecompositionGenerationKey(makeJobPreviewKey(task.id), makeGalleryPreviewKey(task.item.filename));
+        if (state.imageDecomposition.previewKey === makeJobPreviewKey(task.id)) {
+          state.imageDecomposition.previewKey = makeGalleryPreviewKey(task.item.filename);
+        }
+      }
       upsertGalleryItem(task.item);
       if (state.selectedPreviewKey === makeJobPreviewKey(task.id) && task.item.filename) {
         state.selectedPreviewKey = makeGalleryPreviewKey(task.item.filename);
@@ -10849,6 +11514,9 @@ function applyGenerationTaskSnapshots(tasks, { render = true } = {}) {
 
     if (task.status === "error" && task.mode === "reference-analysis") {
       removeReferenceAnalysisGenerationKey(makeJobPreviewKey(task.id));
+    }
+    if (task.status === "error" && task.mode === "image-decomposition") {
+      removeImageDecompositionGenerationKey(makeJobPreviewKey(task.id));
     }
 
     recordGenerationTaskActivity(task);
@@ -10966,7 +11634,10 @@ async function deleteGalleryItem(item) {
     return;
   }
 
-  await preserveReferenceAnalysisGenerationItemForDelete(item);
+  await Promise.all([
+    preserveReferenceAnalysisGenerationItemForDelete(item),
+    preserveImageDecompositionGenerationItemForDelete(item),
+  ]);
   const response = await fetch("/api/output/delete", {
     method: "POST",
     headers: {
@@ -11007,7 +11678,12 @@ async function clearHistory() {
     return;
   }
 
-  await Promise.all(state.gallery.map(preserveReferenceAnalysisGenerationItemForDelete));
+  await Promise.all(
+    state.gallery.flatMap((item) => [
+      preserveReferenceAnalysisGenerationItemForDelete(item),
+      preserveImageDecompositionGenerationItemForDelete(item),
+    ]),
+  );
   for (const item of [...state.gallery]) {
     const response = await fetch("/api/output/delete", {
       method: "POST",
@@ -11049,6 +11725,8 @@ function buildGenerationFormData(job) {
 
   if (job.mode === "style-transfer") {
     appendStyleTransferReferencesToFormData(formData, job);
+  } else if (job.mode === "image-decomposition") {
+    appendImageDecompositionReferencesToFormData(formData, job);
   } else {
     job.referenceFiles.forEach((file) => {
       formData.append("referenceImages", file);
@@ -11056,6 +11734,16 @@ function buildGenerationFormData(job) {
   }
 
   return formData;
+}
+
+function appendImageDecompositionReferencesToFormData(formData, job) {
+  formData.set("mode", "image-decomposition");
+  formData.set("targetLanguage", job.targetLanguage || "zh-CN");
+  formData.set("customTargetLanguage", job.customTargetLanguage || "");
+  formData.set("featureCardsEnabled", job.featureCardsEnabled ? "1" : "0");
+  job.referenceFiles.forEach((file) => {
+    formData.append("referenceImages", file);
+  });
 }
 
 function appendStyleTransferReferencesToFormData(formData, job) {
@@ -11320,6 +12008,9 @@ async function runGeneration(job) {
           statusText: payload.message,
         });
         handleActivityStatus(job.id, payload.stage, payload.message);
+        if (job.mode === "image-decomposition") {
+          setImageDecompositionFeedback(payload.message || "图片拆解生成中...", "busy");
+        }
         renderAll();
         return;
       }
@@ -11377,6 +12068,13 @@ async function runGeneration(job) {
             state.referenceAnalysis.previewKey = makeGalleryPreviewKey(payload.item.filename);
             setReferenceAnalysisFeedback("融图分析图片已生成。", "success");
           }
+          if (job.mode === "image-decomposition") {
+            payload.item.mode = "image-decomposition";
+            storeImageDecompositionGenerationItem(payload.item);
+            replaceImageDecompositionGenerationKey(makeJobPreviewKey(job.id), makeGalleryPreviewKey(payload.item.filename));
+            state.imageDecomposition.previewKey = makeGalleryPreviewKey(payload.item.filename);
+            setImageDecompositionFeedback("图片拆解信息图已生成。", "success");
+          }
           upsertGalleryItem(payload.item);
           state.selectedPreviewKey = makeGalleryPreviewKey(payload.item.filename);
         }
@@ -11414,6 +12112,10 @@ async function runGeneration(job) {
         if (job.mode === "reference-analysis") {
           removeReferenceAnalysisGenerationKey(makeJobPreviewKey(job.id));
         }
+        if (job.mode === "image-decomposition") {
+          removeImageDecompositionGenerationKey(makeJobPreviewKey(job.id));
+          setImageDecompositionFeedback(message, "error");
+        }
         removeJob(job.id);
         renderAll();
       }
@@ -11424,6 +12126,10 @@ async function runGeneration(job) {
       showError(message);
       if (job.mode === "reference-analysis") {
         removeReferenceAnalysisGenerationKey(makeJobPreviewKey(job.id));
+      }
+      if (job.mode === "image-decomposition") {
+        removeImageDecompositionGenerationKey(makeJobPreviewKey(job.id));
+        setImageDecompositionFeedback(message, "error");
       }
       removeJob(job.id);
       renderAll();
@@ -11437,6 +12143,10 @@ async function runGeneration(job) {
     showError(message);
     if (job.mode === "reference-analysis") {
       removeReferenceAnalysisGenerationKey(makeJobPreviewKey(job.id));
+    }
+    if (job.mode === "image-decomposition") {
+      removeImageDecompositionGenerationKey(makeJobPreviewKey(job.id));
+      setImageDecompositionFeedback(message, "error");
     }
     removeJob(job.id);
     renderAll();
@@ -12114,6 +12824,9 @@ function bindEvents() {
   refs.referenceAnalysisSizeInput.addEventListener("change", (event) => {
     syncGenerationSize(event.target.value);
   });
+  refs.imageDecompositionSizeInput.addEventListener("change", (event) => {
+    syncImageDecompositionSize(event.target.value);
+  });
   refs.styleTransferSourceInput.addEventListener("change", (event) => {
     applyStyleTransferReferenceFile("source", event.target.files);
   });
@@ -12170,6 +12883,49 @@ function bindEvents() {
     refs.referenceAnalysisDropzone.classList.remove("dragover");
     applyReferenceAnalysisFiles(event.dataTransfer?.files);
   });
+  refs.imageDecompositionInput.addEventListener("change", (event) => {
+    applyImageDecompositionFile(event.target.files);
+  });
+  refs.imageDecompositionDropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    refs.imageDecompositionDropzone.classList.add("dragover");
+  });
+  refs.imageDecompositionDropzone.addEventListener("dragleave", () => {
+    refs.imageDecompositionDropzone.classList.remove("dragover");
+  });
+  refs.imageDecompositionDropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    refs.imageDecompositionDropzone.classList.remove("dragover");
+    applyImageDecompositionFile(event.dataTransfer?.files);
+  });
+  refs.imageDecompositionGrid.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-image-decomposition-preview-id]");
+    if (!target) {
+      return;
+    }
+
+    openImageDecompositionPreview(target.dataset.imageDecompositionPreviewId);
+  });
+  refs.imageDecompositionLanguageInput.addEventListener("change", (event) => {
+    state.imageDecomposition.language = event.target.value;
+    syncImageDecompositionLanguageUI();
+    renderImageDecompositionView();
+  });
+  refs.imageDecompositionCustomLanguageInput.addEventListener("input", (event) => {
+    state.imageDecomposition.customLanguage = event.target.value;
+    renderImageDecompositionView();
+  });
+  refs.imageDecompositionFeatureCardsInput.addEventListener("change", (event) => {
+    state.imageDecomposition.featureCardsEnabled = event.target.value === "on";
+  });
+  refs.imageDecompositionGenerateButton.addEventListener("click", () => {
+    startImageDecompositionGeneration().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      setImageDecompositionFeedback(message, "error");
+      showError(message);
+    });
+  });
+  refs.imageDecompositionGenerationLightboxButton.addEventListener("click", openImageDecompositionGeneratedPreview);
   refs.referenceAnalyzeButton.addEventListener("click", () => {
     analyzeReferenceImages().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -12347,6 +13103,29 @@ function bindEvents() {
     }
 
     setReferenceAnalysisGenerationPreviewKey(target.dataset.referenceAnalysisGenerationKey);
+  });
+  refs.imageDecompositionGenerationCanvas.addEventListener("click", openImageDecompositionGeneratedPreview);
+  refs.imageDecompositionGenerationCanvas.addEventListener("keydown", (event) => {
+    const shouldOpenPreview = event.key === "Enter" || event.key === " ";
+    if (!shouldOpenPreview) {
+      return;
+    }
+
+    const item = getImageDecompositionGenerationPreviewItem();
+    if (!item || !getImageUrl(item)) {
+      return;
+    }
+
+    event.preventDefault();
+    openImageDecompositionGeneratedPreview();
+  });
+  refs.imageDecompositionGenerationStrip.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-image-decomposition-generation-key]");
+    if (!target) {
+      return;
+    }
+
+    setImageDecompositionGenerationPreviewKey(target.dataset.imageDecompositionGenerationKey);
   });
   refs.zoomOutButton.addEventListener("click", () => stepZoom(-0.1));
   refs.zoomInButton.addEventListener("click", () => stepZoom(0.1));

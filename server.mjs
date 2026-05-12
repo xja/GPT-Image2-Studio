@@ -19,6 +19,13 @@ import {
   normalizeGenerationSize,
 } from "./lib/generation-size-options.mjs";
 import {
+  IMAGE_DECOMPOSITION_ASSET_KIND,
+  IMAGE_DECOMPOSITION_MODE,
+  IMAGE_DECOMPOSITION_REFERENCE_LABEL,
+  buildImageDecompositionPrompt,
+  normalizeImageDecompositionFeatureCards,
+} from "./lib/image-decomposition-prompt.mjs";
+import {
   normalizeOutputFormat,
   toApiOutputFormat,
   toOutputFormatMimeType,
@@ -102,6 +109,8 @@ const STYLE_TRANSFER_REFERENCE_IMAGE_LABELS = [
   "Reference image 1: SOURCE image. Preserve content, identity, pose, composition, and layout only. Do not preserve its visual style.",
   "Reference image 2: STYLE reference. This image is the style authority for final rendering, realism level, lighting, texture, color, and material finish.",
 ];
+const STYLE_TRANSFER_SOURCE_IMAGE_LABELS = [STYLE_TRANSFER_REFERENCE_IMAGE_LABELS[0]];
+const GENERATION_MODES = new Set(["style-transfer", "reference-analysis", IMAGE_DECOMPOSITION_MODE]);
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -128,6 +137,22 @@ function getStaticCacheControl(filePath) {
   const isLibraryAsset = relativeLibPath && !relativeLibPath.startsWith("..") && !isAbsolute(relativeLibPath);
 
   return isPublicAsset || isLibraryAsset ? "no-store" : null;
+}
+
+function getStyleTransferReferenceImageLabels(generationMode, styleTransferStylePreset) {
+  if (generationMode === IMAGE_DECOMPOSITION_MODE) {
+    return [IMAGE_DECOMPOSITION_REFERENCE_LABEL];
+  }
+  if (generationMode !== "style-transfer") {
+    return [];
+  }
+  const hasStyleTransferPreset = Boolean(styleTransferStylePreset);
+  return hasStyleTransferPreset ? STYLE_TRANSFER_SOURCE_IMAGE_LABELS : STYLE_TRANSFER_REFERENCE_IMAGE_LABELS;
+}
+
+function normalizeGenerationMode(value) {
+  const mode = String(value || "").trim();
+  return GENERATION_MODES.has(mode) ? mode : "";
 }
 
 function sendJson(response, statusCode, payload, headers = {}) {
@@ -1187,6 +1212,11 @@ function buildSavedItem({
   generationMode = "",
   styleTransferSourceImageName = "",
   styleTransferReferenceImageName = "",
+  styleTransferStylePreset = "",
+  assetKind = "",
+  targetLanguage = "",
+  sourceImageName = "",
+  featureCardsEnabled = false,
   generationStartedAt,
   generationCompletedAt,
   generationDurationMs,
@@ -1211,6 +1241,11 @@ function buildSavedItem({
     generationMode,
     styleTransferSourceImageName,
     styleTransferReferenceImageName,
+    styleTransferStylePreset,
+    assetKind,
+    targetLanguage,
+    sourceImageName,
+    featureCardsEnabled,
     ratio: ratioOption.value,
     ratioLabel: ratioOption.label,
     size,
@@ -2796,14 +2831,22 @@ async function handleGenerate(request, response) {
 
     const formData = await readFormDataBody(request);
     taskId = String(formData.get("jobId") || fallbackTaskId).trim() || fallbackTaskId;
-    const prompt = String(formData.get("prompt") || "").trim();
+    let prompt = String(formData.get("prompt") || "").trim();
     const ratio = String(formData.get("ratio") || "4:5");
     const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
     const requestedFormatInput = String(formData.get("format") || "").trim().toLowerCase();
     const generationModeInput = String(formData.get("mode") || "").trim();
-    const generationMode = ["style-transfer", "reference-analysis"].includes(generationModeInput) ? generationModeInput : "";
+    const generationMode = normalizeGenerationMode(generationModeInput);
+    const isImageDecomposition = generationMode === IMAGE_DECOMPOSITION_MODE;
+    const targetLanguageInput = String(formData.get("targetLanguage") || "").trim();
+    const customTargetLanguageInput = String(formData.get("customTargetLanguage") || "").trim();
+    const featureCardsEnabled = normalizeImageDecompositionFeatureCards(formData.get("featureCardsEnabled"));
     const styleTransferSourceImageName = String(formData.get("styleTransferSourceImageName") || "").trim();
     const styleTransferReferenceImageName = String(formData.get("styleTransferReferenceImageName") || "").trim();
+    const styleTransferStylePreset = String(formData.get("styleTransferStylePreset") || "").trim();
+    let targetLanguage = "";
+    let sourceImageName = "";
+    let assetKind = "";
     clientSessionId = getClientSessionId(request, formData);
     const createdAt = new Date().toISOString();
 
@@ -2826,7 +2869,7 @@ async function handleGenerate(request, response) {
 
     recordRunningTask();
 
-    if (!prompt) {
+    if (!prompt && !isImageDecomposition) {
       generationTaskStore.failTask(clientSessionId, taskId, {
         errorMessage: "提示词不能为空。",
       });
@@ -2850,7 +2893,37 @@ async function handleGenerate(request, response) {
       });
       return;
     }
-    if (generationMode === "style-transfer" && referenceImages.length < 2) {
+    if (isImageDecomposition && referenceImages.length !== 1) {
+      generationTaskStore.failTask(clientSessionId, taskId, {
+        errorMessage: "图片拆解模式需要且只支持上传一张源图。",
+      });
+      writeSseEvent(response, "error", {
+        message: "图片拆解模式需要且只支持上传一张源图。",
+      });
+      return;
+    }
+
+    if (isImageDecomposition) {
+      const decompositionPrompt = buildImageDecompositionPrompt({
+        targetLanguage: targetLanguageInput,
+        customLanguage: customTargetLanguageInput,
+        featureCardsEnabled,
+      });
+      prompt = decompositionPrompt.prompt;
+      targetLanguage = decompositionPrompt.targetLanguage;
+      sourceImageName = referenceImages[0]?.filename || "";
+      assetKind = IMAGE_DECOMPOSITION_ASSET_KIND;
+      generationTaskStore.updateTask(clientSessionId, taskId, {
+        prompt,
+        targetLanguage,
+        sourceImageName,
+        assetKind,
+        featureCardsEnabled,
+      });
+    }
+
+    const hasStyleTransferPreset = Boolean(styleTransferStylePreset);
+    if (generationMode === "style-transfer" && referenceImages.length < (hasStyleTransferPreset ? 1 : 2)) {
       generationTaskStore.failTask(clientSessionId, taskId, {
         errorMessage: "风格迁移需要上传原图和风格参考图。",
       });
@@ -2915,6 +2988,11 @@ async function handleGenerate(request, response) {
       generationMode,
       styleTransferSourceImageName,
       styleTransferReferenceImageName,
+      styleTransferStylePreset,
+      assetKind,
+      targetLanguage,
+      sourceImageName,
+      featureCardsEnabled,
       reasoningEffort,
     });
 
@@ -2923,7 +3001,7 @@ async function handleGenerate(request, response) {
       apiKey: config.apiKey,
       prompt: finalPrompt,
       referenceImages,
-      referenceImageLabels: generationMode === "style-transfer" ? STYLE_TRANSFER_REFERENCE_IMAGE_LABELS : [],
+      referenceImageLabels: getStyleTransferReferenceImageLabels(generationMode, styleTransferStylePreset),
       size: finalSize,
       quality: finalQuality,
       format: toApiOutputFormat(finalFormat),
@@ -3014,6 +3092,11 @@ async function handleGenerate(request, response) {
         generationMode,
         styleTransferSourceImageName,
         styleTransferReferenceImageName,
+        styleTransferStylePreset,
+        assetKind,
+        targetLanguage,
+        sourceImageName,
+        featureCardsEnabled,
         reasoningEffort,
         generationStartedAt,
         generationCompletedAt,
@@ -3038,6 +3121,11 @@ async function handleGenerate(request, response) {
       generationMode,
       styleTransferSourceImageName,
       styleTransferReferenceImageName,
+      styleTransferStylePreset,
+      assetKind,
+      targetLanguage,
+      sourceImageName,
+      featureCardsEnabled,
       generationStartedAt,
       generationCompletedAt,
       generationDurationMs,

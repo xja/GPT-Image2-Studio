@@ -141,6 +141,62 @@ test("Cloudflare generation uses browser-provided API settings without echoing t
   assert.doesNotMatch(text, /test-browser-key/);
 });
 
+test("Cloudflare image decomposition uses a single reference image and generated target-language prompt", async () => {
+  const seenRequests = [];
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("jobId", "job-decompose");
+  formData.set("mode", "image-decomposition");
+  formData.set("targetLanguage", "Français");
+  formData.set("featureCardsEnabled", "1");
+  formData.set("ratio", "1:1");
+  formData.set("size", "auto");
+  formData.set("format", "png");
+  formData.set("reasoningEffort", "low");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("referenceImages", new File(["source"], "source.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+        body: JSON.parse(init.body),
+      });
+      return makeSseResponse();
+    },
+  });
+
+  const text = await response.text();
+  const events = parseSseEvents(text);
+  const savedEvent = events.find((event) => event.eventName === "saved");
+  const inputContent = seenRequests[0].body.input[0].content;
+  const inputImages = inputContent.filter((item) => item.type === "input_image");
+  const inputText = inputContent.filter((item) => item.type === "input_text").map((item) => item.text).join("\n");
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(seenRequests[0].auth, "Bearer test-browser-key");
+  assert.equal(inputImages.length, 1);
+  assert.match(inputText, /Français/);
+  assert.match(inputText, /SOURCE image/);
+  assert.match(inputText, /Do not invent brands/);
+  assert.match(inputText, /must include left and right side feature cards/i);
+  assert.match(inputText, /detailed callout boxes/i);
+  assert.equal(savedEvent.payload.item.generationMode, "image-decomposition");
+  assert.equal(savedEvent.payload.item.assetKind, "image-decomposition");
+  assert.equal(savedEvent.payload.item.targetLanguage, "Français");
+  assert.equal(savedEvent.payload.item.sourceImageName, "source.png");
+  assert.equal(savedEvent.payload.item.featureCardsEnabled, true);
+  assert.doesNotMatch(text, /test-browser-key/);
+});
+
 test("Cloudflare prompt agent analyzes browser reference images without generation tools", async () => {
   const seenRequests = [];
   const formData = new FormData();

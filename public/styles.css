@@ -3516,6 +3516,252 @@ textarea {
   transform: scale(0.99);
 }
 
+.image-decomposition-workspace {
+  display: grid;
+  grid-template-columns: var(--studio-grid-left, 392px) minmax(0, 1fr);
+  gap: var(--studio-grid-gap, 14px);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.image-decomposition-upload-panel,
+.image-decomposition-preview-panel {
+  min-width: 0;
+}
+
+.image-decomposition-upload-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.image-decomposition-form {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.image-decomposition-source-field > .image-decomposition-dropzone {
+  min-height: var(--reference-dropzone-min-height, 140px);
+}
+
+.image-decomposition-parameter-settings > .ratio-grid,
+.image-decomposition-parameter-settings .ratio-chip {
+  min-width: 0;
+}
+
+.image-decomposition-parameter-settings .ratio-chip strong {
+  font-size: min(var(--type-small-title-size), 18px);
+}
+
+.image-decomposition-size-field,
+.image-decomposition-feature-cards-field,
+.image-decomposition-custom-language {
+  min-width: 0;
+}
+
+.image-decomposition-custom-language {
+  grid-column: 1 / -1;
+}
+
+.image-decomposition-generate-button {
+  width: 100%;
+}
+
+.image-decomposition-feedback {
+  margin: 0;
+}
+
+.image-decomposition-preview-column {
+  display: contents;
+}
+
+.image-decomposition-preview-panel {
+  height: var(--studio-column-height, auto);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.image-decomposition-generation {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.image-decomposition-generation-canvas {
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.image-decomposition-generation-canvas.has-image {
+  background: rgba(12, 14, 18, 0.86);
+}
+
+.image-decomposition-generation-canvas[role="button"] {
+  cursor: zoom-in;
+}
+
+.image-decomposition-generation-canvas:focus-visible {
+  outline: 2px solid rgba(122, 201, 255, 0.78);
+  outline-offset: 3px;
+}
+
+.image-decomposition-generation-canvas img {
+  display: none;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 18px;
+  box-shadow: 0 18px 64px rgba(0, 0, 0, 0.26);
+  opacity: 0;
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
+}
+
+.image-decomposition-generation-canvas img.is-mounted {
+  display: block;
+}
+
+.image-decomposition-generation-canvas img.is-visible {
+  opacity: 1;
+}
+
+.image-decomposition-generation-placeholder {
+  max-width: 480px;
+}
+
+.image-decomposition-preview-toolbar {
+  justify-content: space-between;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.image-decomposition-preview-status {
+  color: var(--muted);
+  font-size: var(--type-subtitle-size);
+}
+
+.image-decomposition-filmstrip-row {
+  margin-top: 4px;
+}
+
+.image-decomposition-generation-strip {
+  min-width: 0;
+}
+
+.image-decomposition-generation-thumb {
+  position: relative;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.image-decomposition-generation-thumb:hover,
+.image-decomposition-generation-thumb:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(122, 201, 255, 0.72);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+  outline: none;
+}
+
+.image-decomposition-generation-thumb.active {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.image-decomposition-generation-thumb img {
+  object-fit: cover;
+}
+
+.image-decomposition-generation-thumb.is-running {
+  cursor: wait;
+}
+
+.image-decomposition-generation-thumb.is-running::after {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-top-color: rgba(122, 201, 255, 0.92);
+  animation: image-decomposition-spin 900ms linear infinite;
+}
+
+.filmstrip .image-decomposition-generation-thumb {
+  width: 100%;
+  aspect-ratio: auto;
+  overflow: visible;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.filmstrip .image-decomposition-generation-thumb:hover,
+.filmstrip .image-decomposition-generation-thumb:focus-visible {
+  transform: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.filmstrip .image-decomposition-generation-thumb.is-running::after {
+  display: none;
+}
+
+.image-decomposition-thumbnail-empty {
+  min-height: 84px;
+}
+
+@keyframes image-decomposition-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-decomposition-generation-thumb,
+  .image-decomposition-generation-thumb.is-running::after {
+    transition: none;
+    animation: none;
+  }
+}
+
+html[data-ui-layout="tablet"] .image-decomposition-workspace,
+html[data-ui-layout="mobile"] .image-decomposition-workspace {
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+}
+
+html[data-ui-layout="tablet"] .image-decomposition-workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+html[data-ui-layout="mobile"] .image-decomposition-workspace {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+html[data-ui-layout="mobile"] .image-decomposition-preview-column {
+  grid-template-rows: auto auto;
+  overflow: visible;
+}
+
+html[data-ui-layout="mobile"] .image-decomposition-generation-canvas {
+  border-radius: 14px;
+}
+
 .parameter-settings .advanced-content {
   border-radius: 14px;
   border: 1px solid var(--border);
@@ -6706,6 +6952,21 @@ html[data-ui-layout="mobile"] .reference-field-group {
 html[data-ui-layout="tablet"] .parameter-settings,
 html[data-ui-layout="mobile"] .parameter-settings {
   order: 5;
+}
+
+html[data-ui-layout="tablet"] .image-decomposition-source-field,
+html[data-ui-layout="mobile"] .image-decomposition-source-field {
+  order: 1;
+}
+
+html[data-ui-layout="tablet"] .image-decomposition-generate-button,
+html[data-ui-layout="mobile"] .image-decomposition-generate-button {
+  order: 2;
+}
+
+html[data-ui-layout="tablet"] .image-decomposition-parameter-settings,
+html[data-ui-layout="mobile"] .image-decomposition-parameter-settings {
+  order: 3;
 }
 
 html[data-ui-layout="tablet"] .adaptive-section,

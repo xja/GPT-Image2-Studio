@@ -141,7 +141,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\.\/app\.js\?v=20260512-creation-unit-mode-1/);
+  assert.match(html, /\.\/app\.js\?v=20260513-image-decomposition-mainline-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -317,7 +317,7 @@ test("style transfer mode exposes independent source and style uploads", async (
   assert.match(html, /id="styleTransferInstructionInput"/);
   assert.match(styles, /\.style-transfer-block\s*\{/);
   assert.match(styles, /\.style-transfer-upload-grid\s*\{/);
-  assert.match(app, /const CREATE_VIEW_IDS = new Set\(\["studio", "style-transfer", "reference-analysis", "creation", "article-illustration", "ppt"\]\);/);
+  assert.match(app, /const CREATE_VIEW_IDS = new Set\(\[[\s\S]*"studio"[\s\S]*"style-transfer"[\s\S]*"reference-analysis"[\s\S]*"image-decomposition"[\s\S]*"creation"[\s\S]*"article-illustration"[\s\S]*"ppt"[\s\S]*\]\);/);
   assert.match(app, /studioMode:\s*"prompt"/);
   assert.match(app, /function setStudioGenerationMode\(mode = "prompt"\)/);
   assert.match(app, /function getViewFromHash\(\) \{[\s\S]*"#style-transfer"[\s\S]*return "style-transfer";/);
@@ -376,7 +376,7 @@ test("style transfer mode keeps the shared studio height sync and mode styling h
 
   assert.match(app, /studioView:\s*document\.querySelector\("\.studio-view"\),/);
   assert.match(app, /if \(refs\.studioView\) \{[\s\S]*refs\.studioView\.dataset\.studioMode = nextMode;[\s\S]*\}/);
-  assert.match(app, /const isStudioLikeView = state\.activeView === "studio" \|\| state\.activeView === "style-transfer";/);
+  assert.match(app, /const isStudioLikeView =[\s\S]*state\.activeView === "studio" \|\| state\.activeView === "style-transfer" \|\| state\.activeView === "image-decomposition";/);
   assert.match(app, /if \(STACKED_STUDIO_LAYOUT_MODES\.has\(getCurrentStudioLayoutMode\(\)\) \|\| !isStudioLikeView\) \{/);
   assert.match(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.studio-grid \{/);
   assert.match(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-upload-grid \{/);
@@ -431,7 +431,7 @@ test("style transfer generation builds a preservation prompt and submits both im
     /startGeneration[\s\S]*if \(state\.studioMode === "style-transfer"\) \{[\s\S]*await ensureStyleTransferGenerationFilesReady\(\);[\s\S]*const job = createStyleTransferJob\(\);/,
   );
   assert.match(server, /STYLE_TRANSFER_REFERENCE_IMAGE_LABELS/);
-  assert.match(server, /referenceImageLabels:\s*generationMode === "style-transfer"\s*\?\s*STYLE_TRANSFER_REFERENCE_IMAGE_LABELS\s*:\s*\[\]/);
+  assert.match(server, /getStyleTransferReferenceImageLabels\(generationMode,\s*styleTransferStylePreset\)/);
 });
 
 test("reference analysis generation uploads prepared reference images", async () => {
@@ -461,10 +461,8 @@ test("reference analysis generation mode survives task polling snapshots", async
   const formDataBody = app.match(/function buildGenerationFormData\(job\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.match(formDataBody, /if \(job\.mode\) \{[\s\S]*formData\.set\("mode", job\.mode\);[\s\S]*\}/);
 
-  assert.match(
-    server,
-    /const generationModeInput = String\(formData\.get\("mode"\) \|\| ""\)\.trim\(\);[\s\S]*const generationMode = \["style-transfer", "reference-analysis"\]\.includes\(generationModeInput\) \? generationModeInput : "";/,
-  );
+  assert.match(server, /const GENERATION_MODES = new Set\(\[[\s\S]*"style-transfer"[\s\S]*"reference-analysis"[\s\S]*IMAGE_DECOMPOSITION_MODE[\s\S]*\]\);/);
+  assert.match(server, /function normalizeGenerationMode\(value\) \{[\s\S]*GENERATION_MODES\.has\(mode\) \? mode : "";/);
   assert.match(server, /generationTaskStore\.upsertTask\(clientSessionId,[\s\S]*mode:\s*generationMode,/);
 
   const applySnapshotsBody = app.match(/function applyGenerationTaskSnapshots\(tasks, \{ render = true \} = \{\}\) \{[\s\S]*?\n\}/)?.[0] || "";
@@ -837,7 +835,7 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(styles, /\.reference-analysis-result-panel\s*\{[\s\S]*overflow-y:\s*auto;/);
   assert.match(styles, /\.reference-analysis-params\s*\{/);
   assert.match(styles, /\.reference-analysis-view\s+\.reference-grid\s*\{/);
-  assert.match(app, /const CREATE_VIEW_IDS = new Set\(\["studio", "style-transfer", "reference-analysis", "creation", "article-illustration", "ppt"\]\);/);
+  assert.match(app, /const CREATE_VIEW_IDS = new Set\(\[[\s\S]*"studio"[\s\S]*"style-transfer"[\s\S]*"reference-analysis"[\s\S]*"image-decomposition"[\s\S]*"creation"[\s\S]*"article-illustration"[\s\S]*"ppt"[\s\S]*\]\);/);
   assert.match(app, /referenceAnalysis:\s*\{/);
   assert.match(app, /files:\s*\[\]/);
   assert.match(app, /autoCollapseOnApply:\s*true/);
@@ -918,8 +916,8 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.doesNotMatch(app, /refs\.referenceAnalysisGenerateButton\.disabled =[\s\S]*isGenerating[\s\S]*getQueuedJobCount\(\) >= getMaxQueuedJobCount\(\);/);
   assert.match(app, /if \(job\.mode === "reference-analysis"\) \{[\s\S]*state\.referenceAnalysis\.previewKey = makeGalleryPreviewKey\(payload\.item\.filename\);/);
   assert.match(app, /if \(job\.mode === "reference-analysis"\) \{[\s\S]*payload\.item\.mode = "reference-analysis";[\s\S]*storeReferenceAnalysisGenerationItem\(payload\.item\);[\s\S]*replaceReferenceAnalysisGenerationKey\(makeJobPreviewKey\(job\.id\), makeGalleryPreviewKey\(payload\.item\.filename\)\);/);
-  assert.match(app, /async function deleteGalleryItem\(item\) \{[\s\S]*preserveReferenceAnalysisGenerationItemForDelete\(item\);[\s\S]*state\.gallery = state\.gallery\.filter/);
-  assert.match(app, /async function clearHistory\(\) \{[\s\S]*await Promise\.all\(state\.gallery\.map\(preserveReferenceAnalysisGenerationItemForDelete\)\);[\s\S]*state\.gallery = \[\];/);
+  assert.match(app, /async function deleteGalleryItem\(item\) \{[\s\S]*preserveReferenceAnalysisGenerationItemForDelete\(item\),[\s\S]*preserveImageDecompositionGenerationItemForDelete\(item\),[\s\S]*state\.gallery = state\.gallery\.filter/);
+  assert.match(app, /async function clearHistory\(\) \{[\s\S]*state\.gallery\.flatMap\(\(item\) => \[[\s\S]*preserveReferenceAnalysisGenerationItemForDelete\(item\),[\s\S]*preserveImageDecompositionGenerationItemForDelete\(item\),[\s\S]*state\.gallery = \[\];/);
   const referenceApplyBody =
     app.match(/function applyReferenceAnalysisPrompt\(index\) \{[\s\S]*?\r?\n\}\r?\n\r?\nfunction mapPromptAgentPrompt/)?.[0] || "";
   assert.match(referenceApplyBody, /state\.referenceAnalysis\.selectedPrompt = promptText;/);
@@ -1027,7 +1025,7 @@ test("mobile and Pad studio layout uses dedicated compact workbench layouts", as
   assert.match(html, /id="parameterAdaptiveSection"[\s\S]*data-adaptive-section="parameters"[\s\S]*data-compact-open="false"[\s\S]*<summary class="field-heading adaptive-section-summary">/);
   assert.match(html, /dataset\.uiLayout = "mobile";[\s\S]*dataset\.uiLayout = "tablet";/);
   assert.match(html, /devicePixelRatio[\s\S]*isPhonePhysicalSize[\s\S]*isTabletPhysicalSize[\s\S]*physicalTouchWidth/);
-  assert.match(html, /\.\/styles\.css\?v=20260512-style-transfer-presets-1/);
+  assert.match(html, /\.\/styles\.css\?v=20260513-image-decomposition-mainline-1/);
   assert.doesNotMatch(referenceAdaptiveSection, /\sopen(?:\s|>)/);
   assert.doesNotMatch(parameterAdaptiveSection, /\sopen(?:\s|>)/);
   assert.match(styles, /html,\s*[\r\n]+body\s*\{[\s\S]*overflow-x:\s*clip;/);
@@ -1108,7 +1106,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260512-creation-unit-mode-1/);
+  assert.match(html, /\/app\.js\?v=20260513-image-decomposition-mainline-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -1522,7 +1520,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260512-creation-unit-mode-1/);
+  assert.match(html, /app\.js\?v=20260513-image-decomposition-mainline-1/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
