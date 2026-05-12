@@ -70,6 +70,7 @@ test("creation store preserves scenario image count and reference image metadata
       industryTemplateLabel: "食品饮料",
       industryTemplatePath: "食品生鲜 > 休闲食品 > 坚果炒货 > 混合坚果",
       dimensionSpecs: "高 14.5 cm\n容量 350 ml",
+      dimensionUnitMode: "both",
       imageCount: 6,
       selectedRoles: ["hero", "benefit", "comparison"],
       referenceImageNames: ["product-front.png", "package.png"],
@@ -90,6 +91,7 @@ test("creation store preserves scenario image count and reference image metadata
   assert.equal(manifest.industryTemplateLabel, "食品饮料");
   assert.equal(manifest.industryTemplatePath, "食品生鲜 > 休闲食品 > 坚果炒货 > 混合坚果");
   assert.equal(manifest.dimensionSpecs, "高 14.5 cm\n容量 350 ml");
+  assert.equal(manifest.dimensionUnitMode, "both");
   assert.equal(manifest.imageCount, 6);
   assert.deepEqual(manifest.selectedRoles, ["hero", "benefit", "comparison"]);
   assert.deepEqual(manifest.referenceImageNames, ["product-front.png", "package.png"]);

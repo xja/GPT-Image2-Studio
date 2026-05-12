@@ -213,6 +213,47 @@ test("creation planner only injects size specifications into the dimensions role
   assert.doesNotMatch(comparisonPrompt, /145mm|110mm|350ml/);
 });
 
+test("creation planner converts dimension specs to the selected unit mode", () => {
+  const metricPlan = buildCreationPlan({
+    productName: "AeroPress Clear",
+    productDescription: "Transparent portable coffee brewer",
+    sellingPoints: "lightweight, easy to clean",
+    targetLanguage: "en",
+    selectedRoles: ["dimensions"],
+    dimensionSpecs: "Height 5.7 in\nDiameter 4.3 in\nCapacity 12 fl oz",
+    dimensionUnitMode: "metric",
+  });
+  const bothPlan = buildCreationPlan({
+    productName: "AeroPress Clear",
+    productDescription: "Transparent portable coffee brewer",
+    sellingPoints: "lightweight, easy to clean",
+    targetLanguage: "en",
+    selectedRoles: ["dimensions"],
+    dimensionSpecs: "Height 14.5 cm\nCapacity 350 ml",
+    dimensionUnitMode: "both",
+  });
+
+  assert.equal(metricPlan.dimensionUnitMode, "metric");
+  assert.match(metricPlan.items[0].prompt, /Height 14\.48 cm \/ Diameter 10\.92 cm \/ Capacity 354\.88 ml/);
+  assert.doesNotMatch(metricPlan.items[0].prompt, /5\.7 in|4\.3 in|12 fl oz/);
+  assert.equal(bothPlan.dimensionUnitMode, "both");
+  assert.match(bothPlan.items[0].prompt, /Height 14\.5 cm \(5\.71 in\) \/ Capacity 350 ml \(11\.83 fl oz\)/);
+});
+
+test("creation planner converts compact metric weight specs in selected unit mode", () => {
+  const plan = buildCreationPlan({
+    productName: "Jointed fishing lure",
+    productDescription: "Segmented swim bait",
+    sellingPoints: "realistic finish",
+    targetLanguage: "en",
+    selectedRoles: ["dimensions"],
+    dimensionSpecs: "13cm/35g",
+    dimensionUnitMode: "both",
+  });
+
+  assert.match(plan.items[0].prompt, /13cm \(5\.12 in\)\/35g \(1\.23 oz\)/);
+});
+
 test("creation planner exposes scenario-specific role presets", () => {
   assert.deepEqual(
     getCreationScenarioRolePreset("livestream").map((role) => role.role),

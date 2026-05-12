@@ -305,6 +305,7 @@ let galleryPanelHeightObserver = null;
 let galleryScrollSyncFrame = 0;
 let galleryScrollObserver = null;
 let generationTaskPollTimer = 0;
+let creationRecordRefreshPromise = null;
 let promptCopyFeedbackTimer = 0;
 let previewLoadingShellNodes = null;
 let referenceAnalysisLoadingShellNodes = null;
@@ -488,6 +489,7 @@ const refs = {
   creationForm: document.querySelector("#creationForm"),
   creationGenerateButton: document.querySelector("#creationGenerateButton"),
   creationDimensionSpecsInput: document.querySelector("#creationDimensionSpecsInput"),
+  creationDimensionUnitModeInput: document.querySelector("#creationDimensionUnitModeInput"),
   creationImageCountInput: document.querySelector("#creationImageCountInput"),
   creationIndustryTemplateBrowser: document.querySelector("#creationIndustryTemplateBrowser"),
   creationIndustryTemplateBackButton: document.querySelector("#creationIndustryTemplateBackButton"),
@@ -2174,6 +2176,9 @@ function setActiveView(view) {
   }
   if (view === "creation") {
     ensureCreationCategoryTemplatesReady({ render: true });
+  }
+  if (view === "creation-record") {
+    refreshCreationRecordSets();
   }
   syncGalleryLayoutMode();
   scheduleStudioHeightSync();
@@ -6194,6 +6199,12 @@ const CREATION_SCENARIO_LABELS = {
   "brand-story": "品牌故事",
 };
 
+const CREATION_DIMENSION_UNIT_MODE_LABELS = {
+  metric: "公制",
+  imperial: "英制",
+  both: "公制和英制",
+};
+
 const CREATION_CATEGORY_TEMPLATE_MODULE_URL = "/lib/creation-category-templates.mjs?v=20260509-category-search-2";
 const CREATION_BASE_INDUSTRY_TEMPLATE_OPTIONS = [
   { value: "general", label: "通用电商", categoryPath: "", rolePreset: [] },
@@ -6877,6 +6888,19 @@ function getCreationSelectedLanguage() {
   };
 }
 
+function normalizeCreationDimensionUnitMode(value) {
+  const normalized = String(value || "").trim();
+  return CREATION_DIMENSION_UNIT_MODE_LABELS[normalized] ? normalized : "metric";
+}
+
+function formatCreationDimensionUnitModeLabel(value) {
+  return CREATION_DIMENSION_UNIT_MODE_LABELS[normalizeCreationDimensionUnitMode(value)];
+}
+
+function getCreationSelectedDimensionUnitMode() {
+  return normalizeCreationDimensionUnitMode(refs.creationDimensionUnitModeInput?.value || "metric");
+}
+
 function setCreationFeedback(message = "", kind = "") {
   if (!refs.creationFeedback) {
     return;
@@ -6894,6 +6918,20 @@ function setCreationRecordFeedback(message = "", kind = "") {
 
   refs.creationRecordActionFeedback.textContent = message || "";
   refs.creationRecordActionFeedback.dataset.state = kind || "";
+}
+
+function refreshCreationRecordSets() {
+  if (state.creation.generating || state.creation.planning || creationRecordRefreshPromise) {
+    return;
+  }
+
+  creationRecordRefreshPromise = loadCreationSets()
+    .catch((error) => {
+      setCreationRecordFeedback(error instanceof Error ? error.message : String(error), "error");
+    })
+    .finally(() => {
+      creationRecordRefreshPromise = null;
+    });
 }
 
 async function writeTextToClipboard(text, failureMessage = "当前浏览器不支持复制图片路径。") {
@@ -7970,6 +8008,8 @@ function normalizeCreationSetForView(set = {}) {
     productDescription: String(set.productDescription || ""),
     sellingPoints: Array.isArray(set.sellingPoints) ? set.sellingPoints.map((item) => String(item)).filter(Boolean) : [],
     dimensionSpecs: String(set.dimensionSpecs || ""),
+    dimensionUnitMode: normalizeCreationDimensionUnitMode(set.dimensionUnitMode),
+    dimensionUnitModeLabel: String(set.dimensionUnitModeLabel || formatCreationDimensionUnitModeLabel(set.dimensionUnitMode)),
     targetLanguage: String(set.targetLanguage || "zh-CN"),
     targetLanguageLabel: String(set.targetLanguageLabel || ""),
     imageCount: Number(set.imageCount) || items.length || 4,
@@ -8214,6 +8254,7 @@ function applyCreationSetToForm(set) {
   refs.creationProductDescriptionInput.value = normalized.productDescription || "";
   refs.creationSellingPointsInput.value = normalized.sellingPoints.join("\n");
   refs.creationDimensionSpecsInput.value = normalized.dimensionSpecs || "";
+  setCreationSelectValue(refs.creationDimensionUnitModeInput, normalized.dimensionUnitMode, "metric");
   setCreationSelectValue(refs.creationTargetLanguageInput, normalized.targetLanguage, "zh-CN");
   setCreationSelectValue(refs.creationScenarioInput, normalized.scenario, "standard");
   setCreationIndustryTemplateValue(normalized.industryTemplate, {
@@ -8333,6 +8374,8 @@ function renderCreationRecordDetail(set) {
     ["场景", set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || "标准电商"],
     ["行业", set.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[set.industryTemplate] || "通用电商"],
     ["类目路径", set.industryTemplatePath || ""],
+    ["尺寸规格", set.dimensionSpecs || ""],
+    ["规格单位", set.dimensionUnitModeLabel || formatCreationDimensionUnitModeLabel(set.dimensionUnitMode)],
     ["语言", set.targetLanguageLabel || set.targetLanguage || "zh-CN"],
     ["进度", `${progress.completed}/${progress.total}`],
     ["参考图", set.referenceImageNames.length > 0 ? set.referenceImageNames.join("、") : "未使用"],
@@ -8982,6 +9025,8 @@ function renderCreationRecordArchiveDetail(set) {
     ["场景", set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || "标准电商"],
     ["行业", set.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[set.industryTemplate] || "通用电商"],
     ["类目路径", set.industryTemplatePath || ""],
+    ["尺寸规格", set.dimensionSpecs || ""],
+    ["规格单位", set.dimensionUnitModeLabel || formatCreationDimensionUnitModeLabel(set.dimensionUnitMode)],
     ["语言", set.targetLanguageLabel || set.targetLanguage || "zh-CN"],
     ["进度", `${progress.completed}/${progress.total}`],
     ["创建时间", formatClock(set.createdAt)],
@@ -9659,6 +9704,7 @@ function buildCreationPlanPreviewFormData() {
   formData.set("productDescription", refs.creationProductDescriptionInput.value.trim());
   formData.set("sellingPoints", refs.creationSellingPointsInput.value.trim());
   formData.set("dimensionSpecs", refs.creationDimensionSpecsInput.value.trim());
+  formData.set("dimensionUnitMode", refs.creationDimensionUnitModeInput.value || "metric");
   formData.set("targetLanguage", targetLanguage.value);
   formData.set("imageCount", String(selectedRoles.length || getCreationSelectedImageCount()));
   formData.set("scenario", refs.creationScenarioInput.value);
@@ -9942,6 +9988,9 @@ async function previewCreationPlan() {
       productName: plan.productName || productName,
       productDescription: plan.productDescription || productDescription,
       sellingPoints: plan.sellingPoints || sellingPoints,
+      dimensionSpecs: plan.dimensionSpecs || refs.creationDimensionSpecsInput.value.trim(),
+      dimensionUnitMode: plan.dimensionUnitMode || getCreationSelectedDimensionUnitMode(),
+      dimensionUnitModeLabel: plan.dimensionUnitModeLabel || formatCreationDimensionUnitModeLabel(getCreationSelectedDimensionUnitMode()),
       targetLanguage: plan.targetLanguage || getCreationSelectedLanguage().value,
       targetLanguageLabel: plan.targetLanguageLabel || getCreationSelectedLanguage().label,
       imageCount: plan.imageCount || items.length || getCreationSelectedRoles().length,
@@ -10010,6 +10059,9 @@ async function startCreationGeneration(event) {
       productName,
       productDescription,
       sellingPoints,
+      dimensionSpecs: refs.creationDimensionSpecsInput.value.trim(),
+      dimensionUnitMode: getCreationSelectedDimensionUnitMode(),
+      dimensionUnitModeLabel: formatCreationDimensionUnitModeLabel(getCreationSelectedDimensionUnitMode()),
       targetLanguage: getCreationSelectedLanguage().value,
       targetLanguageLabel: getCreationSelectedLanguage().label,
       imageCount,

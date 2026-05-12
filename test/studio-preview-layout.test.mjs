@@ -141,7 +141,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\.\/app\.js\?v=20260512-one-megapixel-sizes-4/);
+  assert.match(html, /\.\/app\.js\?v=20260512-creation-unit-mode-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -1108,7 +1108,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260512-one-megapixel-sizes-4/);
+  assert.match(html, /\/app\.js\?v=20260512-creation-unit-mode-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -1366,6 +1366,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.doesNotMatch(creationIndustrySearchInput, /placeholder=/);
   assert.doesNotMatch(html, /placeholder="搜索三级\/四级类目名或编码"/);
   assert.match(html, /id="creationSellingPointsInput"[\s\S]*id="creationDimensionSpecsInput"[\s\S]*name="dimensionSpecs"[\s\S]*例如：高 14\.5 cm，直径 11 cm，容量 350 ml/);
+  assert.match(html, /id="creationDimensionSpecsInput"[\s\S]*id="creationDimensionUnitModeInput"[\s\S]*name="dimensionUnitMode"[\s\S]*<option value="metric">公制<\/option>[\s\S]*<option value="imperial">英制<\/option>[\s\S]*<option value="both">公制和英制<\/option>/);
   assert.doesNotMatch(html, /写清商品是什么|每行或用逗号分隔|只用于尺寸规格图/);
   assert.match(html, /id="creationProductDescriptionInput"[\s\S]*rows="2"/);
   assert.match(html, /id="creationSellingPointsInput"[\s\S]*rows="1"/);
@@ -1413,6 +1414,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /creationReferenceAnalysisList: document\.querySelector\("#creationReferenceAnalysisList"\)/);
   assert.match(app, /creationReferenceAnalysisPanel: document\.querySelector\("#creationReferenceAnalysisPanel"\)/);
   assert.match(app, /creationDimensionSpecsInput: document\.querySelector\("#creationDimensionSpecsInput"\)/);
+  assert.match(app, /creationDimensionUnitModeInput: document\.querySelector\("#creationDimensionUnitModeInput"\)/);
   assert.match(app, /creationIndustryTemplateBrowser: document\.querySelector\("#creationIndustryTemplateBrowser"\)/);
   assert.match(app, /creationIndustryTemplateTrigger: document\.querySelector\("#creationIndustryTemplateTrigger"\)/);
   assert.match(app, /creationIndustryTemplateCurrent: document\.querySelector\("#creationIndustryTemplateCurrent"\)/);
@@ -1492,6 +1494,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function resetCreationDraftPreview\(\) \{/);
   assert.match(app, /const file = getCreationReferenceGenerationFile\(item\);[\s\S]*formData\.append\("referenceImages", file\)/);
   assert.match(app, /formData\.set\("dimensionSpecs", refs\.creationDimensionSpecsInput\.value\.trim\(\)\)/);
+  assert.match(app, /formData\.set\("dimensionUnitMode", refs\.creationDimensionUnitModeInput\.value \|\| "metric"\)/);
   assert.match(app, /formData\.set\("referenceImageRoles", JSON\.stringify\(buildCreationReferenceRolePayload\(\)\)\)/);
   assert.match(app, /formData\.set\("planOverrides", JSON\.stringify\(getCreationPlanOverrides\(\)\)\)/);
   assert.match(app, /fetch\("\/api\/creation\/reference\/analyze"/);
@@ -1514,11 +1517,12 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /document\.addEventListener\("pointerdown"/);
   assert.match(app, /document\.addEventListener\("keydown"/);
   assert.match(app, /refs\.creationRatioInput\.addEventListener\("change", renderCreationSizeOptions\)/);
+  assert.match(app, /setCreationSelectValue\(refs\.creationDimensionUnitModeInput, normalized\.dimensionUnitMode, "metric"\)/);
   assert.match(app, /refs\.creationPlanButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260512-one-megapixel-sizes-4/);
+  assert.match(html, /app\.js\?v=20260512-creation-unit-mode-1/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
@@ -1746,6 +1750,8 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.match(app, /refs\.creationRecordCopyPathsButton\.addEventListener\("click",/);
   assert.match(app, /refs\.creationRecordCopyFullPathsButton\.addEventListener\("click",/);
   assert.match(app, /refs\.creationRecordRefreshButton\.addEventListener\("click",/);
+  assert.match(app, /function refreshCreationRecordSets\(\) \{/);
+  assert.match(app, /if \(view === "creation-record"\) \{[\s\S]*refreshCreationRecordSets\(\);[\s\S]*\}/);
   assert.match(app, /fetch\("\/api\/creation\/sets", \{\s*cache: "no-store"/);
   assert.match(app, /refs\.creationRecordSetList\.addEventListener\("click",[\s\S]*target\.closest\("\[data-creation-record-set-id\]"\)/);
   assert.match(app, /state\.ppt\.decks = Array\.isArray\(payload\) \? payload : \[\];[\s\S]*renderPptRecordView\(\);/);
