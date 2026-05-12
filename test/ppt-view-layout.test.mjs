@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
+const indexPath = new URL("../public/index.html", import.meta.url);
 const stylesPath = new URL("../public/styles.css", import.meta.url);
+const appPath = new URL("../public/app.js", import.meta.url);
 
 function getRule(styles, selector) {
   const normalized = styles.replace(/\r\n/g, "\n");
@@ -16,18 +18,22 @@ function getRule(styles, selector) {
 }
 
 test("PPT desktop workspace keeps all sections inside the active viewport", async () => {
+  const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
   const pptStyles = styles.slice(styles.indexOf("/* PPT presentation generator */"));
   const pptViewRule = getRule(pptStyles, ".ppt-view");
   const pptWorkspaceRule = getRule(pptStyles, ".ppt-workspace");
-  const pptPanelRule = getRule(pptStyles, ".ppt-settings-panel,\n.ppt-result-panel,\n.ppt-history-panel");
-  const pptScrollRule = getRule(pptStyles, ".ppt-form,\n.ppt-slide-list,\n.ppt-history-list");
+  const pptPanelRule = getRule(pptStyles, ".ppt-settings-panel,\n.ppt-result-panel");
+  const pptScrollRule = getRule(pptStyles, ".ppt-form,\n.ppt-slide-list,\n.ppt-record-list");
 
+  assert.doesNotMatch(html, /ppt-history-panel|pptHistoryEmpty|pptHistoryList|pptRefreshHistoryButton|pptDeckCount|历史演示/);
+  assert.doesNotMatch(app, /pptHistoryEmpty|pptHistoryList|pptRefreshHistoryButton|function renderPptHistory/);
   assert.match(pptViewRule, /min-height:\s*0;/);
   assert.match(pptViewRule, /height:\s*100%;/);
   assert.match(
     pptWorkspaceRule,
-    /grid-template-columns:\s*minmax\(320px,\s*var\(--studio-grid-left,\s*392px\)\)\s*minmax\(0,\s*1fr\)\s*minmax\(260px,\s*var\(--studio-grid-right,\s*328px\)\);/,
+    /grid-template-columns:\s*minmax\(320px,\s*var\(--studio-grid-left,\s*392px\)\)\s*minmax\(0,\s*1fr\);/,
   );
   assert.match(pptWorkspaceRule, /min-height:\s*0;/);
   assert.match(pptWorkspaceRule, /height:\s*100%;/);

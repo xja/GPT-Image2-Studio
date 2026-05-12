@@ -890,6 +890,79 @@ textarea::-webkit-scrollbar-corner {
   gap: 10px;
 }
 
+.style-transfer-style-choice {
+  display: grid;
+  gap: 8px;
+}
+
+.style-transfer-preset-preview {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  animation: style-transfer-enter 160ms ease-out both;
+}
+
+.style-transfer-preset-comparison {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.style-transfer-preset-figure {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 4 / 3;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.style-transfer-preset-figure img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.style-transfer-preset-figure figcaption {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(8, 12, 22, 0.68);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 10px;
+  line-height: 1.2;
+  backdrop-filter: blur(8px);
+}
+
+.style-transfer-preset-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.style-transfer-preset-preview strong {
+  color: var(--text);
+  font-size: var(--type-small-title-size);
+}
+
+.style-transfer-preset-preview span {
+  color: var(--muted);
+  font-size: var(--type-subtitle-size);
+  line-height: 1.45;
+}
+
 .style-transfer-slot {
   min-width: 0;
   display: grid;
@@ -6215,6 +6288,10 @@ html[data-ui-layout="mobile"] .style-transfer-upload-grid {
   grid-template-columns: minmax(0, 1fr);
 }
 
+html[data-ui-layout="mobile"] .style-transfer-preset-preview {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 html[data-ui-layout="stacked"] .reference-analysis-workspace,
 html[data-ui-layout="tablet"] .reference-analysis-workspace,
 html[data-ui-layout="mobile"] .reference-analysis-workspace {
@@ -7024,7 +7101,7 @@ html[data-ui-layout="mobile"] .filmstrip-item span {
 
 .ppt-workspace {
   display: grid;
-  grid-template-columns: minmax(320px, var(--studio-grid-left, 392px)) minmax(0, 1fr) minmax(260px, var(--studio-grid-right, 328px));
+  grid-template-columns: minmax(320px, var(--studio-grid-left, 392px)) minmax(0, 1fr);
   gap: var(--studio-grid-gap, 14px);
   align-items: stretch;
   min-height: 0;
@@ -7033,8 +7110,7 @@ html[data-ui-layout="mobile"] .filmstrip-item span {
 }
 
 .ppt-settings-panel,
-.ppt-result-panel,
-.ppt-history-panel {
+.ppt-result-panel {
   min-height: 0;
   height: 100%;
   max-height: 100%;
@@ -7050,7 +7126,6 @@ html[data-ui-layout="mobile"] .filmstrip-item span {
 
 .ppt-form,
 .ppt-slide-list,
-.ppt-history-list,
 .ppt-record-list {
   flex: 1;
   min-height: 0;
@@ -7119,7 +7194,6 @@ html[data-ui-layout="mobile"] .filmstrip-item span {
 }
 
 .ppt-file-item strong,
-.ppt-history-item strong,
 .ppt-record-card strong,
 .ppt-slide-copy strong {
   min-width: 0;
@@ -7130,7 +7204,6 @@ html[data-ui-layout="mobile"] .filmstrip-item span {
 
 .ppt-file-item span,
 .ppt-feedback,
-.ppt-history-empty,
 .ppt-record-empty,
 .ppt-record-card p,
 .ppt-record-card span,
@@ -7257,26 +7330,6 @@ html[data-ui-layout="mobile"] .filmstrip-item span {
 
 .ppt-slide-retry-button {
   justify-self: start;
-}
-
-.ppt-history-list {
-  display: grid;
-  gap: 10px;
-}
-
-.ppt-history-item {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.045);
-}
-
-.ppt-history-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 .ppt-record-view {
@@ -7630,13 +7683,10 @@ html[data-ui-layout="mobile"] .creation-record-browser {
 
 html[data-ui-layout="stacked"] .ppt-settings-panel,
 html[data-ui-layout="stacked"] .ppt-result-panel,
-html[data-ui-layout="stacked"] .ppt-history-panel,
 html[data-ui-layout="tablet"] .ppt-settings-panel,
 html[data-ui-layout="tablet"] .ppt-result-panel,
-html[data-ui-layout="tablet"] .ppt-history-panel,
 html[data-ui-layout="mobile"] .ppt-settings-panel,
-html[data-ui-layout="mobile"] .ppt-result-panel,
-html[data-ui-layout="mobile"] .ppt-history-panel {
+html[data-ui-layout="mobile"] .ppt-result-panel {
   height: auto;
   max-height: none;
   overflow: visible;
@@ -7644,13 +7694,10 @@ html[data-ui-layout="mobile"] .ppt-history-panel {
 
 html[data-ui-layout="stacked"] .ppt-form,
 html[data-ui-layout="stacked"] .ppt-slide-list,
-html[data-ui-layout="stacked"] .ppt-history-list,
 html[data-ui-layout="tablet"] .ppt-form,
 html[data-ui-layout="tablet"] .ppt-slide-list,
-html[data-ui-layout="tablet"] .ppt-history-list,
 html[data-ui-layout="mobile"] .ppt-form,
-html[data-ui-layout="mobile"] .ppt-slide-list,
-html[data-ui-layout="mobile"] .ppt-history-list {
+html[data-ui-layout="mobile"] .ppt-slide-list {
   overflow: visible;
 }
 

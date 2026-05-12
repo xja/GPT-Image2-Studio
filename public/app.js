@@ -27,7 +27,7 @@ import {
   getDefaultGenerationSize,
   getGenerationSizeOptions,
   normalizeGenerationSize,
-} from "/lib/generation-size-options.mjs?v=20260504-vercel-static-lib-1";
+} from "/lib/generation-size-options.mjs?v=20260512-one-megapixel-sizes-1";
 import {
   getOutputFormatOptions,
   normalizeOutputFormat,
@@ -124,6 +124,145 @@ const GALLERY_COLUMN_PRESETS = [6, 9, 12, 15, 18];
 const DEFAULT_GALLERY_COLUMN_PRESET = 12;
 const ARTICLE_RECORD_COLUMN_PRESETS = [2, 4, 6, 8];
 const DEFAULT_ARTICLE_RECORD_COLUMN_PRESET = 4;
+const STYLE_TRANSFER_CUSTOM_PRESET = "custom";
+const STYLE_TRANSFER_PRESET_BEFORE_IMAGE = "./assets/style-presets/style-before.svg";
+const STYLE_TRANSFER_PRESETS = [
+  {
+    value: STYLE_TRANSFER_CUSTOM_PRESET,
+    label: "上传风格图",
+    description: "上传自己的风格参考图；下方示意为自定义风格迁移入口。",
+    promptInstruction: "",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/custom-style-reference.svg",
+  },
+  {
+    value: "cinematic-photo",
+    label: "电影写实",
+    description: "低饱和电影色调、柔和轮廓光和真实镜头质感。",
+    promptInstruction:
+      "Match the visible preset sample: a cinematic photorealistic editorial look with soft rim light, natural lens behavior, subtle film grain, restrained contrast, realistic materials, and a polished teal-and-amber color grade.",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/cinematic-photo.svg",
+  },
+  {
+    value: "anime-cel",
+    label: "日系赛璐璐",
+    description: "干净线条、明快色块、清透高光和动画分层阴影。",
+    promptInstruction:
+      "Match the visible preset sample: a refined Japanese cel-animation style with clean linework, controlled flat color areas, crisp highlights, expressive but consistent shadows, and polished anime background treatment.",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/anime-cel.svg",
+  },
+  {
+    value: "hand-drawn",
+    label: "手绘插画",
+    description: "松弛线稿、手绘涂色、纸面笔触和生活插画感。",
+    promptInstruction:
+      "Match the visible preset sample: a loose hand-drawn illustration style with warm paper texture, imperfect ink contours, visible marker and colored-pencil strokes, and friendly lifestyle illustration charm.",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/hand-drawn.svg",
+  },
+  {
+    value: "pencil-sketch",
+    label: "铅笔素描",
+    description: "灰阶铅笔线条、排线阴影、纸面颗粒和结构速写感。",
+    promptInstruction:
+      "Match the visible preset sample: a pencil sketch style with graphite linework, hatching, smudged paper grain, soft tonal shading, and a clear observational drawing structure.",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/pencil-sketch.svg",
+  },
+  {
+    value: "cyberpunk-neon",
+    label: "赛博霓虹",
+    description: "高饱和霓虹、雨夜反光、电子屏光和未来都市质感。",
+    promptInstruction:
+      "Match the visible preset sample: a cyberpunk neon style with saturated magenta and cyan lights, rainy reflective surfaces, electric signage glow, hard contrast, and a futuristic city-night atmosphere.",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/cyberpunk-neon.svg",
+  },
+  {
+    value: "pixel-game",
+    label: "像素游戏",
+    description: "低分辨率像素块、限定色板、复古游戏场景和清晰轮廓。",
+    promptInstruction:
+      "Match the visible preset sample: a retro pixel game style with chunky pixel blocks, a limited palette, crisp tile-like silhouettes, simplified shading, and nostalgic 16-bit scene design.",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/pixel-game.svg",
+  },
+  {
+    value: "low-poly-3d",
+    label: "低多边形3D",
+    description: "几何切面、低多边形体块、简化材质和轻量 3D 海报感。",
+    promptInstruction:
+      "Match the visible preset sample: a low-poly 3D style with faceted geometric forms, simplified materials, clean polygon planes, soft studio lighting, and a playful rendered poster look.",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/low-poly-3d.svg",
+  },
+  {
+    value: "editorial-watercolor",
+    label: "编辑水彩",
+    description: "纸张肌理、轻透水色、柔边晕染和杂志插画感。",
+    promptInstruction:
+      "Match the visible preset sample: an editorial watercolor illustration style with visible paper texture, translucent pigment washes, soft edge bleeding, hand-painted shading, and elegant magazine illustration composition.",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/editorial-watercolor.svg",
+  },
+  {
+    value: "paper-cut-collage",
+    label: "纸雕拼贴",
+    description: "层叠纸片、剪影边缘、投影层次和手工拼贴质感。",
+    promptInstruction:
+      "Match the visible preset sample: a paper-cut collage style with layered colored paper shapes, visible cut edges, stacked shadows, tactile craft texture, and clean poster-like composition.",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/paper-cut-collage.svg",
+  },
+  {
+    value: "risograph-poster",
+    label: "Riso海报",
+    description: "双色套印、粗颗粒网点、轻微错位和独立杂志海报感。",
+    promptInstruction:
+      "Match the visible preset sample: a risograph poster style with limited two-to-three color inks, grainy dot texture, slight registration offset, flat graphic shapes, and indie editorial print energy.",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/risograph-poster.svg",
+  },
+  {
+    value: "vintage-film",
+    label: "复古胶片",
+    description: "暖褐色调、轻微颗粒、旧镜头暗角和生活抓拍感。",
+    promptInstruction:
+      "Match the visible preset sample: a vintage analog film look with warm sepia color, mild grain, gentle halation, soft vignetting, imperfect lens response, and candid documentary mood.",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/vintage-film.svg",
+  },
+  {
+    value: "comic-ink",
+    label: "漫画墨线",
+    description: "粗黑轮廓、网点阴影、分格张力和高对比漫画感。",
+    promptInstruction:
+      "Match the visible preset sample: a comic ink style with heavy black contours, halftone shading, strong shape design, graphic contrast, and energetic panel-like composition.",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/comic-ink.svg",
+  },
+  {
+    value: "clay-toy",
+    label: "黏土手作",
+    description: "柔软手工材质、圆润体块、玩具灯箱和微缩场景。",
+    promptInstruction:
+      "Match the visible preset sample: a handcrafted clay toy diorama style with rounded soft forms, tactile sculpted surfaces, miniature studio lighting, subtle fingerprints, and playful material realism.",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/clay-toy.svg",
+  },
+  {
+    value: "ink-gongbi",
+    label: "国风工笔",
+    description: "细线勾勒、淡雅设色、宣纸留白和东方画面秩序。",
+    promptInstruction:
+      "Match the visible preset sample: a refined gongbi-inspired Chinese ink illustration style with precise fine outlines, elegant mineral colors, rice-paper texture, disciplined negative space, and graceful traditional composition.",
+    beforeImage: STYLE_TRANSFER_PRESET_BEFORE_IMAGE,
+    image: "./assets/style-presets/ink-gongbi.svg",
+  },
+];
+const STYLE_TRANSFER_PRESET_VALUES = new Set(STYLE_TRANSFER_PRESETS.map((preset) => preset.value));
 const DEFAULT_ARTICLE_ILLUSTRATION_STYLE_PRESET = "realist-magazine";
 const DEFAULT_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
 const DEFAULT_UI_RATIO = "1:1";
@@ -301,6 +440,7 @@ const state = {
   styleTransfer: {
     source: null,
     style: null,
+    selectedStylePreset: STYLE_TRANSFER_CUSTOM_PRESET,
   },
   styleTransferPreviewItem: null,
   timelineHasRendered: false,
@@ -498,7 +638,6 @@ const refs = {
   promptAgentResult: document.querySelector("#promptAgentResult"),
   pptCompleteMissingButton: document.querySelector("#pptCompleteMissingButton"),
   pptCompletionRatio: document.querySelector("#pptCompletionRatio"),
-  pptDeckCount: document.querySelector("#pptDeckCount"),
   pptDownloadLink: document.querySelector("#pptDownloadLink"),
   pptDropzone: document.querySelector("#pptDropzone"),
   pptAutoAdvanceInput: document.querySelector("#pptAutoAdvanceInput"),
@@ -519,8 +658,6 @@ const refs = {
   pptFileList: document.querySelector("#pptFileList"),
   pptForm: document.querySelector("#pptForm"),
   pptGenerateButton: document.querySelector("#pptGenerateButton"),
-  pptHistoryEmpty: document.querySelector("#pptHistoryEmpty"),
-  pptHistoryList: document.querySelector("#pptHistoryList"),
   pptOutlineBox: document.querySelector("#pptOutlineBox"),
   pptPageCountInput: document.querySelector("#pptPageCountInput"),
   pptProgressBar: document.querySelector("#pptProgressBar"),
@@ -529,7 +666,6 @@ const refs = {
   pptRecordEmpty: document.querySelector("#pptRecordEmpty"),
   pptRecordList: document.querySelector("#pptRecordList"),
   pptRecordRefreshButton: document.querySelector("#pptRecordRefreshButton"),
-  pptRefreshHistoryButton: document.querySelector("#pptRefreshHistoryButton"),
   pptSlideList: document.querySelector("#pptSlideList"),
   pptSourceInput: document.querySelector("#pptSourceInput"),
   pptSourceModeInputs: [...document.querySelectorAll("input[name=\"pptSourceMode\"]")],
@@ -604,12 +740,18 @@ const refs = {
   studioView: document.querySelector(".studio-view"),
   styleTransferBlock: document.querySelector("#styleTransferBlock"),
   styleTransferInstructionInput: document.querySelector("#styleTransferInstructionInput"),
+  styleTransferPresetAfterImage: document.querySelector("#styleTransferPresetAfterImage"),
+  styleTransferPresetBeforeImage: document.querySelector("#styleTransferPresetBeforeImage"),
+  styleTransferPresetDescription: document.querySelector("#styleTransferPresetDescription"),
+  styleTransferPresetPreview: document.querySelector("#styleTransferPresetPreview"),
+  styleTransferPresetTitle: document.querySelector("#styleTransferPresetTitle"),
   styleTransferSourceDropzone: document.querySelector("#styleTransferSourceDropzone"),
   styleTransferSourceGrid: document.querySelector("#styleTransferSourceGrid"),
   styleTransferSourceInput: document.querySelector("#styleTransferSourceInput"),
   styleTransferStyleDropzone: document.querySelector("#styleTransferStyleDropzone"),
   styleTransferStyleGrid: document.querySelector("#styleTransferStyleGrid"),
   styleTransferStyleInput: document.querySelector("#styleTransferStyleInput"),
+  styleTransferStylePresetInput: document.querySelector("#styleTransferStylePresetInput"),
   themeToggleButton: document.querySelector("#themeToggleButton"),
   themeToggleLabel: document.querySelector("#themeToggleLabel"),
   topbar: document.querySelector(".topbar"),
@@ -2735,6 +2877,44 @@ function renderReferenceAnalysisGrid() {
   }
 }
 
+function normalizeStyleTransferPreset(value) {
+  const normalized = String(value || STYLE_TRANSFER_CUSTOM_PRESET).trim();
+  return STYLE_TRANSFER_PRESET_VALUES.has(normalized) ? normalized : STYLE_TRANSFER_CUSTOM_PRESET;
+}
+
+function getStyleTransferPreset(value = state.styleTransfer.selectedStylePreset) {
+  const normalized = normalizeStyleTransferPreset(value);
+  return STYLE_TRANSFER_PRESETS.find((preset) => preset.value === normalized) || STYLE_TRANSFER_PRESETS[0];
+}
+
+function hasSelectedStyleTransferPreset() {
+  return normalizeStyleTransferPreset(state.styleTransfer.selectedStylePreset) !== STYLE_TRANSFER_CUSTOM_PRESET;
+}
+
+function clearStyleTransferStyleReference() {
+  const target = state.styleTransfer.style;
+  if (!target) {
+    return;
+  }
+
+  if (state.styleTransferPreviewItem?.id === target.id) {
+    closeReferencePreview();
+  }
+  revokeReferencePreview(target);
+  state.styleTransfer.style = null;
+  refs.styleTransferStyleInput.value = "";
+}
+
+function setStyleTransferStylePreset(value) {
+  const nextValue = normalizeStyleTransferPreset(value);
+  state.styleTransfer.selectedStylePreset = nextValue;
+  if (nextValue !== STYLE_TRANSFER_CUSTOM_PRESET) {
+    clearStyleTransferStyleReference();
+  }
+  renderStyleTransferReferences();
+  updateGenerateButton();
+}
+
 function createStyleTransferReferenceItem(slot, file) {
   return {
     id: `style-transfer-${slot}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -2773,6 +2953,9 @@ function applyStyleTransferReferenceFile(slot, fileList) {
   }
   revokeReferencePreview(current);
   const nextItem = createStyleTransferReferenceItem(slot, file);
+  if (slot === "style") {
+    state.styleTransfer.selectedStylePreset = STYLE_TRANSFER_CUSTOM_PRESET;
+  }
   state.styleTransfer[slot === "style" ? "style" : "source"] = nextItem;
   refs[slot === "style" ? "styleTransferStyleInput" : "styleTransferSourceInput"].value = "";
   startStyleTransferGenerationCompression(nextItem);
@@ -2844,7 +3027,50 @@ function renderStyleTransferReferenceSlot(slot, grid) {
   grid.appendChild(card);
 }
 
+function renderStyleTransferPreset() {
+  if (!refs.styleTransferStylePresetInput) {
+    return;
+  }
+
+  const currentValue = normalizeStyleTransferPreset(state.styleTransfer.selectedStylePreset);
+  if (refs.styleTransferStylePresetInput.options.length !== STYLE_TRANSFER_PRESETS.length) {
+    refs.styleTransferStylePresetInput.innerHTML = "";
+    STYLE_TRANSFER_PRESETS.forEach((preset) => {
+      const option = document.createElement("option");
+      option.value = preset.value;
+      option.textContent = preset.label;
+      refs.styleTransferStylePresetInput.appendChild(option);
+    });
+  }
+  refs.styleTransferStylePresetInput.value = currentValue;
+
+  const preset = getStyleTransferPreset(currentValue);
+  const showPreview = Boolean(preset.beforeImage && preset.image);
+  refs.styleTransferPresetPreview?.classList.toggle("hidden", !showPreview);
+  if (!showPreview) {
+    refs.styleTransferPresetBeforeImage?.removeAttribute("src");
+    refs.styleTransferPresetBeforeImage?.removeAttribute("alt");
+    refs.styleTransferPresetAfterImage?.removeAttribute("src");
+    refs.styleTransferPresetAfterImage?.removeAttribute("alt");
+    if (refs.styleTransferPresetTitle) {
+      refs.styleTransferPresetTitle.textContent = "";
+    }
+    if (refs.styleTransferPresetDescription) {
+      refs.styleTransferPresetDescription.textContent = "";
+    }
+    return;
+  }
+
+  refs.styleTransferPresetBeforeImage.src = preset.beforeImage;
+  refs.styleTransferPresetBeforeImage.alt = `${preset.label}风格前示例`;
+  refs.styleTransferPresetAfterImage.src = preset.image;
+  refs.styleTransferPresetAfterImage.alt = `${preset.label}风格后示例`;
+  refs.styleTransferPresetTitle.textContent = preset.label;
+  refs.styleTransferPresetDescription.textContent = preset.description;
+}
+
 function renderStyleTransferReferences() {
+  renderStyleTransferPreset();
   syncReferenceDropzoneCompact(refs.styleTransferSourceDropzone, Boolean(getStyleTransferReferenceItem("source")));
   syncReferenceDropzoneCompact(refs.styleTransferStyleDropzone, Boolean(getStyleTransferReferenceItem("style")));
   renderStyleTransferReferenceSlot("source", refs.styleTransferSourceGrid);
@@ -9951,17 +10177,15 @@ function formatPptDeckMeta(deck) {
   return parts.filter(Boolean).join(" · ");
 }
 
-function createPptDeckRecordItem(deck, variant = "history") {
+function createPptDeckRecordItem(deck) {
   const item = document.createElement("article");
-  item.className = variant === "record" ? "ppt-record-card" : "ppt-history-item";
+  item.className = "ppt-record-card";
   const recordKey = getPptDeckRecordKey(deck);
 
-  if (variant === "record") {
-    item.dataset.pptRecordKey = getPptDeckRecordKey(deck);
-    item.tabIndex = 0;
-    item.setAttribute("aria-label", `查看 ${deck.title || "PPT 记录"} 预览`);
-    item.classList.toggle("is-selected", state.ppt.recordDetail.deckKey === recordKey);
-  }
+  item.dataset.pptRecordKey = getPptDeckRecordKey(deck);
+  item.tabIndex = 0;
+  item.setAttribute("aria-label", `查看 ${deck.title || "PPT 记录"} 预览`);
+  item.classList.toggle("is-selected", state.ppt.recordDetail.deckKey === recordKey);
 
   const title = document.createElement("strong");
   title.textContent = deck.title || "未命名演示";
@@ -9971,26 +10195,22 @@ function createPptDeckRecordItem(deck, variant = "history") {
   meta.textContent = formatPptDeckMeta(deck);
   item.appendChild(meta);
 
-  if (variant === "record") {
-    const path = document.createElement("p");
-    path.textContent = deck.pptxFilename || deck.pptxRelativePath || "PPTX 文件";
-    item.appendChild(path);
+  const path = document.createElement("p");
+  path.textContent = deck.pptxFilename || deck.pptxRelativePath || "PPTX 文件";
+  item.appendChild(path);
 
-    const source = document.createElement("span");
-    source.className = "ppt-record-source";
-    source.textContent = getPptDeckSourceLabel(deck);
-    item.appendChild(source);
-  }
+  const source = document.createElement("span");
+  source.className = "ppt-record-source";
+  source.textContent = getPptDeckSourceLabel(deck);
+  item.appendChild(source);
 
   const actions = document.createElement("div");
-  actions.className = variant === "record" ? "ppt-record-card-actions" : "ppt-history-actions";
-  if (variant === "record") {
-    const previewButton = document.createElement("button");
-    previewButton.type = "button";
-    previewButton.className = "toolbar-button";
-    previewButton.textContent = "预览";
-    actions.appendChild(previewButton);
-  }
+  actions.className = "ppt-record-card-actions";
+  const previewButton = document.createElement("button");
+  previewButton.type = "button";
+  previewButton.className = "toolbar-button";
+  previewButton.textContent = "预览";
+  actions.appendChild(previewButton);
 
   const link = document.createElement("a");
   link.className = "toolbar-button";
@@ -10005,16 +10225,6 @@ function createPptDeckRecordItem(deck, variant = "history") {
   item.appendChild(actions);
 
   return item;
-}
-
-function renderPptHistory() {
-  refs.pptDeckCount.textContent = `${state.ppt.decks.length} 套`;
-  refs.pptHistoryEmpty.classList.toggle("hidden", state.ppt.decks.length > 0);
-  refs.pptHistoryList.innerHTML = "";
-
-  state.ppt.decks.forEach((deck) => {
-    refs.pptHistoryList.appendChild(createPptDeckRecordItem(deck));
-  });
 }
 
 function renderPptRecordDetail(deck) {
@@ -10143,7 +10353,7 @@ function renderPptRecordView() {
   }
 
   state.ppt.decks.forEach((deck) => {
-    refs.pptRecordList.appendChild(createPptDeckRecordItem(deck, "record"));
+    refs.pptRecordList.appendChild(createPptDeckRecordItem(deck));
   });
 
   renderPptRecordDetail(selectedDeck);
@@ -10175,27 +10385,45 @@ function renderPptView() {
   }
 
   renderPptSlides();
-  renderPptHistory();
   renderPptRecordView();
 }
 
 function getStyleTransferReferenceFiles() {
-  return [getStyleTransferGenerationFile("source"), getStyleTransferGenerationFile("style")].filter(Boolean);
+  const referenceFiles = [getStyleTransferGenerationFile("source")];
+  if (!hasSelectedStyleTransferPreset()) {
+    referenceFiles.push(getStyleTransferGenerationFile("style"));
+  }
+  return referenceFiles.filter(Boolean);
 }
 
 function buildStyleTransferPrompt() {
   const userNote = String(refs.styleTransferInstructionInput?.value || "").trim();
+  const preset = getStyleTransferPreset();
+  const hasPreset = hasSelectedStyleTransferPreset();
   const parts = [
     "Use the first reference image as the source image.",
     "preserve every visible subject, object, pose, layout, composition, spatial relationship, and identity signal from the source image.",
-    "Use the second reference image only as the style reference.",
-    "The second reference image is the style authority; if the source image's visual style conflicts with it, follow the second reference image.",
-    "Transfer the style reference's realism level, camera/lens look, color grade, lighting, shading, texture, edge treatment, material finish, rendering style, and mood.",
-    "If the style reference is a real photograph, the final image must be photorealistic with natural skin texture, realistic anatomy, optical lens behavior, real lighting, and natural material response.",
-    "Do not keep anime, cartoon, comic, cel-shaded, line-art, CGI doll, or illustration residue from the source image unless those traits also exist in the style reference.",
-    "Do not copy subjects, objects, logos, text, or layout from the style reference image unless they also exist in the source image.",
-    "Return one polished final image with the source image's content faithfully migrated into the style reference's visual style.",
+    hasPreset
+      ? `Selected style preset: ${preset.label}. ${preset.promptInstruction}`
+      : "Use the second reference image only as the style reference.",
+    hasPreset
+      ? "The selected style preset is the style authority; if the source image's visual style conflicts with it, follow the selected preset."
+      : "The second reference image is the style authority; if the source image's visual style conflicts with it, follow the second reference image.",
+    hasPreset
+      ? "Transfer the preset's realism level, color grade, lighting, shading, texture, edge treatment, material finish, rendering style, and mood."
+      : "Transfer the style reference's realism level, camera/lens look, color grade, lighting, shading, texture, edge treatment, material finish, rendering style, and mood.",
+    hasPreset
+      ? "Do not copy new subjects, objects, logos, text, or layout from the preset preview; use it only as visual style direction."
+      : "Do not copy subjects, objects, logos, text, or layout from the style reference image unless they also exist in the source image.",
+    "Do not keep anime, cartoon, comic, cel-shaded, line-art, CGI doll, or illustration residue from the source image unless those traits also exist in the target style.",
+    "Return one polished final image with the source image's content faithfully migrated into the target visual style.",
   ];
+
+  if (!hasPreset) {
+    parts.push(
+      "If the style reference is a real photograph, the final image must be photorealistic with natural skin texture, realistic anatomy, optical lens behavior, real lighting, and natural material response.",
+    );
+  }
 
   if (userNote) {
     parts.push(`Additional user note: ${userNote}`);
@@ -10243,6 +10471,8 @@ function createStyleTransferJob() {
   const referenceFiles = getStyleTransferReferenceFiles();
   const sourceItem = state.styleTransfer.source;
   const styleItem = state.styleTransfer.style;
+  const stylePreset = getStyleTransferPreset();
+  const hasStylePreset = hasSelectedStyleTransferPreset();
   const sizeSetting = getSelectedGenerationSize();
   const size = sizeSetting === "auto" ? ratioOption?.baseSize || getDefaultGenerationSize(ratioOption?.value) : sizeSetting;
 
@@ -10262,12 +10492,15 @@ function createStyleTransferJob() {
     imageModel: "gpt-image-2",
     reasoningEffort: refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
     requestRetryCount: 0,
-    referenceFiles: getStyleTransferReferenceFiles(),
+    referenceFiles,
     hasReferenceImage: referenceFiles.length > 0,
     referenceImageName: sourceItem?.file?.name || "",
-    referenceImageNames: [sourceItem?.file?.name || "", styleItem?.file?.name || ""].filter(Boolean),
+    referenceImageNames: [sourceItem?.file?.name || "", hasStylePreset ? stylePreset.label : styleItem?.file?.name || ""].filter(
+      Boolean,
+    ),
     styleTransferSourceImageName: sourceItem?.file?.name || "",
-    styleTransferReferenceImageName: styleItem?.file?.name || "",
+    styleTransferReferenceImageName: hasStylePreset ? stylePreset.label : styleItem?.file?.name || "",
+    styleTransferStylePreset: hasStylePreset ? stylePreset.value : "",
     isRunning: false,
     started: false,
     statusStage: "queued",
@@ -10701,6 +10934,7 @@ function appendStyleTransferReferencesToFormData(formData, job) {
   formData.set("mode", "style-transfer");
   formData.set("styleTransferSourceImageName", job.styleTransferSourceImageName);
   formData.set("styleTransferReferenceImageName", job.styleTransferReferenceImageName);
+  formData.set("styleTransferStylePreset", job.styleTransferStylePreset);
   job.referenceFiles.forEach((file) => {
     formData.append("referenceImages", file);
   });
@@ -11097,8 +11331,9 @@ async function startGeneration(event) {
   clearError();
 
   if (state.studioMode === "style-transfer") {
-    if (!state.styleTransfer.source?.file || !state.styleTransfer.style?.file) {
-      showError("请先上传原图和风格参考图。");
+    const hasStyleInput = Boolean(state.styleTransfer.style?.file || hasSelectedStyleTransferPreset());
+    if (!state.styleTransfer.source?.file || !hasStyleInput) {
+      showError("请先上传原图，并上传风格参考图或选择一个风格。");
       return;
     }
 
@@ -11638,9 +11873,6 @@ function bindEvents() {
   });
   refs.pptForm.addEventListener("submit", startPptGeneration);
   refs.pptCompleteMissingButton.addEventListener("click", completeMissingPptSlides);
-  refs.pptRefreshHistoryButton.addEventListener("click", () => {
-    loadPptDecks().catch((error) => setPptFeedback(error.message, "error"));
-  });
   refs.pptRecordRefreshButton.addEventListener("click", () => {
     loadPptDecks().catch((error) => showError(error.message));
   });
@@ -11750,6 +11982,9 @@ function bindEvents() {
   });
   refs.styleTransferStyleInput.addEventListener("change", (event) => {
     applyStyleTransferReferenceFile("style", event.target.files);
+  });
+  refs.styleTransferStylePresetInput.addEventListener("change", (event) => {
+    setStyleTransferStylePreset(event.target.value);
   });
   bindStyleTransferDropzone(refs.styleTransferSourceDropzone, "source");
   bindStyleTransferDropzone(refs.styleTransferStyleDropzone, "style");

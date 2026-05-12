@@ -48,6 +48,7 @@ const STYLE_TRANSFER_REFERENCE_IMAGE_LABELS = [
   "Reference image 1: SOURCE image. Preserve content, identity, pose, composition, and layout only. Do not preserve its visual style.",
   "Reference image 2: STYLE reference. This image is the style authority for final rendering, realism level, lighting, texture, color, and material finish.",
 ];
+const STYLE_TRANSFER_SOURCE_IMAGE_LABELS = [STYLE_TRANSFER_REFERENCE_IMAGE_LABELS[0]];
 const SERVER_IMAGE_BUCKET_MISSING_MESSAGE = "服务器图片存储未配置 IMAGE_BUCKET";
 const GENERATION_QUEUE_MISSING_MESSAGE = "服务器异步生成队列未配置 GENERATION_QUEUE";
 const DEFAULT_CONFIG = {
@@ -106,6 +107,14 @@ function buildPublicConfig() {
     reasoningEfforts: [...REASONING_EFFORT_OPTIONS],
     aspectRatios: getAspectRatioOptions(),
   };
+}
+
+function getStyleTransferReferenceImageLabels(generationMode, styleTransferStylePreset) {
+  if (generationMode !== "style-transfer") {
+    return [];
+  }
+  const hasStyleTransferPreset = Boolean(styleTransferStylePreset);
+  return hasStyleTransferPreset ? STYLE_TRANSFER_SOURCE_IMAGE_LABELS : STYLE_TRANSFER_REFERENCE_IMAGE_LABELS;
 }
 
 async function handlePromptAgentAnalyze(request, fetchImpl) {
@@ -477,6 +486,8 @@ async function buildGenerationRequestContext(request, formData) {
   const ratio = String(formData.get("ratio") || "4:5");
   const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
   const requestedFormatInput = String(formData.get("format") || "").trim().toLowerCase();
+  const generationMode = String(formData.get("mode") || "").trim() === "style-transfer" ? "style-transfer" : "";
+  const styleTransferStylePreset = String(formData.get("styleTransferStylePreset") || "").trim();
   const config = normalizePrivateConfig(formData);
   const createdAt = new Date().toISOString();
   const sessionId = getClientSessionIdFromRequest(request, formData);
@@ -491,6 +502,10 @@ async function buildGenerationRequestContext(request, formData) {
   ]);
   if (referenceImages.length > MAX_REFERENCE_IMAGES) {
     throw new Error(`参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`);
+  }
+  const hasStyleTransferPreset = Boolean(styleTransferStylePreset);
+  if (generationMode === "style-transfer" && referenceImages.length < (hasStyleTransferPreset ? 1 : 2)) {
+    throw new Error("风格迁移需要上传原图，并上传风格参考图或选择一个风格。");
   }
 
   const reasoningEffort = normalizeReasoningEffort(formData.get("reasoningEffort"));
@@ -511,6 +526,8 @@ async function buildGenerationRequestContext(request, formData) {
     prompt,
     config,
     createdAt,
+    generationMode,
+    styleTransferStylePreset,
     referenceImages,
     reasoningEffort,
     ratioOption,
@@ -530,6 +547,9 @@ function buildQueuedGenerationTask(context) {
     createdAt: context.createdAt,
     updatedAt: context.createdAt,
     prompt: context.prompt,
+    mode: context.generationMode,
+    generationMode: context.generationMode,
+    styleTransferStylePreset: context.styleTransferStylePreset,
     ratio: context.ratioOption.value,
     ratioLabel: context.ratioOption.label,
     size: context.finalSize,
@@ -944,7 +964,10 @@ async function enqueueGenerate(request, writer, { imageBucket, generationQueue }
     taskId: context.taskId,
     prompt: context.prompt,
     config: context.config,
+    generationMode: context.generationMode,
+    styleTransferStylePreset: context.styleTransferStylePreset,
     referenceImages: context.referenceImages,
+    referenceImageLabels: getStyleTransferReferenceImageLabels(context.generationMode, context.styleTransferStylePreset),
     reasoningEffort: context.reasoningEffort,
     ratio: context.ratioOption.value,
     finalPrompt: context.finalPrompt,
@@ -981,6 +1004,7 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
   const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
   const requestedFormatInput = String(formData.get("format") || "").trim().toLowerCase();
   const generationMode = String(formData.get("mode") || "").trim() === "style-transfer" ? "style-transfer" : "";
+  const styleTransferStylePreset = String(formData.get("styleTransferStylePreset") || "").trim();
   const config = normalizePrivateConfig(formData);
   const createdAt = new Date().toISOString();
 
@@ -1006,9 +1030,10 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     });
     return;
   }
-  if (generationMode === "style-transfer" && referenceImages.length < 2) {
+  const hasStyleTransferPreset = Boolean(styleTransferStylePreset);
+  if (generationMode === "style-transfer" && referenceImages.length < (hasStyleTransferPreset ? 1 : 2)) {
     await writeSseEvent(writer, "error", {
-      message: "风格迁移需要上传原图和风格参考图。",
+      message: "风格迁移需要上传原图，并上传风格参考图或选择一个风格。",
     });
     return;
   }
@@ -1034,7 +1059,7 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     apiKey: config.apiKey,
     prompt: finalPrompt,
     referenceImages,
-    referenceImageLabels: generationMode === "style-transfer" ? STYLE_TRANSFER_REFERENCE_IMAGE_LABELS : [],
+    referenceImageLabels: getStyleTransferReferenceImageLabels(generationMode, styleTransferStylePreset),
     size: finalSize,
     quality: finalQuality,
     format: toApiOutputFormat(finalFormat),
@@ -1479,6 +1504,10 @@ async function processQueuedGenerationMessage(messageBody, { imageBucket, fetchI
       apiKey: storedRequest.config.apiKey,
       prompt: storedRequest.finalPrompt,
       referenceImages: storedRequest.referenceImages || [],
+      referenceImageLabels: storedRequest.referenceImageLabels || getStyleTransferReferenceImageLabels(
+        storedRequest.generationMode,
+        storedRequest.styleTransferStylePreset,
+      ),
       size: storedRequest.finalSize,
       quality: storedRequest.finalQuality,
       format: toApiOutputFormat(storedRequest.finalFormat),
