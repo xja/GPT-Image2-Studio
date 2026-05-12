@@ -55,7 +55,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260511-style-transfer-distinctive-1" />
+    <link rel="stylesheet" href="./styles.css?v=20260512-style-transfer-presets-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -191,8 +191,19 @@
                       <span>图片风格迁移</span>
                     </div>
                   </div>
-                  <div class="style-transfer-upload-grid">
-                    <div class="style-transfer-slot">
+                  <label class="compact-field style-transfer-preset-field">
+                    <span>风格选择（可替代风格图）</span>
+                    <select id="styleTransferPresetInput" name="styleTransferPreset"></select>
+                  </label>
+                  <div class="style-transfer-preset-preview" id="styleTransferPresetPreview" aria-live="polite">
+                    <div class="style-transfer-comparison" id="styleTransferPresetComparison"></div>
+                    <div class="style-transfer-preset-copy">
+                      <strong id="styleTransferPresetLabel"></strong>
+                      <span id="styleTransferPresetDescription"></span>
+                    </div>
+                  </div>
+                  <div class="style-transfer-upload-grid" id="styleTransferUploadGrid">
+                    <div class="style-transfer-slot style-transfer-source-slot">
                       <label class="reference-dropzone style-transfer-dropzone" id="styleTransferSourceDropzone">
                         <input id="styleTransferSourceInput" name="styleTransferSourceImage" type="file" accept="image/*" />
                         <div class="reference-icon" aria-hidden="true"></div>
@@ -201,36 +212,13 @@
                       <div class="reference-grid style-transfer-grid hidden" id="styleTransferSourceGrid"></div>
                     </div>
 
-                    <div class="style-transfer-slot">
+                    <div class="style-transfer-slot style-transfer-style-slot">
                       <label class="reference-dropzone style-transfer-dropzone" id="styleTransferStyleDropzone">
                         <input id="styleTransferStyleInput" name="styleTransferReferenceImage" type="file" accept="image/*" />
                         <div class="reference-icon" aria-hidden="true"></div>
                         <strong>上传风格图</strong>
                       </label>
                       <div class="reference-grid style-transfer-grid hidden" id="styleTransferStyleGrid"></div>
-                    </div>
-                  </div>
-
-                  <div class="style-transfer-style-choice">
-                    <label class="compact-field style-transfer-preset-field">
-                      <span>风格选择（可替代风格图）</span>
-                      <select id="styleTransferStylePresetInput" name="styleTransferStylePreset"></select>
-                    </label>
-                    <div class="style-transfer-preset-preview hidden" id="styleTransferPresetPreview">
-                      <div class="style-transfer-preset-comparison" aria-label="风格前后对比">
-                        <figure class="style-transfer-preset-figure">
-                          <img id="styleTransferPresetBeforeImage" alt="" loading="lazy" />
-                          <figcaption>风格前</figcaption>
-                        </figure>
-                        <figure class="style-transfer-preset-figure">
-                          <img id="styleTransferPresetAfterImage" alt="" loading="lazy" />
-                          <figcaption>风格后</figcaption>
-                        </figure>
-                      </div>
-                      <div class="style-transfer-preset-copy">
-                        <strong id="styleTransferPresetTitle"></strong>
-                        <span id="styleTransferPresetDescription"></span>
-                      </div>
                     </div>
                   </div>
 
@@ -855,6 +843,7 @@
                   <div>
                     <h2>PPT 演示文稿制作</h2>
                   </div>
+                  <span class="count-pill small" id="pptDeckCount">0 套</span>
                 </div>
 
                 <div class="field-group">
@@ -1014,6 +1003,16 @@
               <div class="ppt-slide-list" id="pptSlideList"></div>
             </section>
 
+            <aside class="studio-panel ppt-history-panel">
+              <div class="panel-title between">
+                <div>
+                  <h2>历史演示</h2>
+                </div>
+                <button class="toolbar-button" id="pptRefreshHistoryButton" type="button">刷新</button>
+              </div>
+              <div class="ppt-history-empty" id="pptHistoryEmpty">还没有生成过 PPT。</div>
+              <div class="ppt-history-list" id="pptHistoryList"></div>
+            </aside>
           </div>
         </section>
 
@@ -1526,6 +1525,6 @@
       </div>
     </aside>
 
-    <script type="module" src="./app.js?v=20260511-style-transfer-distinctive-1"></script>
+    <script type="module" src="./app.js?v=20260512-one-megapixel-sizes-4"></script>
   </body>
 </html>

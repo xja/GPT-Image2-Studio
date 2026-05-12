@@ -11,7 +11,7 @@ import {
 const EXPECTED_SIZE_OPTIONS = {
   "1:1": ["1024x1024", "1536x1536", "2048x2048", "2816x2816"],
   "5:4": ["1280x1024", "1120x896", "1920x1536", "2560x2048", "3120x2496"],
-  "9:16": ["720x1280", "864x1536", "1152x2048", "2016x3584", "2151x3824", "2160x3840"],
+  "9:16": ["720x1280", "768x1365", "864x1536", "1152x2048", "2016x3584", "2151x3824", "2160x3840"],
   "21:9": [
     "1680x720",
     "1568x672",
@@ -23,7 +23,7 @@ const EXPECTED_SIZE_OPTIONS = {
     "3832x1642",
     "3840x1646",
   ],
-  "16:9": ["1280x720", "1536x864", "2048x1152", "3584x2016", "3824x2151", "3840x2160"],
+  "16:9": ["1280x720", "1365x768", "1536x864", "2048x1152", "3584x2016", "3824x2151", "3840x2160"],
   "4:3": ["1024x768", "1152x864", "1536x1152", "2048x1536", "3072x2304"],
   "3:2": ["1536x1024", "1248x832", "2304x1536", "3072x2048", "3456x2304"],
   "4:5": ["1024x1280", "896x1120", "1536x1920", "2048x2560", "2496x3120"],
@@ -32,17 +32,31 @@ const EXPECTED_SIZE_OPTIONS = {
 };
 
 const KNOWN_ROUNDED_SIZE_OPTIONS = new Set([
+  "9:16 768x1365",
   "9:16 2151x3824",
   "21:9 1916x821",
   "21:9 3824x1639",
   "21:9 3832x1642",
   "21:9 3840x1646",
+  "16:9 1365x768",
   "16:9 3824x2151",
 ]);
 const MAX_IMAGE_PIXELS = 8_294_400;
 const ONE_MEGAPIXEL_TARGET_PIXELS = 1024 * 1024;
 const ONE_MEGAPIXEL_MIN_PIXELS = Math.round(ONE_MEGAPIXEL_TARGET_PIXELS * 0.85);
 const ONE_MEGAPIXEL_MAX_PIXELS = Math.round(ONE_MEGAPIXEL_TARGET_PIXELS * 1.15);
+const EXPECTED_ONE_MEGAPIXEL_SIZE_BY_RATIO = {
+  "1:1": "1024x1024",
+  "5:4": "1120x896",
+  "9:16": "768x1365",
+  "21:9": "1568x672",
+  "16:9": "1365x768",
+  "4:3": "1152x864",
+  "3:2": "1248x832",
+  "4:5": "896x1120",
+  "3:4": "864x1152",
+  "2:3": "832x1248",
+};
 
 test("size options match the configured ratio table", () => {
   for (const [ratio, sizes] of Object.entries(EXPECTED_SIZE_OPTIONS)) {
@@ -80,6 +94,13 @@ test("each configured ratio includes an approximately one megapixel resolution",
   }
 });
 
+test("each configured ratio exposes its dedicated one megapixel resolution", () => {
+  for (const [ratio, size] of Object.entries(EXPECTED_ONE_MEGAPIXEL_SIZE_BY_RATIO)) {
+    const sizes = getGenerationSizeOptions(ratio).map((option) => option.value);
+    assert.ok(sizes.includes(size), `${ratio} should include ${size}`);
+  }
+});
+
 test("size compatibility rejects mismatched ratios", () => {
   assert.equal(isGenerationSizeCompatible("1:1", "2048x2048"), true);
   assert.equal(isGenerationSizeCompatible("1:1", "2816x2816"), true);
@@ -91,7 +112,7 @@ test("size compatibility rejects mismatched ratios", () => {
   assert.equal(isGenerationSizeCompatible("9:16", "2048x1152"), false);
 });
 
-test("size compatibility excludes gpt-image-2 resolutions whose edges are not multiples of 16", () => {
+test("size compatibility rejects non-table ratio resolutions", () => {
   assert.equal(isGenerationSizeCompatible("9:16", "1080x1920"), false);
   assert.equal(isGenerationSizeCompatible("21:9", "2520x1080"), false);
   assert.equal(isGenerationSizeCompatible("16:9", "1920x1080"), false);
@@ -193,14 +214,14 @@ test("size options preserve ratio and stay within the configured edge cap", () =
   }
 });
 
-test("default sizes use the first configured size for each ratio", () => {
-  for (const [ratio, sizes] of Object.entries(EXPECTED_SIZE_OPTIONS)) {
-    assert.equal(getDefaultGenerationSize(ratio), sizes[0], `${ratio} should default to the first configured size`);
+test("auto defaults use the dedicated one megapixel size for each ratio", () => {
+  for (const [ratio, size] of Object.entries(EXPECTED_ONE_MEGAPIXEL_SIZE_BY_RATIO)) {
+    assert.equal(getDefaultGenerationSize(ratio), size, `${ratio} should default to ${size}`);
   }
 });
 
 test("normalizeGenerationSize falls back to auto for invalid resolutions", () => {
   assert.equal(normalizeGenerationSize("4:5", "2048x2560"), "2048x2560");
   assert.equal(normalizeGenerationSize("4:5", "2048x2048"), "auto");
-  assert.equal(getDefaultGenerationSize("3:4"), "768x1024");
+  assert.equal(getDefaultGenerationSize("3:4"), "864x1152");
 });

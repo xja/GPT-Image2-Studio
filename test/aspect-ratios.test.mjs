@@ -16,12 +16,26 @@ test("getAspectRatioOptions exposes the supported compact ratio set", () => {
   );
 });
 
-test("resolveAspectRatioOption maps portrait and landscape ratios to supported base canvases", () => {
-  assert.equal(resolveAspectRatioOption("21:9").baseSize, "1680x720");
+test("resolveAspectRatioOption maps ratios to one megapixel base canvases", () => {
+  const expectedBaseSizeByRatio = {
+    "1:1": "1024x1024",
+    "5:4": "1120x896",
+    "9:16": "768x1365",
+    "21:9": "1568x672",
+    "16:9": "1365x768",
+    "4:3": "1152x864",
+    "3:2": "1248x832",
+    "4:5": "896x1120",
+    "3:4": "864x1152",
+    "2:3": "832x1248",
+  };
+
+  for (const [ratio, baseSize] of Object.entries(expectedBaseSizeByRatio)) {
+    assert.equal(resolveAspectRatioOption(ratio).baseSize, baseSize);
+  }
+
   assert.equal(resolveAspectRatioOption("16:9").orientation, "landscape");
-  assert.equal(resolveAspectRatioOption("4:5").baseSize, "1024x1280");
   assert.equal(resolveAspectRatioOption("2:3").orientation, "portrait");
-  assert.equal(resolveAspectRatioOption("1:1").baseSize, "1024x1024");
 });
 
 test("appendRatioHintToPrompt injects a ratio composition hint without losing the original prompt", () => {

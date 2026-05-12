@@ -17,7 +17,7 @@ test("config store returns empty public config before any save", async () => {
   assert.equal(config.apiKeyMask, undefined);
   assert.equal(config.responsesModel, "gpt-5.4");
   assert.deepEqual(config.defaults, {
-    size: "1024x1280",
+    size: "896x1120",
     quality: "high",
     format: "png",
     reasoningEffort: "xhigh",

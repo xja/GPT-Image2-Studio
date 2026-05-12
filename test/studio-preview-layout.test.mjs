@@ -141,7 +141,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\.\/app\.js\?v=20260511-style-transfer-distinctive-1/);
+  assert.match(html, /\.\/app\.js\?v=20260512-one-megapixel-sizes-4/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -310,6 +310,8 @@ test("style transfer mode exposes independent source and style uploads", async (
 
   assert.match(html, /href="#style-transfer"[\s\S]*data-view-panel="studio"/);
   assert.match(html, /id="styleTransferBlock"/);
+  assert.match(html, /id="styleTransferPresetInput"/);
+  assert.match(html, /id="styleTransferPresetComparison"/);
   assert.match(html, /id="styleTransferSourceInput"[\s\S]*id="styleTransferSourceGrid"/);
   assert.match(html, /id="styleTransferStyleInput"[\s\S]*id="styleTransferStyleGrid"/);
   assert.match(html, /id="styleTransferInstructionInput"/);
@@ -322,77 +324,50 @@ test("style transfer mode exposes independent source and style uploads", async (
   assert.match(app, /function syncHash\(view\) \{[\s\S]*view === "style-transfer"[\s\S]*"#style-transfer"/);
 });
 
-test("style transfer mode can use a selected style preset instead of a style reference upload", async () => {
+test("style transfer mode can use every style preset with before and after previews", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
-  const server = await readFile(serverPath, "utf8");
-  const presetValues = [
-    "cinematic-photo",
-    "anime-cel",
-    "editorial-watercolor",
-    "vintage-film",
-    "clay-toy",
-    "ink-gongbi",
-    "hand-drawn",
-    "pencil-sketch",
-    "cyberpunk-neon",
-    "pixel-game",
-    "low-poly-3d",
-    "paper-cut-collage",
-    "risograph-poster",
-    "comic-ink",
-  ];
   const presetAssets = [
     "custom-style-reference.svg",
     "cinematic-photo.svg",
     "anime-cel.svg",
-    "editorial-watercolor.svg",
-    "vintage-film.svg",
-    "clay-toy.svg",
-    "ink-gongbi.svg",
     "hand-drawn.svg",
     "pencil-sketch.svg",
     "cyberpunk-neon.svg",
     "pixel-game.svg",
     "low-poly-3d.svg",
+    "editorial-watercolor.svg",
     "paper-cut-collage.svg",
     "risograph-poster.svg",
+    "vintage-film.svg",
     "comic-ink.svg",
+    "clay-toy.svg",
+    "ink-gongbi.svg",
   ];
 
-  assert.match(html, /id="styleTransferStylePresetInput"[\s\S]*id="styleTransferPresetPreview"[\s\S]*id="styleTransferPresetBeforeImage"[\s\S]*风格前[\s\S]*id="styleTransferPresetAfterImage"[\s\S]*风格后/);
-  assert.match(app, /const STYLE_TRANSFER_CUSTOM_PRESET = "custom"/);
-  assert.match(app, /value:\s*STYLE_TRANSFER_CUSTOM_PRESET,[\s\S]*beforeImage:\s*STYLE_TRANSFER_PRESET_BEFORE_IMAGE,[\s\S]*image:\s*"\.\/assets\/style-presets\/custom-style-reference\.svg"/);
-  for (const value of presetValues) {
-    assert.match(app, new RegExp(`value: "${value}"`));
-  }
-  assert.doesNotMatch(app, /value: "charcoal-sketch"|value: "oil-painting"|value: "pastel-crayon"/);
-  assert.doesNotMatch(app, /createStyleTransferPresetImage|data:image\/svg/);
+  assert.match(html, /id="styleTransferPresetInput"/);
+  assert.match(html, /id="styleTransferPresetComparison"/);
+  assert.match(styles, /\.style-transfer-preset-preview\s*\{/);
+  assert.match(styles, /\.style-transfer-comparison\s*\{/);
+  assert.match(
+    styles,
+    /\.style-transfer-upload-grid\.uses-preset-style\s+\.style-transfer-style-slot\s*\{[\s\S]*display:\s*none;/,
+  );
+  assert.match(app, /const STYLE_TRANSFER_CUSTOM_PRESET = "custom";/);
+  assert.match(app, /const STYLE_TRANSFER_DEFAULT_PRESET = "clay-toy";/);
+  assert.match(app, /const STYLE_TRANSFER_PRESET_BEFORE_IMAGE = "\.\/assets\/style-presets\/style-before\.svg";/);
+  assert.match(app, /const STYLE_TRANSFER_PRESETS = \[/);
   assert.match(app, /beforeImage:\s*STYLE_TRANSFER_PRESET_BEFORE_IMAGE/);
-  const beforeSource = await readFile(new URL("../public/assets/style-presets/style-before.svg", import.meta.url), "utf8");
-  assert.match(beforeSource, /<svg[^>]*viewBox="0 0 640 480"/);
   for (const asset of presetAssets) {
-    assert.match(app, new RegExp(`image: "\\./assets/style-presets/${asset}"`));
-    const assetSource = await readFile(new URL(`../public/assets/style-presets/${asset}`, import.meta.url), "utf8");
-    assert.match(assetSource, /<svg[^>]*viewBox="0 0 640 480"/);
-    assert.doesNotMatch(assetSource, /\uFFFD/);
+    assert.match(app, new RegExp(`image:\\s*"\\.\\/assets\\/style-presets\\/${asset}"`));
   }
-  assert.match(app, /selectedStylePreset:\s*STYLE_TRANSFER_CUSTOM_PRESET/);
   assert.match(app, /function hasSelectedStyleTransferPreset\(\) \{/);
-  assert.match(app, /function renderStyleTransferPreset\(\) \{/);
+  assert.match(app, /function renderStyleTransferPresetPreview\(\) \{/);
   assert.match(app, /const showPreview = Boolean\(preset\.beforeImage && preset\.image\);/);
-  assert.match(app, /styleTransferPresetBeforeImage\.src = preset\.beforeImage;/);
-  assert.match(app, /styleTransferPresetAfterImage\.src = preset\.image;/);
-  assert.match(app, /Selected style preset: \$\{preset\.label\}/);
-  assert.match(app, /const hasStyleInput = Boolean\(state\.styleTransfer\.style\?\.file \|\| hasSelectedStyleTransferPreset\(\)\);/);
-  assert.match(app, /showError\("请先上传原图，并上传风格参考图或选择一个风格。"\);/);
-  assert.match(app, /formData\.set\("styleTransferStylePreset", job\.styleTransferStylePreset\);/);
-  assert.match(server, /function getStyleTransferReferenceImageLabels\(generationMode, styleTransferStylePreset\) \{/);
-  assert.match(server, /const hasStyleTransferPreset = Boolean\(styleTransferStylePreset\);/);
-  assert.match(styles, /\.style-transfer-preset-preview\s*\{[\s\S]*grid-template-columns:\s*minmax\(180px, 220px\) minmax\(0, 1fr\);/);
-  assert.match(styles, /\.style-transfer-preset-comparison\s*\{[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
-  assert.match(styles, /\.style-transfer-preset-figure\s*\{[\s\S]*aspect-ratio:\s*4\s*\/\s*3;/);
+  assert.match(app, /function ensureStyleTransferPresetReferenceFileReady\(\) \{/);
+  assert.match(app, /await ensureStyleTransferPresetReferenceFileReady\(\);[\s\S]*const job = createStyleTransferJob\(\);/);
+  assert.match(app, /styleTransferReferenceImageName:\s*stylePresetFile\?\.name \|\| styleItem\?\.file\?\.name \|\| ""/);
 });
 
 test("style transfer mode keeps the shared studio height sync and mode styling hooks", async () => {
@@ -445,7 +420,7 @@ test("style transfer generation builds a preservation prompt and submits both im
   assert.match(app, /Do not keep anime, cartoon, comic, cel-shaded, line-art, CGI doll, or illustration residue/);
   assert.match(app, /function createStyleTransferJob\(\) \{/);
   assert.match(app, /mode:\s*"style-transfer"/);
-  assert.match(app, /const referenceFiles = getStyleTransferReferenceFiles\(\);[\s\S]*referenceFiles,/);
+  assert.match(app, /referenceFiles:\s*getStyleTransferReferenceFiles\(\)/);
   assert.match(app, /function appendStyleTransferReferencesToFormData\(formData, job\) \{/);
   assert.match(app, /formData\.set\("mode", "style-transfer"\);/);
   assert.match(app, /formData\.set\("styleTransferSourceImageName", job\.styleTransferSourceImageName\);/);
@@ -456,7 +431,7 @@ test("style transfer generation builds a preservation prompt and submits both im
     /startGeneration[\s\S]*if \(state\.studioMode === "style-transfer"\) \{[\s\S]*await ensureStyleTransferGenerationFilesReady\(\);[\s\S]*const job = createStyleTransferJob\(\);/,
   );
   assert.match(server, /STYLE_TRANSFER_REFERENCE_IMAGE_LABELS/);
-  assert.match(server, /referenceImageLabels:\s*getStyleTransferReferenceImageLabels\(generationMode, styleTransferStylePreset\)/);
+  assert.match(server, /referenceImageLabels:\s*generationMode === "style-transfer"\s*\?\s*STYLE_TRANSFER_REFERENCE_IMAGE_LABELS\s*:\s*\[\]/);
 });
 
 test("reference analysis generation uploads prepared reference images", async () => {
@@ -1052,7 +1027,7 @@ test("mobile and Pad studio layout uses dedicated compact workbench layouts", as
   assert.match(html, /id="parameterAdaptiveSection"[\s\S]*data-adaptive-section="parameters"[\s\S]*data-compact-open="false"[\s\S]*<summary class="field-heading adaptive-section-summary">/);
   assert.match(html, /dataset\.uiLayout = "mobile";[\s\S]*dataset\.uiLayout = "tablet";/);
   assert.match(html, /devicePixelRatio[\s\S]*isPhonePhysicalSize[\s\S]*isTabletPhysicalSize[\s\S]*physicalTouchWidth/);
-  assert.match(html, /\.\/styles\.css\?v=20260511-style-transfer-distinctive-1/);
+  assert.match(html, /\.\/styles\.css\?v=20260512-style-transfer-presets-1/);
   assert.doesNotMatch(referenceAdaptiveSection, /\sopen(?:\s|>)/);
   assert.doesNotMatch(parameterAdaptiveSection, /\sopen(?:\s|>)/);
   assert.match(styles, /html,\s*[\r\n]+body\s*\{[\s\S]*overflow-x:\s*clip;/);
@@ -1133,7 +1108,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260511-style-transfer-distinctive-1/);
+  assert.match(html, /\/app\.js\?v=20260512-one-megapixel-sizes-4/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -1543,7 +1518,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260511-style-transfer-distinctive-1/);
+  assert.match(html, /app\.js\?v=20260512-one-megapixel-sizes-4/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);

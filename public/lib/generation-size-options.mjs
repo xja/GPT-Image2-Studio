@@ -17,6 +17,7 @@ const SIZE_OPTIONS_BY_RATIO = {
   "9:16": [
     { value: "auto", label: "自动适配" },
     { value: "720x1280", label: "720 × 1280" },
+    { value: "768x1365", label: "768 × 1365" },
     { value: "864x1536", label: "864 × 1536" },
     { value: "1152x2048", label: "1152 × 2048" },
     { value: "2016x3584", label: "2016 × 3584" },
@@ -38,6 +39,7 @@ const SIZE_OPTIONS_BY_RATIO = {
   "16:9": [
     { value: "auto", label: "自动适配" },
     { value: "1280x720", label: "1280 × 720" },
+    { value: "1365x768", label: "1365 × 768" },
     { value: "1536x864", label: "1536 × 864" },
     { value: "2048x1152", label: "2048 × 1152" },
     { value: "3584x2016", label: "3584 × 2016" },
@@ -90,15 +92,15 @@ const SIZE_OPTIONS_BY_RATIO = {
 const DEFAULT_RATIO = "4:5";
 const DEFAULT_SIZE_BY_RATIO = {
   "1:1": "1024x1024",
-  "5:4": "1280x1024",
-  "9:16": "720x1280",
-  "21:9": "1680x720",
-  "16:9": "1280x720",
-  "4:3": "1024x768",
-  "3:2": "1536x1024",
-  "4:5": "1024x1280",
-  "3:4": "768x1024",
-  "2:3": "1024x1536",
+  "5:4": "1120x896",
+  "9:16": "768x1365",
+  "21:9": "1568x672",
+  "16:9": "1365x768",
+  "4:3": "1152x864",
+  "3:2": "1248x832",
+  "4:5": "896x1120",
+  "3:4": "864x1152",
+  "2:3": "832x1248",
 };
 
 export function getGenerationSizeOptions(ratio = DEFAULT_RATIO) {

@@ -102,7 +102,6 @@ const STYLE_TRANSFER_REFERENCE_IMAGE_LABELS = [
   "Reference image 1: SOURCE image. Preserve content, identity, pose, composition, and layout only. Do not preserve its visual style.",
   "Reference image 2: STYLE reference. This image is the style authority for final rendering, realism level, lighting, texture, color, and material finish.",
 ];
-const STYLE_TRANSFER_SOURCE_IMAGE_LABELS = [STYLE_TRANSFER_REFERENCE_IMAGE_LABELS[0]];
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -129,14 +128,6 @@ function getStaticCacheControl(filePath) {
   const isLibraryAsset = relativeLibPath && !relativeLibPath.startsWith("..") && !isAbsolute(relativeLibPath);
 
   return isPublicAsset || isLibraryAsset ? "no-store" : null;
-}
-
-function getStyleTransferReferenceImageLabels(generationMode, styleTransferStylePreset) {
-  if (generationMode !== "style-transfer") {
-    return [];
-  }
-  const hasStyleTransferPreset = Boolean(styleTransferStylePreset);
-  return hasStyleTransferPreset ? STYLE_TRANSFER_SOURCE_IMAGE_LABELS : STYLE_TRANSFER_REFERENCE_IMAGE_LABELS;
 }
 
 function sendJson(response, statusCode, payload, headers = {}) {
@@ -1196,7 +1187,6 @@ function buildSavedItem({
   generationMode = "",
   styleTransferSourceImageName = "",
   styleTransferReferenceImageName = "",
-  styleTransferStylePreset = "",
   generationStartedAt,
   generationCompletedAt,
   generationDurationMs,
@@ -1221,7 +1211,6 @@ function buildSavedItem({
     generationMode,
     styleTransferSourceImageName,
     styleTransferReferenceImageName,
-    styleTransferStylePreset,
     ratio: ratioOption.value,
     ratioLabel: ratioOption.label,
     size,
@@ -2809,7 +2798,6 @@ async function handleGenerate(request, response) {
     const generationMode = ["style-transfer", "reference-analysis"].includes(generationModeInput) ? generationModeInput : "";
     const styleTransferSourceImageName = String(formData.get("styleTransferSourceImageName") || "").trim();
     const styleTransferReferenceImageName = String(formData.get("styleTransferReferenceImageName") || "").trim();
-    const styleTransferStylePreset = String(formData.get("styleTransferStylePreset") || "").trim();
     clientSessionId = getClientSessionId(request, formData);
     const createdAt = new Date().toISOString();
 
@@ -2856,13 +2844,12 @@ async function handleGenerate(request, response) {
       });
       return;
     }
-    const hasStyleTransferPreset = Boolean(styleTransferStylePreset);
-    if (generationMode === "style-transfer" && referenceImages.length < (hasStyleTransferPreset ? 1 : 2)) {
+    if (generationMode === "style-transfer" && referenceImages.length < 2) {
       generationTaskStore.failTask(clientSessionId, taskId, {
-        errorMessage: "风格迁移需要上传原图，并上传风格参考图或选择一个风格。",
+        errorMessage: "风格迁移需要上传原图和风格参考图。",
       });
       writeSseEvent(response, "error", {
-        message: "风格迁移需要上传原图，并上传风格参考图或选择一个风格。",
+        message: "风格迁移需要上传原图和风格参考图。",
       });
       return;
     }
@@ -2922,7 +2909,6 @@ async function handleGenerate(request, response) {
       generationMode,
       styleTransferSourceImageName,
       styleTransferReferenceImageName,
-      styleTransferStylePreset,
       reasoningEffort,
     });
 
@@ -2931,7 +2917,7 @@ async function handleGenerate(request, response) {
       apiKey: config.apiKey,
       prompt: finalPrompt,
       referenceImages,
-      referenceImageLabels: getStyleTransferReferenceImageLabels(generationMode, styleTransferStylePreset),
+      referenceImageLabels: generationMode === "style-transfer" ? STYLE_TRANSFER_REFERENCE_IMAGE_LABELS : [],
       size: finalSize,
       quality: finalQuality,
       format: toApiOutputFormat(finalFormat),
@@ -3022,7 +3008,6 @@ async function handleGenerate(request, response) {
         generationMode,
         styleTransferSourceImageName,
         styleTransferReferenceImageName,
-        styleTransferStylePreset,
         reasoningEffort,
         generationStartedAt,
         generationCompletedAt,
@@ -3047,7 +3032,6 @@ async function handleGenerate(request, response) {
       generationMode,
       styleTransferSourceImageName,
       styleTransferReferenceImageName,
-      styleTransferStylePreset,
       generationStartedAt,
       generationCompletedAt,
       generationDurationMs,
