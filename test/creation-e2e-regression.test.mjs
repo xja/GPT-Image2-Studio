@@ -249,6 +249,11 @@ test("creation workflow reuses history, reuploads references, tweaks prompts, re
   assert.equal(generatedSet.items.filter((item) => item.status === "completed").length, 4);
   assert.equal(generatedSet.items[0].prompt, "Custom hero prompt from regression.");
   assert.ok(generatedSet.items[0].relativePath);
+  assert.match(generatedSet.items[0].filename, /^01-主图-\d{6}-主图-\d{6}-[a-z0-9]{4}\.png$/u);
+  assert.match(generatedSet.items[1].filename, /^02-卖点图-\d{6}-卖点图-\d{6}-[a-z0-9]{4}\.png$/u);
+  assert.match(generatedSet.items[2].filename, /^03-包装清单图-\d{6}-包装清单图-\d{6}-[a-z0-9]{4}\.png$/u);
+  assert.match(generatedSet.items[3].filename, /^04-口碑问答图-\d{6}-口碑问答图-\d{6}-[a-z0-9]{4}\.png$/u);
+  assert.doesNotMatch(generatedSet.items.map((item) => item.filename).join("\n"), /\b(?:hero|benefit|package|review|qa)\b/i);
 
   const listResponse = await fetch(`${baseUrl}/api/creation/sets`);
   assert.equal(listResponse.status, 200);

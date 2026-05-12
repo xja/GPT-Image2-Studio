@@ -2941,14 +2941,7 @@ function replaceImageDecompositionGenerationKey(oldKey, newKey) {
     return;
   }
 
-  const keys = state.imageDecomposition.generationKeys.filter((entry) => entry !== nextKey);
-  const index = keys.indexOf(currentKey);
-  if (index >= 0) {
-    keys[index] = nextKey;
-    state.imageDecomposition.generationKeys = keys;
-    return;
-  }
-
+  const keys = state.imageDecomposition.generationKeys.filter((entry) => entry !== nextKey && entry !== currentKey);
   state.imageDecomposition.generationKeys = [nextKey, ...keys];
 }
 

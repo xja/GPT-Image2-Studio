@@ -1319,13 +1319,21 @@ function buildCreationSetManifest({
   };
 }
 
+function sanitizeCreationFilenameToken(value, fallback = "creation") {
+  const token = String(value || fallback)
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+  return token || fallback;
+}
+
 function buildCreationImageFilename({ item, createdAt, setId, format }) {
-  const filenameToken = item.filenameToken || item.role || item.itemId || "creation";
+  const filenameToken = sanitizeCreationFilenameToken(item.title || item.filenameToken || item.role || item.itemId, "creation");
   const baseName = createTimestampedFilename({
     format,
-    prompt: `${item.title} ${item.prompt}`,
+    prompt: item.title || item.filenameToken || item.role || item.prompt,
     createdAt,
-    idSource: `${setId}-${item.itemId}`,
+    idSource: `${setId}-${item.slotIndex || item.itemId}`,
   });
   return `${String(item.slotIndex).padStart(2, "0")}-${filenameToken}-${baseName}`;
 }

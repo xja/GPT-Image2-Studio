@@ -6,6 +6,14 @@ const htmlPath = new URL("../public/index.html", import.meta.url);
 const appPath = new URL("../public/app.js", import.meta.url);
 const stylesPath = new URL("../public/styles.css", import.meta.url);
 
+function extractFunctionBefore(source, functionName, nextFunctionName) {
+  const start = source.indexOf(`function ${functionName}`);
+  const end = source.indexOf(`function ${nextFunctionName}`, start + 1);
+  assert.notEqual(start, -1, `${functionName} should exist`);
+  assert.notEqual(end, -1, `${nextFunctionName} should follow ${functionName}`);
+  return source.slice(start, end).trimEnd();
+}
+
 test("image decomposition mode is exposed as an independent Create view", async () => {
   const html = await readFile(htmlPath, "utf8");
   const app = await readFile(appPath, "utf8");
@@ -70,4 +78,30 @@ test("image decomposition layout has responsive overflow guards", async () => {
   assert.match(styles, /\.filmstrip \.image-decomposition-generation-thumb\s*\{[\s\S]*width:\s*100%;[\s\S]*aspect-ratio:\s*auto;/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.image-decomposition-workspace\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\);/);
   assert.match(styles, /html\[data-ui-layout="tablet"\] \.image-decomposition-generate-button,\s*html\[data-ui-layout="mobile"\] \.image-decomposition-generate-button\s*\{[\s\S]*order:\s*2;/);
+});
+
+test("completed image decomposition thumbnails move to the left edge of the strip", async () => {
+  const app = await readFile(appPath, "utf8");
+  const functionSource = extractFunctionBefore(
+    app,
+    "replaceImageDecompositionGenerationKey",
+    "removeImageDecompositionGenerationKey",
+  );
+  const state = {
+    imageDecomposition: {
+      generationKeys: ["file:older-a.png", "job:latest", "file:older-b.png"],
+    },
+  };
+  const replaceImageDecompositionGenerationKey = Function(
+    "state",
+    `${functionSource}\nreturn replaceImageDecompositionGenerationKey;`,
+  )(state);
+
+  replaceImageDecompositionGenerationKey("job:latest", "file:latest.png");
+
+  assert.deepEqual(state.imageDecomposition.generationKeys, [
+    "file:latest.png",
+    "file:older-a.png",
+    "file:older-b.png",
+  ]);
 });

@@ -86,6 +86,29 @@ test("creation planner avoids duplicated punctuation in composed prompt fields",
   assert.doesNotMatch(prompt, /!\./);
 });
 
+test("creation planner gives concrete ecommerce role intent to scene, seeding, material, and benefit images", () => {
+  const plan = buildCreationPlan({
+    productName: "Jointed fishing lure",
+    productDescription: "Segmented lifelike lure with scale texture, steel treble hooks, and flexible tail action",
+    sellingPoints: "fish ignore basic lures\nsharp hooks\ndurable material",
+    targetLanguage: "en",
+    selectedRoles: ["benefit", "scene", "social-proof", "material-closeup"],
+  });
+
+  const promptByRole = Object.fromEntries(plan.items.map((item) => [item.role, item.prompt]));
+
+  assert.match(promptByRole.benefit, /pain-point-driven benefit image/);
+  assert.match(promptByRole.benefit, /shopper pain points/);
+  assert.match(promptByRole.benefit, /resolved benefit visually/);
+  assert.match(promptByRole.scene, /photorealistic product-in-use scene/);
+  assert.match(promptByRole.scene, /being pursued or struck by a fish/);
+  assert.match(promptByRole["social-proof"], /photoreal real-use recommendation image/);
+  assert.match(promptByRole["social-proof"], /angler using it and the caught fish/);
+  assert.match(promptByRole["material-closeup"], /multi-window material detail image/);
+  assert.match(promptByRole["material-closeup"], /several small inset detail panes/);
+  assert.match(promptByRole["material-closeup"], /texture, finish, joints, edges/);
+});
+
 test("creation planner injects Simplified Chinese target-language guidance", () => {
   const plan = buildCreationPlan({
     productName: "云感防晒衣",
@@ -158,7 +181,7 @@ test("creation planner expands ecommerce scenario sets to twelve images", () => 
     ],
   );
   assert.ok(plan.items.every((item) => item.prompt.includes("Live commerce scenario")));
-  assert.ok(plan.items.some((item) => item.prompt.includes("material texture")));
+  assert.ok(plan.items.some((item) => item.prompt.includes("multi-window material detail")));
   assert.ok(plan.items.some((item) => item.prompt.includes("how to use")));
   assert.ok(plan.items.some((item) => item.prompt.includes("dimensions")));
 });

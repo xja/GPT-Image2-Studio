@@ -141,6 +141,46 @@ test("Cloudflare generation uses browser-provided API settings without echoing t
   assert.doesNotMatch(text, /test-browser-key/);
 });
 
+test("Cloudflare creation filenames use Chinese image type names", async () => {
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("productName", "Jointed fishing lure");
+  formData.set("productDescription", "Segmented lifelike lure");
+  formData.set("sellingPoints", "realistic swim action");
+  formData.set("targetLanguage", "en");
+  formData.set("imageCount", "4");
+  formData.set("scenario", "standard");
+  formData.set("industryTemplate", "general");
+  formData.set("selectedRoles", JSON.stringify(["hero", "review-qa"]));
+  formData.set("ratio", "1:1");
+  formData.set("size", "1024x1024");
+  formData.set("format", "png");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/creation/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl() {
+      return makeSseResponse();
+    },
+  });
+
+  const text = await response.text();
+  const events = parseSseEvents(text);
+  const complete = events.find((event) => event.eventName === "complete");
+  const filenames = complete.payload.set.items.map((item) => item.filename).join("\n");
+
+  assert.equal(response.status, 200);
+  assert.match(complete.payload.set.items[0].filename, /^01-主图-cloudflare-/u);
+  assert.match(complete.payload.set.items[1].filename, /^02-口碑问答图-cloudflare-/u);
+  assert.doesNotMatch(filenames, /(?:^|-)hero(?:-|\.|$)|(?:^|-)review(?:-|\.|$)|(?:^|-)qa(?:-|\.|$)|ewqa/i);
+  assert.equal(imageBucket.objects.size, 2);
+});
+
 test("Cloudflare image decomposition uses a single reference image and generated target-language prompt", async () => {
   const seenRequests = [];
   const imageBucket = makeImageBucket();

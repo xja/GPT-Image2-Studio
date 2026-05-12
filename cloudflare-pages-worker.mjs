@@ -281,6 +281,14 @@ function sanitizeStorageSegment(value, fallback = "item") {
     .slice(0, 80) || fallback;
 }
 
+function sanitizeCreationFilenameToken(value, fallback = "creation") {
+  const token = String(value || fallback)
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+  return token || fallback;
+}
+
 function getClientSessionIdFromRequest(request, formData = null) {
   return sanitizeStorageSegment(
     formData?.get?.("clientSessionId") || request.headers.get("x-client-session-id") || "default",
@@ -1295,12 +1303,13 @@ function buildCloudCreationSet({ setId, plan, createdAt, updatedAt, status, item
 }
 
 function buildCloudCreationFilename({ setId, item, createdAt, format }) {
+  const filenameToken = sanitizeCreationFilenameToken(item.title || item.filenameToken || item.role || item.itemId, "creation");
   const cloudFilename = buildCloudFilename({
-    taskId: `${setId}-${item.itemId}`,
+    taskId: `${setId}-${item.slotIndex || item.itemId}`,
     createdAt,
     format,
   });
-  return `${String(item.slotIndex).padStart(2, "0")}-${sanitizeStorageSegment(item.role || item.itemId)}-${cloudFilename}`;
+  return `${String(item.slotIndex).padStart(2, "0")}-${filenameToken}-${cloudFilename}`;
 }
 
 async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
