@@ -126,6 +126,23 @@ test("creation generation accepts references image count marketing scenario and 
   assert.doesNotMatch(worker, /runCreationGenerate[\s\S]*referenceImages:\s*\[\]/);
 });
 
+test("creation batch generation runs items with the configured parallel limit", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+  const generateHandler =
+    server.match(/async function handleCreationGenerate[\s\S]*?\r?\n}\r?\n\r?\nasync function handleCreationRepair/)?.[0] || "";
+  const repairHandler =
+    server.match(/async function handleCreationRepair[\s\S]*?\r?\n}\r?\n\r?\nasync function handleGenerate/)?.[0] || "";
+  const workerGenerateHandler =
+    worker.match(/async function runCreationGenerate[\s\S]*?\r?\n}\r?\n\r?\nfunction streamCreationGenerate/)?.[0] || "";
+
+  assert.match(server, /runWithConcurrency/);
+  assert.match(worker, /runWithConcurrency/);
+  assert.match(generateHandler, /await runWithConcurrency\(\s*plan\.items,\s*MAX_PARALLEL_TASKS_PER_SESSION,/);
+  assert.match(repairHandler, /await runWithConcurrency\(\s*repairItems,\s*MAX_PARALLEL_TASKS_PER_SESSION,/);
+  assert.match(workerGenerateHandler, /await runWithConcurrency\(\s*plan\.items,\s*MAX_PARALLEL_TASKS_PER_SESSION,/);
+});
+
 test("local creation generation accepts reference role metadata", async () => {
   const server = await readFile(serverPath, "utf8");
 

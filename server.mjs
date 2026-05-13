@@ -44,6 +44,7 @@ import {
 import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
 import { mergeRequestPrivateConfig } from "./lib/request-private-config.mjs";
 import { createGenerationTaskStore } from "./lib/generation-task-store.mjs";
+import { runWithConcurrency } from "./lib/limited-concurrency.mjs";
 import {
   DEFAULT_REASONING_EFFORT,
   MAX_CONCURRENT_TASKS_PER_SESSION,
@@ -2255,7 +2256,7 @@ async function handleCreationGenerate(request, response) {
     writeSseEvent(response, "set_started", { set: setManifest });
     writeSseEvent(response, "plan", { setId, items });
 
-    for (const item of plan.items) {
+    await runWithConcurrency(plan.items, MAX_PARALLEL_TASKS_PER_SESSION, async (item) => {
       const taskId = `${setId}-${item.itemId}`;
       const generationStartedAt = new Date().toISOString();
       const generationStartedAtMs = Date.now();
@@ -2421,7 +2422,7 @@ async function handleCreationGenerate(request, response) {
           releaseSessionTaskSlot(clientSessionId, taskId);
         }
       }
-    }
+    });
 
     const finalSet = await creationSetStore.saveManifest(
       buildCreationSetManifest({
@@ -2601,7 +2602,7 @@ async function handleCreationRepair(request, response) {
       itemIds: repairItems.map((item) => item.itemId),
     });
 
-    for (const item of repairItems) {
+    await runWithConcurrency(repairItems, MAX_PARALLEL_TASKS_PER_SESSION, async (item) => {
       const repairItem = item;
       const taskId = `${setId}-repair-${item.itemId}`;
       const generationStartedAt = new Date().toISOString();
@@ -2778,7 +2779,7 @@ async function handleCreationRepair(request, response) {
           releaseSessionTaskSlot(clientSessionId, taskId);
         }
       }
-    }
+    });
 
     const finalSet = await creationSetStore.saveManifest(
       buildCreationSetManifest({

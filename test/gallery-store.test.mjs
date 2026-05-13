@@ -55,6 +55,32 @@ test("gallery store prefixes the output image folder with the image date", async
   await access(join(outputDir, "json", "2026-04", "04-22", "2026-04-22-image", "demo.json"));
 });
 
+test("gallery store preserves every index entry during concurrent saves", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-concurrent-"));
+  const outputDir = join(rootDir, "output");
+  const indexPath = join(rootDir, ".local", "gallery-index.json");
+  const filenames = Array.from({ length: 8 }, (_value, index) => `concurrent-${index + 1}.png`);
+
+  await Promise.all(
+    filenames.map((filename, index) =>
+      saveGeneratedAsset({
+        outputDir,
+        indexPath,
+        filename,
+        imageBuffer: Buffer.from(filename),
+        metadata: {
+          prompt: filename,
+          createdAt: `2026-04-22T12:00:0${index}.000Z`,
+          format: "png",
+        },
+      }),
+    ),
+  );
+
+  const indexPayload = JSON.parse(await readFile(indexPath, "utf8"));
+  assert.deepEqual(Object.keys(indexPayload).sort(), filenames.sort());
+});
+
 test("gallery store can save PPT slide images inside a named PPT deck folder", async () => {
   const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-ppt-folder-"));
   const outputDir = join(rootDir, "output");

@@ -29,6 +29,7 @@ import {
 } from "./lib/ppt-completion.mjs";
 import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
 import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
+import { runWithConcurrency } from "./lib/limited-concurrency.mjs";
 import { requestPromptAgentAnalysis } from "./lib/prompt-agent.mjs";
 import {
   DEFAULT_BASE_URL,
@@ -1379,7 +1380,7 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
   await writeSseEvent(writer, "set_started", { set });
   await writeSseEvent(writer, "plan", { setId, items });
 
-  for (const item of plan.items) {
+  await runWithConcurrency(plan.items, MAX_PARALLEL_TASKS_PER_SESSION, async (item) => {
     const generationStartedAt = new Date().toISOString();
     const generationStartedAtMs = Date.now();
     let finalBase64 = "";
@@ -1503,7 +1504,7 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
         set,
       });
     }
-  }
+  });
 
   await writeSseEvent(writer, "complete", {
     set: buildCloudCreationSet({
