@@ -41,12 +41,16 @@ test("server saves creation assets into a dated creation folder and hides them f
   assert.match(galleryStore, /targetLanguage/);
 });
 
-test("daily output opener prepares image ppt and creation folders", async () => {
+test("daily output opener prepares separated mode folders", async () => {
   const server = await readFile(serverPath, "utf8");
 
-  assert.match(server, /`\$\{todayDateFolder\}-image`/);
+  assert.match(server, /`\$\{todayDateFolder\}-prompt`/);
+  assert.match(server, /`\$\{todayDateFolder\}-style-transfer`/);
+  assert.match(server, /`\$\{todayDateFolder\}-reference-analysis`/);
+  assert.match(server, /`\$\{todayDateFolder\}-image-decomposition`/);
   assert.match(server, /`\$\{todayDateFolder\}-ppt`/);
   assert.match(server, /`\$\{todayDateFolder\}-creation`/);
+  assert.match(server, /`\$\{todayDateFolder\}-article`/);
 });
 
 test("server opens a selected creation set folder by manifest id", async () => {

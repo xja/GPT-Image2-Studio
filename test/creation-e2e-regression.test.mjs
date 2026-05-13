@@ -183,6 +183,28 @@ function getCompleteSet(events) {
   return complete.payload.set;
 }
 
+function summarizeCreationEvents(events = []) {
+  return events
+    .map((event) => ({
+      eventName: event.eventName,
+      itemId: event.payload.itemId || event.payload.item?.itemId || "",
+      message: event.payload.message || event.payload.item?.error || "",
+      setStatus: event.payload.set?.status || "",
+      itemStatus: event.payload.item?.status || "",
+    }))
+    .filter((entry) => entry.eventName !== "item_partial_image" && entry.eventName !== "item_final_image");
+}
+
+function summarizeCreationItems(set = {}) {
+  return (set.items || []).map((item) => ({
+    itemId: item.itemId,
+    status: item.status,
+    filename: item.filename,
+    relativePath: item.relativePath,
+    error: item.error,
+  }));
+}
+
 test("creation workflow reuses history, reuploads references, tweaks prompts, repairs items, and exposes asset paths", async (t) => {
   const tempRoot = await mkdtemp(join(tmpdir(), "creation-e2e-"));
   const outputDir = join(tempRoot, "output");
@@ -298,7 +320,18 @@ test("creation workflow reuses history, reuploads references, tweaks prompts, re
     repairIncompleteResult.text,
   );
   const repairedSet = getCompleteSet(repairIncompleteResult.events);
-  assert.equal(repairedSet.status, "completed");
+  assert.equal(
+    repairedSet.status,
+    "completed",
+    JSON.stringify(
+      {
+        events: summarizeCreationEvents(repairIncompleteResult.events),
+        items: summarizeCreationItems(repairedSet),
+      },
+      null,
+      2,
+    ),
+  );
   assert.equal(repairedSet.items[1].status, "completed");
   assert.ok(repairedSet.items[1].relativePath);
 

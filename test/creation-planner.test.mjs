@@ -86,13 +86,13 @@ test("creation planner avoids duplicated punctuation in composed prompt fields",
   assert.doesNotMatch(prompt, /!\./);
 });
 
-test("creation planner gives concrete ecommerce role intent to scene, seeding, material, and benefit images", () => {
+test("creation planner gives concrete ecommerce role intent to scene, seeding, material, usage, and benefit images", () => {
   const plan = buildCreationPlan({
     productName: "Jointed fishing lure",
     productDescription: "Segmented lifelike lure with scale texture, steel treble hooks, and flexible tail action",
     sellingPoints: "fish ignore basic lures\nsharp hooks\ndurable material",
     targetLanguage: "en",
-    selectedRoles: ["benefit", "scene", "social-proof", "material-closeup"],
+    selectedRoles: ["benefit", "scene", "social-proof", "usage-steps", "material-closeup"],
   });
 
   const promptByRole = Object.fromEntries(plan.items.map((item) => [item.role, item.prompt]));
@@ -103,7 +103,15 @@ test("creation planner gives concrete ecommerce role intent to scene, seeding, m
   assert.match(promptByRole.scene, /photorealistic product-in-use scene/);
   assert.match(promptByRole.scene, /being pursued or struck by a fish/);
   assert.match(promptByRole["social-proof"], /photoreal real-use recommendation image/);
-  assert.match(promptByRole["social-proof"], /angler using it and the caught fish/);
+  assert.match(promptByRole["social-proof"], /one coherent catch proof/);
+  assert.match(promptByRole["social-proof"], /angler holding the caught fish/);
+  assert.match(promptByRole["social-proof"], /same lure is attached to the fishing line through the front line-tie or split ring/);
+  assert.match(promptByRole["social-proof"], /hook point visibly set in the fish mouth, lip, or jaw/);
+  assert.match(promptByRole["social-proof"], /Do not show a disconnected lure/);
+  assert.match(promptByRole["usage-steps"], /Preserve the supplied reference product as the unchanged subject/);
+  assert.match(promptByRole["usage-steps"], /do not redesign the lure body, paint pattern, segments, tail, hooks, lip, blade, or hardware/);
+  assert.match(promptByRole["usage-steps"], /attach the fishing line to the actual visible line-tie ring or tow eye on the reference lure/);
+  assert.match(promptByRole["usage-steps"], /do not tie the line to the body, eye, hook hanger, tail, diving lip, blade, or an invented ring/);
   assert.match(promptByRole["material-closeup"], /multi-window material detail image/);
   assert.match(promptByRole["material-closeup"], /several small inset detail panes/);
   assert.match(promptByRole["material-closeup"], /texture, finish, joints, edges/);

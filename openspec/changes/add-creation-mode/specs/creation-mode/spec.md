@@ -128,7 +128,7 @@ The system SHALL apply the selected target language to every Creation Mode item 
 - **THEN** each generated item prompt instructs the image generator to use concise Simplified Chinese marketing copy for image text
 
 ### Requirement: Creation assets are stored under the creation folder
-The system SHALL save Creation Mode generated images under `Pictures/YYYY-MM/MM-DD/YYYY-MM-DD-creation/<set-folder>/`, which is beside `YYYY-MM-DD-image` and `YYYY-MM-DD-ppt` for the same date.
+The system SHALL save Creation Mode generated images under `Pictures/YYYY-MM/MM-DD/YYYY-MM-DD-creation/<set-folder>/`, which is beside the prompt, style-transfer, reference-analysis, image-decomposition, and PPT folders for the same date.
 
 #### Scenario: Creation image is saved
 - **WHEN** a Creation Mode item finishes generation on May 5, 2026
@@ -136,7 +136,7 @@ The system SHALL save Creation Mode generated images under `Pictures/YYYY-MM/MM-
 
 #### Scenario: User opens the output directory
 - **WHEN** the app prepares the daily output folders
-- **THEN** the same date folder contains creation, image, and ppt output folders
+- **THEN** the same date folder contains creation, prompt, style-transfer, reference-analysis, image-decomposition, article, and ppt output folders
 
 ### Requirement: Creation records are set-based
 The system SHALL persist Creation Mode records as set manifests with set-level input, target language, marketing scenario, industry template, industry template path when available, item roles, item statuses, prompts, image paths, and partial-failure status.

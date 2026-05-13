@@ -97,7 +97,7 @@ const pptDeckStore = createPptDeckStore({ outputDir, publicBasePath: "/output" }
 const creationSetStore = createCreationSetStore({ outputDir, publicBasePath: "/output" });
 const articleIllustrationSetStore = createArticleIllustrationSetStore({ outputDir, publicBasePath: "/output" });
 const port = Number(process.env.PORT || 3600);
-const activeTasksBySession = new Map();
+const activeTasksBySessionScope = new Map();
 const PPT_SOURCE_EXTENSIONS = new Set([".pdf", ".docx", ".pptx", ".txt", ".md", ".csv"]);
 const ARTICLE_SOURCE_EXTENSIONS = new Set([".txt", ".md", ".csv", ".json"]);
 const PPT_SLIDE_SIZE = "2048x1152";
@@ -154,6 +154,15 @@ function getStyleTransferReferenceImageLabels(generationMode, styleTransferStyle
 function normalizeGenerationMode(value) {
   const mode = String(value || "").trim();
   return GENERATION_MODES.has(mode) ? mode : "";
+}
+
+function getStudioGenerationRequestScope(generationMode) {
+  return generationMode || "prompt";
+}
+
+function getGenerationTaskSlotScopeKey(sessionId, requestScope) {
+  const scope = String(requestScope || "prompt").trim() || "prompt";
+  return `${sessionId}\n${scope}`;
 }
 
 function sendJson(response, statusCode, payload, headers = {}) {
@@ -348,26 +357,28 @@ function getClientSessionIdFromRequest(request, url) {
   return resolved || "global-default-session";
 }
 
-function claimSessionTaskSlot(sessionId, taskId) {
-  const activeTasks = activeTasksBySession.get(sessionId) || new Set();
+function claimSessionTaskSlot(sessionId, taskId, requestScope) {
+  const scopeKey = getGenerationTaskSlotScopeKey(sessionId, requestScope);
+  const activeTasks = activeTasksBySessionScope.get(scopeKey) || new Set();
   if (activeTasks.size >= MAX_PARALLEL_TASKS_PER_SESSION) {
     return false;
   }
 
   activeTasks.add(taskId);
-  activeTasksBySession.set(sessionId, activeTasks);
+  activeTasksBySessionScope.set(scopeKey, activeTasks);
   return true;
 }
 
-function releaseSessionTaskSlot(sessionId, taskId) {
-  const activeTasks = activeTasksBySession.get(sessionId);
+function releaseSessionTaskSlot(sessionId, taskId, requestScope) {
+  const scopeKey = getGenerationTaskSlotScopeKey(sessionId, requestScope);
+  const activeTasks = activeTasksBySessionScope.get(scopeKey);
   if (!activeTasks) {
     return;
   }
 
   activeTasks.delete(taskId);
   if (activeTasks.size === 0) {
-    activeTasksBySession.delete(sessionId);
+    activeTasksBySessionScope.delete(scopeKey);
   }
 }
 
@@ -431,7 +442,10 @@ async function handleOpenOutput(response) {
   const todayOutputDir = join(outputDir, todayMonthFolder, todayDayFolder);
   await Promise.all([
     mkdir(todayOutputDir, { recursive: true }),
-    mkdir(join(todayOutputDir, `${todayDateFolder}-image`), { recursive: true }),
+    mkdir(join(todayOutputDir, `${todayDateFolder}-prompt`), { recursive: true }),
+    mkdir(join(todayOutputDir, `${todayDateFolder}-style-transfer`), { recursive: true }),
+    mkdir(join(todayOutputDir, `${todayDateFolder}-reference-analysis`), { recursive: true }),
+    mkdir(join(todayOutputDir, `${todayDateFolder}-image-decomposition`), { recursive: true }),
     mkdir(join(todayOutputDir, `${todayDateFolder}-ppt`), { recursive: true }),
     mkdir(join(todayOutputDir, `${todayDateFolder}-creation`), { recursive: true }),
     mkdir(join(todayOutputDir, `${todayDateFolder}-article`), { recursive: true }),
@@ -1688,6 +1702,7 @@ async function handleArticleIllustrationGenerate(request, response, { referenceO
     }
 
     const clientSessionId = getClientSessionId(request, formData);
+    const generationRequestScope = "article-illustration";
     const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || "3:2"));
     const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
     const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
@@ -1745,7 +1760,7 @@ async function handleArticleIllustrationGenerate(request, response, { referenceO
       let slotClaimed = false;
 
       try {
-        if (!claimSessionTaskSlot(clientSessionId, taskId)) {
+        if (!claimSessionTaskSlot(clientSessionId, taskId, generationRequestScope)) {
           throw new Error(`同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
         }
         slotClaimed = true;
@@ -1928,7 +1943,7 @@ async function handleArticleIllustrationGenerate(request, response, { referenceO
         });
       } finally {
         if (slotClaimed) {
-          releaseSessionTaskSlot(clientSessionId, taskId);
+          releaseSessionTaskSlot(clientSessionId, taskId, generationRequestScope);
         }
       }
     }
@@ -2212,6 +2227,7 @@ async function handleCreationGenerate(request, response) {
     }
 
     const clientSessionId = getClientSessionId(request, formData);
+    const generationRequestScope = "creation";
     const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || "1:1"));
     const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
     const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
@@ -2264,7 +2280,7 @@ async function handleCreationGenerate(request, response) {
       let slotClaimed = false;
 
       try {
-        if (!claimSessionTaskSlot(clientSessionId, taskId)) {
+        if (!claimSessionTaskSlot(clientSessionId, taskId, generationRequestScope)) {
           throw new Error(`同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
         }
         slotClaimed = true;
@@ -2419,7 +2435,7 @@ async function handleCreationGenerate(request, response) {
         });
       } finally {
         if (slotClaimed) {
-          releaseSessionTaskSlot(clientSessionId, taskId);
+          releaseSessionTaskSlot(clientSessionId, taskId, generationRequestScope);
         }
       }
     });
@@ -2553,6 +2569,7 @@ async function handleCreationRepair(request, response) {
     };
 
     const clientSessionId = getClientSessionId(request, formData);
+    const generationRequestScope = "creation";
     const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || "1:1"));
     const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
     const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
@@ -2611,7 +2628,7 @@ async function handleCreationRepair(request, response) {
       let slotClaimed = false;
 
       try {
-        if (!claimSessionTaskSlot(clientSessionId, taskId)) {
+        if (!claimSessionTaskSlot(clientSessionId, taskId, generationRequestScope)) {
           throw new Error(`同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
         }
         slotClaimed = true;
@@ -2776,7 +2793,7 @@ async function handleCreationRepair(request, response) {
         });
       } finally {
         if (slotClaimed) {
-          releaseSessionTaskSlot(clientSessionId, taskId);
+          releaseSessionTaskSlot(clientSessionId, taskId, generationRequestScope);
         }
       }
     });
@@ -2823,6 +2840,7 @@ async function handleGenerate(request, response) {
   const fallbackTaskId = randomUUID();
   let taskId = fallbackTaskId;
   let clientSessionId = "";
+  let generationRequestScope = "prompt";
   let slotClaimed = false;
   let taskRegistered = false;
 
@@ -2846,6 +2864,7 @@ async function handleGenerate(request, response) {
     const requestedFormatInput = String(formData.get("format") || "").trim().toLowerCase();
     const generationModeInput = String(formData.get("mode") || "").trim();
     const generationMode = normalizeGenerationMode(generationModeInput);
+    generationRequestScope = getStudioGenerationRequestScope(generationMode);
     const isImageDecomposition = generationMode === IMAGE_DECOMPOSITION_MODE;
     const targetLanguageInput = String(formData.get("targetLanguage") || "").trim();
     const customTargetLanguageInput = String(formData.get("customTargetLanguage") || "").trim();
@@ -2957,7 +2976,7 @@ async function handleGenerate(request, response) {
       formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
     );
 
-    if (!claimSessionTaskSlot(clientSessionId, taskId)) {
+    if (!claimSessionTaskSlot(clientSessionId, taskId, generationRequestScope)) {
       generationTaskStore.failTask(clientSessionId, taskId, {
         errorMessage: `同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`,
       });
@@ -3176,7 +3195,7 @@ async function handleGenerate(request, response) {
     });
   } finally {
     if (clientSessionId && slotClaimed) {
-      releaseSessionTaskSlot(clientSessionId, taskId);
+      releaseSessionTaskSlot(clientSessionId, taskId, generationRequestScope);
     }
     if (!response.destroyed && !response.writableEnded) {
       response.end();
