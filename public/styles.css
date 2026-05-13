@@ -1283,6 +1283,7 @@ textarea::-webkit-scrollbar-corner {
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-auto-rows: max-content;
   align-items: start;
   gap: 14px;
   padding: 2px 4px 8px 0;
@@ -1304,7 +1305,7 @@ textarea::-webkit-scrollbar-corner {
   grid-template-rows: auto auto auto;
   align-content: start;
   gap: 10px;
-  min-height: 0;
+  min-height: max-content;
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1312,7 +1313,7 @@ textarea::-webkit-scrollbar-corner {
 }
 
 .creation-card.is-generating {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
 }
 
 .creation-card-head {
@@ -1355,7 +1356,7 @@ textarea::-webkit-scrollbar-corner {
 
 .creation-card-media.is-loading {
   padding: 0;
-  width: calc(100% - 12px);
+  width: min(100%, 280px);
   justify-self: center;
   align-self: center;
   border-color: color-mix(in srgb, var(--accent) 30%, rgba(255, 255, 255, 0.08));

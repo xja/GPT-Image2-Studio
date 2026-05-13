@@ -1553,8 +1553,8 @@ test("creation mode exposes record detail and item repair actions", async () => 
   assert.match(styles, /\.creation-record-detail span\s*\{[\s\S]*overflow-wrap:\s*anywhere;/);
   assert.match(styles, /\.creation-card-actions\s*\{/);
   assert.match(styles, /\.creation-card-path\s*\{/);
-  assert.match(styles, /\.creation-card\s*\{[\s\S]*position:\s*relative;[\s\S]*isolation:\s*isolate;/);
-  assert.match(styles, /\.creation-result-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(240px,\s*1fr\)\);/);
+  assert.match(styles, /\.creation-card\s*\{[\s\S]*position:\s*relative;[\s\S]*isolation:\s*isolate;[\s\S]*min-height:\s*max-content;/);
+  assert.match(styles, /\.creation-result-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(240px,\s*1fr\)\);[\s\S]*grid-auto-rows:\s*max-content;/);
   assert.match(styles, /\.creation-card-media\s*\{[\s\S]*width:\s*min\(100%,\s*280px\);[\s\S]*aspect-ratio:\s*1\s*\/\s*1;/);
   assert.match(styles, /\.creation-card-actions \.mini-action\s*\{[\s\S]*height:\s*34px;/);
   assert.match(styles, /\.creation-card-editor\s*\{[\s\S]*position:\s*fixed;[\s\S]*right:\s*24px;[\s\S]*bottom:\s*24px;[\s\S]*z-index:\s*75;[\s\S]*width:\s*min\(520px,\s*calc\(100vw - 32px\)\);/);
@@ -1614,9 +1614,13 @@ test("creation generation cards replace plan details with loading animation", as
   assert.match(app, /state\.creation\.generationScope = "full";/);
   assert.match(app, /state\.creation\.generationScope = itemId \? "single" : "repair";/);
 
+  const generatingCardRule = styles.match(/\.creation-card\.is-generating\s*\{[\s\S]*?\}/)?.[0] || "";
+  assert.match(generatingCardRule, /grid-template-rows:\s*auto\s+auto;/);
+  assert.doesNotMatch(generatingCardRule, /minmax\(0,\s*1fr\)/);
+  assert.doesNotMatch(styles, /\.creation-result-grid:has\(\.creation-card\.is-generating\)/);
   assert.match(styles, /\.creation-card\.is-generating\s*\{/);
   assert.match(styles, /\.creation-card-media\.is-loading\s*\{/);
-  assert.match(styles, /\.creation-card-media\.is-loading\s*\{[\s\S]*width:\s*calc\(100% - 12px\);/);
+  assert.match(styles, /\.creation-card-media\.is-loading\s*\{[\s\S]*width:\s*min\(100%,\s*280px\);/);
   assert.match(styles, /\.creation-card-loading\s*\{[\s\S]*min-height:\s*132px;[\s\S]*padding:\s*12px;/);
   assert.match(styles, /\.creation-card-loading-motion span\s*\{[\s\S]*animation:\s*creation-card-loading-bar/);
   assert.match(styles, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.creation-card-loading-motion span[\s\S]*animation:\s*none;/);
