@@ -988,7 +988,11 @@ test("image upload zones collapse into compact thumbnail grids after files are p
   assert.match(styles, /\.reference-dropzone\.is-compact-hidden\s*\{[\s\S]*position:\s*absolute;[\s\S]*clip-path:\s*inset\(50%\);/);
   assert.match(styles, /\.reference-add-card\s*\{/);
   assert.match(styles, /\.reference-add-button\s*\{/);
+  assert.match(styles, /\.style-transfer-upload-grid\.uses-preset-style \.style-transfer-source-slot\s*\{[\s\S]*width:\s*calc\(\(100% - 12px\) \/ 2\);[\s\S]*justify-self:\s*center;/);
+  assert.match(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-dropzone\s*\{[\s\S]*aspect-ratio:\s*1\s*\/\s*1;[\s\S]*height:\s*auto;/);
   assert.match(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-slot:has\(\.style-transfer-dropzone\.is-compact-hidden\)\s*\{[\s\S]*grid-template-rows:\s*minmax\(132px,\s*auto\);/);
+  assert.match(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-grid \.reference-preview-button\s*\{[\s\S]*aspect-ratio:\s*1\s*\/\s*1;[\s\S]*height:\s*auto;/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.style-transfer-upload-grid\.uses-preset-style \.style-transfer-source-slot\s*\{[\s\S]*width:\s*100%;/);
 
   assert.match(app, /function syncReferenceDropzoneCompact\(dropzone, hasFiles\) \{/);
   assert.match(app, /function createReferenceAddCard\(\{ input, label, onFiles \}\) \{/);
