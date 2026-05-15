@@ -5348,10 +5348,8 @@ html[data-ui-layout="mobile"] .image-decomposition-generation-canvas {
   min-height: 46px;
   padding: var(--gallery-section-header-padding);
   border-radius: 14px;
-  border: 1px solid rgba(135, 156, 255, 0.16);
-  background:
-    linear-gradient(180deg, rgba(14, 20, 36, 0.94), rgba(14, 20, 36, 0.84)),
-    rgba(14, 20, 36, 0.88);
+  border: 1px solid var(--overlay-border-muted);
+  background: var(--overlay-surface-bg-soft);
   backdrop-filter: blur(14px);
 }
 

@@ -755,6 +755,15 @@ test("compact select controls use theme-aware form surfaces", async () => {
   );
 });
 
+test("gallery date section headers use theme-aware surfaces", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+  const gallerySectionHeadRule = readCssRule(styles, ".gallery-section-head");
+
+  assert.match(gallerySectionHeadRule, /border:\s*1px solid var\(--overlay-border-muted\);/);
+  assert.match(gallerySectionHeadRule, /background:\s*var\(--overlay-surface-bg-soft\);/);
+  assert.doesNotMatch(gallerySectionHeadRule, /rgba\(14,\s*20,\s*36/);
+});
+
 test("prompt agent preview marks uploaded images as zoomable and animates analysis", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
@@ -1093,7 +1102,7 @@ test("mobile and Pad studio layout uses dedicated compact workbench layouts", as
   assert.match(html, /id="parameterAdaptiveSection"[\s\S]*data-adaptive-section="parameters"[\s\S]*data-compact-open="false"[\s\S]*<summary class="field-heading adaptive-section-summary">/);
   assert.match(html, /dataset\.uiLayout = "mobile";[\s\S]*dataset\.uiLayout = "tablet";/);
   assert.match(html, /devicePixelRatio[\s\S]*isPhonePhysicalSize[\s\S]*isTabletPhysicalSize[\s\S]*physicalTouchWidth/);
-  assert.match(html, /\.\/styles\.css\?v=20260515-light-theme-surfaces-2/);
+  assert.match(html, /\.\/styles\.css\?v=20260515-light-theme-surfaces-3/);
   assert.doesNotMatch(referenceAdaptiveSection, /\sopen(?:\s|>)/);
   assert.doesNotMatch(parameterAdaptiveSection, /\sopen(?:\s|>)/);
   assert.match(styles, /html,\s*[\r\n]+body\s*\{[\s\S]*overflow-x:\s*clip;/);
