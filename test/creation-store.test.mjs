@@ -13,11 +13,11 @@ import {
 test("creation store builds dated creation directories beside image and ppt folders", () => {
   assert.equal(
     buildCreationRelativeDir({
-      createdAt: "2026-05-05T09:08:07.000Z",
+      createdAt: new Date(2026, 4, 5, 9, 8, 7),
       productName: "AeroPress Clear",
       setId: "creation-set-abc12345",
     }),
-    "2026-05/05-05/2026-05-05-creation/AeroPressClear-abc12345",
+    "2026-05/05-05/2026-05-05-creation/0908-AeroPressClear-abc12345",
   );
 });
 

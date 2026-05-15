@@ -111,10 +111,16 @@ test("creation planner gives concrete ecommerce role intent to scene, seeding, m
   assert.match(promptByRole["social-proof"], /if the reference lure has a front\/nose tow eye ahead of the diving lip, attach the line there/);
   assert.match(promptByRole["social-proof"], /original belly or tail treble hook point visibly set in the fish mouth, lip, or jaw/);
   assert.match(promptByRole["social-proof"], /Keep the supplied reference lure's body, mouth, segments, tail, hooks, and hardware unchanged/);
+  assert.match(promptByRole["social-proof"], /same SKU: same silhouette, segment count, head direction, tail shape, paint pattern, belly hook hangers, and tail hook hardware/);
+  assert.match(promptByRole["social-proof"], /Keep every belly treble hanging below the lure body at its original underside hanger position/);
+  assert.match(promptByRole["social-proof"], /do not move any belly hook, split ring, or hook hanger onto the back, spine, side, fish mouth, or angler hand/);
+  assert.match(promptByRole["social-proof"], /the lure body must stay outside or beside the fish mouth while an original underside treble point hooks the mouth/);
   assert.match(promptByRole["social-proof"], /Do not show a disconnected lure/);
   assert.match(promptByRole["social-proof"], /do not invent a top\/back ring, dorsal ring, mouth ring, standalone hook, or new front attachment hardware/);
   assert.match(promptByRole["usage-steps"], /Preserve the supplied reference product as the unchanged subject/);
   assert.match(promptByRole["usage-steps"], /do not redesign the lure body, paint pattern, segments, tail, hooks, lip, blade, or hardware/);
+  assert.match(promptByRole["usage-steps"], /keep belly and tail treble hooks hanging from their original underside and tail hangers/);
+  assert.match(promptByRole["usage-steps"], /never relocate hooks or hangers onto the top, back, side, fish mouth, or hand/);
   assert.match(promptByRole["usage-steps"], /attach the fishing line through the exact visible line-tie, tow eye, or split ring already present on the reference lure/);
   assert.match(promptByRole["usage-steps"], /if the reference lure uses a front\/nose tow eye ahead of the diving lip, use that front\/nose tow eye/);
   assert.match(promptByRole["usage-steps"], /do not assume or add a top\/back ring unless it is already visible in the reference/);
