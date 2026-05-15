@@ -19,7 +19,7 @@ import {
   toApiOutputFormat,
   toOutputFormatMimeType,
 } from "./lib/output-format-options.mjs";
-import { buildCreationPlan } from "./lib/creation-planner.mjs";
+import { buildCreationPlan, normalizeCreationLogoOptions } from "./lib/creation-planner.mjs";
 import { generatePptDeckOutline } from "./lib/ppt-deck-workflow.mjs";
 import { buildSlideEditPrompt, buildSlideImagePrompts } from "./lib/ppt-slide-prompts.mjs";
 import {
@@ -234,6 +234,35 @@ async function toReferenceImages(files) {
       };
     }),
   );
+}
+
+async function readCreationLogoImage(formData) {
+  const logoImages = await toReferenceImages([
+    ...formData.getAll("logoImage"),
+    ...formData.getAll("creationLogoImage"),
+  ]);
+  if (logoImages.length > 1) {
+    throw new Error("Logo 最多只能上传 1 张。");
+  }
+  if (logoImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+    throw new Error("Logo 仅支持图片文件。");
+  }
+  return logoImages[0] || null;
+}
+
+function buildCreationLogoOptionsFromFormData(formData, logoImage = null) {
+  const submittedLogo = normalizeCreationLogoOptions(formData.get("logoOptions"));
+  return normalizeCreationLogoOptions({
+    ...submittedLogo,
+    filename: logoImage?.filename || submittedLogo.filename,
+    enabled: Boolean(logoImage) || submittedLogo.enabled,
+    placement: formData.get("logoPlacement") || submittedLogo.placement,
+    background: formData.get("logoBackground") || submittedLogo.background,
+  });
+}
+
+function appendCreationLogoReference(referenceImages = [], logoImage = null) {
+  return logoImage ? [...referenceImages, logoImage] : referenceImages;
 }
 
 function arrayBufferToBase64(buffer) {
@@ -1295,6 +1324,7 @@ function buildCloudCreationSet({ setId, plan, createdAt, updatedAt, status, item
     industryTemplatePath: plan.industryTemplatePath,
     selectedRoles: plan.selectedRoles,
     referenceImageNames,
+    logo: plan.logo || null,
     createdAt,
     updatedAt: updatedAt || createdAt,
     status,
@@ -1326,12 +1356,14 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
     ...formData.getAll("referenceImages"),
     ...formData.getAll("referenceImage"),
   ]);
+  const logoImage = await readCreationLogoImage(formData);
   if (referenceImages.length > MAX_REFERENCE_IMAGES) {
     throw new Error(`参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`);
   }
   if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
     throw new Error("仅支持图片参考文件。");
   }
+  const generationReferenceImages = appendCreationLogoReference(referenceImages, logoImage);
   const referenceImageNames = referenceImages.map((image) => image.filename).filter(Boolean);
   const plan = buildCreationPlan({
     productName: formData.get("productName"),
@@ -1344,6 +1376,7 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
     scenario: formData.get("scenario"),
     industryTemplate: formData.get("industryTemplate"),
     selectedRoles: formData.get("selectedRoles"),
+    logoOptions: buildCreationLogoOptionsFromFormData(formData, logoImage),
   });
   const config = normalizePrivateConfig(formData);
   const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || "1:1"));
@@ -1395,7 +1428,7 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
         prompt: appendRatioHintToPrompt(item.prompt, ratioOption),
-        referenceImages,
+        referenceImages: generationReferenceImages,
         size: finalSize,
         quality: finalQuality,
         format: toApiOutputFormat(finalFormat),

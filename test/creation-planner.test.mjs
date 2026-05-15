@@ -7,6 +7,8 @@ import {
   getCreationIndustryRolePreset,
   getCreationScenarioRoleInstruction,
   getCreationScenarioRolePreset,
+  normalizeCreationLogoOptions,
+  normalizeCreationDimensionUnitMode,
   normalizeCreationReferenceAnalysis,
   normalizeCreationImageCount,
   normalizeCreationIndustryTemplate,
@@ -105,13 +107,16 @@ test("creation planner gives concrete ecommerce role intent to scene, seeding, m
   assert.match(promptByRole["social-proof"], /photoreal real-use recommendation image/);
   assert.match(promptByRole["social-proof"], /one coherent catch proof/);
   assert.match(promptByRole["social-proof"], /angler holding the caught fish/);
-  assert.match(promptByRole["social-proof"], /same lure is attached to the fishing line through the front line-tie or split ring/);
-  assert.match(promptByRole["social-proof"], /hook point visibly set in the fish mouth, lip, or jaw/);
+  assert.match(promptByRole["social-proof"], /same lure is attached to the fishing line through the real top\/back line-tie ring or split ring visible on the reference lure/);
+  assert.match(promptByRole["social-proof"], /existing lower treble hook point visibly set in the fish mouth, lip, or jaw/);
+  assert.match(promptByRole["social-proof"], /Keep the supplied reference lure's body, mouth, segments, tail, hooks, and hardware unchanged/);
   assert.match(promptByRole["social-proof"], /Do not show a disconnected lure/);
+  assert.match(promptByRole["social-proof"], /do not add a mouth hook, extra mouth ring, or new front attachment hardware/);
   assert.match(promptByRole["usage-steps"], /Preserve the supplied reference product as the unchanged subject/);
   assert.match(promptByRole["usage-steps"], /do not redesign the lure body, paint pattern, segments, tail, hooks, lip, blade, or hardware/);
-  assert.match(promptByRole["usage-steps"], /attach the fishing line to the actual visible line-tie ring or tow eye on the reference lure/);
-  assert.match(promptByRole["usage-steps"], /do not tie the line to the body, eye, hook hanger, tail, diving lip, blade, or an invented ring/);
+  assert.match(promptByRole["usage-steps"], /attach the fishing line through the actual visible top\/back line-tie ring or tow eye on the reference lure/);
+  assert.match(promptByRole["usage-steps"], /do not tie the line to the body, eye, hook hanger, tail, mouth, propeller, diving lip, blade, or an invented ring/);
+  assert.match(promptByRole["usage-steps"], /do not add a hook or extra ring at the lure mouth/);
   assert.match(promptByRole["material-closeup"], /multi-window material detail image/);
   assert.match(promptByRole["material-closeup"], /several small inset detail panes/);
   assert.match(promptByRole["material-closeup"], /texture, finish, joints, edges/);
@@ -134,7 +139,70 @@ test("creation planner injects Simplified Chinese target-language guidance", () 
 test("creation planner normalizes supported target languages", () => {
   assert.equal(normalizeCreationTargetLanguage("en").value, "en");
   assert.equal(normalizeCreationTargetLanguage("ja").value, "ja");
-  assert.equal(normalizeCreationTargetLanguage("unknown").value, "zh-CN");
+  assert.equal(normalizeCreationTargetLanguage("unknown").value, "en");
+});
+
+test("creation planner defaults to English copy and metric-plus-imperial specs", () => {
+  const plan = buildCreationPlan({
+    productName: "Jointed fishing lure",
+    productDescription: "Segmented swim bait",
+    sellingPoints: "realistic finish",
+    selectedRoles: ["dimensions"],
+    dimensionSpecs: "13cm/35g",
+  });
+
+  assert.equal(normalizeCreationTargetLanguage("").value, "en");
+  assert.equal(normalizeCreationDimensionUnitMode("").value, "both");
+  assert.equal(plan.targetLanguage, "en");
+  assert.equal(plan.targetLanguageLabel, "English");
+  assert.equal(plan.dimensionUnitMode, "both");
+  assert.match(plan.items[0].prompt, /13cm \(5\.12 in\)\/35g \(1\.23 oz\)/);
+  assert.match(plan.items[0].prompt, /Use concise English marketing copy/);
+});
+
+test("creation planner normalizes optional logo placement and background handling", () => {
+  const logo = normalizeCreationLogoOptions({
+    enabled: true,
+    filename: "brand-mark.png",
+    placement: "top-right",
+    background: "remove-background",
+  });
+
+  assert.equal(logo.enabled, true);
+  assert.equal(logo.filename, "brand-mark.png");
+  assert.equal(logo.placement, "top-right");
+  assert.equal(logo.background, "remove-background");
+  assert.equal(logo.placementLabel, "右上");
+  assert.equal(logo.backgroundLabel, "非透明底，先抠图");
+
+  const defaultLogo = normalizeCreationLogoOptions({
+    enabled: true,
+    filename: "brand-mark.png",
+  });
+  assert.equal(defaultLogo.placement, "top-left");
+  assert.equal(defaultLogo.placementLabel, "左上");
+});
+
+test("creation planner injects optional logo guidance into every generated item", () => {
+  const plan = buildCreationPlan({
+    productName: "AeroPress Clear",
+    productDescription: "Transparent portable coffee brewer",
+    sellingPoints: "lightweight, easy to clean, stable taste",
+    targetLanguage: "en",
+    logoOptions: {
+      enabled: true,
+      filename: "brand-mark.png",
+      placement: "bottom-left",
+      background: "transparent",
+    },
+  });
+
+  assert.equal(plan.logo?.filename, "brand-mark.png");
+  assert.equal(plan.logo?.placement, "bottom-left");
+  assert.equal(plan.logo?.background, "transparent");
+  assert.ok(plan.items.every((item) => item.prompt.includes("brand-mark.png")));
+  assert.ok(plan.items.every((item) => item.prompt.includes("bottom-left")));
+  assert.ok(plan.items.every((item) => item.prompt.includes("transparent logo")));
 });
 
 test("creation planner expands ecommerce scenario sets to eight images", () => {
@@ -231,6 +299,7 @@ test("creation planner only injects size specifications into the dimensions role
     targetLanguage: "en",
     selectedRoles: ["hero", "comparison", "dimensions"],
     dimensionSpecs: "Height 145mm\nDiameter 110mm\nCapacity 350ml",
+    dimensionUnitMode: "metric",
   });
 
   const heroPrompt = plan.items.find((item) => item.role === "hero").prompt;

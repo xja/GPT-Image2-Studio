@@ -7,6 +7,18 @@ const stylesPath = new URL("../public/styles.css", import.meta.url);
 const appPath = new URL("../public/app.js", import.meta.url);
 const serverPath = new URL("../server.mjs", import.meta.url);
 
+function readCssRule(styles, selector) {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = styles.match(new RegExp(`${escapedSelector}\\s*\\{([\\s\\S]*?)\\n\\}`));
+  return match?.[1] || "";
+}
+
+function readCssRuleContaining(styles, selector, text) {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matches = [...styles.matchAll(new RegExp(`${escapedSelector}\\s*\\{([\\s\\S]*?)\\n\\}`, "g"))];
+  return matches.find((match) => match[1].includes(text))?.[1] || "";
+}
+
 test("browser-imported lib modules are copied into public for Vercel static serving", async () => {
   const app = await readFile(appPath, "utf8");
   const imports = [...app.matchAll(/from "\/lib\/([^"?]+)\.mjs(?:\?[^"]*)?"/g)].map((match) => match[1]);
@@ -691,6 +703,58 @@ test("theme toggle persists dark and white themes", async () => {
   assert.match(app, /refs\.themeToggleButton\.addEventListener\("click",\s*\(\) => \{/);
 });
 
+test("floating dialogs and popovers use theme-aware overlay surface tokens", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+
+  assert.match(styles, /:root\s*\{[\s\S]*--overlay-surface-bg:/);
+  assert.match(
+    styles,
+    /html\[data-theme="light"\]\s*\{[\s\S]*--overlay-surface-bg:\s*linear-gradient\(180deg,\s*rgba\(255,\s*255,\s*255,\s*0\.98\)/,
+  );
+
+  [
+    ".lightbox-dialog",
+    ".creation-industry-popover",
+    ".prompt-agent-dialog",
+    ".prompt-agent-image-viewer-dialog",
+    ".prompt-template-panel",
+    ".ppt-edit-dialog",
+  ].forEach((selector) => {
+    const rule = readCssRuleContaining(styles, selector, "background: var(--overlay-surface-bg");
+    assert.match(rule, /background:\s*var\(--overlay-surface-bg/);
+    assert.doesNotMatch(rule, /background:\s*(?:rgba\((?:13|14|17|21|24),|linear-gradient\(180deg,\s*rgba\((?:13|14|17|21|24),)/);
+  });
+
+  assert.match(readCssRule(styles, ".prompt-template-head"), /border-bottom:\s*1px solid var\(--overlay-border-muted/);
+  assert.match(readCssRule(styles, ".ppt-edit-head"), /border-bottom:\s*1px solid var\(--overlay-border-muted/);
+});
+
+test("compact select controls use theme-aware form surfaces", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+  const rootRule = readCssRule(styles, ":root");
+  const lightRule = readCssRule(styles, "html[data-theme=\"light\"]");
+  const compactSelectRule = readCssRule(styles, ".compact-field select");
+  const compactArrowRule = readCssRule(styles, ".compact-field::after");
+  const compactOptionRule = readCssRule(styles, ".compact-field select option");
+  const gallerySelectRule = readCssRule(styles, ".gallery-filter-select");
+  const creationTemplateSearchRule = readCssRule(styles, ".creation-template-search");
+
+  assert.match(rootRule, /color-scheme:\s*dark;/);
+  assert.match(lightRule, /color-scheme:\s*light;/);
+  assert.match(compactSelectRule, /color:\s*var\(--text\);/);
+  assert.match(compactSelectRule, /background:\s*var\(--input-bg/);
+  assert.doesNotMatch(compactSelectRule, /rgba\(16,\s*22,\s*40,\s*0\.92\)|color:\s*#f5f7ff/);
+  assert.match(compactArrowRule, /border-right:\s*2px solid var\(--muted\);/);
+  assert.match(compactOptionRule, /color:\s*var\(--text\);[\s\S]*background:\s*var\(--bg-soft\);/);
+  assert.match(gallerySelectRule, /color-scheme:\s*inherit;/);
+  assert.match(creationTemplateSearchRule, /color:\s*var\(--text\);[\s\S]*background:\s*var\(--input-bg/);
+  assert.doesNotMatch(creationTemplateSearchRule, /rgba\(12,\s*18,\s*32,\s*0\.88\)|color:\s*#f5f7ff/);
+  assert.match(
+    styles,
+    /\.gallery-filter-select option,\s*[\r\n]+\.gallery-filter-select optgroup\s*\{[\s\S]*background:\s*var\(--bg-soft\);[\s\S]*color:\s*var\(--text\);/,
+  );
+});
+
 test("prompt agent preview marks uploaded images as zoomable and animates analysis", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
@@ -1029,7 +1093,7 @@ test("mobile and Pad studio layout uses dedicated compact workbench layouts", as
   assert.match(html, /id="parameterAdaptiveSection"[\s\S]*data-adaptive-section="parameters"[\s\S]*data-compact-open="false"[\s\S]*<summary class="field-heading adaptive-section-summary">/);
   assert.match(html, /dataset\.uiLayout = "mobile";[\s\S]*dataset\.uiLayout = "tablet";/);
   assert.match(html, /devicePixelRatio[\s\S]*isPhonePhysicalSize[\s\S]*isTabletPhysicalSize[\s\S]*physicalTouchWidth/);
-  assert.match(html, /\.\/styles\.css\?v=20260513-image-decomposition-mainline-1/);
+  assert.match(html, /\.\/styles\.css\?v=20260515-light-theme-surfaces-2/);
   assert.doesNotMatch(referenceAdaptiveSection, /\sopen(?:\s|>)/);
   assert.doesNotMatch(parameterAdaptiveSection, /\sopen(?:\s|>)/);
   assert.match(styles, /html,\s*[\r\n]+body\s*\{[\s\S]*overflow-x:\s*clip;/);
@@ -1305,6 +1369,7 @@ test("creation mode is a separate studio view with isolated state and routes", a
   assert.match(html, /data-view-panel="creation"/);
   assert.match(html, /id="creationForm"/);
   assert.match(html, /id="creationTargetLanguageInput"/);
+  assert.match(html, /id="creationTargetLanguageInput"[\s\S]*<option value="zh-CN">[\s\S]*<option value="en" selected>English<\/option>/);
   assert.match(html, /id="creationGenerateButton"/);
   assert.match(html, /id="creationPlanButton"/);
   assert.doesNotMatch(html, /id="creationPlanMeta"/);
@@ -1368,7 +1433,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.doesNotMatch(creationIndustrySearchInput, /placeholder=/);
   assert.doesNotMatch(html, /placeholder="搜索三级\/四级类目名或编码"/);
   assert.match(html, /id="creationSellingPointsInput"[\s\S]*id="creationDimensionSpecsInput"[\s\S]*name="dimensionSpecs"[\s\S]*例如：高 14\.5 cm，直径 11 cm，容量 350 ml/);
-  assert.match(html, /id="creationDimensionSpecsInput"[\s\S]*id="creationDimensionUnitModeInput"[\s\S]*name="dimensionUnitMode"[\s\S]*<option value="metric">公制<\/option>[\s\S]*<option value="imperial">英制<\/option>[\s\S]*<option value="both">公制和英制<\/option>/);
+  assert.match(html, /id="creationDimensionSpecsInput"[\s\S]*id="creationDimensionUnitModeInput"[\s\S]*name="dimensionUnitMode"[\s\S]*<option value="metric">[\s\S]*<option value="imperial">[\s\S]*<option value="both" selected>/);
   assert.doesNotMatch(html, /写清商品是什么|每行或用逗号分隔|只用于尺寸规格图/);
   assert.match(html, /id="creationProductDescriptionInput"[\s\S]*rows="2"/);
   assert.match(html, /id="creationSellingPointsInput"[\s\S]*rows="1"/);
@@ -1496,7 +1561,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function resetCreationDraftPreview\(\) \{/);
   assert.match(app, /const file = getCreationReferenceGenerationFile\(item\);[\s\S]*formData\.append\("referenceImages", file\)/);
   assert.match(app, /formData\.set\("dimensionSpecs", refs\.creationDimensionSpecsInput\.value\.trim\(\)\)/);
-  assert.match(app, /formData\.set\("dimensionUnitMode", refs\.creationDimensionUnitModeInput\.value \|\| "metric"\)/);
+  assert.match(app, /formData\.set\("dimensionUnitMode", refs\.creationDimensionUnitModeInput\.value \|\| "both"\)/);
   assert.match(app, /formData\.set\("referenceImageRoles", JSON\.stringify\(buildCreationReferenceRolePayload\(\)\)\)/);
   assert.match(app, /formData\.set\("planOverrides", JSON\.stringify\(getCreationPlanOverrides\(\)\)\)/);
   assert.match(app, /fetch\("\/api\/creation\/reference\/analyze"/);
@@ -1519,7 +1584,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /document\.addEventListener\("pointerdown"/);
   assert.match(app, /document\.addEventListener\("keydown"/);
   assert.match(app, /refs\.creationRatioInput\.addEventListener\("change", renderCreationSizeOptions\)/);
-  assert.match(app, /setCreationSelectValue\(refs\.creationDimensionUnitModeInput, normalized\.dimensionUnitMode, "metric"\)/);
+  assert.match(app, /setCreationSelectValue\(refs\.creationDimensionUnitModeInput, normalized\.dimensionUnitMode, "both"\)/);
   assert.match(app, /refs\.creationPlanButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
@@ -1528,6 +1593,31 @@ test("creation mode has independent references count and scenario controls", asy
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
+});
+
+test("creation mode exposes optional logo upload placement and background controls", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /id="creationLogoInput"[\s\S]*name="logoImage"[\s\S]*accept="image\/\*"/);
+  assert.match(html, /id="creationLogoPreview"/);
+  assert.match(html, /id="creationLogoPlacementInput"[\s\S]*value="top-left" selected[\s\S]*value="top-right"[\s\S]*value="bottom-left"[\s\S]*value="bottom-right"/);
+  assert.match(html, /id="creationLogoBackgroundInput"[\s\S]*value="transparent"[\s\S]*value="remove-background"/);
+
+  assert.match(styles, /\.creation-logo-block\s*\{/);
+  assert.match(styles, /\.creation-logo-controls\s*\{/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.creation-logo-controls\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\);/);
+
+  assert.match(app, /creationLogo:\s*\{/);
+  assert.match(app, /creationLogoInput: document\.querySelector\("#creationLogoInput"\)/);
+  assert.match(app, /creationLogoPlacementInput: document\.querySelector\("#creationLogoPlacementInput"\)/);
+  assert.match(app, /creationLogoBackgroundInput: document\.querySelector\("#creationLogoBackgroundInput"\)/);
+  assert.match(app, /function applyCreationLogoFile\(fileList\) \{/);
+  assert.match(app, /function getCreationLogoPayload\(\) \{/);
+  assert.match(app, /formData\.set\("logoOptions", JSON\.stringify\(getCreationLogoPayload\(\)\)\);/);
+  assert.match(app, /formData\.append\("logoImage", logoFile\);/);
+  assert.match(app, /refs\.creationLogoInput\.addEventListener\("change"/);
 });
 
 test("creation reference analysis apply fills product name from fourth-level category", async () => {
@@ -1767,7 +1857,7 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.match(app, /refs\.creationProductDescriptionInput\.value = normalized\.productDescription \|\| "";/);
   assert.match(app, /refs\.creationSellingPointsInput\.value = normalized\.sellingPoints\.join\("\\n"\);/);
   assert.match(app, /refs\.creationDimensionSpecsInput\.value = normalized\.dimensionSpecs \|\| "";/);
-  assert.match(app, /setCreationSelectValue\(refs\.creationTargetLanguageInput, normalized\.targetLanguage, "zh-CN"\);/);
+  assert.match(app, /setCreationSelectValue\(refs\.creationTargetLanguageInput, normalized\.targetLanguage, "en"\);/);
   assert.match(app, /setCreationSelectValue\(refs\.creationScenarioInput, normalized\.scenario, "standard"\);/);
   assert.match(app, /setCreationIndustryTemplateValue\(normalized\.industryTemplate/);
   assert.match(app, /state\.creationSelectedRoles = normalizedRoles\.length > 0 \? normalizedRoles : getCreationRoleIdsForCount\(normalized\.imageCount\);/);

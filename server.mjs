@@ -68,6 +68,7 @@ import { migrateOutputDirectoryMonths } from "./lib/output-directory-migration.m
 import {
   applyCreationPlanOverrides,
   buildCreationPlan,
+  normalizeCreationLogoOptions,
   normalizeCreationReferenceAnalysis,
   normalizeCreationReferenceRoles,
 } from "./lib/creation-planner.mjs";
@@ -547,6 +548,35 @@ async function toReferenceImages(files) {
       };
     }),
   );
+}
+
+async function readCreationLogoImage(formData) {
+  const logoImages = await toReferenceImages([
+    ...formData.getAll("logoImage"),
+    ...formData.getAll("creationLogoImage"),
+  ]);
+  if (logoImages.length > 1) {
+    throw new Error("Logo 最多只能上传 1 张。");
+  }
+  if (logoImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+    throw new Error("Logo 仅支持图片文件。");
+  }
+  return logoImages[0] || null;
+}
+
+function buildCreationLogoOptionsFromFormData(formData, logoImage = null) {
+  const submittedLogo = normalizeCreationLogoOptions(formData.get("logoOptions"));
+  return normalizeCreationLogoOptions({
+    ...submittedLogo,
+    filename: logoImage?.filename || submittedLogo.filename,
+    enabled: Boolean(logoImage) || submittedLogo.enabled,
+    placement: formData.get("logoPlacement") || submittedLogo.placement,
+    background: formData.get("logoBackground") || submittedLogo.background,
+  });
+}
+
+function appendCreationLogoReference(referenceImages = [], logoImage = null) {
+  return logoImage ? [...referenceImages, logoImage] : referenceImages;
 }
 
 function normalizePptRelativePath(relativePath) {
@@ -1326,6 +1356,7 @@ function buildCreationSetManifest({
     selectedRoles: plan.selectedRoles || items.map((item) => item.role).filter(Boolean),
     referenceImageNames,
     referenceImageRoles: plan.referenceImageRoles || referenceImageRoles,
+    logo: plan.logo || null,
     createdAt,
     updatedAt: updatedAt || createdAt,
     status,
@@ -2157,6 +2188,7 @@ async function handleCreationPlan(request, response) {
       industryTemplate: formData.get("industryTemplate"),
       selectedRoles: formData.get("selectedRoles"),
       referenceImageRoles,
+      logoOptions: buildCreationLogoOptionsFromFormData(formData),
     });
     plan = applyCreationPlanOverrides(plan, formData.get("planOverrides"));
 
@@ -2184,6 +2216,8 @@ async function handleCreationGenerate(request, response) {
   let creationRelativeDir = "";
   let createdAt = new Date().toISOString();
   let referenceImages = [];
+  let generationReferenceImages = [];
+  let logoImage = null;
   let referenceImageNames = [];
   let referenceImageRoles = [];
 
@@ -2195,12 +2229,14 @@ async function handleCreationGenerate(request, response) {
       ...formData.getAll("referenceImages"),
       ...formData.getAll("referenceImage"),
     ]);
+    logoImage = await readCreationLogoImage(formData);
     if (referenceImages.length > MAX_REFERENCE_IMAGES) {
       throw new Error(`参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`);
     }
     if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
       throw new Error("仅支持图片参考文件。");
     }
+    generationReferenceImages = appendCreationLogoReference(referenceImages, logoImage);
     referenceImageNames = referenceImages.map((image) => image.filename).filter(Boolean);
     referenceImageRoles = normalizeCreationReferenceRoles(formData.get("referenceImageRoles"));
     plan = buildCreationPlan({
@@ -2215,6 +2251,7 @@ async function handleCreationGenerate(request, response) {
       industryTemplate: formData.get("industryTemplate"),
       selectedRoles: formData.get("selectedRoles"),
       referenceImageRoles,
+      logoOptions: buildCreationLogoOptionsFromFormData(formData, logoImage),
     });
     plan = applyCreationPlanOverrides(plan, formData.get("planOverrides"));
 
@@ -2295,7 +2332,7 @@ async function handleCreationGenerate(request, response) {
           baseUrl: config.baseUrl,
           apiKey: config.apiKey,
           prompt: finalPrompt,
-          referenceImages,
+          referenceImages: generationReferenceImages,
           size: finalSize,
           quality: finalQuality,
           format: toApiOutputFormat(finalFormat),
@@ -2372,10 +2409,13 @@ async function handleCreationGenerate(request, response) {
             creationScenario: plan.scenario,
             creationIndustryTemplate: plan.industryTemplate,
             creationImageCount: plan.imageCount,
-            hasReferenceImage: referenceImages.length > 0,
+            hasReferenceImage: generationReferenceImages.length > 0,
             referenceImageNames,
             referenceImageName: referenceImageNames[0] || "",
             referenceImageRoles,
+            hasCreationLogo: Boolean(plan.logo),
+            creationLogo: plan.logo,
+            creationLogoImageName: plan.logo?.filename || "",
             galleryVisible: false,
           },
         });
@@ -2505,6 +2545,7 @@ async function handleCreationRepair(request, response) {
       ...formData.getAll("referenceImages"),
       ...formData.getAll("referenceImage"),
     ]);
+    const logoImage = await readCreationLogoImage(formData);
     if (referenceImages.length > MAX_REFERENCE_IMAGES) {
       throw new Error(`参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`);
     }
@@ -2520,6 +2561,11 @@ async function handleCreationRepair(request, response) {
       referenceImageRoles =
         submittedReferenceImageRoles.length > 0 ? submittedReferenceImageRoles : existingSet.referenceImageRoles || [];
     }
+    const logoOptions = logoImage
+      ? buildCreationLogoOptionsFromFormData(formData, logoImage)
+      : existingSet.logo || buildCreationLogoOptionsFromFormData(formData);
+    const normalizedLogoOptions = normalizeCreationLogoOptions(logoOptions);
+    const generationReferenceImages = appendCreationLogoReference(referenceImages, logoImage);
 
     const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
     if (!config.apiKey) {
@@ -2566,6 +2612,7 @@ async function handleCreationRepair(request, response) {
       industryTemplateLabel: existingSet.industryTemplateLabel || "",
       industryTemplatePath: existingSet.industryTemplatePath || "",
       referenceImageRoles,
+      logo: normalizedLogoOptions.enabled ? normalizedLogoOptions : existingSet.logo || null,
     };
 
     const clientSessionId = getClientSessionId(request, formData);
@@ -2646,7 +2693,7 @@ async function handleCreationRepair(request, response) {
           baseUrl: config.baseUrl,
           apiKey: config.apiKey,
           prompt: finalPrompt,
-          referenceImages,
+          referenceImages: generationReferenceImages,
           size: finalSize,
           quality: finalQuality,
           format: toApiOutputFormat(finalFormat),
@@ -2727,10 +2774,13 @@ async function handleCreationRepair(request, response) {
             creationScenario: existingSet.scenario,
             creationIndustryTemplate: existingSet.industryTemplate || "general",
             creationImageCount: existingSet.imageCount,
-            hasReferenceImage: referenceImages.length > 0,
+            hasReferenceImage: generationReferenceImages.length > 0,
             referenceImageNames,
             referenceImageName: referenceImageNames[0] || "",
             referenceImageRoles,
+            hasCreationLogo: Boolean(repairPlan.logo),
+            creationLogo: repairPlan.logo,
+            creationLogoImageName: repairPlan.logo?.filename || "",
             galleryVisible: false,
           },
         });

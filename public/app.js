@@ -128,6 +128,33 @@ const DEFAULT_ARTICLE_ILLUSTRATION_STYLE_PRESET = "realist-magazine";
 const DEFAULT_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
 const DEFAULT_UI_RATIO = "1:1";
 const DEFAULT_UI_RATIO_LABEL = "方形 1:1";
+const CREATION_LOGO_PLACEMENTS = new Set([
+  "top-left",
+  "top-center",
+  "top-right",
+  "center-left",
+  "center",
+  "center-right",
+  "bottom-left",
+  "bottom-center",
+  "bottom-right",
+]);
+const CREATION_LOGO_PLACEMENT_LABELS = {
+  "top-left": "左上",
+  "top-center": "上中",
+  "top-right": "右上",
+  "center-left": "左中",
+  center: "居中",
+  "center-right": "右中",
+  "bottom-left": "左下",
+  "bottom-center": "下中",
+  "bottom-right": "右下",
+};
+const CREATION_LOGO_BACKGROUNDS = new Set(["transparent", "remove-background"]);
+const CREATION_LOGO_BACKGROUND_LABELS = {
+  transparent: "透明底，直接放置",
+  "remove-background": "非透明底，先抠图",
+};
 const STYLE_TRANSFER_CUSTOM_PRESET = "custom";
 const STYLE_TRANSFER_DEFAULT_PRESET = "clay-toy";
 const STYLE_TRANSFER_PRESET_BEFORE_IMAGE = "./assets/style-presets/style-before.svg";
@@ -357,6 +384,15 @@ const state = {
     sets: [],
   },
   creationReferenceFiles: [],
+  creationLogo: {
+    background: "transparent",
+    file: null,
+    generationCompressed: false,
+    generationFile: null,
+    generationFilePromise: null,
+    placement: "top-left",
+    previewUrl: "",
+  },
   creationReferenceRestoreQueue: [],
   creationReferenceAnalysis: {
     applied: false,
@@ -520,6 +556,14 @@ const refs = {
   creationIndustryTemplateSearchInput: document.querySelector("#creationIndustryTemplateSearchInput"),
   creationIndustryTemplateStepLabel: document.querySelector("#creationIndustryTemplateStepLabel"),
   creationIndustryTemplateTrigger: document.querySelector("#creationIndustryTemplateTrigger"),
+  creationLogoBackgroundInput: document.querySelector("#creationLogoBackgroundInput"),
+  creationLogoDropzone: document.querySelector("#creationLogoDropzone"),
+  creationLogoFilename: document.querySelector("#creationLogoFilename"),
+  creationLogoInput: document.querySelector("#creationLogoInput"),
+  creationLogoPlacementInput: document.querySelector("#creationLogoPlacementInput"),
+  creationLogoPreview: document.querySelector("#creationLogoPreview"),
+  creationLogoPreviewImage: document.querySelector("#creationLogoPreviewImage"),
+  creationLogoRemoveButton: document.querySelector("#creationLogoRemoveButton"),
   creationOutputFormatInput: document.querySelector("#creationOutputFormatInput"),
   creationPlanButton: document.querySelector("#creationPlanButton"),
   creationPromptEditorLayer: document.querySelector("#creationPromptEditorLayer"),
@@ -2481,6 +2525,37 @@ function getCreationReferenceGenerationFile(item) {
   return item?.generationFile || item?.file;
 }
 
+function normalizeCreationLogoPlacement(value) {
+  return CREATION_LOGO_PLACEMENTS.has(String(value || "")) ? String(value) : "top-left";
+}
+
+function normalizeCreationLogoBackground(value) {
+  return CREATION_LOGO_BACKGROUNDS.has(String(value || "")) ? String(value) : "transparent";
+}
+
+function normalizeCreationLogoPayload(value = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  const filename = String(source.filename || source.name || source.logoFilename || "").trim();
+  if (!filename) {
+    return null;
+  }
+
+  const placement = normalizeCreationLogoPlacement(source.placement || source.logoPlacement);
+  const background = normalizeCreationLogoBackground(source.background || source.backgroundMode || source.logoBackground);
+  return {
+    enabled: true,
+    filename,
+    placement,
+    placementLabel: CREATION_LOGO_PLACEMENT_LABELS[placement] || placement,
+    background,
+    backgroundLabel: CREATION_LOGO_BACKGROUND_LABELS[background] || background,
+  };
+}
+
+function getCreationLogoGenerationFile() {
+  return state.creationLogo?.generationFile || state.creationLogo?.file || null;
+}
+
 function getReferenceAnalysisGenerationFile(item) {
   return item?.generationFile || item?.file;
 }
@@ -2495,6 +2570,10 @@ function hasPendingReferenceGenerationFiles() {
 
 function hasPendingCreationReferenceGenerationFiles() {
   return state.creationReferenceFiles.some((item) => item.generationFilePromise);
+}
+
+function hasPendingCreationLogoGenerationFile() {
+  return Boolean(state.creationLogo?.generationFilePromise);
 }
 
 function hasPendingReferenceAnalysisGenerationFiles() {
@@ -2656,6 +2735,33 @@ function startCreationReferenceGenerationCompression(item) {
   return item.generationFilePromise;
 }
 
+function startCreationLogoGenerationCompression(item = state.creationLogo) {
+  if (!item?.file) {
+    return null;
+  }
+
+  item.generationFile = item.file;
+  item.generationCompressed = false;
+  item.generationFilePromise = prepareGenerationReferenceImageFile(item.file)
+    .then((preparedFile) => {
+      item.generationFile = preparedFile || item.file;
+      item.generationCompressed = Boolean(preparedFile && preparedFile !== item.file);
+      return item.generationFile;
+    })
+    .catch(() => {
+      item.generationFile = item.file;
+      item.generationCompressed = false;
+      return item.file;
+    })
+    .finally(() => {
+      item.generationFilePromise = null;
+      renderCreationView();
+    });
+
+  renderCreationView();
+  return item.generationFilePromise;
+}
+
 async function ensureStyleTransferGenerationFilesReady() {
   const pending = [state.styleTransfer.source?.generationFilePromise, state.styleTransfer.style?.generationFilePromise].filter(
     Boolean,
@@ -2688,7 +2794,10 @@ async function ensureReferenceGenerationFilesReady() {
 }
 
 async function ensureCreationReferenceGenerationFilesReady() {
-  const pending = state.creationReferenceFiles.map((item) => item.generationFilePromise).filter(Boolean);
+  const pending = [
+    ...state.creationReferenceFiles.map((item) => item.generationFilePromise),
+    state.creationLogo?.generationFilePromise,
+  ].filter(Boolean);
   if (pending.length === 0) {
     return;
   }
@@ -7530,14 +7639,14 @@ function getCreationSelectedLanguage() {
   const select = refs.creationTargetLanguageInput;
   const option = select?.selectedOptions?.[0];
   return {
-    value: select?.value || "zh-CN",
-    label: option?.textContent || select?.value || "zh-CN",
+    value: select?.value || "en",
+    label: option?.textContent || select?.value || "English",
   };
 }
 
 function normalizeCreationDimensionUnitMode(value) {
   const normalized = String(value || "").trim();
-  return CREATION_DIMENSION_UNIT_MODE_LABELS[normalized] ? normalized : "metric";
+  return CREATION_DIMENSION_UNIT_MODE_LABELS[normalized] ? normalized : "both";
 }
 
 function formatCreationDimensionUnitModeLabel(value) {
@@ -7545,7 +7654,7 @@ function formatCreationDimensionUnitModeLabel(value) {
 }
 
 function getCreationSelectedDimensionUnitMode() {
-  return normalizeCreationDimensionUnitMode(refs.creationDimensionUnitModeInput?.value || "metric");
+  return normalizeCreationDimensionUnitMode(refs.creationDimensionUnitModeInput?.value || "both");
 }
 
 function setCreationFeedback(message = "", kind = "") {
@@ -8657,7 +8766,7 @@ function normalizeCreationSetForView(set = {}) {
     dimensionSpecs: String(set.dimensionSpecs || ""),
     dimensionUnitMode: normalizeCreationDimensionUnitMode(set.dimensionUnitMode),
     dimensionUnitModeLabel: String(set.dimensionUnitModeLabel || formatCreationDimensionUnitModeLabel(set.dimensionUnitMode)),
-    targetLanguage: String(set.targetLanguage || "zh-CN"),
+    targetLanguage: String(set.targetLanguage || "en"),
     targetLanguageLabel: String(set.targetLanguageLabel || ""),
     imageCount: Number(set.imageCount) || items.length || 4,
     selectedRoles: normalizeCreationRoleIds(set.selectedRoles || items.map((item) => item.role)),
@@ -8679,6 +8788,7 @@ function normalizeCreationSetForView(set = {}) {
           }))
           .filter((item) => item.filename)
       : [],
+    logo: normalizeCreationLogoPayload(set.logo || set.creationLogo || null),
     createdAt: String(set.createdAt || nowIso()),
     updatedAt: String(set.updatedAt || set.createdAt || nowIso()),
     status: resolvedStatus,
@@ -8895,14 +9005,32 @@ function resetCreationReferenceFilesForRecordReuse(normalized = null) {
   renderCreationReferenceAnalysis();
 }
 
+function resetCreationLogoForRecordReuse(normalized = null) {
+  const logo = normalizeCreationLogoPayload(normalized?.logo || null);
+  revokeReferencePreview(state.creationLogo);
+  state.creationLogo = {
+    background: logo?.background || "transparent",
+    file: null,
+    generationCompressed: false,
+    generationFile: null,
+    generationFilePromise: null,
+    placement: logo?.placement || "top-left",
+    previewUrl: "",
+  };
+  if (refs.creationLogoInput) {
+    refs.creationLogoInput.value = "";
+  }
+  renderCreationLogo();
+}
+
 function applyCreationSetToForm(set) {
   const normalized = normalizeCreationSetForView(set);
   refs.creationProductNameInput.value = normalized.productName || "";
   refs.creationProductDescriptionInput.value = normalized.productDescription || "";
   refs.creationSellingPointsInput.value = normalized.sellingPoints.join("\n");
   refs.creationDimensionSpecsInput.value = normalized.dimensionSpecs || "";
-  setCreationSelectValue(refs.creationDimensionUnitModeInput, normalized.dimensionUnitMode, "metric");
-  setCreationSelectValue(refs.creationTargetLanguageInput, normalized.targetLanguage, "zh-CN");
+  setCreationSelectValue(refs.creationDimensionUnitModeInput, normalized.dimensionUnitMode, "both");
+  setCreationSelectValue(refs.creationTargetLanguageInput, normalized.targetLanguage, "en");
   setCreationSelectValue(refs.creationScenarioInput, normalized.scenario, "standard");
   setCreationIndustryTemplateValue(normalized.industryTemplate, {
     searchText: normalized.industryTemplatePath || "",
@@ -8914,6 +9042,7 @@ function applyCreationSetToForm(set) {
   state.creationSelectedRoles = normalizedRoles.length > 0 ? normalizedRoles : getCreationRoleIdsForCount(normalized.imageCount);
   setCreationImageCountValue(state.creationSelectedRoles.length || normalized.imageCount);
   resetCreationReferenceFilesForRecordReuse(normalized);
+  resetCreationLogoForRecordReuse(normalized);
   renderCreationRolePicker();
   renderCreationReferenceGrid();
 }
@@ -9023,10 +9152,11 @@ function renderCreationRecordDetail(set) {
     ["类目路径", set.industryTemplatePath || ""],
     ["尺寸规格", set.dimensionSpecs || ""],
     ["规格单位", set.dimensionUnitModeLabel || formatCreationDimensionUnitModeLabel(set.dimensionUnitMode)],
-    ["语言", set.targetLanguageLabel || set.targetLanguage || "zh-CN"],
+    ["语言", set.targetLanguageLabel || set.targetLanguage || "English"],
     ["进度", `${progress.completed}/${progress.total}`],
     ["参考图", set.referenceImageNames.length > 0 ? set.referenceImageNames.join("、") : "未使用"],
     ["参考用途", formatCreationReferenceRoleSummary(set.referenceImageRoles)],
+    ["Logo", formatCreationLogoSummary(set.logo)],
   ];
 
   detailItems.filter(([, value]) => value).forEach(([label, value]) => {
@@ -9562,7 +9692,7 @@ function renderCreationRecordSetList() {
     const meta = document.createElement("span");
     meta.className = "creation-record-meta";
     const progress = getCreationProgressSummary(set);
-    const languageLabel = set.targetLanguageLabel || set.targetLanguage || "zh-CN";
+    const languageLabel = set.targetLanguageLabel || set.targetLanguage || "English";
     meta.textContent = `${languageLabel} · ${progress.completed}/${progress.total} · ${formatClock(set.createdAt)}`;
     button.appendChild(meta);
 
@@ -9674,7 +9804,7 @@ function renderCreationRecordArchiveDetail(set) {
     ["类目路径", set.industryTemplatePath || ""],
     ["尺寸规格", set.dimensionSpecs || ""],
     ["规格单位", set.dimensionUnitModeLabel || formatCreationDimensionUnitModeLabel(set.dimensionUnitMode)],
-    ["语言", set.targetLanguageLabel || set.targetLanguage || "zh-CN"],
+    ["语言", set.targetLanguageLabel || set.targetLanguage || "English"],
     ["进度", `${progress.completed}/${progress.total}`],
     ["创建时间", formatClock(set.createdAt)],
     ["参考图", set.referenceImageNames.length > 0 ? set.referenceImageNames.join("、") : "未使用"],
@@ -9774,6 +9904,47 @@ function updateCreationReferenceRole(referenceId, role) {
   renderCreationReferenceGrid();
 }
 
+function removeCreationLogoFile() {
+  revokeReferencePreview(state.creationLogo);
+  state.creationLogo = {
+    ...state.creationLogo,
+    file: null,
+    generationCompressed: false,
+    generationFile: null,
+    generationFilePromise: null,
+    previewUrl: "",
+  };
+  if (refs.creationLogoInput) {
+    refs.creationLogoInput.value = "";
+  }
+  renderCreationLogo();
+  renderCreationView();
+}
+
+function applyCreationLogoFile(fileList) {
+  const file = [...(fileList || [])].find((item) => item.type.startsWith("image/"));
+  if (!file) {
+    return;
+  }
+
+  revokeReferencePreview(state.creationLogo);
+  state.creationLogo = {
+    background: normalizeCreationLogoBackground(refs.creationLogoBackgroundInput?.value || state.creationLogo.background),
+    file,
+    generationCompressed: false,
+    generationFile: file,
+    generationFilePromise: null,
+    placement: normalizeCreationLogoPlacement(refs.creationLogoPlacementInput?.value || state.creationLogo.placement),
+    previewUrl: URL.createObjectURL(file),
+  };
+  if (refs.creationLogoInput) {
+    refs.creationLogoInput.value = "";
+  }
+  startCreationLogoGenerationCompression(state.creationLogo);
+  renderCreationLogo();
+  renderCreationView();
+}
+
 function applyCreationReferenceFiles(fileList) {
   const incomingFiles = [...(fileList || [])].filter((file) => file.type.startsWith("image/"));
   if (incomingFiles.length === 0) {
@@ -9839,6 +10010,37 @@ function applyCreationReferenceFiles(fileList) {
   if (overflowed) {
     showError(`套图参考图最多支持 ${state.limits.maxReferenceImages} 张。`);
   }
+}
+
+function renderCreationLogo() {
+  if (!refs.creationLogoPreview) {
+    return;
+  }
+
+  const logo = state.creationLogo || {};
+  const hasLogo = Boolean(logo.file && logo.previewUrl);
+  state.creationLogo.placement = normalizeCreationLogoPlacement(refs.creationLogoPlacementInput?.value || logo.placement);
+  state.creationLogo.background = normalizeCreationLogoBackground(refs.creationLogoBackgroundInput?.value || logo.background);
+
+  if (refs.creationLogoPlacementInput) {
+    refs.creationLogoPlacementInput.value = state.creationLogo.placement;
+  }
+  if (refs.creationLogoBackgroundInput) {
+    refs.creationLogoBackgroundInput.value = state.creationLogo.background;
+  }
+
+  refs.creationLogoPreview.classList.toggle("hidden", !hasLogo);
+  if (refs.creationLogoPreviewImage) {
+    if (hasLogo) {
+      refs.creationLogoPreviewImage.src = logo.previewUrl;
+    } else {
+      refs.creationLogoPreviewImage.removeAttribute("src");
+    }
+  }
+  if (refs.creationLogoFilename) {
+    refs.creationLogoFilename.textContent = hasLogo ? logo.file.name || "Logo" : "未上传";
+  }
+  syncReferenceDropzoneCompact(refs.creationLogoDropzone, hasLogo);
 }
 
 function renderCreationReferenceGrid() {
@@ -9941,6 +10143,22 @@ function buildCreationReferenceRolePayload() {
   }));
 }
 
+function getCreationLogoPayload() {
+  const logoFile = getCreationLogoGenerationFile();
+  const placement = normalizeCreationLogoPlacement(refs.creationLogoPlacementInput?.value || state.creationLogo.placement);
+  const background = normalizeCreationLogoBackground(refs.creationLogoBackgroundInput?.value || state.creationLogo.background);
+
+  state.creationLogo.placement = placement;
+  state.creationLogo.background = background;
+
+  return {
+    enabled: Boolean(logoFile),
+    filename: logoFile?.name || "",
+    placement,
+    background,
+  };
+}
+
 function formatCreationReferenceRoleSummary(referenceImageRoles = []) {
   const roles = Array.isArray(referenceImageRoles) ? referenceImageRoles : [];
   if (roles.length === 0) {
@@ -9956,6 +10174,15 @@ function formatCreationReferenceRoleSummary(referenceImageRoles = []) {
       return `${filename || "参考图"}: ${roleLabel}${note ? ` (${note})` : ""}`;
     })
     .join("、");
+}
+
+function formatCreationLogoSummary(logo = null) {
+  const normalized = normalizeCreationLogoPayload(logo);
+  if (!normalized) {
+    return "未使用";
+  }
+
+  return `${normalized.filename} · ${normalized.placementLabel} · ${normalized.backgroundLabel}`;
 }
 
 function getCreationRepairReferenceRolePayload(set = getCreationCurrentSet()) {
@@ -10288,12 +10515,12 @@ function renderCreationView() {
     status: state.creation.generating ? "queued" : "idle",
   }));
   const progress = getCreationProgressSummary(currentSet);
-  const preparingReferences = hasPendingCreationReferenceGenerationFiles();
+  const preparingReferences = hasPendingCreationReferenceGenerationFiles() || hasPendingCreationLogoGenerationFile();
   const targetLanguageLabel =
     currentSet?.targetLanguageLabel ||
     getCreationSelectedLanguage().label ||
     refs.creationTargetLanguageInput?.value ||
-    "zh-CN";
+    "English";
 
   refs.creationGenerateButton.textContent = state.creation.generating ? "生成中..." : "生成套图";
   refs.creationGenerateButton.disabled = state.creation.generating || state.creation.planning || preparingReferences;
@@ -10304,6 +10531,7 @@ function renderCreationView() {
   refs.creationProgressText.textContent = `${progress.completed} / ${progress.total}`;
   renderCreationRolePicker();
   renderCreationReferenceGrid();
+  renderCreationLogo();
   const currentIndustryLabel = currentSet?.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[currentSet?.industryTemplate] || "通用电商";
   refs.creationSetMeta.textContent = currentSet
     ? `${currentSet.productName || "未命名商品"} · ${currentSet.scenarioLabel || CREATION_SCENARIO_LABELS[currentSet.scenario] || "标准电商"} · ${currentIndustryLabel} · ${targetLanguageLabel} · ${CREATION_ITEM_STATUS_LABELS[currentSet.status] || currentSet.status} · ${formatClock(currentSet.createdAt)}`
@@ -10351,13 +10579,14 @@ function buildCreationPlanPreviewFormData() {
   formData.set("productDescription", refs.creationProductDescriptionInput.value.trim());
   formData.set("sellingPoints", refs.creationSellingPointsInput.value.trim());
   formData.set("dimensionSpecs", refs.creationDimensionSpecsInput.value.trim());
-  formData.set("dimensionUnitMode", refs.creationDimensionUnitModeInput.value || "metric");
+  formData.set("dimensionUnitMode", refs.creationDimensionUnitModeInput.value || "both");
   formData.set("targetLanguage", targetLanguage.value);
   formData.set("imageCount", String(selectedRoles.length || getCreationSelectedImageCount()));
   formData.set("scenario", refs.creationScenarioInput.value);
   formData.set("industryTemplate", refs.creationIndustryTemplateInput.value);
   formData.set("selectedRoles", JSON.stringify(getCreationSelectedRoles()));
   formData.set("referenceImageRoles", JSON.stringify(buildCreationReferenceRolePayload()));
+  formData.set("logoOptions", JSON.stringify(getCreationLogoPayload()));
   formData.set("planOverrides", JSON.stringify(getCreationPlanOverrides()));
 
   return formData;
@@ -10377,6 +10606,10 @@ function buildCreationFormData() {
       formData.append("referenceImages", file);
     }
   });
+  const logoFile = getCreationLogoGenerationFile();
+  if (logoFile) {
+    formData.append("logoImage", logoFile);
+  }
   appendBrowserConfigToFormData(formData);
 
   return formData;
@@ -10408,6 +10641,11 @@ function buildCreationRepairFormData({ itemId = "", scope = "incomplete" } = {})
       formData.append("referenceImages", file);
     }
   });
+  formData.set("logoOptions", JSON.stringify(getCreationLogoPayload()));
+  const logoFile = getCreationLogoGenerationFile();
+  if (logoFile) {
+    formData.append("logoImage", logoFile);
+  }
   appendBrowserConfigToFormData(formData);
 
   return formData;
@@ -12665,6 +12903,18 @@ function bindEvents() {
   refs.creationReferenceInput.addEventListener("change", (event) => {
     applyCreationReferenceFiles(event.target.files);
   });
+  refs.creationLogoInput.addEventListener("change", (event) => {
+    applyCreationLogoFile(event.target.files);
+  });
+  refs.creationLogoPlacementInput.addEventListener("change", () => {
+    state.creationLogo.placement = normalizeCreationLogoPlacement(refs.creationLogoPlacementInput.value);
+    renderCreationLogo();
+  });
+  refs.creationLogoBackgroundInput.addEventListener("change", () => {
+    state.creationLogo.background = normalizeCreationLogoBackground(refs.creationLogoBackgroundInput.value);
+    renderCreationLogo();
+  });
+  refs.creationLogoRemoveButton.addEventListener("click", removeCreationLogoFile);
   refs.creationReferenceAnalyzeButton.addEventListener("click", () => {
     analyzeCreationReferenceImages().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -12706,6 +12956,18 @@ function bindEvents() {
     event.preventDefault();
     refs.creationReferenceDropzone.classList.remove("dragover");
     applyCreationReferenceFiles(event.dataTransfer?.files);
+  });
+  refs.creationLogoDropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    refs.creationLogoDropzone.classList.add("dragover");
+  });
+  refs.creationLogoDropzone.addEventListener("dragleave", () => {
+    refs.creationLogoDropzone.classList.remove("dragover");
+  });
+  refs.creationLogoDropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    refs.creationLogoDropzone.classList.remove("dragover");
+    applyCreationLogoFile(event.dataTransfer?.files);
   });
   refs.pptForm.addEventListener("submit", startPptGeneration);
   refs.pptCompleteMissingButton.addEventListener("click", completeMissingPptSlides);

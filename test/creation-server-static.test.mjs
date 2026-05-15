@@ -113,6 +113,8 @@ test("creation generation accepts references image count marketing scenario and 
   assert.match(server, /const referenceImages = await toReferenceImages/);
   assert.match(server, /referenceImageNames:\s*referenceImages\.map/);
   assert.match(server, /referenceImages,/);
+  assert.match(server, /formData\.getAll\("logoImage"\)/);
+  assert.match(server, /logoOptions:/);
   assert.doesNotMatch(server, /handleCreationGenerate[\s\S]*referenceImages:\s*\[\]/);
 
   assert.match(worker, /formData\.get\("imageCount"\)/);
@@ -127,6 +129,8 @@ test("creation generation accepts references image count marketing scenario and 
   assert.match(worker, /const referenceImages = await toReferenceImages/);
   assert.match(worker, /referenceImageNames:\s*referenceImages\.map/);
   assert.match(worker, /referenceImages,/);
+  assert.match(worker, /formData\.getAll\("logoImage"\)/);
+  assert.match(worker, /logoOptions:/);
   assert.doesNotMatch(worker, /runCreationGenerate[\s\S]*referenceImages:\s*\[\]/);
 });
 

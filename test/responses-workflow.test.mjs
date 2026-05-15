@@ -562,6 +562,8 @@ test("requestImageGeneration retries without streaming when the stream ends afte
 });
 
 test("requestImageGeneration returns compact upstream HTTP errors", async () => {
+  let attempts = 0;
+
   await assert.rejects(
     () =>
       requestImageGeneration({
@@ -571,7 +573,9 @@ test("requestImageGeneration returns compact upstream HTTP errors", async () => 
         size: "1024x1536",
         quality: "high",
         responsesModel: "gpt-5.4",
+        transientHttpRetryDelayMs: 0,
         async fetchImpl() {
+          attempts += 1;
           return new Response(
             JSON.stringify({
               type: "https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-5xx-errors/error-524/",
@@ -585,6 +589,77 @@ test("requestImageGeneration returns compact upstream HTTP errors", async () => 
     {
       message: "生成请求失败：HTTP 524，错误码 524",
     },
+  );
+  assert.equal(attempts, 3);
+});
+
+test("requestImageGeneration retries transient upstream HTTP errors before surfacing", async () => {
+  const requests = [];
+  const events = [];
+
+  const result = await requestImageGeneration({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    prompt: "Create a small red icon.",
+    size: "1024x1024",
+    quality: "high",
+    responsesModel: "gpt-5.4",
+    transientHttpRetryDelayMs: 0,
+    async fetchImpl(_url, init) {
+      const body = JSON.parse(init.body);
+      requests.push({ stream: body.stream, size: body.tools[0].size });
+
+      if (requests.length === 1) {
+        return new Response(
+          JSON.stringify({
+            error_code: 502,
+          }),
+          { status: 502 },
+        );
+      }
+
+      if (requests.length === 2) {
+        return new Response(
+          JSON.stringify({
+            error_code: 524,
+          }),
+          { status: 524 },
+        );
+      }
+
+      return new Response(
+        [
+          "event: response.output_item.done",
+          'data: {"item":{"type":"image_generation_call","result":"cmV0cmllZA=="}}',
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"),
+        {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        },
+      );
+    },
+    onEvent(event) {
+      events.push(event);
+    },
+  });
+
+  assert.deepEqual(requests, [
+    { stream: true, size: "1024x1024" },
+    { stream: true, size: "1024x1024" },
+    { stream: true, size: "1024x1024" },
+  ]);
+  assert.equal(result.finalImageBase64, "cmV0cmllZA==");
+  assert.deepEqual(
+    events
+      .filter((event) => event.type === "status" && event.stage === "retrying_upstream")
+      .map((event) => event.message),
+    [
+      "上游服务短暂异常（HTTP 502），正在重试 1/2",
+      "上游服务短暂异常（HTTP 524），正在重试 2/2",
+    ],
   );
 });
 
