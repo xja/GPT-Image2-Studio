@@ -6929,8 +6929,7 @@ html[data-ui-layout="mobile"] .prompt-template-head {
   flex-direction: column;
 }
 
-html[data-ui-layout="tablet"] .app-shell,
-html[data-ui-layout="mobile"] .app-shell {
+html[data-ui-layout="tablet"] .app-shell {
   height: 100dvh;
   min-height: 100dvh;
   display: grid;
@@ -6938,6 +6937,14 @@ html[data-ui-layout="mobile"] .app-shell {
   gap: 6px;
   overflow: hidden;
   padding-bottom: 6px;
+}
+
+html[data-ui-layout="mobile"] .app-shell {
+  height: auto;
+  min-height: 100dvh;
+  display: block;
+  overflow: visible;
+  padding-bottom: 8px;
 }
 
 html[data-ui-layout="tablet"] .topbar,
@@ -6959,19 +6966,29 @@ html[data-ui-layout="mobile"] .topbar-api-check {
   right: 10px;
 }
 
-html[data-ui-layout="tablet"] .view-root,
-html[data-ui-layout="mobile"] .view-root {
+html[data-ui-layout="tablet"] .view-root {
   height: auto;
   min-height: 0;
   overflow: auto;
   overflow-x: hidden;
 }
 
-html[data-ui-layout="tablet"] .studio-view,
-html[data-ui-layout="mobile"] .studio-view {
+html[data-ui-layout="mobile"] .view-root {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+html[data-ui-layout="tablet"] .studio-view {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+html[data-ui-layout="mobile"] .studio-view {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
 }
 
 html[data-ui-layout="tablet"] .studio-grid {
@@ -6986,40 +7003,59 @@ html[data-ui-layout="tablet"] .studio-grid {
 
 html[data-ui-layout="mobile"] .studio-grid {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(220px, 42%) minmax(0, 1fr);
+  grid-template-rows: none;
   grid-template-areas:
     "preview"
     "settings";
   gap: 8px;
   align-items: stretch;
   min-height: 0;
-  height: 100%;
-  overflow: hidden;
+  height: auto;
+  overflow: visible;
 }
 
-html[data-ui-layout="tablet"] .settings-panel,
-html[data-ui-layout="mobile"] .settings-panel {
+html[data-ui-layout="tablet"] .settings-panel {
   grid-area: settings;
   height: 100%;
   min-height: 0;
   overflow: hidden;
 }
 
-html[data-ui-layout="tablet"] .preview-panel,
-html[data-ui-layout="mobile"] .preview-panel {
+html[data-ui-layout="mobile"] .settings-panel {
+  grid-area: settings;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+html[data-ui-layout="tablet"] .preview-panel {
   grid-area: preview;
   height: 100%;
   min-height: 0;
   overflow: hidden;
 }
 
-html[data-ui-layout="tablet"] .settings-form,
-html[data-ui-layout="mobile"] .settings-form {
+html[data-ui-layout="mobile"] .preview-panel {
+  grid-area: preview;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+html[data-ui-layout="tablet"] .settings-form {
   height: 100%;
   min-height: 0;
   overflow: auto;
   gap: 8px;
   padding-right: 2px;
+}
+
+html[data-ui-layout="mobile"] .settings-form {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  gap: 8px;
+  padding-right: 0;
 }
 
 html[data-ui-layout="tablet"] .style-transfer-block,
@@ -7264,7 +7300,7 @@ html[data-ui-layout="mobile"] .settings-form {
   gap: 7px;
   padding-right: 0;
   scrollbar-gutter: auto;
-  overflow-x: hidden;
+  overflow: visible;
 }
 
 html[data-ui-layout="mobile"] #promptInput {
@@ -7358,13 +7394,14 @@ html[data-ui-layout="mobile"] .compact-field::after {
 }
 
 html[data-ui-layout="mobile"] .preview-stage {
+  min-height: clamp(300px, 58svh, 420px);
   border-radius: 14px;
   padding: 8px;
 }
 
 html[data-ui-layout="mobile"] .preview-canvas {
   margin-top: 6px;
-  min-height: 0;
+  min-height: clamp(180px, 36svh, 280px);
   padding: 8px;
   border-radius: 14px;
 }

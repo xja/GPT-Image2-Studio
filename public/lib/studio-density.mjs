@@ -215,7 +215,7 @@ function resolvePhysicalTouchLayoutWidth(viewport = {}) {
 }
 
 function resolveLayoutViewportWidth(viewport = {}) {
-  const { width = 0, outerWidth = 0 } = viewport;
+  const { width = 0, outerWidth = 0, devicePixelRatio = 1 } = viewport;
   const physicalTouchWidth = resolvePhysicalTouchLayoutWidth(viewport);
   if (physicalTouchWidth) {
     return physicalTouchWidth;
@@ -225,7 +225,11 @@ function resolveLayoutViewportWidth(viewport = {}) {
     return width;
   }
 
-  if (Number.isFinite(outerWidth) && outerWidth > 0) {
+  if (Number.isFinite(outerWidth) && outerWidth > width) {
+    return outerWidth;
+  }
+
+  if (Number.isFinite(outerWidth) && outerWidth > 0 && Number.isFinite(devicePixelRatio) && devicePixelRatio < 1) {
     return outerWidth;
   }
 

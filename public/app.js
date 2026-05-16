@@ -49,7 +49,7 @@ import {
   sortGenerationActivityFeed,
   upsertGenerationActivityEntry,
 } from "/lib/generation-activity-feed.mjs?v=20260504-vercel-static-lib-1";
-import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260511-device-layout-config-1";
+import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260515-responsive-layout-1";
 const SURPRISE_PROMPTS = [
   {
     name: "清晨通勤",

@@ -38,10 +38,11 @@
           longerSide / shorterSide < 1.65;
         const inferredScale = deviceScale >= 1.5 ? deviceScale : isPhonePhysicalSize && shorterSide >= 1080 ? 3 : 2;
         const physicalTouchWidth = isPhonePhysicalSize || isTabletPhysicalSize ? Math.round(innerWidth / inferredScale) : 0;
+        const viewportWidth = outerWidth > innerWidth ? outerWidth : innerWidth;
         const width =
           physicalTouchWidth >= 320 && physicalTouchWidth <= 1480
             ? physicalTouchWidth
-            : Math.min(innerWidth, outerWidth || innerWidth);
+            : viewportWidth;
         if (width > 0 && width <= 640) {
           document.documentElement.dataset.uiLayout = "mobile";
         } else if (width > 0 && width <= 1024) {
@@ -55,7 +56,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260515-light-theme-surfaces-3" />
+    <link rel="stylesheet" href="./styles.css?v=20260515-responsive-layout-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -1711,6 +1712,6 @@
       </div>
     </aside>
 
-    <script type="module" src="./app.js?v=20260513-image-decomposition-mainline-1"></script>
+    <script type="module" src="./app.js?v=20260515-responsive-layout-1"></script>
   </body>
 </html>

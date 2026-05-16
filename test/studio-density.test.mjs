@@ -184,6 +184,25 @@ test("studio layout mode keeps narrow desktop gutters on medium windows", () => 
   );
 });
 
+test("studio layout mode ignores stale smaller outerWidth values", () => {
+  assert.equal(
+    getStudioLayoutMode({
+      width: 1440,
+      height: 900,
+      outerWidth: 1050,
+    }),
+    "narrow-desktop",
+  );
+  assert.equal(
+    getStudioLayoutMode({
+      width: 1600,
+      height: 900,
+      outerWidth: 1050,
+    }),
+    "desktop",
+  );
+});
+
 test("studio layout mode collapses only when the actual window width is narrow", () => {
   assert.equal(
     getStudioLayoutMode({

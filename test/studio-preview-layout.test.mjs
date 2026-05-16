@@ -153,7 +153,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\.\/app\.js\?v=20260513-image-decomposition-mainline-1/);
+  assert.match(html, /\.\/app\.js\?v=20260515-responsive-layout-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -1102,13 +1102,18 @@ test("mobile and Pad studio layout uses dedicated compact workbench layouts", as
   assert.match(html, /id="parameterAdaptiveSection"[\s\S]*data-adaptive-section="parameters"[\s\S]*data-compact-open="false"[\s\S]*<summary class="field-heading adaptive-section-summary">/);
   assert.match(html, /dataset\.uiLayout = "mobile";[\s\S]*dataset\.uiLayout = "tablet";/);
   assert.match(html, /devicePixelRatio[\s\S]*isPhonePhysicalSize[\s\S]*isTabletPhysicalSize[\s\S]*physicalTouchWidth/);
-  assert.match(html, /\.\/styles\.css\?v=20260515-light-theme-surfaces-3/);
+  assert.match(html, /const viewportWidth = outerWidth > innerWidth \? outerWidth : innerWidth;/);
+  assert.match(html, /\.\/styles\.css\?v=20260515-responsive-layout-1/);
   assert.doesNotMatch(referenceAdaptiveSection, /\sopen(?:\s|>)/);
   assert.doesNotMatch(parameterAdaptiveSection, /\sopen(?:\s|>)/);
   assert.match(styles, /html,\s*[\r\n]+body\s*\{[\s\S]*overflow-x:\s*clip;/);
   assert.match(
     styles,
-    /html\[data-ui-layout="tablet"\] \.app-shell,\s*[\r\n]+html\[data-ui-layout="mobile"\] \.app-shell\s*\{[\s\S]*height:\s*100dvh;[\s\S]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);[\s\S]*overflow:\s*hidden;/,
+    /html\[data-ui-layout="tablet"\] \.app-shell\s*\{[\s\S]*height:\s*100dvh;[\s\S]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);[\s\S]*overflow:\s*hidden;/,
+  );
+  assert.match(
+    styles,
+    /html\[data-ui-layout="mobile"\] \.app-shell\s*\{[\s\S]*height:\s*auto;[\s\S]*min-height:\s*100dvh;[\s\S]*display:\s*block;[\s\S]*overflow:\s*visible;/,
   );
   assert.match(
     styles,
@@ -1116,10 +1121,13 @@ test("mobile and Pad studio layout uses dedicated compact workbench layouts", as
   );
   assert.match(
     styles,
-    /html\[data-ui-layout="mobile"\] \.studio-grid\s*\{[\s\S]*grid-template-rows:\s*minmax\(220px,\s*42%\)\s*minmax\(0,\s*1fr\);[\s\S]*"preview"[\s\S]*"settings";[\s\S]*height:\s*100%;[\s\S]*overflow:\s*hidden;/,
+    /html\[data-ui-layout="mobile"\] \.studio-grid\s*\{[\s\S]*grid-template-rows:\s*none;[\s\S]*"preview"[\s\S]*"settings";[\s\S]*height:\s*auto;[\s\S]*overflow:\s*visible;/,
   );
-  assert.match(styles, /html\[data-ui-layout="tablet"\] \.preview-panel,[\s\S]*html\[data-ui-layout="mobile"\] \.preview-panel\s*\{[\s\S]*grid-area:\s*preview;[\s\S]*height:\s*100%;/);
-  assert.match(styles, /html\[data-ui-layout="tablet"\] \.settings-form,[\s\S]*html\[data-ui-layout="mobile"\] \.settings-form\s*\{[\s\S]*height:\s*100%;[\s\S]*overflow:\s*auto;/);
+  assert.match(styles, /html\[data-ui-layout="tablet"\] \.preview-panel\s*\{[\s\S]*grid-area:\s*preview;[\s\S]*height:\s*100%;/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.preview-panel\s*\{[\s\S]*grid-area:\s*preview;[\s\S]*height:\s*auto;[\s\S]*overflow:\s*visible;/);
+  assert.match(styles, /html\[data-ui-layout="tablet"\] \.settings-form\s*\{[\s\S]*height:\s*100%;[\s\S]*overflow:\s*auto;/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.settings-form\s*\{[\s\S]*height:\s*auto;[\s\S]*overflow:\s*visible;/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.preview-canvas\s*\{[\s\S]*min-height:\s*clamp\(180px,\s*36svh,\s*280px\);/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.ratio-grid\s*\{[\s\S]*display:\s*flex;[\s\S]*overflow-x:\s*auto;/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.reference-dropzone\s*\{[\s\S]*min-height:\s*48px;[\s\S]*grid-template-columns:\s*30px\s*minmax\(0,\s*1fr\);/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.filmstrip-item span\s*\{[\s\S]*display:\s*none;/);
@@ -1131,7 +1139,7 @@ test("mobile and Pad studio layout uses dedicated compact workbench layouts", as
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.zoom-controls\s*\{[\s\S]*grid-template-columns:\s*34px\s*minmax\(52px,\s*1fr\)\s*34px\s*minmax\(54px,\s*0\.9fr\);/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.preview-actions\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
   assert.match(app, /const ADAPTIVE_COLLAPSIBLE_LAYOUTS = new Set\(\["tablet", "mobile"\]\);/);
-  assert.match(app, /studio-density\.mjs\?v=20260511-device-layout-config-1/);
+  assert.match(app, /studio-density\.mjs\?v=20260515-responsive-layout-1/);
   assert.match(app, /function getStudioViewportMetrics\(\) \{[\s\S]*coarsePointer:\s*window\.matchMedia\?\.\("\(pointer: coarse\)"\)\?\.matches \|\| false,/);
   assert.match(app, /function syncAdaptiveWorkbenchSections\(layoutMode = getCurrentStudioLayoutMode\(\)\) \{/);
   assert.match(app, /section\.open = section\.dataset\.compactOpen === "true";/);
@@ -1183,7 +1191,7 @@ test("studio caches generated browser images for persistent preview and download
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260513-image-decomposition-mainline-1/);
+  assert.match(html, /\/app\.js\?v=20260515-responsive-layout-1/);
   assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
   assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
@@ -1598,7 +1606,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260513-image-decomposition-mainline-1/);
+  assert.match(html, /app\.js\?v=20260515-responsive-layout-1/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);

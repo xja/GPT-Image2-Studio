@@ -104,19 +104,20 @@ test("creation planner gives concrete ecommerce role intent to scene, seeding, m
   assert.match(promptByRole.benefit, /resolved benefit visually/);
   assert.match(promptByRole.scene, /photorealistic product-in-use scene/);
   assert.match(promptByRole.scene, /being pursued or struck by a fish/);
-  assert.match(promptByRole["social-proof"], /photoreal real-use recommendation image/);
-  assert.match(promptByRole["social-proof"], /one coherent catch proof/);
-  assert.match(promptByRole["social-proof"], /angler holding the caught fish/);
-  assert.match(promptByRole["social-proof"], /same lure is attached to the fishing line through the exact line-tie, tow eye, or split ring that already exists on the reference lure/);
-  assert.match(promptByRole["social-proof"], /if the reference lure has a front\/nose tow eye ahead of the diving lip, attach the line there/);
-  assert.match(promptByRole["social-proof"], /original belly or tail treble hook point visibly set in the fish mouth, lip, or jaw/);
-  assert.match(promptByRole["social-proof"], /Keep the supplied reference lure's body, mouth, segments, tail, hooks, and hardware unchanged/);
-  assert.match(promptByRole["social-proof"], /same SKU: same silhouette, segment count, head direction, tail shape, paint pattern, belly hook hangers, and tail hook hardware/);
-  assert.match(promptByRole["social-proof"], /Keep every belly treble hanging below the lure body at its original underside hanger position/);
-  assert.match(promptByRole["social-proof"], /do not move any belly hook, split ring, or hook hanger onto the back, spine, side, fish mouth, or angler hand/);
-  assert.match(promptByRole["social-proof"], /the lure body must stay outside or beside the fish mouth while an original underside treble point hooks the mouth/);
-  assert.match(promptByRole["social-proof"], /Do not show a disconnected lure/);
-  assert.match(promptByRole["social-proof"], /do not invent a top\/back ring, dorsal ring, mouth ring, standalone hook, or new front attachment hardware/);
+  assert.match(promptByRole["social-proof"], /social-feed product recommendation image/);
+  assert.match(promptByRole["social-proof"], /real adult person or angler/);
+  assert.match(promptByRole["social-proof"], /preserve the exact reference product as the unchanged sellable subject/);
+  assert.match(promptByRole["social-proof"], /same lure silhouette, segment count, head direction, tail shape, paint pattern, eye placement, fin shapes, hook hangers, split rings, tow eye, belly treble hooks, and tail hook hardware/);
+  assert.match(promptByRole["social-proof"], /People, fish, hands, rods, line, water, logos, and text may appear as supporting marketing context/);
+  assert.match(promptByRole["social-proof"], /Show a real hooked fish only when its mouth, lip, or jaw is visibly biting an existing belly or tail treble hook from the reference lure/);
+  assert.match(promptByRole["social-proof"], /Clearly show one visible point of that original treble hook embedded in the fish mouth, lip, or jaw/);
+  assert.match(promptByRole["social-proof"], /Do not replace the treble hook with a separate single hook/);
+  assert.match(promptByRole["social-proof"], /Keep the lure body outside or beside the fish mouth/);
+  assert.match(promptByRole["social-proof"], /Do not invent a new hook, top hook, back hook, mouth ring, extra split ring, or new attachment point/);
+  assert.match(promptByRole["social-proof"], /must not replace, redesign, duplicate, hide, cover, recolor, resize, or move any visible part of the reference lure/);
+  assert.match(promptByRole["social-proof"], /Do not turn the lure into a real fish or a different lure SKU/);
+  assert.match(promptByRole["social-proof"], /one short selling-point headline from the provided selling points/);
+  assert.doesNotMatch(promptByRole["social-proof"], /caught fish merely posed beside the lure/);
   assert.match(promptByRole["usage-steps"], /Preserve the supplied reference product as the unchanged subject/);
   assert.match(promptByRole["usage-steps"], /do not redesign the lure body, paint pattern, segments, tail, hooks, lip, blade, or hardware/);
   assert.match(promptByRole["usage-steps"], /keep belly and tail treble hooks hanging from their original underside and tail hangers/);
@@ -521,6 +522,14 @@ test("creation planner adds role-specific guidance inside each marketing scenari
     scenario: "marketplace-search",
     selectedRoles: ["hero", "comparison"],
   });
+  const socialSeedingPlan = buildCreationPlan({
+    productName: "Jointed fishing lure",
+    productDescription: "Segmented lifelike lure with scale texture and steel treble hooks",
+    sellingPoints: "lifelike finish, sharp hooks, durable material",
+    targetLanguage: "en",
+    scenario: "social-seeding",
+    selectedRoles: ["social-proof"],
+  });
 
   assert.match(
     livestreamPlan.items.find((item) => item.role === "usage-steps").prompt,
@@ -537,6 +546,26 @@ test("creation planner adds role-specific guidance inside each marketing scenari
   assert.match(
     marketplacePlan.items.find((item) => item.role === "comparison").prompt,
     /crowded search result pages/,
+  );
+  assert.match(
+    socialSeedingPlan.items.find((item) => item.role === "social-proof").prompt,
+    /product-centered feed recommendation/,
+  );
+  assert.match(
+    socialSeedingPlan.items.find((item) => item.role === "social-proof").prompt,
+    /real adult person or angler/,
+  );
+  assert.doesNotMatch(
+    socialSeedingPlan.items.find((item) => item.role === "social-proof").prompt,
+    /believable user recommendation/,
+  );
+  assert.match(
+    socialSeedingPlan.items.find((item) => item.role === "social-proof").prompt,
+    /supporting marketing context/,
+  );
+  assert.match(
+    socialSeedingPlan.items.find((item) => item.role === "social-proof").prompt,
+    /real hooked fish/,
   );
   assert.match(getCreationScenarioRoleInstruction("unknown", "hero"), /selected ecommerce scenario/);
 });
