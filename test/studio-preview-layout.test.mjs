@@ -6,6 +6,9 @@ const indexPath = new URL("../public/index.html", import.meta.url);
 const stylesPath = new URL("../public/styles.css", import.meta.url);
 const appPath = new URL("../public/app.js", import.meta.url);
 const serverPath = new URL("../server.mjs", import.meta.url);
+const browserConfigPath = new URL("../lib/browser-config.mjs", import.meta.url);
+const browserImageCachePath = new URL("../lib/browser-image-cache.mjs", import.meta.url);
+const generationClientPath = new URL("../lib/generation-client.mjs", import.meta.url);
 
 function readCssRule(styles, selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -153,7 +156,7 @@ test("live feed keeps existing task order stable while activity text changes", a
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\.\/app\.js\?v=20260515-responsive-layout-1/);
+  assert.match(html, /\.\/app\.js\?v=20260517-view-modules-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -283,6 +286,21 @@ test("style transfer upload slots accept one image and align preview width to up
     styles,
     /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-grid \.reference-preview-button img\s*\{[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;/,
   );
+});
+
+test("pasted clipboard images in studio text inputs upload to the active image slot", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(
+    app,
+    /function getClipboardImageFiles\(clipboardData\) \{[\s\S]*clipboardData\?\.items[\s\S]*item\.kind === "file"[\s\S]*item\.type\.startsWith\("image\/"\)[\s\S]*item\.getAsFile\(\)/,
+  );
+  assert.match(
+    app,
+    /function handleStudioImagePaste\(event\) \{[\s\S]*const imageFiles = getClipboardImageFiles\(event\.clipboardData\);[\s\S]*if \(imageFiles\.length === 0\) \{[\s\S]*return;[\s\S]*event\.preventDefault\(\);[\s\S]*if \(state\.studioMode === "style-transfer"\) \{[\s\S]*applyStyleTransferReferenceFile\("source", imageFiles\);[\s\S]*return;[\s\S]*applyReferenceFiles\(imageFiles\);/,
+  );
+  assert.match(app, /refs\.promptInput\.addEventListener\("paste", handleStudioImagePaste\);/);
+  assert.match(app, /refs\.styleTransferInstructionInput\.addEventListener\("paste", handleStudioImagePaste\);/);
 });
 
 test("reference thumbnails render three per row and open a local preview viewer", async () => {
@@ -529,7 +547,10 @@ test("studio panels start without redundant title blocks and merge parameters un
 
   assert.match(html, /<details[\s\S]*class="field-group parameter-settings adaptive-section"[\s\S]*id="parameterAdaptiveSection"[\s\S]*<div class="ratio-grid" id="ratioGrid"><\/div>[\s\S]*<div class="advanced-content">/);
   assert.doesNotMatch(promptParameterSettings, /<small>Parameters<\/small>/);
-  assert.match(html, /<details[\s\S]*class="field-group parameter-settings adaptive-section"[\s\S]*<label class="compact-field">[\s\S]*id="reasoningEffortInput"[\s\S]*<label class="compact-field">[\s\S]*id="sizeInput"[\s\S]*<label class="compact-field">[\s\S]*id="outputFormatInput"/);
+  assert.match(html, /<details[\s\S]*class="field-group parameter-settings adaptive-section"[\s\S]*<label class="compact-field">[\s\S]*<span>思考等级<\/span>[\s\S]*id="reasoningEffortInput"[\s\S]*<label class="compact-field">[\s\S]*id="sizeInput"[\s\S]*<label class="compact-field">[\s\S]*id="outputFormatInput"/);
+  assert.match(app, /const REASONING_LABELS = \{[\s\S]*low: "Low",[\s\S]*medium: "Medium",[\s\S]*high: "High",[\s\S]*xhigh: "XHigh",[\s\S]*\};/);
+  assert.match(app, /const REASONING_ESTIMATES = \{[\s\S]*low: "30s\+",[\s\S]*medium: "90s\+",[\s\S]*high: "150s\+",[\s\S]*xhigh: "210s\+",[\s\S]*\};/);
+  assert.match(app, /option\.textContent = estimate \? `\$\{label\} ~\$\{estimate\}` : label;/);
   assert.match(html, /<div class="advanced-controls">[\s\S]*<label class="compact-field">[\s\S]*<span>输出格式<\/span>[\s\S]*<\/label>[\s\S]*<div class="parameter-meta" aria-label="工具模型与质量">[\s\S]*<span>工具模型<\/span>[\s\S]*<strong>gpt-image-2<\/strong>[\s\S]*<span>质量<\/span>[\s\S]*<strong>High<\/strong>[\s\S]*<\/div>[\s\S]*<\/div>/);
   assert.doesNotMatch(html, /<p>工具模型：/);
   assert.doesNotMatch(html, /<p>质量：/);
@@ -1173,16 +1194,19 @@ test("generation task refresh tolerates older servers without the task endpoint"
 test("studio stores API settings in the browser and sends them with cloud generation requests", async () => {
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
+  const browserConfig = await readFile(browserConfigPath, "utf8");
 
   assert.match(html, /id="configFeedback"[\s\S]*API Key 只保存在当前浏览器/);
-  assert.match(app, /const BROWSER_CONFIG_STORAGE_KEY = "image-studio-browser-config-v1";/);
-  assert.match(app, /function readBrowserPrivateConfig\(\) \{/);
-  assert.match(app, /function appendBrowserConfigToFormData\(formData\) \{/);
-  assert.match(app, /function getBrowserPrivateConfigRequestPayload\(\) \{/);
-  assert.match(app, /window\.localStorage\.setItem\(BROWSER_CONFIG_STORAGE_KEY, JSON\.stringify/);
-  assert.match(app, /formData\.set\("baseUrl", browserConfig\.baseUrl\);/);
-  assert.match(app, /formData\.set\("apiKey", browserConfig\.apiKey\);/);
-  assert.match(app, /formData\.set\("responsesModel", browserConfig\.responsesModel\);/);
+  assert.match(app, /from "\/lib\/browser-config\.mjs";/);
+  assert.match(app, /appendBrowserConfigToFormData,\s*[\s\S]*getBrowserPrivateConfigRequestPayload,\s*[\s\S]*readBrowserPrivateConfig,\s*[\s\S]*saveBrowserPrivateConfig,/);
+  assert.match(browserConfig, /export const BROWSER_CONFIG_STORAGE_KEY = "image-studio-browser-config-v1";/);
+  assert.match(browserConfig, /export function readBrowserPrivateConfig\(storage = getLocalStorage\(\)\) \{/);
+  assert.match(browserConfig, /export function appendBrowserConfigToFormData\(formData, readConfig = readBrowserPrivateConfig\) \{/);
+  assert.match(browserConfig, /export function getBrowserPrivateConfigRequestPayload\(readConfig = readBrowserPrivateConfig\) \{/);
+  assert.match(browserConfig, /storage\?\.setItem\?\.\(BROWSER_CONFIG_STORAGE_KEY, JSON\.stringify/);
+  assert.match(browserConfig, /formData\.set\("baseUrl", browserConfig\.baseUrl\);/);
+  assert.match(browserConfig, /formData\.set\("apiKey", browserConfig\.apiKey\);/);
+  assert.match(browserConfig, /formData\.set\("responsesModel", browserConfig\.responsesModel\);/);
   assert.match(app, /function buildPptFormData\(\) \{[\s\S]*appendBrowserConfigToFormData\(formData\);[\s\S]*return formData;/);
   assert.match(app, /function buildPptCompletionRequest\(slideNumbers\) \{[\s\S]*\.\.\.getBrowserPrivateConfigRequestPayload\(\),/);
 });
@@ -1190,39 +1214,41 @@ test("studio stores API settings in the browser and sends them with cloud genera
 test("studio caches generated browser images for persistent preview and download", async () => {
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
+  const browserImageCache = await readFile(browserImageCachePath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260515-responsive-layout-1/);
-  assert.match(app, /const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
-  assert.match(app, /function openBrowserImageCacheDB\(\) \{/);
-  assert.match(app, /function isServerImageProxyUrl\(url\) \{/);
-  assert.match(app, /async function fetchServerImageAsDataUrl\(imageUrl\) \{/);
-  assert.match(app, /async function cacheBrowserGalleryItem\(item\) \{/);
-  assert.match(app, /await fetchServerImageAsDataUrl\(imageUrl\)/);
-  assert.match(app, /if \(eventName === "final_image_chunk"\) \{[\s\S]*await cacheBrowserGalleryItem\(\{\s*filename: payload\.filename,[\s\S]*imageUrl: dataUrl,[\s\S]*thumbnailUrl: dataUrl,[\s\S]*\}\);/);
+  assert.match(html, /\/app\.js\?v=20260517-view-modules-1/);
+  assert.match(app, /from "\/lib\/browser-image-cache\.mjs";/);
+  assert.match(browserImageCache, /export const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
+  assert.match(browserImageCache, /export function openBrowserImageCacheDB\(\) \{/);
+  assert.match(browserImageCache, /export function isServerImageProxyUrl\(url\) \{/);
+  assert.match(browserImageCache, /export async function fetchServerImageAsDataUrl\(imageUrl\) \{/);
+  assert.match(browserImageCache, /export async function cacheBrowserGalleryItem\(item\) \{/);
+  assert.match(browserImageCache, /await fetchServerImageAsDataUrl\(imageUrl\)/);
+  assert.match(app, /if \(eventName === GENERATION_STREAM_EVENTS\.FINAL_IMAGE_CHUNK\) \{[\s\S]*await cacheBrowserGalleryItem\(\{\s*filename: payload\.filename,[\s\S]*imageUrl: dataUrl,[\s\S]*thumbnailUrl: dataUrl,[\s\S]*\}\);/);
   assert.match(app, /function attachChunkedImageToSavedItem\(item, finalImageChunks, fallbackDataUrl = ""\) \{/);
   assert.match(app, /const dataUrl = entry\?\.dataUrl \|\| \(isCacheableBrowserImageUrl\(fallbackDataUrl\) \? fallbackDataUrl : ""\);/);
   assert.match(app, /let finalImageDataUrl = "";/);
-  assert.match(app, /if \(eventName === "final_image"\) \{[\s\S]*finalImageDataUrl = isCacheableBrowserImageUrl\(payload\.dataUrl\) \? payload\.dataUrl : "";/);
+  assert.match(app, /if \(eventName === GENERATION_STREAM_EVENTS\.FINAL_IMAGE\) \{[\s\S]*finalImageDataUrl = isCacheableBrowserImageUrl\(payload\.dataUrl\) \? payload\.dataUrl : "";/);
   assert.match(app, /if \(dataUrl\) \{[\s\S]*finalImageDataUrl = dataUrl;[\s\S]*handleActivityFinal\(job\.id\);/);
   assert.match(
     app,
     /payload\.item = attachChunkedImageToSavedItem\(payload\.item, finalImageChunks, finalImageDataUrl \|\| job\.previewUrl\);/,
   );
-  assert.match(app, /const cachedImageUrl = isCacheableBrowserImageUrl\(cachedItem\?\.imageUrl\) \? cachedItem\.imageUrl : "";/);
-  assert.match(app, /imageUrl: cachedImageUrl \|\| item\.imageUrl \|\| cachedItem\?\.imageUrl \|\| "",/);
+  assert.match(browserImageCache, /const cachedImageUrl = isCacheableBrowserImageUrl\(cachedItem\?\.imageUrl\) \? cachedItem\.imageUrl : "";/);
+  assert.match(browserImageCache, /imageUrl: cachedImageUrl \|\| item\.imageUrl \|\| cachedItem\?\.imageUrl \|\| "",/);
   assert.match(
-    app,
+    browserImageCache,
     /thumbnailUrl: cachedThumbnailUrl \|\| item\.thumbnailUrl \|\| cachedItem\?\.thumbnailUrl \|\| cachedImageUrl \|\| "",/,
   );
   assert.match(app, /function mergeGalleryItemWithExistingBrowserImage\(item\) \{/);
   assert.match(app, /const imageMergedItem = mergeGalleryItemWithExistingBrowserImage\(item\);/);
   assert.match(app, /const hydratedItem = mergeGalleryItemWithCachedMetadata\(imageMergedItem, state\.galleryMetadataCache\[item\?\.filename\]\);/);
-  assert.match(app, /async function readBrowserCachedGalleryItems\(\) \{/);
+  assert.match(browserImageCache, /export async function readBrowserCachedGalleryItems\(\) \{/);
   assert.match(app, /function upsertGalleryItem\(item\) \{[\s\S]*void cacheBrowserGalleryItem\(hydratedItem\);/);
   assert.match(app, /async function loadGallery\(\) \{[\s\S]*const browserCachedItems = await readBrowserCachedGalleryItems\(\);[\s\S]*state\.gallery = sortGalleryItemsByCreatedAtDesc/);
   assert.match(app, /async function deleteGalleryItem\(item\) \{[\s\S]*await deleteBrowserCachedGalleryItem\(item\.filename\);/);
   assert.match(app, /async function clearHistory\(\) \{[\s\S]*await clearBrowserImageCache\(\);/);
-  assert.match(app, /function dataUrlToBlob\(dataUrl\) \{/);
+  assert.match(browserImageCache, /export function dataUrlToBlob\(dataUrl\) \{/);
   assert.match(app, /function imageElementToBlob\(imageElement\) \{/);
   assert.match(app, /async function resolveDownloadImageBlob\(item, imageElement\) \{/);
   assert.match(app, /const renderedBlob = await imageElementToBlob\(imageElement\);[\s\S]*if \(renderedBlob\) \{[\s\S]*return renderedBlob;/);
@@ -1236,11 +1262,12 @@ test("studio caches generated browser images for persistent preview and download
 
 test("studio accepts server-stored Cloudflare image URLs before browser caching finishes", async () => {
   const app = await readFile(appPath, "utf8");
+  const browserImageCache = await readFile(browserImageCachePath, "utf8");
 
-  assert.match(app, /if \(isServerImageProxyUrl\(imageUrl\)\) \{/);
+  assert.match(browserImageCache, /if \(isServerImageProxyUrl\(imageUrl\)\) \{/);
   assert.match(app, /const serverImageUrl = getServerImageUrl\(item\);/);
-  assert.match(app, /writeIndex\(\);[\s\S]*const dataUrl = hasDataUrl \? imageUrl : await fetchServerImageAsDataUrl\(imageUrl\);/);
-  assert.match(app, /const fallbackImageUrl = isServerImageProxyUrl\(entry\.imageUrl\) \? entry\.imageUrl : "";/);
+  assert.match(browserImageCache, /writeIndex\(\);[\s\S]*const dataUrl = hasDataUrl \? imageUrl : await fetchServerImageAsDataUrl\(imageUrl\);/);
+  assert.match(browserImageCache, /const fallbackImageUrl = isServerImageProxyUrl\(entry\.imageUrl\) \? entry\.imageUrl : "";/);
   assert.match(
     app,
     /payload\.item = attachChunkedImageToSavedItem\(payload\.item, finalImageChunks, finalImageDataUrl \|\| job\.previewUrl\);/,
@@ -1248,7 +1275,7 @@ test("studio accepts server-stored Cloudflare image URLs before browser caching 
   assert.match(app, /function applyServerImageToGalleryItem\(item\) \{/);
   assert.match(app, /const browserImageUrl = isCacheableBrowserImageUrl\(current\.imageUrl\)[\s\S]*\? current\.imageUrl[\s\S]*: isCacheableBrowserImageUrl\(current\.thumbnailUrl\)[\s\S]*\? current\.thumbnailUrl[\s\S]*: "";/);
   assert.match(app, /imageUrl: browserImageUrl \|\| serverImageUrl,/);
-  assert.match(app, /if \(eventName === "server_image"\) \{[\s\S]*applyServerImageToGalleryItem\(payload\.item\);[\s\S]*renderAll\(\);[\s\S]*return;/);
+  assert.match(app, /if \(eventName === GENERATION_STREAM_EVENTS\.SERVER_IMAGE\) \{[\s\S]*applyServerImageToGalleryItem\(payload\.item\);[\s\S]*renderAll\(\);[\s\S]*return;/);
   assert.match(app, /upsertGalleryItem\(payload\.item\);/);
 });
 
@@ -1256,10 +1283,28 @@ test("studio keeps queued Cloudflare jobs alive for task polling after the SSE r
   const app = await readFile(appPath, "utf8");
 
   assert.match(app, /let queuedForPolling = false;/);
-  assert.match(app, /if \(eventName === "queued"\) \{/);
+  assert.match(app, /if \(eventName === GENERATION_STREAM_EVENTS\.QUEUED\) \{/);
   assert.match(app, /scheduleGenerationTaskPolling\(\);/);
   assert.match(app, /currentJob\.isRunning = queuedForPolling;/);
   assert.match(app, /生成连接已中断，未收到完成事件/);
+});
+
+test("studio lazy-loads non-default view modules and renders only the active view", async () => {
+  const app = await readFile(appPath, "utf8");
+  const loader = await readFile(new URL("../lib/view-mode-loader.mjs", import.meta.url), "utf8");
+
+  assert.match(app, /ensureLazyViewModule/);
+  assert.match(app, /function ensureActiveViewModule\(view\) \{/);
+  assert.match(app, /function renderActiveView\(\) \{/);
+  assert.match(app, /function renderAll\(\) \{[\s\S]*renderActiveView\(\);[\s\S]*\}/);
+  assert.match(app, /setActiveView\(view\) \{[\s\S]*ensureActiveViewModule\(view\);[\s\S]*renderActiveView\(\);/);
+
+  const renderAllBody = app.match(/function renderAll\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
+  assert.doesNotMatch(renderAllBody, /renderCreationView\(\);[\s\S]*renderPptView\(\);[\s\S]*renderGalleryView\(\);/);
+
+  assert.match(loader, /export const VIEW_MODULE_URLS = Object\.freeze/);
+  assert.match(loader, /"creation": "\/lib\/views\/creation-view\.mjs"/);
+  assert.match(loader, /export async function ensureLazyViewModule/);
 });
 
 test("studio marks persisted active generation records as interrupted on reload", async () => {
@@ -1275,12 +1320,13 @@ test("studio marks persisted active generation records as interrupted on reload"
 
 test("studio keeps local port retry exhaustion out of the visible error feed", async () => {
   const app = await readFile(appPath, "utf8");
+  const generationClient = await readFile(generationClientPath, "utf8");
 
   assert.match(app, /isGenerationRequestRetryMessage,/);
   assert.match(app, /if \(isGenerationRequestRetryMessage\(detail\)\) \{[\s\S]*return null;/);
-  assert.match(app, /if \(retryPlan\.retryable && !retryPlan\.shouldSurfaceError\) \{[\s\S]*return null;/);
+  assert.match(generationClient, /if \(plan\.retryable && !plan\.shouldSurfaceError\) \{[\s\S]*return null;/);
   assert.match(app, /if \(!response\) \{[\s\S]*removeJob\(job\.id\);[\s\S]*return;/);
-  assert.doesNotMatch(app, /throw new Error\(retryPlan\.message\)/);
+  assert.doesNotMatch(generationClient, /throw new Error\(plan\.message\)/);
 });
 
 test("prompt template list shows titles only and uses title clicks to apply prompts", async () => {
@@ -1606,7 +1652,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260515-responsive-layout-1/);
+  assert.match(html, /app\.js\?v=20260517-view-modules-1/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);

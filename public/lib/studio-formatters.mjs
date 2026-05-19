@@ -1,8 +1,8 @@
 const REASONING_LABELS = {
-  low: "低",
-  medium: "中",
-  high: "高",
-  xhigh: "超高",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "XHigh",
 };
 
 export function formatImageModelLabel(imageModel) {
@@ -45,7 +45,7 @@ export function buildParameterText(item = {}, fallbackConfig = {}) {
     `画布：${item.size || "未记录"}`,
     `格式：${String(item.format || "png").toUpperCase()}`,
     `质量：${item.quality || "high"}`,
-    `推理强度：${REASONING_LABELS[item.reasoningEffort] || item.reasoningEffort || "未记录"}`,
+    `思考等级：${REASONING_LABELS[item.reasoningEffort] || item.reasoningEffort || "未记录"}`,
     `图像模型：${formatImageModelLabel(item.imageModel)}`,
     `外层模型：${item.responsesModel || fallbackConfig.responsesModel || "gpt-5.4"}`,
     `参考图：${item.hasReferenceImage ? referenceNames || "已使用" : "未使用"}`,

@@ -2,9 +2,13 @@ import { cp, copyFile, mkdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { syncPublicLib } from "./sync-public-lib.mjs";
+
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(scriptsDir, "..");
 const distDir = join(rootDir, "dist");
+
+await syncPublicLib();
 
 await rm(distDir, { recursive: true, force: true });
 await mkdir(distDir, { recursive: true });

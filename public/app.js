@@ -37,7 +37,6 @@ import {
   shouldReusePreviewLoadingShell,
 } from "/lib/preview-loading-shell.mjs";
 import {
-  getGenerationRequestRetryPlan,
   isGenerationRequestRetryMessage,
 } from "/lib/generation-request-retry.mjs";
 import {
@@ -49,7 +48,35 @@ import {
   sortGenerationActivityFeed,
   upsertGenerationActivityEntry,
 } from "/lib/generation-activity-feed.mjs?v=20260504-vercel-static-lib-1";
+import {
+  GENERATION_STREAM_EVENTS,
+  recordFinalImageChunk,
+} from "/lib/generation-stream-protocol.mjs";
 import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260515-responsive-layout-1";
+import { ensureLazyViewModule, getMountedLazyViewModule } from "/lib/view-mode-loader.mjs";
+import {
+  appendBrowserConfigToFormData,
+  getBrowserPrivateConfigRequestPayload,
+  getOrCreateClientSessionId,
+  readBrowserPrivateConfig,
+  saveBrowserPrivateConfig,
+  toPublicBrowserConfig,
+} from "/lib/browser-config.mjs";
+import {
+  cacheBrowserGalleryItem,
+  clearBrowserImageCache,
+  dataUrlToBlob,
+  deleteBrowserCachedGalleryItem,
+  fetchServerImageAsDataUrl,
+  getBrowserCachedImageData,
+  getImageUrl,
+  getServerImageUrl,
+  getServerThumbnailUrl,
+  isCacheableBrowserImageUrl,
+  mergeServerAndBrowserGalleryItems,
+  readBrowserCachedGalleryItems,
+} from "/lib/browser-image-cache.mjs";
+import { consumeSse, requestGenerationStream } from "/lib/generation-client.mjs";
 const SURPRISE_PROMPTS = [
   {
     name: "清晨通勤",
@@ -94,10 +121,17 @@ const SURPRISE_PROMPTS = [
 ];
 
 const REASONING_LABELS = {
-  low: "低",
-  medium: "中",
-  high: "高",
-  xhigh: "超高",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "XHigh",
+};
+
+const REASONING_ESTIMATES = {
+  low: "30s+",
+  medium: "90s+",
+  high: "150s+",
+  xhigh: "210s+",
 };
 
 const DEFAULT_LIMITS = {
@@ -283,13 +317,9 @@ const STYLE_TRANSFER_PRESETS = [
 ];
 const GALLERY_METADATA_CACHE_KEY = "image-studio-gallery-metadata-cache-v2";
 const GENERATION_ACTIVITY_STORAGE_KEY = "image-studio-generation-activity-v1";
-const BROWSER_CONFIG_STORAGE_KEY = "image-studio-browser-config-v1";
 const THEME_STORAGE_KEY = "image-studio-ui-theme-v1";
-const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";
-const BROWSER_IMAGE_CACHE_DB_NAME = "image-studio-browser-image-cache-v1";
 const CONNECTION_STATUS_ENTRY_LABEL = "API、LOG";
 const CONNECTION_STATUS_EMPTY_LABEL = "待填写API、LOG";
-const BROWSER_IMAGE_CACHE_STORE_NAME = "generated-images";
 const PROMPT_ANALYSIS_IMAGE_MAX_EDGE = 1024;
 const PROMPT_ANALYSIS_IMAGE_COMPRESS_THRESHOLD_BYTES = 900 * 1024;
 const PROMPT_ANALYSIS_IMAGE_JPEG_QUALITY = 0.82;
@@ -895,12 +925,6 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function wait(milliseconds) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, milliseconds);
-  });
-}
-
 function buildReferenceFingerprint(file) {
   return `${file.name}:${file.size}:${file.lastModified}`;
 }
@@ -1047,88 +1071,6 @@ function getDisplayPrompt(item) {
   return "未命名输出";
 }
 
-function getServerImageUrl(item = {}) {
-  const imageUrl = String(item.serverImageUrl || item.imageUrl || "");
-  const thumbnailUrl = String(item.serverThumbnailUrl || item.thumbnailUrl || "");
-  if (isServerImageProxyUrl(imageUrl)) {
-    return imageUrl;
-  }
-  if (isServerImageProxyUrl(thumbnailUrl)) {
-    return thumbnailUrl;
-  }
-  return "";
-}
-
-function getServerThumbnailUrl(item = {}) {
-  const thumbnailUrl = String(item.serverThumbnailUrl || item.thumbnailUrl || "");
-  if (isServerImageProxyUrl(thumbnailUrl)) {
-    return thumbnailUrl;
-  }
-  return getServerImageUrl(item);
-}
-
-function getImageUrl(item) {
-  return item?.imageUrl || item?.thumbnailUrl || item?.previewUrl || item?.serverImageUrl || item?.serverThumbnailUrl || "";
-}
-
-function isCacheableBrowserImageUrl(url) {
-  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(String(url || ""));
-}
-
-function isServerImageProxyUrl(url) {
-  const raw = String(url || "").trim();
-  if (!raw) {
-    return false;
-  }
-
-  if (raw.startsWith("/api/images/")) {
-    return true;
-  }
-
-  try {
-    const parsed = new URL(raw, window.location.origin);
-    return parsed.origin === window.location.origin && parsed.pathname.startsWith("/api/images/");
-  } catch (_error) {
-    return false;
-  }
-}
-
-function readBlobAsDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("FileReader failed"));
-    reader.readAsDataURL(blob);
-  });
-}
-
-async function fetchServerImageAsDataUrl(imageUrl) {
-  const response = await fetch(imageUrl, {
-    credentials: "same-origin",
-    cache: "force-cache",
-  });
-  if (!response.ok) {
-    throw new Error(`server image fetch failed with status ${response.status}`);
-  }
-
-  const blob = await response.blob();
-  if (!blob.type.startsWith("image/")) {
-    throw new Error("server image response is not an image");
-  }
-  return readBlobAsDataUrl(blob);
-}
-
-function dataUrlToBlob(dataUrl) {
-  const [header, base64 = ""] = String(dataUrl || "").split(",", 2);
-  const mimeType = header.match(/^data:([^;]+);base64$/i)?.[1] || "application/octet-stream";
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return new Blob([bytes], { type: mimeType });
-}
-
 function imageElementToBlob(imageElement) {
   if (!imageElement?.complete || !imageElement.naturalWidth || !imageElement.naturalHeight) {
     return Promise.resolve(null);
@@ -1216,258 +1158,6 @@ async function downloadGalleryItem(item, imageElement) {
   }
   const blob = await resolveDownloadImageBlob(item, imageElement);
   triggerBrowserImageDownload(blob, item.filename || "preview.png");
-}
-
-function normalizeBrowserCachedGalleryItem(item = {}) {
-  const filename = String(item.filename || "").trim();
-  if (!filename) {
-    return null;
-  }
-
-  const serverImageUrl = getServerImageUrl(item);
-  const serverThumbnailUrl = getServerThumbnailUrl(item);
-  const normalized = {
-    id: String(item.id || ""),
-    filename,
-    createdAt: String(item.createdAt || nowIso()),
-    prompt: String(item.prompt || ""),
-    baseUrl: String(item.baseUrl || ""),
-    responsesModel: String(item.responsesModel || ""),
-    imageModel: String(item.imageModel || "gpt-image-2"),
-    hasReferenceImage: Boolean(item.hasReferenceImage),
-    referenceImageNames: Array.isArray(item.referenceImageNames) ? item.referenceImageNames.map(String).filter(Boolean) : [],
-    referenceImageName: String(item.referenceImageName || ""),
-    ratio: String(item.ratio || ""),
-    ratioLabel: String(item.ratioLabel || ""),
-    size: String(item.size || ""),
-    quality: String(item.quality || ""),
-    format: String(item.format || ""),
-    reasoningEffort: String(item.reasoningEffort || ""),
-    generationStartedAt: String(item.generationStartedAt || ""),
-    generationCompletedAt: String(item.generationCompletedAt || ""),
-    generationDurationMs: String(item.generationDurationMs || ""),
-  };
-
-  if (serverImageUrl) {
-    normalized.imageUrl = serverImageUrl;
-  }
-  if (serverThumbnailUrl) {
-    normalized.thumbnailUrl = serverThumbnailUrl;
-  } else if (normalized.imageUrl) {
-    normalized.thumbnailUrl = normalized.imageUrl;
-  }
-
-  return normalized;
-}
-
-function readBrowserImageCacheIndex() {
-  try {
-    const raw = window.localStorage.getItem(BROWSER_IMAGE_CACHE_INDEX_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed)
-      ? parsed.map(normalizeBrowserCachedGalleryItem).filter(Boolean)
-      : [];
-  } catch (_error) {
-    return [];
-  }
-}
-
-function writeBrowserImageCacheIndex(items) {
-  try {
-    window.localStorage.setItem(
-      BROWSER_IMAGE_CACHE_INDEX_KEY,
-      JSON.stringify(items.map(normalizeBrowserCachedGalleryItem).filter(Boolean)),
-    );
-  } catch (_error) {
-    // Ignore storage quota or privacy-mode failures; IndexedDB still keeps images for this session.
-  }
-}
-
-function openBrowserImageCacheDB() {
-  if (!window.indexedDB) {
-    return Promise.resolve(null);
-  }
-
-  return new Promise((resolve, reject) => {
-    const request = window.indexedDB.open(BROWSER_IMAGE_CACHE_DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore(BROWSER_IMAGE_CACHE_STORE_NAME, { keyPath: "filename" });
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error("IndexedDB open failed"));
-  });
-}
-
-async function withBrowserImageCacheStore(mode, operation) {
-  const db = await openBrowserImageCacheDB();
-  if (!db) {
-    return null;
-  }
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(BROWSER_IMAGE_CACHE_STORE_NAME, mode);
-    const store = transaction.objectStore(BROWSER_IMAGE_CACHE_STORE_NAME);
-    let operationResult = null;
-    transaction.oncomplete = () => {
-      db.close();
-      resolve(operationResult);
-    };
-    transaction.onerror = () => {
-      db.close();
-      reject(transaction.error || new Error("IndexedDB transaction failed"));
-    };
-    operationResult = operation(store);
-  });
-}
-
-async function putBrowserCachedImageData(filename, dataUrl) {
-  await withBrowserImageCacheStore("readwrite", (store) => {
-    store.put({ filename, dataUrl, updatedAt: nowIso() });
-  });
-}
-
-async function getBrowserCachedImageData(filename) {
-  return withBrowserImageCacheStore("readonly", (store) => {
-    const request = store.get(filename);
-    return new Promise((resolve, reject) => {
-      request.onsuccess = () => resolve(request.result?.dataUrl || "");
-      request.onerror = () => reject(request.error || new Error("IndexedDB read failed"));
-    });
-  });
-}
-
-async function deleteBrowserCachedImageData(filename) {
-  await withBrowserImageCacheStore("readwrite", (store) => {
-    store.delete(filename);
-  });
-}
-
-async function cacheBrowserGalleryItem(item) {
-  const cachedItem = normalizeBrowserCachedGalleryItem(item);
-  const serverImageUrl = getServerImageUrl(item);
-  let imageUrl = getImageUrl(item);
-  if (!isCacheableBrowserImageUrl(imageUrl) && serverImageUrl) {
-    imageUrl = serverImageUrl;
-  }
-  const hasServerImageUrl = isServerImageProxyUrl(imageUrl);
-  const hasDataUrl = isCacheableBrowserImageUrl(imageUrl);
-  if (!cachedItem || (!hasDataUrl && !hasServerImageUrl)) {
-    return;
-  }
-
-  const writeIndex = () => {
-    const nextIndex = [
-      cachedItem,
-      ...readBrowserImageCacheIndex().filter((entry) => entry.filename !== cachedItem.filename),
-    ];
-    writeBrowserImageCacheIndex(nextIndex);
-  };
-
-  try {
-    if (hasServerImageUrl) {
-      writeIndex();
-    }
-    const dataUrl = hasDataUrl ? imageUrl : await fetchServerImageAsDataUrl(imageUrl);
-    await putBrowserCachedImageData(cachedItem.filename, dataUrl);
-    writeIndex();
-    await navigator.storage?.persist?.();
-  } catch (error) {
-    console.warn("cache generated image in browser failed", cachedItem.filename, error);
-  }
-}
-
-async function readBrowserCachedGalleryItems() {
-  const entries = readBrowserImageCacheIndex();
-  const restoredItems = [];
-  const missingFilenames = new Set();
-
-  for (const entry of entries) {
-    try {
-      const dataUrl = await getBrowserCachedImageData(entry.filename);
-      const fallbackImageUrl = isServerImageProxyUrl(entry.imageUrl) ? entry.imageUrl : "";
-      const fallbackThumbnailUrl = isServerImageProxyUrl(entry.thumbnailUrl) ? entry.thumbnailUrl : fallbackImageUrl;
-      if (!isCacheableBrowserImageUrl(dataUrl)) {
-        if (fallbackImageUrl) {
-          restoredItems.push({
-            ...entry,
-            imageUrl: fallbackImageUrl,
-            thumbnailUrl: fallbackThumbnailUrl,
-          });
-        } else {
-          missingFilenames.add(entry.filename);
-        }
-        continue;
-      }
-
-      restoredItems.push({
-        ...entry,
-        imageUrl: dataUrl,
-        thumbnailUrl: dataUrl,
-      });
-    } catch (_error) {
-      missingFilenames.add(entry.filename);
-    }
-  }
-
-  if (missingFilenames.size > 0) {
-    writeBrowserImageCacheIndex(entries.filter((entry) => !missingFilenames.has(entry.filename)));
-  }
-
-  return restoredItems;
-}
-
-async function deleteBrowserCachedGalleryItem(filename) {
-  const normalizedFilename = String(filename || "").trim();
-  if (!normalizedFilename) {
-    return;
-  }
-
-  writeBrowserImageCacheIndex(readBrowserImageCacheIndex().filter((entry) => entry.filename !== normalizedFilename));
-  try {
-    await deleteBrowserCachedImageData(normalizedFilename);
-  } catch (_error) {
-    // The in-page gallery has already been updated; stale browser data can be ignored.
-  }
-}
-
-async function clearBrowserImageCache() {
-  window.localStorage.removeItem(BROWSER_IMAGE_CACHE_INDEX_KEY);
-  try {
-    await withBrowserImageCacheStore("readwrite", (store) => {
-      store.clear();
-    });
-  } catch (_error) {
-    // Ignore unavailable IndexedDB or privacy-mode failures.
-  }
-}
-
-function mergeServerAndBrowserGalleryItems(serverItems, browserItems) {
-  const mergedByFilename = new Map();
-
-  for (const item of browserItems) {
-    if (item?.filename) {
-      mergedByFilename.set(item.filename, item);
-    }
-  }
-
-  for (const item of serverItems) {
-    if (!item?.filename) {
-      continue;
-    }
-    const cachedItem = mergedByFilename.get(item.filename);
-    const cachedImageUrl = isCacheableBrowserImageUrl(cachedItem?.imageUrl) ? cachedItem.imageUrl : "";
-    const cachedThumbnailUrl = isCacheableBrowserImageUrl(cachedItem?.thumbnailUrl)
-      ? cachedItem.thumbnailUrl
-      : cachedImageUrl;
-    mergedByFilename.set(item.filename, {
-      ...cachedItem,
-      ...item,
-      imageUrl: cachedImageUrl || item.imageUrl || cachedItem?.imageUrl || "",
-      thumbnailUrl: cachedThumbnailUrl || item.thumbnailUrl || cachedItem?.thumbnailUrl || cachedImageUrl || "",
-    });
-  }
-
-  return [...mergedByFilename.values()];
 }
 
 function getDisplayId(item) {
@@ -1875,100 +1565,23 @@ function setStudioGenerationMode(mode = "prompt") {
   updateGenerateButton();
 }
 
-function getOrCreateClientSessionId() {
-  const storageKey = "image-studio-client-session-id";
-  const existing = window.localStorage.getItem(storageKey);
-  if (existing) {
-    return existing;
+async function ensureActiveViewModule(view) {
+  if (view === "studio") {
+    return true;
   }
 
-  const next = `studio-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  window.localStorage.setItem(storageKey, next);
-  return next;
-}
-
-function maskBrowserApiKey(apiKey) {
-  if (!apiKey) {
-    return "";
-  }
-
-  if (apiKey.length <= 8) {
-    return `${apiKey.slice(0, 2)}***`;
-  }
-
-  return `${apiKey.slice(0, 4)}***${apiKey.slice(-4)}`;
-}
-
-function normalizeBrowserPrivateConfig(source = {}) {
-  const baseUrl = String(source.baseUrl || "https://api.openai.com/v1").trim();
-  const apiKey = String(source.apiKey || "").trim();
-  const responsesModel = String(source.responsesModel || "gpt-5.5").trim();
-
-  return {
-    baseUrl: baseUrl || "https://api.openai.com/v1",
-    apiKey,
-    responsesModel: responsesModel || "gpt-5.5",
-  };
-}
-
-function readBrowserPrivateConfig() {
   try {
-    const raw = window.localStorage.getItem(BROWSER_CONFIG_STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
-
-    return normalizeBrowserPrivateConfig(JSON.parse(raw));
-  } catch {
-    return null;
+    await ensureLazyViewModule(view, {
+      context: {
+        renderers: VIEW_RENDERERS,
+      },
+    });
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    showError(`工作区模块加载失败：${message}`);
+    return false;
   }
-}
-
-function toPublicBrowserConfig(privateConfig, baseConfig = {}) {
-  const normalized = normalizeBrowserPrivateConfig(privateConfig);
-  return {
-    ...baseConfig,
-    baseUrl: normalized.baseUrl,
-    apiKeyConfigured: Boolean(normalized.apiKey),
-    apiKeyMask: maskBrowserApiKey(normalized.apiKey),
-    responsesModel: normalized.responsesModel,
-  };
-}
-
-function saveBrowserPrivateConfig(payload) {
-  const current = readBrowserPrivateConfig() || normalizeBrowserPrivateConfig();
-  const next = normalizeBrowserPrivateConfig({
-    ...current,
-    baseUrl: payload.baseUrl,
-    apiKey: payload.apiKey ? payload.apiKey : current.apiKey,
-    responsesModel: payload.responsesModel,
-  });
-
-  window.localStorage.setItem(BROWSER_CONFIG_STORAGE_KEY, JSON.stringify(next));
-  return next;
-}
-
-function appendBrowserConfigToFormData(formData) {
-  const browserConfig = readBrowserPrivateConfig();
-  if (!browserConfig) {
-    return formData;
-  }
-
-  formData.set("baseUrl", browserConfig.baseUrl);
-  formData.set("apiKey", browserConfig.apiKey);
-  formData.set("responsesModel", browserConfig.responsesModel);
-  return formData;
-}
-
-function getBrowserPrivateConfigRequestPayload() {
-  const browserConfig = readBrowserPrivateConfig();
-  return browserConfig
-    ? {
-        baseUrl: browserConfig.baseUrl,
-        apiKey: browserConfig.apiKey,
-        responsesModel: browserConfig.responsesModel,
-      }
-    : {};
 }
 
 function compactErrorMessage(message, fallbackLabel = "请求失败") {
@@ -2241,7 +1854,7 @@ function bindStudioDensitySync() {
   }
 }
 
-function setActiveView(view) {
+async function setActiveView(view) {
   state.activeView = view;
   syncHash(view);
   const activeNavSection = CREATE_VIEW_IDS.has(view) ? "create" : ASSET_VIEW_IDS.has(view) ? "assets" : "";
@@ -2261,6 +1874,11 @@ function setActiveView(view) {
     panel.classList.toggle("hidden", panel.dataset.viewPanel !== activePanelView);
   });
 
+  const moduleReady = await ensureActiveViewModule(view);
+  if (!moduleReady || state.activeView !== view) {
+    return false;
+  }
+
   if (view === "studio" || view === "style-transfer") {
     setStudioGenerationMode(view === "style-transfer" ? "style-transfer" : "prompt");
   }
@@ -2270,10 +1888,12 @@ function setActiveView(view) {
   if (view === "creation-record") {
     refreshCreationRecordSets();
   }
+  renderActiveView();
   syncGalleryLayoutMode();
   scheduleStudioHeightSync();
   scheduleGalleryPanelHeightSync();
   scheduleGalleryScrollSync();
+  return true;
 }
 
 function updatePromptCounter() {
@@ -4400,8 +4020,10 @@ function renderReasoningOptions() {
 
   state.reasoningEfforts.forEach((value) => {
     const option = document.createElement("option");
+    const label = REASONING_LABELS[value] || value;
+    const estimate = REASONING_ESTIMATES[value] || "";
     option.value = value;
-    option.textContent = REASONING_LABELS[value] || value;
+    option.textContent = estimate ? `${label} ~${estimate}` : label;
     refs.reasoningEffortInput.appendChild(option);
   });
 
@@ -5938,6 +5560,39 @@ function renderStudio() {
   scheduleStudioHeightSync();
 }
 
+const VIEW_RENDERERS = Object.freeze({
+  studio: renderStudio,
+  styleTransfer: renderStudio,
+  referenceAnalysis() {
+    renderReferenceAnalysisGrid();
+    renderReferenceAnalysis();
+  },
+  imageDecomposition: renderImageDecompositionView,
+  articleIllustration: renderArticleIllustrationView,
+  articleRecord: renderArticleRecordView,
+  creation: renderCreationView,
+  creationRecord: renderCreationRecordView,
+  ppt: renderPptView,
+  pptRecord: renderPptRecordView,
+  gallery: renderGalleryView,
+});
+
+function renderActiveView() {
+  if (state.activeView === "studio") {
+    renderStudio();
+    return true;
+  }
+
+  const mountedView = getMountedLazyViewModule(state.activeView);
+  if (mountedView && typeof mountedView.renderView === "function") {
+    return mountedView.renderView({
+      renderers: VIEW_RENDERERS,
+    });
+  }
+
+  return false;
+}
+
 function renderAll() {
   const settingsScrollTop = getSettingsFormScrollTop();
 
@@ -5945,16 +5600,7 @@ function renderAll() {
   syncConnectionState();
   updateGenerateButton();
   renderTimeline();
-  renderStudio();
-  renderReferenceAnalysisGrid();
-  renderReferenceAnalysis();
-  renderImageDecompositionView();
-  renderArticleIllustrationView();
-  renderArticleRecordView();
-  renderCreationView();
-  renderCreationRecordView();
-  renderPptView();
-  renderGalleryView();
+  renderActiveView();
   syncLightboxItem();
 
   restoreSettingsFormScrollTop(settingsScrollTop);
@@ -6222,93 +5868,6 @@ function stepZoom(delta) {
   const next = Math.min(1.8, Math.max(0.6, state.zoom + delta));
   state.zoom = Number(next.toFixed(2));
   renderPreview();
-}
-
-function parseSseChunk(chunk) {
-  const lines = chunk
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter(Boolean);
-
-  let eventName = "";
-  const dataLines = [];
-
-  for (const line of lines) {
-    if (line.startsWith(":")) {
-      continue;
-    }
-
-    if (line.startsWith("event:")) {
-      eventName = line.slice("event:".length).trim();
-      continue;
-    }
-
-    if (line.startsWith("data:")) {
-      dataLines.push(line.slice("data:".length).trim());
-    }
-  }
-
-  return {
-    eventName,
-    data: dataLines.join("\n"),
-  };
-}
-
-async function consumeSse(body, onEvent) {
-  const reader = body.getReader();
-  const decoder = new TextDecoder("utf-8");
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split(/\r?\n\r?\n/);
-    buffer = chunks.pop() ?? "";
-
-    for (const chunk of chunks) {
-      const parsed = parseSseChunk(chunk);
-      if (!parsed.data || parsed.data === "[DONE]") {
-        continue;
-      }
-
-      await onEvent(parsed.eventName, JSON.parse(parsed.data));
-    }
-  }
-}
-
-function recordFinalImageChunk(finalImageChunks, payload = {}) {
-  const filename = String(payload.filename || "").trim();
-  const index = Number(payload.index);
-  const total = Number(payload.total);
-  const chunk = String(payload.chunk || "");
-  const mimeType = String(payload.mimeType || "image/png");
-  if (!filename || !Number.isInteger(index) || !Number.isInteger(total) || total <= 0 || index < 0 || index >= total || !chunk) {
-    return "";
-  }
-
-  const existing = finalImageChunks.get(filename) || {
-    chunks: new Array(total).fill(""),
-    received: 0,
-    total,
-    mimeType,
-    dataUrl: "",
-  };
-
-  if (!existing.chunks[index]) {
-    existing.chunks[index] = chunk;
-    existing.received += 1;
-  }
-
-  if (existing.received === existing.total && !existing.dataUrl) {
-    existing.dataUrl = `data:${existing.mimeType};base64,${existing.chunks.join("")}`;
-  }
-
-  finalImageChunks.set(filename, existing);
-  return existing.dataUrl;
 }
 
 function attachChunkedImageToSavedItem(item, finalImageChunks, fallbackDataUrl = "") {
@@ -11598,45 +11157,6 @@ function cancelQueuedJob(jobId) {
   return true;
 }
 
-async function requestGenerationStream(job) {
-  while (true) {
-    try {
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: {
-          "x-client-session-id": state.clientSessionId,
-        },
-        body: buildGenerationFormData(job),
-      });
-
-      if (!response.ok || !response.body) {
-        throw new Error("生成请求失败");
-      }
-
-      return response;
-    } catch (error) {
-      const retryPlan = getGenerationRequestRetryPlan({
-        error,
-        retryCount: job.requestRetryCount || 0,
-      });
-      if (!retryPlan.shouldRetry) {
-        if (retryPlan.retryable && !retryPlan.shouldSurfaceError) {
-          return null;
-        }
-        throw error;
-      }
-
-      job.requestRetryCount = retryPlan.nextRetryCount;
-      updateJob(job.id, {
-        requestRetryCount: retryPlan.nextRetryCount,
-        statusStage: "connecting",
-        statusText: retryPlan.message,
-      });
-      await wait(900);
-    }
-  }
-}
-
 async function loadConfig() {
   let serverConfig = null;
   try {
@@ -12225,7 +11745,12 @@ async function runGeneration(job) {
   let terminalEventReceived = false;
   let queuedForPolling = false;
   try {
-    const response = await requestGenerationStream(job);
+    const response = await requestGenerationStream({
+      job,
+      clientSessionId: state.clientSessionId,
+      buildGenerationFormData,
+      updateJob: (patch) => updateJob(job.id, patch),
+    });
     if (!response) {
       removeJob(job.id);
       renderAll();
@@ -12233,7 +11758,7 @@ async function runGeneration(job) {
     }
 
     await consumeSse(response.body, async (eventName, payload) => {
-      if (eventName === "status") {
+      if (eventName === GENERATION_STREAM_EVENTS.STATUS) {
         updateJob(job.id, {
           statusStage: payload.stage,
           statusText: payload.message,
@@ -12246,7 +11771,7 @@ async function runGeneration(job) {
         return;
       }
 
-      if (eventName === "partial_image") {
+      if (eventName === GENERATION_STREAM_EVENTS.PARTIAL_IMAGE) {
         updateJob(job.id, {
           previewUrl: payload.dataUrl,
           statusText: "已收到中途预览",
@@ -12256,7 +11781,7 @@ async function runGeneration(job) {
         return;
       }
 
-      if (eventName === "final_image") {
+      if (eventName === GENERATION_STREAM_EVENTS.FINAL_IMAGE) {
         finalImageDataUrl = isCacheableBrowserImageUrl(payload.dataUrl) ? payload.dataUrl : "";
         updateJob(job.id, {
           previewUrl: payload.dataUrl,
@@ -12267,7 +11792,7 @@ async function runGeneration(job) {
         return;
       }
 
-      if (eventName === "final_image_chunk") {
+      if (eventName === GENERATION_STREAM_EVENTS.FINAL_IMAGE_CHUNK) {
         const dataUrl = recordFinalImageChunk(finalImageChunks, payload);
         if (dataUrl) {
           finalImageDataUrl = dataUrl;
@@ -12288,7 +11813,7 @@ async function runGeneration(job) {
         return;
       }
 
-      if (eventName === "saved") {
+      if (eventName === GENERATION_STREAM_EVENTS.SAVED) {
         terminalEventReceived = true;
         payload.item = attachChunkedImageToSavedItem(payload.item, finalImageChunks, finalImageDataUrl || job.previewUrl);
         if (payload.item) {
@@ -12315,13 +11840,13 @@ async function runGeneration(job) {
         return;
       }
 
-      if (eventName === "server_image") {
+      if (eventName === GENERATION_STREAM_EVENTS.SERVER_IMAGE) {
         applyServerImageToGalleryItem(payload.item);
         renderAll();
         return;
       }
 
-      if (eventName === "queued") {
+      if (eventName === GENERATION_STREAM_EVENTS.QUEUED) {
         queuedForPolling = true;
         const task = payload.task || {};
         updateJob(job.id, {
@@ -12335,7 +11860,7 @@ async function runGeneration(job) {
         return;
       }
 
-      if (eventName === "error") {
+      if (eventName === GENERATION_STREAM_EVENTS.ERROR) {
         terminalEventReceived = true;
         const message = compactErrorMessage(payload.message, "生成请求失败");
         handleActivityFailure(job.id, message);
@@ -12562,6 +12087,33 @@ function bindStyleTransferDropzone(dropzone, slot) {
     dropzone.classList.remove("dragover");
     applyStyleTransferReferenceFile(slot, event.dataTransfer?.files);
   });
+}
+
+function getClipboardImageFiles(clipboardData) {
+  const itemFiles = [...(clipboardData?.items || [])]
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+  if (itemFiles.length > 0) {
+    return itemFiles;
+  }
+
+  return [...(clipboardData?.files || [])].filter((file) => file.type.startsWith("image/"));
+}
+
+function handleStudioImagePaste(event) {
+  const imageFiles = getClipboardImageFiles(event.clipboardData);
+  if (imageFiles.length === 0) {
+    return;
+  }
+
+  event.preventDefault();
+  if (state.studioMode === "style-transfer") {
+    applyStyleTransferReferenceFile("source", imageFiles);
+    return;
+  }
+
+  applyReferenceFiles(imageFiles);
 }
 
 function bindEvents() {
@@ -13071,7 +12623,9 @@ function bindEvents() {
   refs.deletePromptTemplateButton.addEventListener("click", deletePromptTemplate);
   refs.promptInput.addEventListener("input", updatePromptCounter);
   refs.promptInput.addEventListener("keydown", handlePromptGenerationShortcut);
+  refs.promptInput.addEventListener("paste", handleStudioImagePaste);
   refs.styleTransferInstructionInput.addEventListener("keydown", handlePromptGenerationShortcut);
+  refs.styleTransferInstructionInput.addEventListener("paste", handleStudioImagePaste);
   refs.styleTransferPresetInput.addEventListener("change", handleStyleTransferPresetChange);
   refs.sizeInput.addEventListener("change", (event) => {
     syncGenerationSize(event.target.value);
@@ -13509,17 +13063,9 @@ async function bootstrap() {
   renderCreationIndustryTemplateBrowser();
   updateGenerateButton();
   renderReferenceGrid();
-  renderReferenceAnalysisGrid();
-  renderReferenceAnalysis();
   renderStyleTransferReferences();
   renderPromptTemplates();
   renderTimeline();
-  renderStudio();
-  renderArticleIllustrationView();
-  renderArticleRecordView();
-  renderCreationView();
-  renderPptView();
-  renderGalleryView();
   setActiveView(getViewFromHash());
   scheduleGalleryPanelHeightSync();
   scheduleGalleryScrollSync();

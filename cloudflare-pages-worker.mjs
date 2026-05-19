@@ -19,6 +19,10 @@ import {
   toApiOutputFormat,
   toOutputFormatMimeType,
 } from "./lib/output-format-options.mjs";
+import {
+  GENERATION_STREAM_EVENTS,
+  buildFinalImageChunkPayloads,
+} from "./lib/generation-stream-protocol.mjs";
 import { buildCreationPlan, normalizeCreationLogoOptions } from "./lib/creation-planner.mjs";
 import { generatePptDeckOutline } from "./lib/ppt-deck-workflow.mjs";
 import { buildSlideEditPrompt, buildSlideImagePrompts } from "./lib/ppt-slide-prompts.mjs";
@@ -31,6 +35,7 @@ import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
 import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
 import { runWithConcurrency } from "./lib/limited-concurrency.mjs";
 import { requestPromptAgentAnalysis } from "./lib/prompt-agent.mjs";
+import { writeWorkerSseEvent } from "./lib/sse-writer.mjs";
 import {
   DEFAULT_BASE_URL,
   DEFAULT_REASONING_EFFORT,
@@ -39,6 +44,7 @@ import {
   MAX_REFERENCE_IMAGES,
   REASONING_EFFORT_OPTIONS,
 } from "./lib/studio-constants.mjs";
+import { buildUnsupportedRuntimeCapabilityPayload } from "./lib/api-contract.mjs";
 
 const DEFAULT_RESPONSES_MODEL = "gpt-5.5";
 const PPT_SLIDE_SIZE = "2048x1152";
@@ -51,7 +57,6 @@ const SERVER_IMAGE_STORAGE_PREFIX = "images/";
 const GENERATION_TASK_STORAGE_PREFIX = "generation-tasks/";
 const GENERATION_REQUEST_STORAGE_PREFIX = "generation-requests/";
 const SERVER_IMAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
-const FINAL_IMAGE_CHUNK_SIZE = 48 * 1024;
 const STYLE_TRANSFER_REFERENCE_IMAGE_LABELS = [
   "Reference image 1: SOURCE image. Preserve content, identity, pose, composition, and layout only. Do not preserve its visual style.",
   "Reference image 2: STYLE reference. This image is the style authority for final rendering, realism level, lighting, texture, color, and material finish.",
@@ -81,8 +86,6 @@ const SSE_HEADERS = {
   "Content-Type": "text/event-stream; charset=utf-8",
 };
 
-const textEncoder = new TextEncoder();
-
 function jsonResponse(payload, status = 200) {
   return new Response(`${JSON.stringify(payload, null, 2)}\n`, {
     status,
@@ -98,8 +101,7 @@ function textResponse(message, status = 404) {
 }
 
 async function writeSseEvent(writer, type, payload) {
-  await writer.write(textEncoder.encode(`event: ${type}\n`));
-  await writer.write(textEncoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+  await writeWorkerSseEvent(writer, type, payload);
 }
 
 function buildPublicConfig() {
@@ -483,17 +485,13 @@ async function storeFinalImage({ imageBucket, filename, createdAt, format, base6
 }
 
 async function writeFinalImageChunks(writer, { filename, base64, format }) {
-  const normalizedBase64 = normalizeBase64(base64);
-  const total = Math.max(1, Math.ceil(normalizedBase64.length / FINAL_IMAGE_CHUNK_SIZE));
-  const mimeType = toOutputFormatMimeType(format);
-  for (let index = 0; index < total; index += 1) {
-    await writeSseEvent(writer, "final_image_chunk", {
-      filename,
-      index,
-      total,
-      mimeType,
-      chunk: normalizedBase64.slice(index * FINAL_IMAGE_CHUNK_SIZE, (index + 1) * FINAL_IMAGE_CHUNK_SIZE),
-    });
+  const payloads = buildFinalImageChunkPayloads({
+    filename,
+    base64: normalizeBase64(base64),
+    format,
+  });
+  for (const payload of payloads) {
+    await writeSseEvent(writer, GENERATION_STREAM_EVENTS.FINAL_IMAGE_CHUNK, payload);
   }
 }
 
@@ -1255,7 +1253,7 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     generationCompletedAt,
     generationDurationMs,
   });
-  await writeSseEvent(writer, "saved", {
+  await writeSseEvent(writer, GENERATION_STREAM_EVENTS.SAVED, {
     filename: item.filename,
     ratio: ratioOption.value,
     ratioLabel: ratioOption.label,
@@ -1276,7 +1274,7 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     item.thumbnailUrl = storedImage.imageUrl;
     item.storageKey = storedImage.storageKey;
     item.expiresAt = storedImage.expiresAt;
-    await writeSseEvent(writer, "server_image", {
+    await writeSseEvent(writer, GENERATION_STREAM_EVENTS.SERVER_IMAGE, {
       filename: item.filename,
       item,
     });
@@ -1284,7 +1282,7 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     console.warn("store generated image in R2 failed", error instanceof Error ? error.message : String(error));
   }
 
-  await writeSseEvent(writer, "complete", {
+  await writeSseEvent(writer, GENERATION_STREAM_EVENTS.COMPLETE, {
     filename: item.filename,
   });
 }
@@ -2031,8 +2029,9 @@ function streamPptRequest(request, fetchImpl, runner) {
   });
 }
 
-function unsupportedFeature(message) {
-  return jsonResponse({ ok: false, message }, 400);
+function unsupportedFeature(request, message) {
+  const url = new URL(request.url);
+  return jsonResponse(buildUnsupportedRuntimeCapabilityPayload("cloudflare", request.method, url.pathname, message), 400);
 }
 
 async function handleServerImageRequest(request, imageBucket) {
@@ -2125,7 +2124,7 @@ export async function handleApiRequest(request, options = {}) {
   }
 
   if (request.method === "POST" && url.pathname === "/api/output/open") {
-    return unsupportedFeature("Cloudflare 部署版不支持打开本机输出目录，请使用预览区的下载按钮保存图片。");
+    return unsupportedFeature(request, "Cloudflare 部署版不支持打开本机输出目录，请使用预览区的下载按钮保存图片。");
   }
 
   if (request.method === "POST" && url.pathname === "/api/ppt/generate") {

@@ -30,6 +30,8 @@ import {
   toApiOutputFormat,
   toOutputFormatMimeType,
 } from "./lib/output-format-options.mjs";
+import { GENERATION_STREAM_EVENTS } from "./lib/generation-stream-protocol.mjs";
+import { writeNodeSseEvent } from "./lib/sse-writer.mjs";
 import {
   createTimestampedFilename,
   buildPublicAssetUrl,
@@ -209,17 +211,7 @@ async function requestStudioImageGeneration(options) {
 }
 
 function writeSseEvent(response, type, payload) {
-  if (response.destroyed || response.writableEnded) {
-    return false;
-  }
-
-  try {
-    response.write(`event: ${type}\n`);
-    response.write(`data: ${JSON.stringify(payload)}\n\n`);
-    return true;
-  } catch (_error) {
-    return false;
-  }
+  return writeNodeSseEvent(response, type, payload);
 }
 
 async function readJsonBody(request) {
@@ -3220,7 +3212,7 @@ async function handleGenerate(request, response) {
       item,
     });
 
-    writeSseEvent(response, "saved", {
+    writeSseEvent(response, GENERATION_STREAM_EVENTS.SAVED, {
       filename,
       absolutePath: saved.absolutePath,
       ratio: ratioOption.value,
@@ -3229,7 +3221,7 @@ async function handleGenerate(request, response) {
       item,
     });
 
-    writeSseEvent(response, "complete", {
+    writeSseEvent(response, GENERATION_STREAM_EVENTS.COMPLETE, {
       filename,
       absolutePath: saved.absolutePath,
     });
