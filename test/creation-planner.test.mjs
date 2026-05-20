@@ -72,6 +72,73 @@ test("creation planner builds the fixed four-image ecommerce set", () => {
   assert.match(plan.items[3].prompt, /trust/i);
 });
 
+test("creation planner rewrites Chinese visible copy when target language is English", () => {
+  const plan = buildCreationPlan({
+    productName: "Handheld vacuum",
+    productDescription: "\u753b\u9762\u6587\u5b57\uff1a\u8d85\u5f3a\u5438\u529b\uff0c\u8f66\u5bb6\u4e24\u7528",
+    sellingPoints: "\u5f3a\u52b2\u5438\u529b\n\u4f4e\u566a\u97f3",
+    targetLanguage: "en",
+    selectedRoles: ["hero", "benefit"],
+  });
+
+  assert.ok(
+    plan.items.every((item) =>
+      item.prompt.includes("do not render that Chinese wording or Chinese typography as visible image text"),
+    ),
+  );
+  assert.ok(
+    plan.items.every((item) =>
+      item.prompt.includes("Visible marketing text, captions, callouts, labels, and typography in the generated image must use English"),
+    ),
+  );
+});
+
+test("creation planner treats detailed descriptions as selective set-wide source material", () => {
+  const plan = buildCreationPlan({
+    productName: "Handheld vacuum",
+    productDescription: "\u753b\u9762\u6587\u5b57\uff1a\u8d85\u5f3a\u5438\u529b\uff0c\u8f66\u5bb6\u4e24\u7528\uff1b\u5c55\u793a\u6ee4\u82af\u7ed3\u6784\u3001\u5438\u5634\u914d\u4ef6\u548c\u8f66\u5185\u4f7f\u7528\u573a\u666f",
+    sellingPoints: "\u5f3a\u52b2\u5438\u529b\n\u4f4e\u566a\u97f3\n\u591a\u573a\u666f\u9002\u7528",
+    targetLanguage: "en",
+    selectedRoles: ["hero", "benefit", "material-closeup"],
+  });
+
+  assert.ok(
+    plan.items.every((item) =>
+      item.prompt.includes(
+        "Use the shared Product, Description, Selling points, and reference notes selectively for this image's role.",
+      ),
+    ),
+  );
+  assert.ok(
+    plan.items.every((item) =>
+      item.prompt.includes("Do not repeat the same visible slogan, caption, or callout across every image in the set."),
+    ),
+  );
+});
+
+test("creation planner allocates source details by role without requiring agent analysis", () => {
+  const plan = buildCreationPlan({
+    productName: "Handheld vacuum",
+    productDescription:
+      "\u753b\u9762\u6587\u5b57\uff1a\u8d85\u5f3a\u5438\u529b\uff1b\u6ee4\u82af\u7ed3\u6784\uff1b\u5438\u5634\u914d\u4ef6\uff1b\u8f66\u5185\u4f7f\u7528\u573a\u666f\uff1b\u5305\u88c5\u6536\u7eb3\u888b",
+    sellingPoints: "\u5f3a\u52b2\u5438\u529b\n\u4f4e\u566a\u97f3\n\u591a\u573a\u666f\u9002\u7528",
+    targetLanguage: "en",
+    selectedRoles: ["hero", "material-closeup", "scene", "package"],
+  });
+
+  const promptByRole = Object.fromEntries(plan.items.map((item) => [item.role, item.prompt]));
+
+  assert.equal(plan.contentAllocation.strategy, "deterministic-rules");
+  assert.equal(plan.contentAllocation.agentRequired, false);
+  assert.match(promptByRole["material-closeup"], /\u6ee4\u82af\u7ed3\u6784/);
+  assert.match(promptByRole["material-closeup"], /\u5438\u5634\u914d\u4ef6/);
+  assert.doesNotMatch(promptByRole["material-closeup"], /\u8f66\u5185\u4f7f\u7528\u573a\u666f/);
+  assert.match(promptByRole.scene, /\u8f66\u5185\u4f7f\u7528\u573a\u666f/);
+  assert.doesNotMatch(promptByRole.scene, /\u6ee4\u82af\u7ed3\u6784/);
+  assert.doesNotMatch(promptByRole.scene, /\u753b\u9762\u6587\u5b57/);
+  assert.match(promptByRole.package, /\u5305\u88c5\u6536\u7eb3\u888b/);
+});
+
 test("creation planner avoids duplicated punctuation in composed prompt fields", () => {
   const plan = buildCreationPlan({
     productName: "AeroPress Clear.",

@@ -646,23 +646,30 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.match(html, /<div class="topbar-api-check" aria-label="API、LOG">[\s\S]*<button class="header-pill status-ready" id="connectionStatus" data-state="idle" type="button" aria-label="待填写API、LOG，打开 API、LOG">[\s\S]*<span id="connectionLabel">待填写API、LOG<\/span>/);
   assert.match(html, /<div class="topbar-ghost-actions" aria-hidden="true">[\s\S]*id="configStatus"[\s\S]*id="themeToggleButton"[\s\S]*id="openOutputButton"[\s\S]*id="openPromptAgentButton"[\s\S]*id="openConfigButton"/);
   assert.doesNotMatch(html, /nav-switch-panel|nav-switch-list|nav-switch-link|小区 · 界面切换/);
-  assert.match(styles, /\.topbar\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(0,\s*1fr\);/);
-  assert.match(styles, /\.global-nav\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*50%;[\s\S]*transform:\s*translateX\(-50%\);/);
-  assert.match(styles, /\.view-tabs\s*\{[\s\S]*border-color:\s*transparent;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;/);
-  assert.match(styles, /\.topbar-api-check\s*\{[\s\S]*position:\s*absolute;[\s\S]*top:\s*14px;[\s\S]*right:\s*14px;/);
-  assert.match(styles, /\.topbar-api-check \.header-pill:hover,\s*[\r\n]+\s*\.topbar-api-check \.header-pill:focus-visible\s*\{[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent\)\s*48%,\s*var\(--border\)\);/);
+  assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.topbar\s*\{[\s\S]*position:\s*fixed;[\s\S]*top:\s*0;[\s\S]*left:\s*50%;[\s\S]*transform:\s*translate\(-50%,\s*calc\(-100% \+ var\(--topbar-trigger-height,\s*10px\)\)\);/);
+  assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.topbar:hover,[\s\S]*\.topbar:focus-within,[\s\S]*\.topbar-reveal \.topbar,[\s\S]*\.topbar:has\(\.nav-item\.is-nav-open\)\s*\{[\s\S]*transform:\s*translate\(-50%,\s*0\);/);
+  assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.brand-cluster,[\s\S]*\.topbar-api-check,[\s\S]*\.topbar-ghost-actions,[\s\S]*\.nav-tab-note\s*\{[\s\S]*display:\s*none;/);
+  assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.global-nav\s*\{[\s\S]*position:\s*static;[\s\S]*width:\s*auto;[\s\S]*transform:\s*none;/);
+  assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.view-tabs\s*\{[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;/);
+  assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.view-tab\s*\{[\s\S]*border:\s*0;[\s\S]*border-radius:\s*0;[\s\S]*background:\s*transparent;/);
   assert.match(styles, /--flyout-bg:\s*rgba\(8,\s*13,\s*26,\s*0\.96\);[\s\S]*--flyout-text:\s*var\(--text\);/);
   assert.match(styles, /html\[data-theme="light"\]\s*\{[\s\S]*--flyout-bg:\s*rgba\(251,\s*251,\s*253,\s*0\.96\);[\s\S]*--flyout-text:\s*var\(--text\);/);
   assert.match(styles, /\.nav-flyout\.mega-menu\s*\{[\s\S]*width:\s*min\(680px,\s*calc\(100vw - 32px\)\);[\s\S]*padding:\s*24px;/);
   assert.match(styles, /\.mega-menu-grid\s*\{[\s\S]*grid-template-columns:\s*minmax\(170px,\s*1\.35fr\)\s+repeat\(2,\s*minmax\(120px,\s*1fr\)\);/);
   assert.match(styles, /\.mega-menu-link,\s*[\r\n]+\s*\.mega-menu-action\s*\{[\s\S]*font-size:\s*var\(--type-small-title-size\);[\s\S]*font-weight:\s*600;/);
   assert.doesNotMatch(styles, /\.mega-menu-link\.large,\s*[\r\n]+\s*\.mega-menu-action\.large\s*\{/);
-  assert.match(styles, /\.global-nav-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);[\s\S]*overflow:\s*visible;/);
+  assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.global-nav-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,\s*max-content\);[\s\S]*overflow:\s*visible;/);
   assert.match(styles, /html\[data-ui-layout="stacked"\] \.global-nav-list,[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.global-nav-list\s*\{[\s\S]*overflow:\s*visible;/);
   assert.doesNotMatch(styles, /\.nav-item:hover \.nav-flyout/);
   assert.doesNotMatch(styles, /\.nav-item:focus-within \.nav-flyout/);
   assert.match(styles, /\.nav-item\.is-nav-open \.nav-flyout\s*\{[\s\S]*opacity:\s*1;[\s\S]*visibility:\s*visible;[\s\S]*pointer-events:\s*auto;/);
+  assert.match(app, /const TOPBAR_REVEAL_CLASS = "topbar-reveal";/);
+  assert.match(app, /document\.addEventListener\("pointermove", syncTopbarRevealFromPointer, \{ passive: true \}\);/);
+  assert.match(app, /setTopbarReveal\(Boolean\(item\)\);/);
+  assert.match(app, /function closeGlobalNavIfOutsideTopbar\(\) \{/);
+  assert.match(app, /refs\.topbar\?\.addEventListener\("pointerleave", closeGlobalNavIfOutsideTopbar\);/);
+  assert.match(app, /refs\.topbar\?\.addEventListener\("focusout", closeGlobalNavIfOutsideTopbar\);/);
   assert.match(app, /function handleGlobalNavAction\(action\) \{/);
   assert.match(app, /const activeNavSection = CREATE_VIEW_IDS\.has\(view\) \? "create" : ASSET_VIEW_IDS\.has\(view\) \? "assets" : "";/);
   assert.match(app, /refs\.connectionStatus\.addEventListener\("click",\s*\(\) => setDrawerOpen\(true\)\);/);
@@ -1058,7 +1065,7 @@ test("studio layout consumes density variables for wide-screen adaptation withou
 
   assert.match(styles, /\.app-shell\s*\{[\s\S]*min\(var\(--app-shell-max-width,\s*1680px\),\s*calc\(100vw - 20px\)\);[\s\S]*padding:\s*var\(--app-shell-padding-top,\s*8px\)\s*0\s*var\(--app-shell-padding-bottom,\s*10px\);/);
   assert.match(styles, /\.topbar\s*\{[\s\S]*gap:\s*var\(--topbar-gap,\s*18px\);[\s\S]*padding:\s*var\(--topbar-padding,\s*6px 10px 14px\);/);
-  assert.match(styles, /\.view-root\s*\{[\s\S]*min-height:\s*calc\(100svh - var\(--view-root-offset,\s*88px\)\);[\s\S]*height:\s*calc\(100svh - var\(--view-root-offset,\s*88px\)\);/);
+  assert.match(styles, /\.view-root\s*\{[\s\S]*min-height:\s*calc\(100svh - var\(--view-root-offset,\s*12px\)\);[\s\S]*height:\s*calc\(100svh - var\(--view-root-offset,\s*12px\)\);/);
   assert.match(styles, /\.studio-grid\s*\{[\s\S]*grid-template-columns:\s*var\(--studio-grid-left,\s*392px\)\s*minmax\(0,\s*1fr\);[\s\S]*gap:\s*var\(--studio-grid-gap,\s*14px\);/);
   assert.match(styles, /\.studio-panel,\s*[\r\n]+\s*\.drawer-panel,\s*[\r\n]+\s*\.lightbox-dialog\s*\{[\s\S]*padding:\s*var\(--panel-padding,\s*12px\);/);
   assert.match(styles, /\.settings-form\s*\{[\s\S]*gap:\s*calc\(var\(--field-gap,\s*6px\) \+ 6px\);/);
@@ -1124,7 +1131,7 @@ test("mobile and Pad studio layout uses dedicated compact workbench layouts", as
   assert.match(html, /dataset\.uiLayout = "mobile";[\s\S]*dataset\.uiLayout = "tablet";/);
   assert.match(html, /devicePixelRatio[\s\S]*isPhonePhysicalSize[\s\S]*isTabletPhysicalSize[\s\S]*physicalTouchWidth/);
   assert.match(html, /const viewportWidth = outerWidth > innerWidth \? outerWidth : innerWidth;/);
-  assert.match(html, /\.\/styles\.css\?v=20260515-responsive-layout-1/);
+  assert.match(html, /\.\/styles\.css\?v=20260519-topbar-reveal-2/);
   assert.doesNotMatch(referenceAdaptiveSection, /\sopen(?:\s|>)/);
   assert.doesNotMatch(parameterAdaptiveSection, /\sopen(?:\s|>)/);
   assert.match(styles, /html,\s*[\r\n]+body\s*\{[\s\S]*overflow-x:\s*clip;/);
@@ -1160,7 +1167,7 @@ test("mobile and Pad studio layout uses dedicated compact workbench layouts", as
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.zoom-controls\s*\{[\s\S]*grid-template-columns:\s*34px\s*minmax\(52px,\s*1fr\)\s*34px\s*minmax\(54px,\s*0\.9fr\);/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.preview-actions\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
   assert.match(app, /const ADAPTIVE_COLLAPSIBLE_LAYOUTS = new Set\(\["tablet", "mobile"\]\);/);
-  assert.match(app, /studio-density\.mjs\?v=20260515-responsive-layout-1/);
+  assert.match(app, /studio-density\.mjs\?v=20260519-topbar-reveal-2/);
   assert.match(app, /function getStudioViewportMetrics\(\) \{[\s\S]*coarsePointer:\s*window\.matchMedia\?\.\("\(pointer: coarse\)"\)\?\.matches \|\| false,/);
   assert.match(app, /function syncAdaptiveWorkbenchSections\(layoutMode = getCurrentStudioLayoutMode\(\)\) \{/);
   assert.match(app, /section\.open = section\.dataset\.compactOpen === "true";/);
@@ -1180,8 +1187,10 @@ test("studio columns use synchronized desktop height so wide screens do not leav
   assert.doesNotMatch(app, /!refs\.settingsPanel \|\| !refs\.previewPanel \|\| !refs\.sideColumn \|\| !refs\.viewRoot/);
   assert.match(
     app,
-    /const viewRootRect = refs\.viewRoot\.getBoundingClientRect\(\);[\s\S]*const availableHeight = Math\.max\(600,\s*Math\.floor\(window\.innerHeight - viewRootRect\.top - 12\)\);[\s\S]*const resolvedHeight = availableHeight;/,
+    /const viewRootRect = refs\.viewRoot\.getBoundingClientRect\(\);[\s\S]*const availableHeight = Math\.max\(600,\s*Math\.floor\(window\.innerHeight - viewRootRect\.top - WORKSPACE_BOTTOM_GAP_PX\)\);[\s\S]*const resolvedHeight = availableHeight;/,
   );
+  assert.match(app, /const WORKSPACE_BOTTOM_GAP_PX = 2;/);
+  assert.match(app, /const availableHeight = Math\.max\(320,\s*Math\.floor\(window\.innerHeight - viewRootRect\.top - WORKSPACE_BOTTOM_GAP_PX\)\);/);
 });
 
 test("generation task refresh tolerates older servers without the task endpoint", async () => {
@@ -1389,11 +1398,13 @@ test("PPT view exposes source options, page count, progress, retry and PPTX down
   assert.match(html, /id="pptCompletionRatio"/);
   assert.match(html, /id="pptCompleteMissingButton"[\s\S]*补齐缺页/);
   assert.match(html, /id="pptDownloadLink"[\s\S]*下载 PPTX/);
+  assert.doesNotMatch(html, /id="pptDeckCount"|class="studio-panel ppt-history-panel"|id="pptRefreshHistoryButton"|id="pptHistoryEmpty"|id="pptHistoryList"|历史演示/);
 
   assert.match(styles, /\.ppt-workspace\s*\{/);
   assert.match(styles, /\.ppt-source-options\s*\{/);
   assert.match(styles, /\.ppt-output-actions\s*\{/);
   assert.match(styles, /\.ppt-slide-retry-button\s*\{/);
+  assert.doesNotMatch(styles, /\.ppt-history-panel|\.ppt-history-list|\.ppt-history-item|\.ppt-history-actions/);
 
   assert.match(app, /ppt:\s*\{/);
   assert.match(app, /fetch\("\/api\/ppt\/generate"/);
@@ -1405,6 +1416,7 @@ test("PPT view exposes source options, page count, progress, retry and PPTX down
   assert.match(app, /data-ppt-retry-slide/);
   assert.match(app, /refs\.pptCompleteMissingButton\.addEventListener\("click", completeMissingPptSlides\)/);
   assert.match(app, /eventName === "slide_failed"/);
+  assert.doesNotMatch(app, /pptDeckCount|pptHistoryEmpty|pptHistoryList|pptRefreshHistoryButton|renderPptHistory/);
 });
 
 test("studio compact panels omit repeated helper copy", async () => {
@@ -1681,6 +1693,41 @@ test("creation mode exposes optional logo upload placement and background contro
   assert.match(app, /formData\.set\("logoOptions", JSON\.stringify\(getCreationLogoPayload\(\)\)\);/);
   assert.match(app, /formData\.append\("logoImage", logoFile\);/);
   assert.match(app, /refs\.creationLogoInput\.addEventListener\("change"/);
+});
+
+test("creation mode exposes upload-image logo batch branch", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /class="creation-branch-tabs"[\s\S]*name="creationBranch"[\s\S]*value="set" checked/);
+  assert.match(html, /id="creationBranchLogoBatchInput"[\s\S]*value="logo-batch"/);
+  assert.match(html, /id="creationLogoBatchSourceInput"[\s\S]*name="logoBatchSourceImages"[\s\S]*accept="image\/\*"[\s\S]*multiple/);
+  assert.match(html, /id="creationLogoBatchSourceGrid"/);
+  assert.match(html, /data-creation-set-only/);
+  assert.match(html, /data-creation-logo-batch-only/);
+
+  assert.match(styles, /\.creation-branch-tabs\s*\{/);
+  assert.match(styles, /\.creation-logo-batch-source-block\s*\{/);
+  assert.match(styles, /\.creation-branch-option:has\(input:checked\)\s*\{/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.creation-branch-tabs\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\);/);
+
+  assert.match(app, /creationBranch:\s*"set"/);
+  assert.match(app, /creationLogoBatchFiles:\s*\[\]/);
+  assert.match(app, /creationBranchInputs:\s*document\.querySelectorAll\('\[name="creationBranch"\]'\)/);
+  assert.match(app, /creationLogoBatchSourceInput: document\.querySelector\("#creationLogoBatchSourceInput"\)/);
+  assert.match(app, /function setCreationBranch\(branch = "set"\) \{/);
+  assert.match(app, /function applyCreationLogoBatchSourceFiles\(fileList\) \{/);
+  assert.match(app, /function renderCreationLogoBatchSourceGrid\(\) \{/);
+  assert.match(app, /function buildCreationLogoBatchFormData\(\) \{/);
+  assert.match(app, /function hasPendingCreationBranchGenerationFiles\(\) \{/);
+  assert.match(app, /const preparingReferences = hasPendingCreationBranchGenerationFiles\(\);/);
+  assert.match(app, /formData\.append\("sourceImages", file\)/);
+  assert.match(app, /fetch\("\/api\/creation\/logo-batch"/);
+
+  const logoBatchForm = app.match(/function buildCreationLogoBatchFormData\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(logoBatchForm, /creationProductNameInput/);
+  assert.match(logoBatchForm, /const title = firstSourceName \? `上传图加 Logo \$\{firstSourceName\}` : "上传图加 Logo";/);
 });
 
 test("creation reference analysis apply fills product name from fourth-level category", async () => {

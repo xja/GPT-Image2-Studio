@@ -52,7 +52,7 @@ import {
   GENERATION_STREAM_EVENTS,
   recordFinalImageChunk,
 } from "/lib/generation-stream-protocol.mjs";
-import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260515-responsive-layout-1";
+import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260519-topbar-reveal-2";
 import { ensureLazyViewModule, getMountedLazyViewModule } from "/lib/view-mode-loader.mjs";
 import {
   appendBrowserConfigToFormData,
@@ -348,6 +348,9 @@ const GALLERY_REFERENCE_LABELS = {
 };
 const STACKED_STUDIO_LAYOUT_MODES = new Set(["stacked", "tablet", "mobile"]);
 const ADAPTIVE_COLLAPSIBLE_LAYOUTS = new Set(["tablet", "mobile"]);
+const TOPBAR_REVEAL_CLASS = "topbar-reveal";
+const TOPBAR_REVEAL_EDGE_PX = 16;
+const WORKSPACE_BOTTOM_GAP_PX = 2;
 const PPT_SOURCE_MODES = new Set(["upload", "text", "topic"]);
 const CREATE_VIEW_IDS = new Set([
   "studio",
@@ -413,6 +416,8 @@ const state = {
     recordSetId: "",
     sets: [],
   },
+  creationBranch: "set",
+  creationLogoBatchFiles: [],
   creationReferenceFiles: [],
   creationLogo: {
     background: "transparent",
@@ -571,6 +576,7 @@ const refs = {
   articleRecordRefreshButton: document.querySelector("#articleRecordRefreshButton"),
   articleRecordSearchInput: document.querySelector("#articleRecordSearchInput"),
   articleStoryboardSectionCount: document.querySelector("#articleStoryboardSectionCount"),
+  creationBranchInputs: document.querySelectorAll('[name="creationBranch"]'),
   creationFeedback: document.querySelector("#creationFeedback"),
   creationForm: document.querySelector("#creationForm"),
   creationGenerateButton: document.querySelector("#creationGenerateButton"),
@@ -590,6 +596,11 @@ const refs = {
   creationLogoDropzone: document.querySelector("#creationLogoDropzone"),
   creationLogoFilename: document.querySelector("#creationLogoFilename"),
   creationLogoInput: document.querySelector("#creationLogoInput"),
+  creationLogoBatchOnly: [...document.querySelectorAll("[data-creation-logo-batch-only]")],
+  creationLogoBatchSourceCount: document.querySelector("#creationLogoBatchSourceCount"),
+  creationLogoBatchSourceDropzone: document.querySelector("#creationLogoBatchSourceDropzone"),
+  creationLogoBatchSourceGrid: document.querySelector("#creationLogoBatchSourceGrid"),
+  creationLogoBatchSourceInput: document.querySelector("#creationLogoBatchSourceInput"),
   creationLogoPlacementInput: document.querySelector("#creationLogoPlacementInput"),
   creationLogoPreview: document.querySelector("#creationLogoPreview"),
   creationLogoPreviewImage: document.querySelector("#creationLogoPreviewImage"),
@@ -633,6 +644,7 @@ const refs = {
   creationRoleGrid: document.querySelector("#creationRoleGrid"),
   creationScenarioInput: document.querySelector("#creationScenarioInput"),
   creationSellingPointsInput: document.querySelector("#creationSellingPointsInput"),
+  creationSetOnly: [...document.querySelectorAll("[data-creation-set-only]")],
   creationSetMeta: document.querySelector("#creationSetMeta"),
   creationSizeInput: document.querySelector("#creationSizeInput"),
   creationRatioInput: document.querySelector("#creationRatioInput"),
@@ -723,7 +735,6 @@ const refs = {
   promptAgentResult: document.querySelector("#promptAgentResult"),
   pptCompleteMissingButton: document.querySelector("#pptCompleteMissingButton"),
   pptCompletionRatio: document.querySelector("#pptCompletionRatio"),
-  pptDeckCount: document.querySelector("#pptDeckCount"),
   pptDownloadLink: document.querySelector("#pptDownloadLink"),
   pptDropzone: document.querySelector("#pptDropzone"),
   pptAutoAdvanceInput: document.querySelector("#pptAutoAdvanceInput"),
@@ -744,8 +755,6 @@ const refs = {
   pptFileList: document.querySelector("#pptFileList"),
   pptForm: document.querySelector("#pptForm"),
   pptGenerateButton: document.querySelector("#pptGenerateButton"),
-  pptHistoryEmpty: document.querySelector("#pptHistoryEmpty"),
-  pptHistoryList: document.querySelector("#pptHistoryList"),
   pptOutlineBox: document.querySelector("#pptOutlineBox"),
   pptPageCountInput: document.querySelector("#pptPageCountInput"),
   pptProgressBar: document.querySelector("#pptProgressBar"),
@@ -754,7 +763,6 @@ const refs = {
   pptRecordEmpty: document.querySelector("#pptRecordEmpty"),
   pptRecordList: document.querySelector("#pptRecordList"),
   pptRecordRefreshButton: document.querySelector("#pptRecordRefreshButton"),
-  pptRefreshHistoryButton: document.querySelector("#pptRefreshHistoryButton"),
   pptSlideList: document.querySelector("#pptSlideList"),
   pptSourceInput: document.querySelector("#pptSourceInput"),
   pptSourceModeInputs: [...document.querySelectorAll("input[name=\"pptSourceMode\"]")],
@@ -2145,6 +2153,10 @@ function getCreationReferenceGenerationFile(item) {
   return item?.generationFile || item?.file;
 }
 
+function getCreationLogoBatchSourceGenerationFile(item) {
+  return item?.generationFile || item?.file || null;
+}
+
 function normalizeCreationLogoPlacement(value) {
   return CREATION_LOGO_PLACEMENTS.has(String(value || "")) ? String(value) : "top-left";
 }
@@ -2194,6 +2206,16 @@ function hasPendingCreationReferenceGenerationFiles() {
 
 function hasPendingCreationLogoGenerationFile() {
   return Boolean(state.creationLogo?.generationFilePromise);
+}
+
+function hasPendingCreationLogoBatchGenerationFiles() {
+  return state.creationLogoBatchFiles.some((item) => item.generationFilePromise);
+}
+
+function hasPendingCreationBranchGenerationFiles() {
+  return isCreationLogoBatchBranch()
+    ? hasPendingCreationLogoBatchGenerationFiles() || hasPendingCreationLogoGenerationFile()
+    : hasPendingCreationReferenceGenerationFiles() || hasPendingCreationLogoGenerationFile();
 }
 
 function hasPendingReferenceAnalysisGenerationFiles() {
@@ -2382,6 +2404,35 @@ function startCreationLogoGenerationCompression(item = state.creationLogo) {
   return item.generationFilePromise;
 }
 
+function startCreationLogoBatchGenerationCompression(item) {
+  if (!item?.file) {
+    return null;
+  }
+
+  item.generationFile = item.file;
+  item.generationCompressed = false;
+  item.generationFilePromise = prepareGenerationReferenceImageFile(item.file)
+    .then((preparedFile) => {
+      item.generationFile = preparedFile || item.file;
+      item.generationCompressed = Boolean(preparedFile && preparedFile !== item.file);
+      return item.generationFile;
+    })
+    .catch(() => {
+      item.generationFile = item.file;
+      item.generationCompressed = false;
+      return item.file;
+    })
+    .finally(() => {
+      item.generationFilePromise = null;
+      renderCreationLogoBatchSourceGrid();
+      renderCreationView();
+    });
+
+  renderCreationLogoBatchSourceGrid();
+  renderCreationView();
+  return item.generationFilePromise;
+}
+
 async function ensureStyleTransferGenerationFilesReady() {
   const pending = [state.styleTransfer.source?.generationFilePromise, state.styleTransfer.style?.generationFilePromise].filter(
     Boolean,
@@ -2416,6 +2467,22 @@ async function ensureReferenceGenerationFilesReady() {
 async function ensureCreationReferenceGenerationFilesReady() {
   const pending = [
     ...state.creationReferenceFiles.map((item) => item.generationFilePromise),
+    state.creationLogo?.generationFilePromise,
+  ].filter(Boolean);
+  if (pending.length === 0) {
+    return;
+  }
+
+  try {
+    await Promise.allSettled(pending);
+  } finally {
+    renderCreationView();
+  }
+}
+
+async function ensureCreationLogoBatchGenerationFilesReady() {
+  const pending = [
+    ...state.creationLogoBatchFiles.map((item) => item.generationFilePromise),
     state.creationLogo?.generationFilePromise,
   ].filter(Boolean);
   if (pending.length === 0) {
@@ -4163,7 +4230,7 @@ function syncStudioHeight() {
   void refs.settingsPanel.offsetHeight;
 
   const viewRootRect = refs.viewRoot.getBoundingClientRect();
-  const availableHeight = Math.max(600, Math.floor(window.innerHeight - viewRootRect.top - 12));
+  const availableHeight = Math.max(600, Math.floor(window.innerHeight - viewRootRect.top - WORKSPACE_BOTTOM_GAP_PX));
   const resolvedHeight = availableHeight;
 
   if (resolvedHeight > 0) {
@@ -4198,7 +4265,7 @@ function syncGalleryPanelHeight() {
   void refs.viewRoot.offsetHeight;
 
   const viewRootRect = refs.viewRoot.getBoundingClientRect();
-  const availableHeight = Math.max(320, Math.floor(window.innerHeight - viewRootRect.top - 12));
+  const availableHeight = Math.max(320, Math.floor(window.innerHeight - viewRootRect.top - WORKSPACE_BOTTOM_GAP_PX));
   document.documentElement.style.setProperty("--gallery-panel-height", `${availableHeight}px`);
 }
 
@@ -9499,9 +9566,182 @@ function applyCreationLogoFile(fileList) {
   if (refs.creationLogoInput) {
     refs.creationLogoInput.value = "";
   }
+  if (isCreationLogoBatchBranch()) {
+    setCreationFeedback("");
+    clearError();
+  }
   startCreationLogoGenerationCompression(state.creationLogo);
   renderCreationLogo();
   renderCreationView();
+}
+
+function isCreationLogoBatchBranch() {
+  return state.creationBranch === "logo-batch";
+}
+
+function syncCreationBranchPanels() {
+  const logoBatchBranch = isCreationLogoBatchBranch();
+  refs.creationBranchInputs.forEach((input) => {
+    input.checked = input.value === state.creationBranch;
+  });
+  refs.creationSetOnly.forEach((element) => {
+    element.classList.toggle("hidden", logoBatchBranch);
+  });
+  refs.creationLogoBatchOnly.forEach((element) => {
+    element.classList.toggle("hidden", !logoBatchBranch);
+  });
+}
+
+function setCreationBranch(branch = "set") {
+  const nextBranch = branch === "logo-batch" ? "logo-batch" : "set";
+  const changed = state.creationBranch !== nextBranch;
+  state.creationBranch = nextBranch;
+  state.creation.editingItemId = "";
+  syncCreationBranchPanels();
+
+  if (changed && !state.creation.generating && !state.creation.planning) {
+    state.creation.currentSet = null;
+    state.creation.generationScope = "";
+    setCreationFeedback("");
+  }
+  renderCreationView();
+}
+
+function openCreationLogoBatchSourcePreview(sourceId) {
+  const item = state.creationLogoBatchFiles.find((entry) => entry.id === sourceId);
+  if (!item?.previewUrl) {
+    return;
+  }
+
+  state.creationReferencePreviewItem = item;
+  refs.referencePreviewImage.src = item.previewUrl;
+  refs.referencePreviewViewer.classList.add("open");
+  refs.referencePreviewViewer.setAttribute("aria-hidden", "false");
+}
+
+function removeCreationLogoBatchSourceFile(sourceId) {
+  const target = state.creationLogoBatchFiles.find((item) => item.id === sourceId);
+  if (state.creationReferencePreviewItem?.id === sourceId) {
+    closeReferencePreview();
+  }
+  revokeReferencePreview(target);
+  state.creationLogoBatchFiles = state.creationLogoBatchFiles.filter((item) => item.id !== sourceId);
+  if (refs.creationLogoBatchSourceInput) {
+    refs.creationLogoBatchSourceInput.value = "";
+  }
+  if (!state.creation.generating && isCreationLogoBatchBranch()) {
+    state.creation.currentSet = null;
+  }
+  renderCreationLogoBatchSourceGrid();
+  renderCreationView();
+}
+
+function applyCreationLogoBatchSourceFiles(fileList) {
+  const incomingFiles = [...(fileList || [])].filter((file) => file.type.startsWith("image/"));
+  if (incomingFiles.length === 0) {
+    return;
+  }
+
+  const next = [...state.creationLogoBatchFiles];
+  const fingerprints = new Set(next.map((item) => item.fingerprint));
+  let overflowed = false;
+
+  for (const file of incomingFiles) {
+    if (next.length >= state.limits.maxReferenceImages) {
+      overflowed = true;
+      break;
+    }
+
+    const fingerprint = buildReferenceFingerprint(file);
+    if (fingerprints.has(fingerprint)) {
+      continue;
+    }
+
+    const sourceItem = {
+      id: `creation-logo-source-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      fingerprint,
+      file,
+      generationFile: file,
+      generationFilePromise: null,
+      generationCompressed: false,
+      previewUrl: URL.createObjectURL(file),
+    };
+    startCreationLogoBatchGenerationCompression(sourceItem);
+    next.push(sourceItem);
+    fingerprints.add(fingerprint);
+  }
+
+  state.creationLogoBatchFiles = next;
+  setCreationFeedback("");
+  clearError();
+  if (refs.creationLogoBatchSourceInput) {
+    refs.creationLogoBatchSourceInput.value = "";
+  }
+  if (!state.creation.generating && isCreationLogoBatchBranch()) {
+    state.creation.currentSet = null;
+  }
+  renderCreationLogoBatchSourceGrid();
+  renderCreationView();
+
+  if (overflowed) {
+    showError(`上传图加 Logo 最多支持 ${state.limits.maxReferenceImages} 张。`);
+  }
+}
+
+function renderCreationLogoBatchSourceGrid() {
+  if (!refs.creationLogoBatchSourceGrid) {
+    return;
+  }
+
+  refs.creationLogoBatchSourceGrid.innerHTML = "";
+  if (refs.creationLogoBatchSourceCount) {
+    refs.creationLogoBatchSourceCount.textContent = `${state.creationLogoBatchFiles.length} / ${state.limits.maxReferenceImages}`;
+  }
+  syncReferenceDropzoneCompact(refs.creationLogoBatchSourceDropzone, state.creationLogoBatchFiles.length > 0);
+  refs.creationLogoBatchSourceGrid.classList.toggle("hidden", state.creationLogoBatchFiles.length === 0);
+
+  state.creationLogoBatchFiles.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "reference-card";
+
+    const previewButton = document.createElement("button");
+    previewButton.type = "button";
+    previewButton.className = "reference-preview-button";
+    previewButton.dataset.creationLogoBatchSourcePreviewId = item.id;
+    previewButton.setAttribute("aria-label", "放大查看待加 Logo 图片");
+
+    const image = document.createElement("img");
+    image.src = item.previewUrl;
+    image.alt = "待加 Logo 图片预览";
+    previewButton.appendChild(image);
+    previewButton.addEventListener("click", () => openCreationLogoBatchSourcePreview(item.id));
+    card.appendChild(previewButton);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "reference-remove";
+    remove.textContent = "x";
+    remove.setAttribute("aria-label", "移除待加 Logo 图片");
+    remove.addEventListener("click", () => removeCreationLogoBatchSourceFile(item.id));
+    card.appendChild(remove);
+
+    const name = document.createElement("span");
+    name.className = "creation-logo-batch-source-name";
+    name.textContent = item.file?.name || "待处理图片";
+    card.appendChild(name);
+
+    refs.creationLogoBatchSourceGrid.appendChild(card);
+  });
+
+  if (state.creationLogoBatchFiles.length > 0 && state.creationLogoBatchFiles.length < state.limits.maxReferenceImages) {
+    refs.creationLogoBatchSourceGrid.appendChild(
+      createReferenceAddCard({
+        input: refs.creationLogoBatchSourceInput,
+        label: "继续上传待加 Logo 图片",
+        onFiles: applyCreationLogoBatchSourceFiles,
+      }),
+    );
+  }
 }
 
 function applyCreationReferenceFiles(fileList) {
@@ -10060,28 +10300,56 @@ function renderCreationRolePicker() {
   });
 }
 
+function buildCreationLogoBatchPreviewItems(status = "idle") {
+  return state.creationLogoBatchFiles.map((item, index) => ({
+    itemId: `logo-batch-preview-${index + 1}`,
+    slotIndex: index + 1,
+    role: "logo-batch",
+    title: `加 Logo ${index + 1}`,
+    brief: item.file?.name || "上传图加 Logo",
+    status,
+    imageUrl: status === "idle" ? item.previewUrl : "",
+    thumbnailUrl: status === "idle" ? item.previewUrl : "",
+    prompt: "",
+  }));
+}
+
 function renderCreationView() {
   if (!refs.creationResultGrid) {
     return;
   }
 
+  syncCreationBranchPanels();
   const currentSet = getCreationCurrentSet();
-  const previewSlots = getCreationPreviewSlots(currentSet?.imageCount || getCreationSelectedImageCount());
+  const logoBatchBranch = isCreationLogoBatchBranch();
+  const previewSlots = logoBatchBranch
+    ? buildCreationLogoBatchPreviewItems(state.creation.generating ? "queued" : "idle")
+    : getCreationPreviewSlots(currentSet?.imageCount || getCreationSelectedImageCount());
   const items = currentSet?.items.length ? currentSet.items : previewSlots.map((slot, index) => ({
     ...slot,
     itemId: slot.itemId,
     slotIndex: index + 1,
-    status: state.creation.generating ? "queued" : "idle",
+    status: state.creation.generating ? "queued" : slot.status || "idle",
   }));
-  const progress = getCreationProgressSummary(currentSet);
-  const preparingReferences = hasPendingCreationReferenceGenerationFiles() || hasPendingCreationLogoGenerationFile();
+  const progress = currentSet
+    ? getCreationProgressSummary(currentSet)
+    : logoBatchBranch
+      ? { total: state.creationLogoBatchFiles.length, completed: 0, failed: 0 }
+      : getCreationProgressSummary(currentSet);
+  const preparingReferences = hasPendingCreationBranchGenerationFiles();
   const targetLanguageLabel =
     currentSet?.targetLanguageLabel ||
     getCreationSelectedLanguage().label ||
     refs.creationTargetLanguageInput?.value ||
     "English";
 
-  refs.creationGenerateButton.textContent = state.creation.generating ? "生成中..." : "生成套图";
+  refs.creationGenerateButton.textContent = logoBatchBranch
+    ? state.creation.generating
+      ? "添加中..."
+      : "批量添加 Logo"
+    : state.creation.generating
+      ? "生成中..."
+      : "生成套图";
   refs.creationGenerateButton.disabled = state.creation.generating || state.creation.planning || preparingReferences;
   if (refs.creationPlanButton) {
     refs.creationPlanButton.textContent = state.creation.planning ? "预览中..." : "预览计划";
@@ -10090,11 +10358,16 @@ function renderCreationView() {
   refs.creationProgressText.textContent = `${progress.completed} / ${progress.total}`;
   renderCreationRolePicker();
   renderCreationReferenceGrid();
+  renderCreationLogoBatchSourceGrid();
   renderCreationLogo();
   const currentIndustryLabel = currentSet?.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[currentSet?.industryTemplate] || "通用电商";
   refs.creationSetMeta.textContent = currentSet
     ? `${currentSet.productName || "未命名商品"} · ${currentSet.scenarioLabel || CREATION_SCENARIO_LABELS[currentSet.scenario] || "标准电商"} · ${currentIndustryLabel} · ${targetLanguageLabel} · ${CREATION_ITEM_STATUS_LABELS[currentSet.status] || currentSet.status} · ${formatClock(currentSet.createdAt)}`
-    : "等待生成";
+    : logoBatchBranch
+      ? state.creationLogoBatchFiles.length > 0
+        ? `${state.creationLogoBatchFiles.length} 张待添加 Logo · ${getCreationLogoGenerationFile() ? "Logo 已上传" : "待上传 Logo"}`
+        : "上传图片后批量添加 Logo"
+      : "等待生成";
 
   renderCreationRecordDetail(currentSet);
 
@@ -10163,6 +10436,33 @@ function buildCreationFormData() {
     const file = getCreationReferenceGenerationFile(item);
     if (file) {
       formData.append("referenceImages", file);
+    }
+  });
+  const logoFile = getCreationLogoGenerationFile();
+  if (logoFile) {
+    formData.append("logoImage", logoFile);
+  }
+  appendBrowserConfigToFormData(formData);
+
+  return formData;
+}
+
+function buildCreationLogoBatchFormData() {
+  const formData = new FormData();
+  const firstSourceName = state.creationLogoBatchFiles[0]?.file?.name || "";
+  const title = firstSourceName ? `上传图加 Logo ${firstSourceName}` : "上传图加 Logo";
+
+  formData.set("title", title);
+  formData.set("format", normalizeOutputFormat(refs.creationOutputFormatInput.value || state.config?.defaults?.format || "png"));
+  formData.set("ratio", refs.creationRatioInput.value || DEFAULT_UI_RATIO);
+  formData.set("size", refs.creationSizeInput.value || "auto");
+  formData.set("reasoningEffort", refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh");
+  formData.set("clientSessionId", state.clientSessionId);
+  formData.set("logoOptions", JSON.stringify(getCreationLogoPayload()));
+  state.creationLogoBatchFiles.forEach((item) => {
+    const file = getCreationLogoBatchSourceGenerationFile(item);
+    if (file) {
+      formData.append("sourceImages", file);
     }
   });
   const logoFile = getCreationLogoGenerationFile();
@@ -10463,8 +10763,88 @@ async function previewCreationPlan() {
   }
 }
 
+async function startCreationLogoBatchGeneration() {
+  if (state.creation.generating || state.creation.planning) {
+    return;
+  }
+
+  clearError();
+  setCreationFeedback("");
+
+  if (state.creationLogoBatchFiles.length === 0) {
+    const message = "请先上传需要添加 Logo 的图片。";
+    setCreationFeedback(message, "error");
+    showError(message);
+    return;
+  }
+  if (!getCreationLogoGenerationFile()) {
+    const message = "请先上传 Logo。";
+    setCreationFeedback(message, "error");
+    showError(message);
+    return;
+  }
+
+  state.creation.generating = true;
+  state.creation.generationScope = "logo-batch";
+  state.creation.editingItemId = "";
+  renderCreationView();
+
+  try {
+    await ensureCreationLogoBatchGenerationFilesReady();
+    const logoBatchFormData = buildCreationLogoBatchFormData();
+    const createdAt = nowIso();
+    const logoPayload = getCreationLogoPayload();
+    const sourceNames = state.creationLogoBatchFiles.map((item) => item.file?.name || "").filter(Boolean);
+    const items = buildCreationLogoBatchPreviewItems("queued");
+    state.creation.currentSet = normalizeCreationSetForView({
+      setId: `creation-local-${Date.now()}`,
+      productName: logoBatchFormData.get("title") || "上传图加 Logo",
+      productDescription: "将上传图片分别添加同一个 Logo。",
+      dimensionUnitMode: "both",
+      targetLanguage: "en",
+      targetLanguageLabel: "English",
+      imageCount: items.length,
+      scenario: "logo-batch",
+      scenarioLabel: "上传图加 Logo",
+      industryTemplate: "general",
+      industryTemplateLabel: "通用电商",
+      selectedRoles: ["logo-batch"],
+      referenceImageNames: sourceNames,
+      logo: logoPayload,
+      createdAt,
+      updatedAt: createdAt,
+      status: "generating",
+      items,
+    });
+    renderCreationView();
+
+    const response = await fetch("/api/creation/logo-batch", {
+      method: "POST",
+      body: logoBatchFormData,
+    });
+    if (!response.ok || !response.body) {
+      throw new Error("上传图加 Logo 请求失败");
+    }
+
+    await runCreationStream(response);
+    await loadCreationSets();
+  } catch (error) {
+    const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "上传图加 Logo 请求失败");
+    setCreationFeedback(message, "error");
+    showError(message);
+  } finally {
+    state.creation.generating = false;
+    state.creation.generationScope = "";
+    renderCreationView();
+  }
+}
+
 async function startCreationGeneration(event) {
   event.preventDefault();
+  if (isCreationLogoBatchBranch()) {
+    await startCreationLogoBatchGeneration();
+    return;
+  }
   if (state.creation.generating || state.creation.planning) {
     return;
   }
@@ -10746,17 +11126,14 @@ function formatPptDeckMeta(deck) {
   return parts.filter(Boolean).join(" · ");
 }
 
-function createPptDeckRecordItem(deck, variant = "history") {
+function createPptDeckRecordItem(deck) {
   const item = document.createElement("article");
-  item.className = variant === "record" ? "ppt-record-card" : "ppt-history-item";
+  item.className = "ppt-record-card";
   const recordKey = getPptDeckRecordKey(deck);
-
-  if (variant === "record") {
-    item.dataset.pptRecordKey = getPptDeckRecordKey(deck);
-    item.tabIndex = 0;
-    item.setAttribute("aria-label", `查看 ${deck.title || "PPT 记录"} 预览`);
-    item.classList.toggle("is-selected", state.ppt.recordDetail.deckKey === recordKey);
-  }
+  item.dataset.pptRecordKey = getPptDeckRecordKey(deck);
+  item.tabIndex = 0;
+  item.setAttribute("aria-label", `查看 ${deck.title || "PPT 记录"} 预览`);
+  item.classList.toggle("is-selected", state.ppt.recordDetail.deckKey === recordKey);
 
   const title = document.createElement("strong");
   title.textContent = deck.title || "未命名演示";
@@ -10766,26 +11143,22 @@ function createPptDeckRecordItem(deck, variant = "history") {
   meta.textContent = formatPptDeckMeta(deck);
   item.appendChild(meta);
 
-  if (variant === "record") {
-    const path = document.createElement("p");
-    path.textContent = deck.pptxFilename || deck.pptxRelativePath || "PPTX 文件";
-    item.appendChild(path);
+  const path = document.createElement("p");
+  path.textContent = deck.pptxFilename || deck.pptxRelativePath || "PPTX 文件";
+  item.appendChild(path);
 
-    const source = document.createElement("span");
-    source.className = "ppt-record-source";
-    source.textContent = getPptDeckSourceLabel(deck);
-    item.appendChild(source);
-  }
+  const source = document.createElement("span");
+  source.className = "ppt-record-source";
+  source.textContent = getPptDeckSourceLabel(deck);
+  item.appendChild(source);
 
   const actions = document.createElement("div");
-  actions.className = variant === "record" ? "ppt-record-card-actions" : "ppt-history-actions";
-  if (variant === "record") {
-    const previewButton = document.createElement("button");
-    previewButton.type = "button";
-    previewButton.className = "toolbar-button";
-    previewButton.textContent = "预览";
-    actions.appendChild(previewButton);
-  }
+  actions.className = "ppt-record-card-actions";
+  const previewButton = document.createElement("button");
+  previewButton.type = "button";
+  previewButton.className = "toolbar-button";
+  previewButton.textContent = "预览";
+  actions.appendChild(previewButton);
 
   const link = document.createElement("a");
   link.className = "toolbar-button";
@@ -10800,16 +11173,6 @@ function createPptDeckRecordItem(deck, variant = "history") {
   item.appendChild(actions);
 
   return item;
-}
-
-function renderPptHistory() {
-  refs.pptDeckCount.textContent = `${state.ppt.decks.length} 套`;
-  refs.pptHistoryEmpty.classList.toggle("hidden", state.ppt.decks.length > 0);
-  refs.pptHistoryList.innerHTML = "";
-
-  state.ppt.decks.forEach((deck) => {
-    refs.pptHistoryList.appendChild(createPptDeckRecordItem(deck));
-  });
 }
 
 function renderPptRecordDetail(deck) {
@@ -10938,7 +11301,7 @@ function renderPptRecordView() {
   }
 
   state.ppt.decks.forEach((deck) => {
-    refs.pptRecordList.appendChild(createPptDeckRecordItem(deck, "record"));
+    refs.pptRecordList.appendChild(createPptDeckRecordItem(deck));
   });
 
   renderPptRecordDetail(selectedDeck);
@@ -10970,7 +11333,6 @@ function renderPptView() {
   }
 
   renderPptSlides();
-  renderPptHistory();
   renderPptRecordView();
 }
 
@@ -11990,6 +12352,58 @@ function handlePromptGenerationShortcut(event) {
   refs.generateButton.click();
 }
 
+function isTopbarRevealLayout() {
+  const layoutMode = getCurrentStudioLayoutMode();
+  return layoutMode !== "tablet" && layoutMode !== "mobile";
+}
+
+function hasOpenGlobalNavItem() {
+  return refs.globalNavItems.some((item) => item.classList.contains("is-nav-open"));
+}
+
+function setTopbarReveal(open) {
+  const shouldOpen = Boolean(open) && isTopbarRevealLayout();
+  document.documentElement.classList.toggle(TOPBAR_REVEAL_CLASS, shouldOpen);
+}
+
+function syncTopbarRevealFromPointer(event) {
+  if (!refs.topbar || !isTopbarRevealLayout()) {
+    setTopbarReveal(false);
+    return;
+  }
+
+  const target = event.target instanceof Element ? event.target : null;
+  const isInTopbar = Boolean(target?.closest(".topbar"));
+  setTopbarReveal(isInTopbar || event.clientY <= TOPBAR_REVEAL_EDGE_PX || hasOpenGlobalNavItem());
+}
+
+function bindTopbarRevealEvents() {
+  document.addEventListener("pointermove", syncTopbarRevealFromPointer, { passive: true });
+  document.addEventListener("focusin", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(".topbar")) {
+      setTopbarReveal(true);
+    }
+  });
+  document.addEventListener("focusout", () => {
+    window.setTimeout(() => {
+      if (!refs.topbar?.contains(document.activeElement) && !hasOpenGlobalNavItem()) {
+        setTopbarReveal(false);
+      }
+    }, 0);
+  });
+}
+
+function closeGlobalNavIfOutsideTopbar() {
+  window.setTimeout(() => {
+    if (refs.topbar?.matches(":hover") || refs.topbar?.contains(document.activeElement)) {
+      return;
+    }
+
+    setActiveGlobalNavItem(null);
+  }, 0);
+}
+
 function setActiveGlobalNavItem(item) {
   refs.globalNavItems.forEach((navItem) => {
     const isOpen = navItem === item;
@@ -12005,6 +12419,8 @@ function setActiveGlobalNavItem(item) {
       flyout.setAttribute("aria-hidden", String(!isOpen));
     }
   });
+
+  setTopbarReveal(Boolean(item));
 }
 
 function bindGlobalNavEvents() {
@@ -12040,6 +12456,8 @@ function bindGlobalNavEvents() {
 
     setActiveGlobalNavItem(null);
   });
+  refs.topbar?.addEventListener("pointerleave", closeGlobalNavIfOutsideTopbar);
+  refs.topbar?.addEventListener("focusout", closeGlobalNavIfOutsideTopbar);
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
@@ -12118,6 +12536,7 @@ function handleStudioImagePaste(event) {
 
 function bindEvents() {
   bindGlobalNavEvents();
+  bindTopbarRevealEvents();
   bindAdaptiveWorkbenchSections();
 
   refs.viewTabs.forEach((button) => {
@@ -12452,19 +12871,29 @@ function bindEvents() {
 
     toggleCreationSelectedRole(target.dataset.creationRole);
   });
+  refs.creationBranchInputs.forEach((input) => {
+    input.addEventListener("change", (event) => {
+      if (event.target.checked) {
+        setCreationBranch(event.target.value);
+      }
+    });
+  });
   refs.creationReferenceInput.addEventListener("change", (event) => {
     applyCreationReferenceFiles(event.target.files);
+  });
+  refs.creationLogoBatchSourceInput.addEventListener("change", (event) => {
+    applyCreationLogoBatchSourceFiles(event.target.files);
   });
   refs.creationLogoInput.addEventListener("change", (event) => {
     applyCreationLogoFile(event.target.files);
   });
   refs.creationLogoPlacementInput.addEventListener("change", () => {
     state.creationLogo.placement = normalizeCreationLogoPlacement(refs.creationLogoPlacementInput.value);
-    renderCreationLogo();
+    renderCreationView();
   });
   refs.creationLogoBackgroundInput.addEventListener("change", () => {
     state.creationLogo.background = normalizeCreationLogoBackground(refs.creationLogoBackgroundInput.value);
-    renderCreationLogo();
+    renderCreationView();
   });
   refs.creationLogoRemoveButton.addEventListener("click", removeCreationLogoFile);
   refs.creationReferenceAnalyzeButton.addEventListener("click", () => {
@@ -12509,6 +12938,18 @@ function bindEvents() {
     refs.creationReferenceDropzone.classList.remove("dragover");
     applyCreationReferenceFiles(event.dataTransfer?.files);
   });
+  refs.creationLogoBatchSourceDropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    refs.creationLogoBatchSourceDropzone.classList.add("dragover");
+  });
+  refs.creationLogoBatchSourceDropzone.addEventListener("dragleave", () => {
+    refs.creationLogoBatchSourceDropzone.classList.remove("dragover");
+  });
+  refs.creationLogoBatchSourceDropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    refs.creationLogoBatchSourceDropzone.classList.remove("dragover");
+    applyCreationLogoBatchSourceFiles(event.dataTransfer?.files);
+  });
   refs.creationLogoDropzone.addEventListener("dragover", (event) => {
     event.preventDefault();
     refs.creationLogoDropzone.classList.add("dragover");
@@ -12523,9 +12964,6 @@ function bindEvents() {
   });
   refs.pptForm.addEventListener("submit", startPptGeneration);
   refs.pptCompleteMissingButton.addEventListener("click", completeMissingPptSlides);
-  refs.pptRefreshHistoryButton.addEventListener("click", () => {
-    loadPptDecks().catch((error) => setPptFeedback(error.message, "error"));
-  });
   refs.pptRecordRefreshButton.addEventListener("click", () => {
     loadPptDecks().catch((error) => showError(error.message));
   });

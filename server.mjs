@@ -74,6 +74,10 @@ import {
   normalizeCreationReferenceAnalysis,
   normalizeCreationReferenceRoles,
 } from "./lib/creation-planner.mjs";
+import {
+  CREATION_LOGO_BATCH_REFERENCE_LABELS,
+  buildCreationLogoBatchPlan,
+} from "./lib/creation-logo-batch.mjs";
 import { applyCreationRepairOverrides, selectCreationRepairItems } from "./lib/creation-repair.mjs";
 import { buildCreationRelativeDir, createCreationSetStore } from "./lib/creation-store.mjs";
 import {
@@ -1300,6 +1304,10 @@ function updateCreationItems(items, itemId, patch = {}) {
 }
 
 function getCreationSetStatus(items) {
+  if (!items.length) {
+    return "failed";
+  }
+
   const completedCount = items.filter((item) => item.status === "completed").length;
   const failedCount = items.filter((item) => item.status === "failed").length;
 
@@ -2510,6 +2518,320 @@ async function handleCreationGenerate(request, response) {
   }
 }
 
+async function handleCreationLogoBatchGenerate(request, response) {
+  response.writeHead(200, {
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "Content-Type": "text/event-stream; charset=utf-8",
+  });
+
+  let setId = "";
+  let items = [];
+  let plan = null;
+  let creationRelativeDir = "";
+  let createdAt = new Date().toISOString();
+  let sourceImages = [];
+  let logoImage = null;
+  let referenceImageNames = [];
+
+  try {
+    const formData = await readFormDataBody(request);
+    setId = `creation-set-${randomUUID()}`;
+    createdAt = new Date().toISOString();
+    sourceImages = await toReferenceImages([
+      ...formData.getAll("sourceImages"),
+      ...formData.getAll("logoBatchSourceImages"),
+    ]);
+    logoImage = await readCreationLogoImage(formData);
+    if (sourceImages.length === 0) {
+      throw new Error("请先上传需要添加 Logo 的图片。");
+    }
+    if (sourceImages.length > MAX_REFERENCE_IMAGES) {
+      throw new Error(`上传图加 Logo 最多支持 ${MAX_REFERENCE_IMAGES} 张。`);
+    }
+    if (sourceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+      throw new Error("上传图加 Logo 仅支持图片文件。");
+    }
+    if (!logoImage) {
+      throw new Error("请先上传 Logo。");
+    }
+
+    plan = buildCreationLogoBatchPlan({
+      title: formData.get("title") || formData.get("productName"),
+      sourceImages,
+      logoOptions: buildCreationLogoOptionsFromFormData(formData, logoImage),
+    });
+    referenceImageNames = plan.referenceImageNames || sourceImages.map((image) => image.filename).filter(Boolean);
+
+    const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
+    if (!config.apiKey) {
+      writeSseEvent(response, "error", {
+        message: "当前未保存 API Key，请先在配置中保存。",
+      });
+      return;
+    }
+
+    const clientSessionId = getClientSessionId(request, formData);
+    const generationRequestScope = "creation";
+    const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || "1:1"));
+    const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
+    const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
+    if (requestedSize !== requestedSizeInput && requestedSizeInput !== "") {
+      throw new Error(`当前比例 ${ratioOption.value} 不支持分辨率 ${requestedSizeInput}`);
+    }
+
+    const finalSize = requestedSize === "auto" ? getDefaultGenerationSize(ratioOption.value) : requestedSize;
+    const finalQuality = config.defaults?.quality || "high";
+    const finalFormat = normalizeOutputFormat(String(formData.get("format") || config.defaults?.format || "png"));
+    const reasoningEffort = normalizeReasoningEffort(
+      formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    );
+
+    creationRelativeDir = buildCreationRelativeDir({
+      createdAt,
+      productName: plan.productName,
+      setId,
+    });
+    items = plan.items.map((item) => ({
+      ...item,
+      status: "queued",
+      filename: "",
+      relativePath: "",
+      imageUrl: "",
+      thumbnailUrl: "",
+      error: "",
+    }));
+
+    let setManifest = await creationSetStore.saveManifest(
+      buildCreationSetManifest({
+        setId,
+        plan,
+        createdAt,
+        status: "generating",
+        relativeDir: creationRelativeDir,
+        items,
+        referenceImageNames,
+      }),
+    );
+
+    writeSseEvent(response, "set_started", { set: setManifest });
+    writeSseEvent(response, "plan", { setId, items });
+
+    await runWithConcurrency(plan.items, MAX_PARALLEL_TASKS_PER_SESSION, async (item) => {
+      const sourceImage = sourceImages[item.sourceImageIndex] || sourceImages[(item.slotIndex || 1) - 1];
+      const taskId = `${setId}-${item.itemId}`;
+      const generationStartedAt = new Date().toISOString();
+      const generationStartedAtMs = Date.now();
+      let finalBase64 = "";
+      let slotClaimed = false;
+
+      try {
+        if (!sourceImage) {
+          throw new Error("找不到对应的上传源图。");
+        }
+        if (!claimSessionTaskSlot(clientSessionId, taskId, generationRequestScope)) {
+          throw new Error(`同一会话最大同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
+        }
+        slotClaimed = true;
+        items = updateCreationItems(items, item.itemId, {
+          status: "generating",
+          generationStartedAt,
+        });
+        writeSseEvent(response, "item_started", { setId, itemId: item.itemId, role: item.role });
+
+        const finalPrompt = appendRatioHintToPrompt(item.prompt, ratioOption);
+        const generationResult = await requestStudioImageGeneration({
+          baseUrl: config.baseUrl,
+          apiKey: config.apiKey,
+          prompt: finalPrompt,
+          referenceImages: [sourceImage, logoImage],
+          referenceImageLabels: CREATION_LOGO_BATCH_REFERENCE_LABELS,
+          size: finalSize,
+          quality: finalQuality,
+          format: toApiOutputFormat(finalFormat),
+          responsesModel: config.responsesModel,
+          reasoningEffort,
+          async onEvent(event) {
+            if (event.type === "status") {
+              writeSseEvent(response, "item_status", {
+                setId,
+                itemId: item.itemId,
+                stage: event.stage,
+                message: event.message,
+              });
+            }
+
+            if (event.type === "partial_image") {
+              writeSseEvent(response, "item_partial_image", {
+                setId,
+                itemId: item.itemId,
+                dataUrl: event.dataUrl,
+              });
+            }
+
+            if (event.type === "final_image") {
+              finalBase64 = event.base64;
+              writeSseEvent(response, "item_final_image", {
+                setId,
+                itemId: item.itemId,
+                dataUrl: `data:${toOutputFormatMimeType(finalFormat)};base64,${normalizeBase64(event.base64)}`,
+              });
+            }
+          },
+        });
+
+        finalBase64 = finalBase64 || generationResult.finalImageBase64;
+        if (!finalBase64) {
+          throw new Error("上游响应结束，但没有拿到最终图片。");
+        }
+
+        const generationCompletedAt = new Date().toISOString();
+        const generationDurationMs = Math.max(0, Date.now() - generationStartedAtMs);
+        const savedSize = generationResult.effectiveSize || finalSize;
+        const filename = buildCreationImageFilename({
+          item,
+          createdAt,
+          setId,
+          format: finalFormat,
+        });
+        const saved = await saveGeneratedAsset({
+          outputDir,
+          relativeDir: creationRelativeDir,
+          filename,
+          imageBuffer: Buffer.from(normalizeBase64(finalBase64), "base64"),
+          metadata: {
+            prompt: item.prompt,
+            createdAt,
+            baseUrl: config.baseUrl,
+            responsesModel: config.responsesModel,
+            imageModel: "gpt-image-2",
+            ratio: ratioOption.value,
+            ratioLabel: ratioOption.label,
+            size: savedSize,
+            quality: finalQuality,
+            format: finalFormat,
+            reasoningEffort,
+            generationStartedAt,
+            generationCompletedAt,
+            generationDurationMs,
+            assetKind: "creation-logo-batch-image",
+            creationSetId: setId,
+            creationItemId: item.itemId,
+            creationRole: item.role,
+            targetLanguage: plan.targetLanguage,
+            creationScenario: plan.scenario,
+            creationIndustryTemplate: plan.industryTemplate,
+            creationImageCount: plan.imageCount,
+            hasReferenceImage: true,
+            referenceImageNames,
+            referenceImageName: sourceImage.filename,
+            referenceImageRoles: [plan.referenceImageRoles[item.sourceImageIndex]].filter(Boolean),
+            sourceImageName: sourceImage.filename,
+            hasCreationLogo: Boolean(plan.logo),
+            creationLogo: plan.logo,
+            creationLogoImageName: plan.logo?.filename || "",
+            galleryVisible: false,
+          },
+        });
+        const imageUrl = buildPublicAssetUrl("/output", saved.relativePath, saved.createdAt);
+
+        items = updateCreationItems(items, item.itemId, {
+          status: "completed",
+          filename,
+          relativePath: saved.relativePath,
+          imageUrl,
+          thumbnailUrl: imageUrl,
+          generationStartedAt,
+          generationCompletedAt,
+          generationDurationMs,
+        });
+        setManifest = await creationSetStore.saveManifest(
+          buildCreationSetManifest({
+            setId,
+            plan,
+            createdAt,
+            updatedAt: generationCompletedAt,
+            status: getCreationSetStatus(items),
+            relativeDir: creationRelativeDir,
+            items,
+            referenceImageNames,
+          }),
+        );
+
+        writeSseEvent(response, "item_saved", {
+          setId,
+          item: setManifest.items.find((entry) => entry.itemId === item.itemId),
+          set: setManifest,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        items = updateCreationItems(items, item.itemId, {
+          status: "failed",
+          error: message,
+        });
+        setManifest = await creationSetStore.saveManifest(
+          buildCreationSetManifest({
+            setId,
+            plan,
+            createdAt,
+            updatedAt: new Date().toISOString(),
+            status: getCreationSetStatus(items),
+            relativeDir: creationRelativeDir,
+            items,
+            referenceImageNames,
+          }),
+        );
+        writeSseEvent(response, "item_failed", {
+          setId,
+          itemId: item.itemId,
+          message,
+          set: setManifest,
+        });
+      } finally {
+        if (slotClaimed) {
+          releaseSessionTaskSlot(clientSessionId, taskId, generationRequestScope);
+        }
+      }
+    });
+
+    const finalSet = await creationSetStore.saveManifest(
+      buildCreationSetManifest({
+        setId,
+        plan,
+        createdAt,
+        updatedAt: new Date().toISOString(),
+        status: getCreationSetStatus(items),
+        relativeDir: creationRelativeDir,
+        items,
+        referenceImageNames,
+      }),
+    );
+
+    writeSseEvent(response, "complete", { set: finalSet });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (setId && plan && items.length > 0) {
+      await creationSetStore.saveManifest(
+        buildCreationSetManifest({
+          setId,
+          plan,
+          createdAt,
+          updatedAt: new Date().toISOString(),
+          status: getCreationSetStatus(items),
+          relativeDir: creationRelativeDir,
+          items,
+          referenceImageNames,
+        }),
+      );
+    }
+    writeSseEvent(response, "error", { message });
+  } finally {
+    if (!response.destroyed && !response.writableEnded) {
+      response.end();
+    }
+  }
+}
+
 async function handleCreationRepair(request, response) {
   response.writeHead(200, {
     "Cache-Control": "no-cache, no-transform",
@@ -3330,6 +3652,10 @@ async function routeRequest(request, response) {
 
   if (request.method === "POST" && url.pathname === "/api/creation/generate") {
     return handleCreationGenerate(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/creation/logo-batch") {
+    return handleCreationLogoBatchGenerate(request, response);
   }
 
   if (request.method === "POST" && url.pathname === "/api/creation/repair") {

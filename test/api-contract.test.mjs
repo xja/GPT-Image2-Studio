@@ -21,6 +21,8 @@ test("API capability matrix documents local and Cloudflare runtime differences",
 
   assert.equal(API_RUNTIME_CAPABILITIES.some((route) => route.path === "/api/generate"), true);
   assert.equal(isApiRouteSupported("cloudflare", "POST", "/api/generate"), true);
+  assert.equal(isApiRouteSupported("local", "POST", "/api/creation/logo-batch"), true);
+  assert.equal(isApiRouteSupported("cloudflare", "POST", "/api/creation/logo-batch"), true);
 });
 
 test("Cloudflare unsupported API routes use the shared capability contract", async () => {

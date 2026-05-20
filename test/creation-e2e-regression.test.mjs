@@ -132,6 +132,27 @@ function makeCreationForm(overrides = {}) {
   return formData;
 }
 
+function makeLogoBatchForm(overrides = {}) {
+  const formData = new FormData();
+  formData.set("title", "Logo batch invalid settings");
+  formData.set("ratio", "1:1");
+  formData.set("size", "1024x1280");
+  formData.set("format", "png");
+  formData.set("reasoningEffort", "low");
+  formData.set("baseUrl", "http://127.0.0.1:9/v1");
+  formData.set("apiKey", "test-key");
+  formData.set("responsesModel", "gpt-5.4");
+  formData.set("clientSessionId", "creation-logo-batch-e2e-session");
+  formData.append("sourceImages", new File(["front-reference"], "front.png", { type: "image/png" }));
+  formData.append("logoImage", new File(["logo-reference"], "brand-mark.png", { type: "image/png" }));
+
+  for (const [key, value] of Object.entries(overrides.fields || {})) {
+    formData.set(key, value);
+  }
+
+  return formData;
+}
+
 async function postForm(baseUrl, pathname, formData) {
   const response = await fetch(`${baseUrl}${pathname}`, {
     method: "POST",
@@ -204,6 +225,45 @@ function summarizeCreationItems(set = {}) {
     error: item.error,
   }));
 }
+
+test("logo batch validation errors do not create empty completed set records", async (t) => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "creation-logo-batch-invalid-"));
+  const outputDir = join(tempRoot, "output");
+  const localDataRootDir = join(tempRoot, "local-data");
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const server = spawn(process.execPath, ["server.mjs"], {
+    cwd: rootDir,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      VERCEL: "1",
+      TMP: tempRoot,
+      TEMP: tempRoot,
+      IMAGE_STUDIO_MOCK_IMAGE_GENERATION: "1",
+      IMAGE_STUDIO_OUTPUT_DIR: outputDir,
+      IMAGE_STUDIO_LOCAL_DATA_DIR: localDataRootDir,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const diagnostics = collectDiagnostics(server);
+
+  t.after(async () => {
+    await stopServer(server);
+    await rm(tempRoot, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl, server, diagnostics);
+
+  const result = await postForm(baseUrl, "/api/creation/logo-batch", makeLogoBatchForm());
+  assert.equal(result.response.status, 200);
+  assert.match(result.text, /不支持分辨率 1024x1280/);
+  assert.equal(result.events.some((event) => event.eventName === "complete"), false);
+
+  const setsResponse = await fetch(`${baseUrl}/api/creation/sets`);
+  assert.equal(setsResponse.status, 200);
+  assert.deepEqual(await setsResponse.json(), []);
+});
 
 test("creation workflow reuses history, reuploads references, tweaks prompts, repairs items, and exposes asset paths", async (t) => {
   const tempRoot = await mkdtemp(join(tmpdir(), "creation-e2e-"));

@@ -181,6 +181,68 @@ test("Cloudflare creation filenames use Chinese image type names", async () => {
   assert.equal(imageBucket.objects.size, 2);
 });
 
+test("Cloudflare creation logo batch edits each uploaded source with the shared logo", async () => {
+  const seenRequests = [];
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("title", "Marketplace logo pass");
+  formData.set("ratio", "1:1");
+  formData.set("size", "1024x1024");
+  formData.set("format", "png");
+  formData.set("reasoningEffort", "low");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.set("logoOptions", JSON.stringify({
+    enabled: true,
+    filename: "brand-mark.png",
+    placement: "bottom-right",
+    background: "transparent",
+  }));
+  formData.append("sourceImages", new File(["front"], "front.png", { type: "image/png" }));
+  formData.append("sourceImages", new File(["detail"], "detail.png", { type: "image/png" }));
+  formData.append("logoImage", new File(["logo"], "brand-mark.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/creation/logo-batch", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+        body: JSON.parse(init.body),
+      });
+      return makeSseResponse();
+    },
+  });
+
+  const text = await response.text();
+  const events = parseSseEvents(text);
+  const savedEvents = events.filter((event) => event.eventName === "item_saved");
+  const completeEvent = events.find((event) => event.eventName === "complete");
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 2);
+  assert.equal(seenRequests[0].auth, "Bearer test-browser-key");
+  assert.equal(seenRequests[0].body.input[0].content.filter((item) => item.type === "input_image").length, 2);
+  assert.match(seenRequests[0].body.input[0].content[0].text, /Preserve the source image/);
+  assert.match(seenRequests[0].body.input[0].content[1].text, /SOURCE image/);
+  assert.match(seenRequests[0].body.input[0].content[3].text, /LOGO image/);
+  assert.equal(savedEvents.length, 2);
+  assert.equal(completeEvent.payload.set.logo.filename, "brand-mark.png");
+  assert.equal(completeEvent.payload.set.referenceImageNames.length, 2);
+  assert.deepEqual(
+    completeEvent.payload.set.referenceImageRoles.map((entry) => [entry.filename, entry.role]),
+    [
+      ["front.png", "product"],
+      ["detail.png", "product"],
+    ],
+  );
+  assert.doesNotMatch(text, /test-browser-key/);
+});
+
 test("Cloudflare image decomposition uses a single reference image and generated target-language prompt", async () => {
   const seenRequests = [];
   const imageBucket = makeImageBucket();

@@ -56,7 +56,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260515-responsive-layout-1" />
+    <link rel="stylesheet" href="./styles.css?v=20260519-topbar-reveal-2" />
   </head>
   <body>
     <div class="app-shell">
@@ -761,12 +761,38 @@
                   <span class="count-pill small" id="creationProgressText">0 / 4</span>
                 </div>
 
-                <label class="compact-field">
+                <div class="creation-branch-tabs" role="radiogroup" aria-label="套图分支">
+                  <label class="creation-branch-option">
+                    <input name="creationBranch" type="radio" value="set" checked />
+                    <span>生成套图</span>
+                  </label>
+                  <label class="creation-branch-option">
+                    <input id="creationBranchLogoBatchInput" name="creationBranch" type="radio" value="logo-batch" />
+                    <span>上传图加 Logo</span>
+                  </label>
+                </div>
+
+                <div class="creation-logo-batch-source-block hidden" data-creation-logo-batch-only>
+                  <div class="field-head">
+                    <div>
+                      <span>待加 Logo 图片</span>
+                    </div>
+                    <small id="creationLogoBatchSourceCount">0 / 6</small>
+                  </div>
+                  <label class="reference-dropzone creation-logo-batch-source-dropzone" id="creationLogoBatchSourceDropzone">
+                    <input id="creationLogoBatchSourceInput" name="logoBatchSourceImages" type="file" accept="image/*" multiple />
+                    <div class="reference-icon" aria-hidden="true"></div>
+                    <span>上传需要加 Logo 的图片</span>
+                  </label>
+                  <div class="reference-grid creation-logo-batch-source-grid hidden" id="creationLogoBatchSourceGrid"></div>
+                </div>
+
+                <label class="compact-field" data-creation-set-only>
                   <span>商品名称</span>
                   <input id="creationProductNameInput" name="productName" type="text" maxlength="80" placeholder="例如：AeroPress Clear" />
                 </label>
 
-                <label class="compact-field">
+                <label class="compact-field" data-creation-set-only>
                   <span>商品描述</span>
                   <textarea
                     id="creationProductDescriptionInput"
@@ -777,7 +803,7 @@
                   ></textarea>
                 </label>
 
-                <label class="compact-field">
+                <label class="compact-field" data-creation-set-only>
                   <span>核心卖点</span>
                   <textarea
                     id="creationSellingPointsInput"
@@ -788,7 +814,7 @@
                   ></textarea>
                 </label>
 
-                <label class="compact-field">
+                <label class="compact-field" data-creation-set-only>
                   <span>尺寸规格</span>
                   <textarea
                     id="creationDimensionSpecsInput"
@@ -799,7 +825,7 @@
                   ></textarea>
                 </label>
 
-                <label class="compact-field creation-dimension-unit-field">
+                <label class="compact-field creation-dimension-unit-field" data-creation-set-only>
                   <span>规格单位</span>
                   <select id="creationDimensionUnitModeInput" name="dimensionUnitMode">
                     <option value="metric">公制</option>
@@ -808,7 +834,7 @@
                   </select>
                 </label>
 
-                <div class="creation-reference-block">
+                <div class="creation-reference-block" data-creation-set-only>
                   <div class="field-head">
                     <div>
                       <span>套图参考图</span>
@@ -889,7 +915,7 @@
                 </div>
 
                 <div class="creation-control-row creation-option-grid">
-                  <label class="compact-field">
+                  <label class="compact-field" data-creation-set-only>
                     <span>套图数量</span>
                     <select id="creationImageCountInput" name="imageCount">
                       <option value="4">4 张</option>
@@ -900,7 +926,7 @@
                     </select>
                   </label>
 
-                  <label class="compact-field">
+                  <label class="compact-field" data-creation-set-only>
                     <span>营销场景</span>
                     <select id="creationScenarioInput" name="scenario">
                       <option value="standard">标准电商</option>
@@ -915,7 +941,7 @@
                     </select>
                   </label>
 
-                  <label class="compact-field">
+                  <label class="compact-field" data-creation-set-only>
                     <span>目标语言</span>
                     <select id="creationTargetLanguageInput" name="targetLanguage">
                       <option value="zh-CN">简体中文</option>
@@ -947,7 +973,7 @@
                     </select>
                   </label>
 
-                  <section class="creation-industry-browser" id="creationIndustryTemplateBrowser" aria-label="行业模板">
+                  <section class="creation-industry-browser" id="creationIndustryTemplateBrowser" aria-label="行业模板" data-creation-set-only>
                     <input id="creationIndustryTemplateInput" name="industryTemplate" type="hidden" value="general" />
                     <div class="creation-industry-browser-head">
                       <div class="creation-industry-picker-field">
@@ -987,7 +1013,7 @@
                     </div>
                   </section>
                 </div>
-                <section class="creation-role-picker" id="creationRolePicker" aria-label="套图图片类型">
+                <section class="creation-role-picker" id="creationRolePicker" aria-label="套图图片类型" data-creation-set-only>
                   <div class="field-head">
                     <div>
                       <span>图片类型</span>
@@ -997,7 +1023,7 @@
                   <div class="creation-role-grid" id="creationRoleGrid"></div>
                 </section>
 
-                <div class="creation-plan-actions">
+                <div class="creation-plan-actions" data-creation-set-only>
                   <button class="toolbar-button" id="creationPlanButton" type="button">预览计划</button>
                 </div>
                 <button class="generate-button" id="creationGenerateButton" type="submit">生成营销套图</button>
@@ -1030,7 +1056,6 @@
                   <div>
                     <h2>PPT 演示文稿制作</h2>
                   </div>
-                  <span class="count-pill small" id="pptDeckCount">0 套</span>
                 </div>
 
                 <div class="field-group">
@@ -1189,17 +1214,6 @@
               <div class="ppt-outline-box" id="pptOutlineBox"></div>
               <div class="ppt-slide-list" id="pptSlideList"></div>
             </section>
-
-            <aside class="studio-panel ppt-history-panel">
-              <div class="panel-title between">
-                <div>
-                  <h2>历史演示</h2>
-                </div>
-                <button class="toolbar-button" id="pptRefreshHistoryButton" type="button">刷新</button>
-              </div>
-              <div class="ppt-history-empty" id="pptHistoryEmpty">还没有生成过 PPT。</div>
-              <div class="ppt-history-list" id="pptHistoryList"></div>
-            </aside>
           </div>
         </section>
 

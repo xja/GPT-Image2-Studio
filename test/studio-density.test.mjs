@@ -34,7 +34,7 @@ test("studio density switches to wide mode on 2560x1348 desktops without changin
   assert.equal(settings.variables["--app-shell-max-width"], "2200px");
   assert.equal(settings.variables["--studio-grid-left"], "392px");
   assert.equal(settings.variables["--studio-grid-right"], "328px");
-  assert.equal(settings.variables["--view-root-offset"], "88px");
+  assert.equal(settings.variables["--view-root-offset"], "12px");
   assert.equal(settings.variables["--textarea-min-height"], "100px");
   assert.equal(settings.variables["--reference-dropzone-min-height"], "140px");
 });

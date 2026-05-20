@@ -24,6 +24,10 @@ import {
   buildFinalImageChunkPayloads,
 } from "./lib/generation-stream-protocol.mjs";
 import { buildCreationPlan, normalizeCreationLogoOptions } from "./lib/creation-planner.mjs";
+import {
+  CREATION_LOGO_BATCH_REFERENCE_LABELS,
+  buildCreationLogoBatchPlan,
+} from "./lib/creation-logo-batch.mjs";
 import { generatePptDeckOutline } from "./lib/ppt-deck-workflow.mjs";
 import { buildSlideEditPrompt, buildSlideImagePrompts } from "./lib/ppt-slide-prompts.mjs";
 import {
@@ -1288,6 +1292,10 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
 }
 
 function getCloudCreationSetStatus(items) {
+  if (!items.length) {
+    return "failed";
+  }
+
   const completedCount = items.filter((item) => item.status === "completed").length;
   const failedCount = items.filter((item) => item.status === "failed").length;
 
@@ -1322,6 +1330,7 @@ function buildCloudCreationSet({ setId, plan, createdAt, updatedAt, status, item
     industryTemplatePath: plan.industryTemplatePath,
     selectedRoles: plan.selectedRoles,
     referenceImageNames,
+    referenceImageRoles: plan.referenceImageRoles || [],
     logo: plan.logo || null,
     createdAt,
     updatedAt: updatedAt || createdAt,
@@ -1547,6 +1556,242 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
       items,
       referenceImageNames,
     }),
+  });
+}
+
+async function runCreationLogoBatchGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
+  if (!imageBucket) {
+    await writeSseEvent(writer, "error", { message: SERVER_IMAGE_BUCKET_MISSING_MESSAGE });
+    return;
+  }
+
+  const formData = await request.formData();
+  const setId = `creation-set-${crypto.randomUUID()}`;
+  const createdAt = new Date().toISOString();
+  const sourceImages = await toReferenceImages([
+    ...formData.getAll("sourceImages"),
+    ...formData.getAll("logoBatchSourceImages"),
+  ]);
+  const logoImage = await readCreationLogoImage(formData);
+  if (sourceImages.length === 0) {
+    throw new Error("请先上传需要添加 Logo 的图片。");
+  }
+  if (sourceImages.length > MAX_REFERENCE_IMAGES) {
+    throw new Error(`上传图加 Logo 最多支持 ${MAX_REFERENCE_IMAGES} 张。`);
+  }
+  if (sourceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+    throw new Error("上传图加 Logo 仅支持图片文件。");
+  }
+  if (!logoImage) {
+    throw new Error("请先上传 Logo。");
+  }
+
+  const plan = buildCreationLogoBatchPlan({
+    title: formData.get("title") || formData.get("productName"),
+    sourceImages,
+    logoOptions: buildCreationLogoOptionsFromFormData(formData, logoImage),
+  });
+  const referenceImageNames = plan.referenceImageNames || sourceImages.map((image) => image.filename).filter(Boolean);
+  const config = normalizePrivateConfig(formData);
+  const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || "1:1"));
+  const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
+  const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
+  if (requestedSize !== requestedSizeInput && requestedSizeInput !== "") {
+    throw new Error(`当前比例 ${ratioOption.value} 不支持分辨率 ${requestedSizeInput}`);
+  }
+
+  const finalSize = requestedSize === "auto" ? getDefaultGenerationSize(ratioOption.value) : requestedSize;
+  const finalQuality = config.defaults.quality;
+  const finalFormat = normalizeOutputFormat(formData.get("format") || config.defaults.format);
+  const reasoningEffort = normalizeReasoningEffort(
+    formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+  );
+  let items = plan.items.map((item) => ({
+    ...item,
+    status: "queued",
+    filename: "",
+    relativePath: "",
+    imageUrl: "",
+    thumbnailUrl: "",
+    error: "",
+  }));
+  let set = buildCloudCreationSet({
+    setId,
+    plan,
+    createdAt,
+    status: "generating",
+    items,
+    referenceImageNames,
+  });
+
+  await writeSseEvent(writer, "set_started", { set });
+  await writeSseEvent(writer, "plan", { setId, items });
+
+  await runWithConcurrency(plan.items, MAX_PARALLEL_TASKS_PER_SESSION, async (item) => {
+    const sourceImage = sourceImages[item.sourceImageIndex] || sourceImages[(item.slotIndex || 1) - 1];
+    const generationStartedAt = new Date().toISOString();
+    const generationStartedAtMs = Date.now();
+    let finalBase64 = "";
+
+    try {
+      if (!sourceImage) {
+        throw new Error("找不到对应的上传源图。");
+      }
+
+      items = items.map((entry) =>
+        entry.itemId === item.itemId ? { ...entry, status: "generating", generationStartedAt } : entry,
+      );
+      await writeSseEvent(writer, "item_started", { setId, itemId: item.itemId, role: item.role });
+
+      const generationResult = await requestImageGeneration({
+        baseUrl: config.baseUrl,
+        apiKey: config.apiKey,
+        prompt: appendRatioHintToPrompt(item.prompt, ratioOption),
+        referenceImages: [sourceImage, logoImage],
+        referenceImageLabels: CREATION_LOGO_BATCH_REFERENCE_LABELS,
+        size: finalSize,
+        quality: finalQuality,
+        format: toApiOutputFormat(finalFormat),
+        responsesModel: config.responsesModel,
+        reasoningEffort,
+        statusHeartbeatMs: UPSTREAM_STATUS_HEARTBEAT_MS,
+        fetchImpl,
+        async onEvent(event) {
+          if (event.type === "status") {
+            await writeSseEvent(writer, "item_status", {
+              setId,
+              itemId: item.itemId,
+              stage: event.stage,
+              message: event.message,
+            });
+            return;
+          }
+
+          if (event.type === "partial_image") {
+            await writeSseEvent(writer, "item_partial_image", {
+              setId,
+              itemId: item.itemId,
+              dataUrl: event.dataUrl,
+            });
+            return;
+          }
+
+          if (event.type === "final_image") {
+            finalBase64 = event.base64;
+            await writeSseEvent(writer, "item_final_image", {
+              setId,
+              itemId: item.itemId,
+              dataUrl: makeImageDataUrl(event.base64, finalFormat),
+            });
+          }
+        },
+      });
+
+      finalBase64 = finalBase64 || generationResult.finalImageBase64;
+      if (!finalBase64) {
+        throw new Error("上游响应结束，但没有拿到最终图片。");
+      }
+
+      const generationCompletedAt = new Date().toISOString();
+      const generationDurationMs = Math.max(0, Date.now() - generationStartedAtMs);
+      const savedSize = generationResult.effectiveSize || finalSize;
+      const filename = buildCloudCreationFilename({ setId, item, createdAt, format: finalFormat });
+      const storedImage = await storeFinalImage({
+        imageBucket,
+        filename,
+        createdAt,
+        format: finalFormat,
+        base64: finalBase64,
+      });
+
+      items = items.map((entry) =>
+        entry.itemId === item.itemId
+          ? {
+              ...entry,
+              status: "completed",
+              filename,
+              imageUrl: storedImage.imageUrl,
+              thumbnailUrl: storedImage.imageUrl,
+              storageKey: storedImage.storageKey,
+              expiresAt: storedImage.expiresAt,
+              generationStartedAt,
+              generationCompletedAt,
+              generationDurationMs,
+              size: savedSize,
+              format: finalFormat,
+            }
+          : entry,
+      );
+      set = buildCloudCreationSet({
+        setId,
+        plan,
+        createdAt,
+        updatedAt: generationCompletedAt,
+        status: getCloudCreationSetStatus(items),
+        items,
+        referenceImageNames,
+      });
+      await writeSseEvent(writer, "item_saved", {
+        setId,
+        item: set.items.find((entry) => entry.itemId === item.itemId),
+        set,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      items = items.map((entry) =>
+        entry.itemId === item.itemId ? { ...entry, status: "failed", error: message } : entry,
+      );
+      set = buildCloudCreationSet({
+        setId,
+        plan,
+        createdAt,
+        updatedAt: new Date().toISOString(),
+        status: getCloudCreationSetStatus(items),
+        items,
+        referenceImageNames,
+      });
+      await writeSseEvent(writer, "item_failed", {
+        setId,
+        itemId: item.itemId,
+        message,
+        set,
+      });
+    }
+  });
+
+  await writeSseEvent(writer, "complete", {
+    set: buildCloudCreationSet({
+      setId,
+      plan,
+      createdAt,
+      updatedAt: new Date().toISOString(),
+      status: getCloudCreationSetStatus(items),
+      items,
+      referenceImageNames,
+    }),
+  });
+}
+
+function streamCreationLogoBatchGenerate(request, options = {}) {
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+
+  const work = async () => {
+    try {
+      await runCreationLogoBatchGenerate(request, writer, options);
+    } catch (error) {
+      await writeSseEvent(writer, "error", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      await writer.close();
+    }
+  };
+
+  work();
+  return new Response(readable, {
+    status: 200,
+    headers: SSE_HEADERS,
   });
 }
 
@@ -2109,6 +2354,10 @@ export async function handleApiRequest(request, options = {}) {
 
   if (request.method === "POST" && url.pathname === "/api/creation/generate") {
     return streamCreationGenerate(request, { fetchImpl, imageBucket });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/creation/logo-batch") {
+    return streamCreationLogoBatchGenerate(request, { fetchImpl, imageBucket });
   }
 
   if (request.method === "GET" && url.pathname.startsWith(SERVER_IMAGE_ROUTE_PREFIX)) {

@@ -12,8 +12,10 @@ test("server exposes independent creation generation and record endpoints", asyn
 
   assert.match(server, /createCreationSetStore/);
   assert.match(server, /async function handleCreationGenerate/);
+  assert.match(server, /async function handleCreationLogoBatchGenerate/);
   assert.match(server, /async function handleCreationSetsGet/);
   assert.match(server, /url\.pathname === "\/api\/creation\/generate"/);
+  assert.match(server, /url\.pathname === "\/api\/creation\/logo-batch"/);
   assert.match(server, /url\.pathname === "\/api\/creation\/sets"/);
   assert.doesNotMatch(server, /mode=creation/);
 });
@@ -91,9 +93,35 @@ test("cloudflare worker exposes creation record and generation routes", async ()
   const worker = await readFile(cloudflareWorkerPath, "utf8");
 
   assert.match(worker, /buildCreationPlan/);
+  assert.match(worker, /buildCreationLogoBatchPlan/);
   assert.match(worker, /async function runCreationGenerate/);
+  assert.match(worker, /async function runCreationLogoBatchGenerate/);
   assert.match(worker, /url\.pathname === "\/api\/creation\/sets"/);
   assert.match(worker, /url\.pathname === "\/api\/creation\/generate"/);
+  assert.match(worker, /url\.pathname === "\/api\/creation\/logo-batch"/);
+});
+
+test("creation logo batch uses each uploaded image with the shared logo reference", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+  const localHandler =
+    server.match(/async function handleCreationLogoBatchGenerate[\s\S]*?\r?\n}\r?\n\r?\nasync function handleCreationRepair/)?.[0] || "";
+  const workerHandler =
+    worker.match(/async function runCreationLogoBatchGenerate[\s\S]*?\r?\n}\r?\n\r?\nfunction streamCreationLogoBatchGenerate/)?.[0] || "";
+
+  assert.match(server, /CREATION_LOGO_BATCH_REFERENCE_LABELS/);
+  assert.match(worker, /CREATION_LOGO_BATCH_REFERENCE_LABELS/);
+  assert.match(localHandler, /formData\.getAll\("sourceImages"\)/);
+  assert.match(localHandler, /readCreationLogoImage\(formData\)/);
+  assert.match(localHandler, /buildCreationLogoBatchPlan/);
+  assert.match(localHandler, /referenceImages:\s*\[sourceImage,\s*logoImage\]/);
+  assert.match(localHandler, /referenceImageLabels:\s*CREATION_LOGO_BATCH_REFERENCE_LABELS/);
+  assert.match(localHandler, /assetKind:\s*"creation-logo-batch-image"/);
+  assert.match(workerHandler, /formData\.getAll\("sourceImages"\)/);
+  assert.match(workerHandler, /readCreationLogoImage\(formData\)/);
+  assert.match(workerHandler, /buildCreationLogoBatchPlan/);
+  assert.match(workerHandler, /referenceImages:\s*\[sourceImage,\s*logoImage\]/);
+  assert.match(workerHandler, /referenceImageLabels:\s*CREATION_LOGO_BATCH_REFERENCE_LABELS/);
 });
 
 test("creation generation accepts references image count marketing scenario and industry template", async () => {
