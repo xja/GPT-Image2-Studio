@@ -25,6 +25,7 @@ export const PUBLIC_LIB_SYNC_TARGETS = [
   "output-format-options.mjs",
   "preview-loading-shell.mjs",
   "preview-placeholder-state.mjs",
+  "reference-analysis-language.mjs",
   "sse-writer.mjs",
   "studio-density.mjs",
   "studio-formatters.mjs",

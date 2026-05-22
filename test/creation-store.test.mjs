@@ -9,6 +9,7 @@ import {
   createCreationSetStore,
   normalizeCreationSetManifest,
 } from "../lib/creation-store.mjs";
+import { buildCreationItemReferenceImages } from "../lib/creation-reference-labels.mjs";
 
 test("creation store builds dated creation directories beside image and ppt folders", () => {
   assert.equal(
@@ -133,6 +134,98 @@ test("creation store preserves item generation telemetry", () => {
   assert.equal(manifest.items[0].generationDurationMs, 30000);
   assert.equal(manifest.items[0].size, "1024x1024");
   assert.equal(manifest.items[0].format, "jpg");
+});
+
+test("creation store preserves optional logo metadata for creation set detail display", async () => {
+  const logo = {
+    enabled: true,
+    filename: "ALURES.png",
+    placement: "top-left",
+    placementLabel: "左上",
+    promptPosition: "top-left corner",
+    background: "transparent",
+    backgroundLabel: "透明底，直接放置",
+    backgroundInstruction: "Treat the supplied reference as a transparent logo and place the transparent logo directly.",
+  };
+  const manifest = normalizeCreationSetManifest(
+    {
+      setId: "creation-set-logo",
+      productName: "Fishing lure",
+      createdAt: "2026-05-05T09:00:00.000Z",
+      status: "generating",
+      logo,
+      items: [],
+    },
+    { publicBasePath: "/output" },
+  );
+
+  assert.deepEqual(manifest.logo, logo);
+
+  const outputDir = await mkdtemp(join(tmpdir(), "creation-store-logo-"));
+  const store = createCreationSetStore({ outputDir, publicBasePath: "/output" });
+  const saved = await store.saveManifest(manifest);
+  const raw = await readFile(store.manifestPath("creation-set-logo"), "utf8");
+
+  assert.deepEqual(saved.logo, logo);
+  assert.deepEqual(JSON.parse(raw).logo, logo);
+});
+
+test("creation store preserves SKU subject metadata for repair reference binding", () => {
+  const manifest = normalizeCreationSetManifest(
+    {
+      setId: "creation-set-sku",
+      productName: "Jointed fishing lure",
+      referenceImageNames: ["yellow-lure.png", "silver-lure.png", "package.png"],
+      referenceImageRoles: [
+        { filename: "yellow-lure.png", role: "product", note: "yellow SKU" },
+        { filename: "silver-lure.png", role: "product", note: "silver SKU" },
+        { filename: "package.png", role: "package", note: "retail package" },
+      ],
+      skuSubjects: [
+        {
+          id: "silver",
+          title: "Silver lure",
+          filenames: ["silver-lure.png"],
+          referenceIndexes: [2],
+          note: "preserve the silver finish and body segments",
+          bundleCount: 3,
+        },
+      ],
+      items: [
+        {
+          itemId: "13-sku-silver",
+          slotIndex: 13,
+          role: "sku",
+          title: "SKU image 1",
+          prompt: "Create one SKU product image for the distinct sellable subject: Silver lure.",
+          skuSubject: {
+            id: "silver",
+            title: "Silver lure",
+            filenames: ["silver-lure.png"],
+            referenceIndexes: [2],
+            note: "preserve the silver finish and body segments",
+            bundleCount: 3,
+          },
+          status: "failed",
+        },
+      ],
+    },
+    { publicBasePath: "/output" },
+  );
+
+  assert.deepEqual(manifest.items[0].skuSubject, manifest.skuSubjects[0]);
+  assert.deepEqual(
+    buildCreationItemReferenceImages(
+      manifest.items[0],
+      [
+        { filename: "yellow-lure.png" },
+        { filename: "silver-lure.png" },
+        { filename: "package.png" },
+      ],
+      manifest.referenceImageRoles,
+    ),
+    [{ filename: "silver-lure.png" }],
+  );
 });
 
 test("creation set store writes and lists manifests newest first", async () => {

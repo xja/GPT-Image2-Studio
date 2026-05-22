@@ -1,8 +1,4 @@
-import {
-  buildParameterText,
-  formatImageModelLabel,
-  formatRecentOutputMeta,
-} from "/lib/studio-formatters.mjs";
+import { buildParameterText, formatImageModelLabel, formatRecentOutputMeta } from "/lib/studio-formatters.mjs";
 import { getPreviewPlaceholderState } from "/lib/preview-placeholder-state.mjs?v=20260510-activity-log-1";
 import {
   buildGalleryReferenceFilterOptions,
@@ -23,45 +19,17 @@ import {
   mergeGalleryItemWithCachedMetadata,
   pruneGalleryMetadataCache,
 } from "/lib/gallery-metadata-recovery.mjs";
-import {
-  getDefaultGenerationSize,
-  getGenerationSizeOptions,
-  normalizeGenerationSize,
-} from "/lib/generation-size-options.mjs?v=20260512-one-megapixel-sizes-4";
-import {
-  getOutputFormatOptions,
-  normalizeOutputFormat,
-} from "/lib/output-format-options.mjs?v=20260504-vercel-static-lib-1";
-import {
-  getPreviewLoadingShellTheme,
-  shouldReusePreviewLoadingShell,
-} from "/lib/preview-loading-shell.mjs";
-import {
-  isGenerationRequestRetryMessage,
-} from "/lib/generation-request-retry.mjs";
-import {
-  cancelQueuedGenerationJob,
-  isQueuedGenerationJob,
-  selectNextQueuedGenerationJobs,
-} from "/lib/generation-queue.mjs?v=20260504-vercel-static-lib-1";
-import {
-  sortGenerationActivityFeed,
-  upsertGenerationActivityEntry,
-} from "/lib/generation-activity-feed.mjs?v=20260504-vercel-static-lib-1";
-import {
-  GENERATION_STREAM_EVENTS,
-  recordFinalImageChunk,
-} from "/lib/generation-stream-protocol.mjs";
+import { getDefaultGenerationSize, getGenerationSizeOptions, normalizeGenerationSize } from "/lib/generation-size-options.mjs?v=20260512-one-megapixel-sizes-4";
+import { getOutputFormatOptions, normalizeOutputFormat, } from "/lib/output-format-options.mjs?v=20260504-vercel-static-lib-1";
+import { normalizeReferenceAnalysisLanguage, } from "/lib/reference-analysis-language.mjs?v=20260522-reference-language-1";
+import { getPreviewLoadingShellTheme, shouldReusePreviewLoadingShell } from "/lib/preview-loading-shell.mjs";
+import { isGenerationRequestRetryMessage, } from "/lib/generation-request-retry.mjs";
+import { cancelQueuedGenerationJob, isQueuedGenerationJob, selectNextQueuedGenerationJobs } from "/lib/generation-queue.mjs?v=20260504-vercel-static-lib-1";
+import { sortGenerationActivityFeed, upsertGenerationActivityEntry } from "/lib/generation-activity-feed.mjs?v=20260504-vercel-static-lib-1";
+import { GENERATION_STREAM_EVENTS, recordFinalImageChunk } from "/lib/generation-stream-protocol.mjs";
 import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260519-topbar-reveal-2";
 import { ensureLazyViewModule, getMountedLazyViewModule } from "/lib/view-mode-loader.mjs";
-import {
-  appendBrowserConfigToFormData,
-  getBrowserPrivateConfigRequestPayload,
-  getOrCreateClientSessionId,
-  readBrowserPrivateConfig,
-  saveBrowserPrivateConfig,
-  toPublicBrowserConfig,
-} from "/lib/browser-config.mjs";
+import { appendBrowserConfigToFormData, getBrowserPrivateConfigRequestPayload, getOrCreateClientSessionId, readBrowserPrivateConfig, saveBrowserPrivateConfig, toPublicBrowserConfig } from "/lib/browser-config.mjs";
 import {
   cacheBrowserGalleryItem,
   clearBrowserImageCache,
@@ -498,6 +466,7 @@ const state = {
     previewKey: "",
     result: null,
     running: false,
+    outputLanguage: "zh-CN",
     selectedPrompt: "",
   },
   imageDecomposition: {
@@ -799,6 +768,7 @@ const refs = {
   referenceAnalysisGrid: document.querySelector("#referenceAnalysisGrid"),
   referenceAnalysisHead: document.querySelector("#referenceAnalysisHead"),
   referenceAnalysisInput: document.querySelector("#referenceAnalysisInput"),
+  referenceAnalysisLanguageInput: document.querySelector("#referenceAnalysisLanguageInput"),
   referenceAnalysisList: document.querySelector("#referenceAnalysisList"),
   referenceAnalysisMeta: document.querySelector("#referenceAnalysisMeta"),
   referenceAnalysisPanel: document.querySelector("#referenceAnalysisPanel"),
@@ -10391,7 +10361,6 @@ function renderCreationView() {
   items.forEach((item, index) => {
     refs.creationResultGrid.appendChild(createCreationCard(item, index));
   });
-
 }
 
 function getCreationPlanOverrides() {
@@ -10765,6 +10734,7 @@ async function previewCreationPlan() {
       referenceImageRoles: plan.referenceImageRoles || buildCreationReferenceRolePayload(),
       skuSubjects: plan.skuSubjects || buildCreationSkuSubjectPayload(),
       skuBundleCount: plan.skuBundleCount || normalizeCreationSkuBundleCountForPayload(refs.creationSkuBundleCountInput?.value || "1"),
+      logo: plan.logo || getCreationLogoPayload(),
       createdAt: previousDraft?.createdAt || createdAt,
       updatedAt: createdAt,
       status: "planning",
@@ -10918,6 +10888,7 @@ async function startCreationGeneration(event) {
       referenceImageRoles: buildCreationReferenceRolePayload(),
       skuSubjects: buildCreationSkuSubjectPayload(),
       skuBundleCount: normalizeCreationSkuBundleCountForPayload(refs.creationSkuBundleCountInput?.value || "1"),
+      logo: getCreationLogoPayload(),
       createdAt,
       updatedAt: createdAt,
       status: "generating",
@@ -11468,18 +11439,28 @@ function getSelectedReferenceAnalysisGenerationSize() {
   return normalizeGenerationSize(refs.referenceAnalysisRatioInput.value || DEFAULT_UI_RATIO, refs.referenceAnalysisSizeInput.value || "auto");
 }
 
+function getReferenceAnalysisSelectedLanguage() {
+  return normalizeReferenceAnalysisLanguage(
+    refs.referenceAnalysisLanguageInput?.value || state.referenceAnalysis.outputLanguage || "zh-CN",
+    refs.referenceAnalysisLanguageInput?.selectedOptions?.[0]?.textContent || "",
+  );
+}
+
 function createReferenceAnalysisJob() {
   const ratioOption = getRatioOption(refs.referenceAnalysisRatioInput.value || DEFAULT_UI_RATIO);
   const referenceFiles = state.referenceAnalysis.files.map(getReferenceAnalysisGenerationFile).filter(Boolean);
   const referenceImageNames = state.referenceAnalysis.files.map((item) => item.file.name).filter(Boolean);
   const sizeSetting = getSelectedReferenceAnalysisGenerationSize();
   const size = sizeSetting === "auto" ? ratioOption?.baseSize || getDefaultGenerationSize(ratioOption?.value) : sizeSetting;
+  const targetLanguage = getReferenceAnalysisSelectedLanguage();
 
   return {
     id: `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: nowIso(),
     mode: "reference-analysis",
     prompt: String(state.referenceAnalysis.selectedPrompt || "").trim(),
+    targetLanguage: targetLanguage.value,
+    targetLanguageLabel: targetLanguage.label,
     ratio: ratioOption?.value || DEFAULT_UI_RATIO,
     ratioLabel: ratioOption?.label || DEFAULT_UI_RATIO_LABEL,
     sizeSetting,
@@ -11855,6 +11836,10 @@ function buildGenerationFormData(job) {
   if (job.mode) {
     formData.set("mode", job.mode);
   }
+  if (job.targetLanguage) {
+    formData.set("targetLanguage", job.targetLanguage);
+    formData.set("targetLanguageLabel", job.targetLanguageLabel || job.targetLanguage);
+  }
   appendBrowserConfigToFormData(formData);
 
   if (job.mode === "style-transfer") {
@@ -11918,7 +11903,10 @@ async function buildPromptAgentFormData() {
 
 async function buildReferenceAnalysisFormData() {
   const formData = new FormData();
+  const targetLanguage = getReferenceAnalysisSelectedLanguage();
   formData.set("mode", "reference-orchestration");
+  formData.set("targetLanguage", targetLanguage.value);
+  formData.set("targetLanguageLabel", targetLanguage.label);
   formData.set(
     "reasoningEffort",
     refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
@@ -13092,6 +13080,9 @@ function bindEvents() {
   });
   refs.referenceAnalysisSizeInput.addEventListener("change", (event) => {
     syncGenerationSize(event.target.value);
+  });
+  refs.referenceAnalysisLanguageInput.addEventListener("change", (event) => {
+    state.referenceAnalysis.outputLanguage = event.target.value;
   });
   refs.imageDecompositionSizeInput.addEventListener("change", (event) => {
     syncImageDecompositionSize(event.target.value);

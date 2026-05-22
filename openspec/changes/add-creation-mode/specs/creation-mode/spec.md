@@ -133,7 +133,7 @@ The system SHALL allow Creation Mode to upload its own reference images and choo
 - **AND** generated item prompts include any applied reference-image analysis notes
 
 ### Requirement: Target language controls marketing prompts
-The system SHALL apply the selected target language to every Creation Mode item prompt and marketing copy while preserving product names, model names, numbers, and units from the user's product input.
+The system SHALL apply the selected target language to every Creation Mode item prompt and marketing copy while preserving product names, model names, numbers, and units from the user's product input. The system SHALL support Simplified Chinese, English, Japanese, Korean, French, German, and Spanish presets.
 
 #### Scenario: User selects English target language
 - **WHEN** the user starts a Creation Mode set with English selected

@@ -6,6 +6,7 @@ const indexPath = new URL("../public/index.html", import.meta.url);
 const stylesPath = new URL("../public/styles.css", import.meta.url);
 const appPath = new URL("../public/app.js", import.meta.url);
 const serverPath = new URL("../server.mjs", import.meta.url);
+const workerPath = new URL("../cloudflare-pages-worker.mjs", import.meta.url);
 const browserConfigPath = new URL("../lib/browser-config.mjs", import.meta.url);
 const browserImageCachePath = new URL("../lib/browser-image-cache.mjs", import.meta.url);
 const generationClientPath = new URL("../lib/generation-client.mjs", import.meta.url);
@@ -484,6 +485,39 @@ test("reference analysis generation uploads prepared reference images", async ()
   );
 });
 
+test("reference analysis generation applies selected output language", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(workerPath, "utf8");
+
+  assert.match(
+    html,
+    /<span>输出语言<\/span>[\s\S]*<select id="referenceAnalysisLanguageInput" name="targetLanguage">[\s\S]*<option value="zh-CN" selected>简体中文<\/option>[\s\S]*<option value="en">English<\/option>/,
+  );
+  assert.match(app, /normalizeReferenceAnalysisLanguage,/);
+  assert.doesNotMatch(app, /appendReferenceAnalysisLanguageInstruction/);
+  assert.match(app, /outputLanguage:\s*"zh-CN"/);
+  assert.match(app, /referenceAnalysisLanguageInput:\s*document\.querySelector\("#referenceAnalysisLanguageInput"\),/);
+  assert.match(app, /function getReferenceAnalysisSelectedLanguage\(\) \{/);
+  assert.match(
+    app,
+    /function createReferenceAnalysisJob\(\) \{[\s\S]*const targetLanguage = getReferenceAnalysisSelectedLanguage\(\);[\s\S]*prompt:\s*String\(state\.referenceAnalysis\.selectedPrompt \|\| ""\)\.trim\(\),[\s\S]*targetLanguage:\s*targetLanguage\.value,[\s\S]*targetLanguageLabel:\s*targetLanguage\.label,/,
+  );
+  assert.match(
+    app,
+    /function buildGenerationFormData\(job\) \{[\s\S]*if \(job\.targetLanguage\) \{[\s\S]*formData\.set\("targetLanguage", job\.targetLanguage\);[\s\S]*formData\.set\("targetLanguageLabel", job\.targetLanguageLabel \|\| job\.targetLanguage\);/,
+  );
+  assert.match(
+    server,
+    /appendReferenceAnalysisLanguageInstruction\(prompt,\s*targetLanguageInput,\s*targetLanguageLabelInput\)/,
+  );
+  assert.match(
+    worker,
+    /appendReferenceAnalysisLanguageInstruction\(prompt,\s*targetLanguageInput,\s*targetLanguageLabelInput\)/,
+  );
+});
+
 test("reference analysis generation mode survives task polling snapshots", async () => {
   const app = await readFile(appPath, "utf8");
   const server = await readFile(serverPath, "utf8");
@@ -884,7 +918,7 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(html, /data-view-panel="reference-analysis"/);
   assert.match(html, /id="referenceAnalysisDropzone"[\s\S]*id="referenceAnalysisGrid"/);
   assert.match(html, /id="referenceAnalysisGrid"[\s\S]*class="reference-analysis-actions"[\s\S]*class="reference-analysis-params"/);
-  assert.match(html, /id="referenceAnalysisRatioGrid"[\s\S]*id="referenceAnalysisSizeInput"[\s\S]*id="referenceAnalysisGenerateButton"[\s\S]*id="referenceAnalysisAutoCollapseButton"/);
+  assert.match(html, /id="referenceAnalysisRatioGrid"[\s\S]*id="referenceAnalysisLanguageInput"[\s\S]*id="referenceAnalysisSizeInput"[\s\S]*id="referenceAnalysisGenerateButton"[\s\S]*id="referenceAnalysisAutoCollapseButton"/);
   assert.match(html, /id="referenceAnalysisAutoCollapseButton"[\s\S]*role="switch"[\s\S]*aria-checked="true"/);
   assert.match(html, /class="reference-analysis-switch-label"[\s\S]*应用提示词后自动折叠/);
   assert.match(html, /class="reference-analysis-switch-track"[\s\S]*class="reference-analysis-switch-thumb"/);
@@ -971,6 +1005,7 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(app, /referenceAnalysisGrid:\s*document\.querySelector\("#referenceAnalysisGrid"\),/);
   assert.match(app, /referenceAnalysisHead:\s*document\.querySelector\("#referenceAnalysisHead"\),/);
   assert.match(app, /referenceAnalysisRatioGrid:\s*document\.querySelector\("#referenceAnalysisRatioGrid"\),/);
+  assert.match(app, /referenceAnalysisLanguageInput:\s*document\.querySelector\("#referenceAnalysisLanguageInput"\),/);
   assert.match(app, /referenceAnalysisSizeInput:\s*document\.querySelector\("#referenceAnalysisSizeInput"\),/);
   assert.match(app, /referenceAnalysisSelectedPrompt:\s*document\.querySelector\("#referenceAnalysisSelectedPrompt"\),/);
   assert.match(app, /referenceAnalysisSelectedPromptPanel:\s*document\.querySelector\("#referenceAnalysisSelectedPromptPanel"\),/);
@@ -1466,6 +1501,7 @@ test("creation mode is a separate studio view with isolated state and routes", a
   assert.match(html, /id="creationForm"/);
   assert.match(html, /id="creationTargetLanguageInput"/);
   assert.match(html, /id="creationTargetLanguageInput"[\s\S]*<option value="zh-CN">[\s\S]*<option value="en" selected>English<\/option>/);
+  assert.match(html, /id="creationTargetLanguageInput"[\s\S]*<option value="fr">Français<\/option>[\s\S]*<option value="de">Deutsch<\/option>[\s\S]*<option value="es">Español<\/option>/);
   assert.match(html, /id="creationGenerateButton"/);
   assert.match(html, /id="creationPlanButton"/);
   assert.doesNotMatch(html, /id="creationPlanMeta"/);
@@ -1547,6 +1583,7 @@ test("creation mode has independent references count and scenario controls", asy
 
   assert.match(styles, /\.creation-reference-grid\s*\{/);
   assert.match(styles, /\.creation-reference-role\s*\{/);
+  assert.match(styles, /\.creation-reference-role option\s*\{[\s\S]*background:\s*#ffffff;[\s\S]*color:\s*#171b2f;/);
   assert.match(styles, /#creationProductNameInput,\s*#creationSellingPointsInput,\s*#creationDimensionSpecsInput\s*\{[\s\S]*height:\s*44px;/);
   assert.match(styles, /#creationProductDescriptionInput\s*\{[\s\S]*height:\s*72px;/);
   assert.match(styles, /#creationProductDescriptionInput,\s*#creationSellingPointsInput,\s*#creationDimensionSpecsInput\s*\{[\s\S]*overflow-y:\s*hidden;[\s\S]*resize:\s*vertical;/);
@@ -1720,6 +1757,8 @@ test("creation mode exposes optional logo upload placement and background contro
   assert.match(app, /function getCreationLogoPayload\(\) \{/);
   assert.match(app, /formData\.set\("logoOptions", JSON\.stringify\(getCreationLogoPayload\(\)\)\);/);
   assert.match(app, /formData\.append\("logoImage", logoFile\);/);
+  assert.match(app, /logo:\s*plan\.logo \|\| getCreationLogoPayload\(\),/);
+  assert.match(app, /logo:\s*getCreationLogoPayload\(\),/);
   assert.match(app, /refs\.creationLogoInput\.addEventListener\("change"/);
 });
 
@@ -1785,10 +1824,10 @@ test("creation mode exposes record detail and item repair actions", async () => 
   assert.match(styles, /\.creation-record-detail span\s*\{[\s\S]*overflow-wrap:\s*anywhere;/);
   assert.match(styles, /\.creation-card-actions\s*\{/);
   assert.match(styles, /\.creation-card-path\s*\{/);
-  assert.match(styles, /\.creation-card\s*\{[\s\S]*position:\s*relative;[\s\S]*isolation:\s*isolate;[\s\S]*min-height:\s*max-content;/);
-  assert.match(styles, /\.creation-result-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(240px,\s*1fr\)\);[\s\S]*grid-auto-rows:\s*max-content;/);
-  assert.match(styles, /\.creation-card-media\s*\{[\s\S]*width:\s*min\(100%,\s*280px\);[\s\S]*aspect-ratio:\s*1\s*\/\s*1;/);
-  assert.match(styles, /\.creation-card-actions \.mini-action\s*\{[\s\S]*height:\s*34px;/);
+  assert.match(styles, /\.creation-card\s*\{[\s\S]*position:\s*relative;[\s\S]*isolation:\s*isolate;[\s\S]*gap:\s*8px;[\s\S]*min-height:\s*max-content;[\s\S]*padding:\s*8px;/);
+  assert.match(styles, /\.creation-result-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\);[\s\S]*grid-auto-rows:\s*max-content;[\s\S]*gap:\s*10px;/);
+  assert.match(styles, /\.creation-card-media\s*\{[\s\S]*width:\s*min\(100%,\s*220px\);[\s\S]*aspect-ratio:\s*1\s*\/\s*1;/);
+  assert.match(styles, /\.creation-card-actions \.mini-action\s*\{[\s\S]*height:\s*30px;/);
   assert.match(styles, /\.creation-card-editor\s*\{[\s\S]*position:\s*fixed;[\s\S]*right:\s*24px;[\s\S]*bottom:\s*24px;[\s\S]*z-index:\s*75;[\s\S]*width:\s*min\(520px,\s*calc\(100vw - 32px\)\);/);
   assert.match(styles, /\.creation-card-editor-head\s*\{/);
   assert.match(styles, /\.creation-card-editor-close\s*\{/);
@@ -1852,7 +1891,7 @@ test("creation generation cards replace plan details with loading animation", as
   assert.doesNotMatch(styles, /\.creation-result-grid:has\(\.creation-card\.is-generating\)/);
   assert.match(styles, /\.creation-card\.is-generating\s*\{/);
   assert.match(styles, /\.creation-card-media\.is-loading\s*\{/);
-  assert.match(styles, /\.creation-card-media\.is-loading\s*\{[\s\S]*width:\s*min\(100%,\s*280px\);/);
+  assert.match(styles, /\.creation-card-media\.is-loading\s*\{[\s\S]*width:\s*min\(100%,\s*220px\);/);
   assert.match(styles, /\.creation-card-loading\s*\{[\s\S]*min-height:\s*132px;[\s\S]*padding:\s*12px;/);
   assert.match(styles, /\.creation-card-loading-motion span\s*\{[\s\S]*animation:\s*creation-card-loading-bar/);
   assert.match(styles, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.creation-card-loading-motion span[\s\S]*animation:\s*none;/);

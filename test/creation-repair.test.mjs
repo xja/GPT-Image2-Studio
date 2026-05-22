@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { applyCreationRepairOverrides, selectCreationRepairItems } from "../lib/creation-repair.mjs";
+import {
+  applyCreationRepairOverrides,
+  hydrateCreationRepairSkuSubjects,
+  selectCreationRepairItems,
+} from "../lib/creation-repair.mjs";
 
 const demoSet = {
   setId: "creation-set-demo",
@@ -113,4 +117,55 @@ test("creation repair keeps existing prompt when overrides are blank", () => {
 
   assert.equal(item.prompt, "Original prompt");
   assert.equal(item.marketingCopy, "Original copy");
+});
+
+test("creation repair rehydrates SKU subject metadata from legacy set manifests", () => {
+  const items = hydrateCreationRepairSkuSubjects(
+    [
+      {
+        itemId: "13-sku-silver",
+        slotIndex: 13,
+        role: "sku",
+        title: "SKU image 1",
+        prompt: "Create one SKU product image for Silver lure.",
+      },
+      {
+        itemId: "14-sku-gold",
+        slotIndex: 14,
+        role: "sku",
+        title: "SKU image 2",
+        prompt: "Create one SKU product image for Gold lure.",
+      },
+    ],
+    {
+      imageCount: 12,
+      skuSubjects: [
+        {
+          id: "silver",
+          title: "Silver lure",
+          filenames: ["silver-lure.png"],
+          referenceIndexes: [1],
+          note: "silver body",
+          bundleCount: 3,
+        },
+        {
+          id: "gold",
+          title: "Gold lure",
+          filenames: ["gold-lure.png"],
+          referenceIndexes: [2],
+          note: "gold body",
+          bundleCount: 3,
+        },
+      ],
+    },
+  );
+
+  assert.deepEqual(
+    items.map((item) => item.skuSubject?.filenames),
+    [["silver-lure.png"], ["gold-lure.png"]],
+  );
+  assert.deepEqual(
+    items.map((item) => item.skuSubject?.referenceIndexes),
+    [[1], [2]],
+  );
 });

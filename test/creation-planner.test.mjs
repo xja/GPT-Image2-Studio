@@ -140,6 +140,30 @@ test("creation planner allocates source details by role without requiring agent 
   assert.match(promptByRole.package, /\u5305\u88c5\u6536\u7eb3\u888b/);
 });
 
+test("creation planner does not repeat the full detailed description across unrelated roles", () => {
+  const plan = buildCreationPlan({
+    productName: "Electric fishing lure",
+    productDescription: "Electric lure, built-in LED light, internal steel rattle beads, ABS body, USB recharge cable",
+    sellingPoints: "",
+    targetLanguage: "en",
+    selectedRoles: ["hero", "package", "promotion", "material-closeup", "usage-steps", "dimensions", "review-qa"],
+  });
+  const promptByRole = Object.fromEntries(plan.items.map((item) => [item.role, item.prompt]));
+  const fullDescription =
+    "Description: Electric lure, built-in LED light, internal steel rattle beads, ABS body, USB recharge cable.";
+
+  assert.match(promptByRole.hero, /Electric lure/);
+  assert.match(promptByRole.promotion, /built-in LED light/);
+  assert.match(promptByRole["material-closeup"], /internal steel rattle beads/);
+  assert.match(promptByRole["material-closeup"], /ABS body/);
+  assert.doesNotMatch(promptByRole.package, /built-in LED light|internal steel rattle beads|ABS body/);
+  assert.doesNotMatch(promptByRole["material-closeup"], /built-in LED light/);
+  assert.doesNotMatch(promptByRole.package, new RegExp(fullDescription.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.doesNotMatch(promptByRole["usage-steps"], new RegExp(fullDescription.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.doesNotMatch(promptByRole.dimensions, new RegExp(fullDescription.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.doesNotMatch(promptByRole["review-qa"], new RegExp(fullDescription.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
 test("creation planner avoids duplicated punctuation in composed prompt fields", () => {
   const plan = buildCreationPlan({
     productName: "AeroPress Clear.",
@@ -217,7 +241,32 @@ test("creation planner injects Simplified Chinese target-language guidance", () 
 test("creation planner normalizes supported target languages", () => {
   assert.equal(normalizeCreationTargetLanguage("en").value, "en");
   assert.equal(normalizeCreationTargetLanguage("ja").value, "ja");
+  assert.equal(normalizeCreationTargetLanguage("fr").value, "fr");
+  assert.equal(normalizeCreationTargetLanguage("de").value, "de");
+  assert.equal(normalizeCreationTargetLanguage("es").value, "es");
   assert.equal(normalizeCreationTargetLanguage("unknown").value, "en");
+});
+
+test("creation planner injects common international target-language guidance", () => {
+  const cases = [
+    ["fr", "Français", /Use concise French marketing copy/],
+    ["de", "Deutsch", /Use concise German marketing copy/],
+    ["es", "Español", /Use concise Spanish marketing copy/],
+  ];
+
+  for (const [targetLanguage, targetLanguageLabel, promptPattern] of cases) {
+    const plan = buildCreationPlan({
+      productName: "Portable espresso maker",
+      productDescription: "Compact manual coffee machine",
+      sellingPoints: ["travel-friendly", "fast extraction"],
+      targetLanguage,
+    });
+
+    assert.equal(plan.targetLanguage, targetLanguage);
+    assert.equal(plan.targetLanguageLabel, targetLanguageLabel);
+    assert.ok(plan.items.every((item) => promptPattern.test(item.prompt)));
+    assert.ok(plan.items.every((item) => item.marketingCopyLanguage === targetLanguage));
+  }
 });
 
 test("creation planner defaults to English copy and metric-plus-imperial specs", () => {

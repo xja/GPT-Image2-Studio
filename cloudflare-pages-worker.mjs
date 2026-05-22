@@ -15,6 +15,10 @@ import {
   normalizeImageDecompositionFeatureCards,
 } from "./lib/image-decomposition-prompt.mjs";
 import {
+  appendReferenceAnalysisLanguageInstruction,
+  normalizeReferenceAnalysisLanguage,
+} from "./lib/reference-analysis-language.mjs";
+import {
   normalizeOutputFormat,
   toApiOutputFormat,
   toOutputFormatMimeType,
@@ -160,6 +164,8 @@ async function handlePromptAgentAnalyze(request, fetchImpl) {
   ];
   const images = await toReferenceImages(rawImages);
   const mode = String(formData.get("mode") || "").trim();
+  const targetLanguageInput = String(formData.get("targetLanguage") || "").trim();
+  const targetLanguageLabelInput = String(formData.get("targetLanguageLabel") || "").trim();
   const maxReferenceImages =
     mode === CREATION_REFERENCE_ANALYSIS_MODE ? MAX_CREATION_REFERENCE_IMAGES : MAX_REFERENCE_IMAGES;
 
@@ -185,6 +191,8 @@ async function handlePromptAgentAnalyze(request, fetchImpl) {
     image: images[0],
     images,
     mode,
+    targetLanguage: targetLanguageInput,
+    targetLanguageLabel: targetLanguageLabelInput,
     responsesModel: config.responsesModel,
     reasoningEffort,
     fetchImpl,
@@ -571,7 +579,9 @@ async function buildGenerationRequestContext(request, formData) {
   const requestedFormatInput = String(formData.get("format") || "").trim().toLowerCase();
   const generationMode = normalizeGenerationMode(formData.get("mode"));
   const isImageDecomposition = generationMode === IMAGE_DECOMPOSITION_MODE;
+  const isReferenceAnalysis = generationMode === "reference-analysis";
   const targetLanguageInput = String(formData.get("targetLanguage") || "").trim();
+  const targetLanguageLabelInput = String(formData.get("targetLanguageLabel") || "").trim();
   const customTargetLanguageInput = String(formData.get("customTargetLanguage") || "").trim();
   const featureCardsEnabled = normalizeImageDecompositionFeatureCards(formData.get("featureCardsEnabled"));
   const styleTransferStylePreset = String(formData.get("styleTransferStylePreset") || "").trim();
@@ -606,6 +616,11 @@ async function buildGenerationRequestContext(request, formData) {
     targetLanguage = decompositionPrompt.targetLanguage;
     sourceImageName = referenceImages[0]?.filename || "";
     assetKind = IMAGE_DECOMPOSITION_ASSET_KIND;
+  }
+  if (isReferenceAnalysis) {
+    prompt = appendReferenceAnalysisLanguageInstruction(prompt, targetLanguageInput, targetLanguageLabelInput);
+    const language = normalizeReferenceAnalysisLanguage(targetLanguageInput, targetLanguageLabelInput);
+    targetLanguage = language.label;
   }
   const hasStyleTransferPreset = Boolean(styleTransferStylePreset);
   if (generationMode === "style-transfer" && referenceImages.length < (hasStyleTransferPreset ? 1 : 2)) {

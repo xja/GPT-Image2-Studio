@@ -308,7 +308,8 @@ test("creation repair route regenerates selected set items", async () => {
   assert.match(server, /formData\.get\("scope"\)/);
   assert.match(server, /formData\.get\("promptOverride"\)/);
   assert.match(server, /formData\.get\("marketingCopyOverride"\)/);
-  assert.match(server, /const repairItems = selectCreationRepairItems/);
+  assert.match(server, /hydrateCreationRepairSkuSubjects/);
+  assert.match(server, /const repairItems = hydrateCreationRepairSkuSubjects\(\s*selectCreationRepairItems/);
   assert.match(server, /dimensionSpecs:\s*existingSet\.dimensionSpecs/);
   assert.match(server, /industryTemplatePath:\s*existingSet\.industryTemplatePath/);
   assert.match(server, /applyCreationRepairOverrides/);

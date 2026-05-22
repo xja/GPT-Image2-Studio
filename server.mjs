@@ -26,6 +26,10 @@ import {
   normalizeImageDecompositionFeatureCards,
 } from "./lib/image-decomposition-prompt.mjs";
 import {
+  appendReferenceAnalysisLanguageInstruction,
+  normalizeReferenceAnalysisLanguage,
+} from "./lib/reference-analysis-language.mjs";
+import {
   normalizeOutputFormat,
   toApiOutputFormat,
   toOutputFormatMimeType,
@@ -83,7 +87,11 @@ import {
   CREATION_LOGO_BATCH_REFERENCE_LABELS,
   buildCreationLogoBatchPlan,
 } from "./lib/creation-logo-batch.mjs";
-import { applyCreationRepairOverrides, selectCreationRepairItems } from "./lib/creation-repair.mjs";
+import {
+  applyCreationRepairOverrides,
+  hydrateCreationRepairSkuSubjects,
+  selectCreationRepairItems,
+} from "./lib/creation-repair.mjs";
 import { buildCreationRelativeDir, createCreationSetStore } from "./lib/creation-store.mjs";
 import {
   buildArticleBundle,
@@ -1184,6 +1192,8 @@ async function handlePromptAgentAnalyze(request, response) {
   ];
   const images = await toReferenceImages(rawImages);
   const mode = String(formData.get("mode") || "").trim();
+  const targetLanguageInput = String(formData.get("targetLanguage") || "").trim();
+  const targetLanguageLabelInput = String(formData.get("targetLanguageLabel") || "").trim();
   const maxReferenceImages =
     mode === CREATION_REFERENCE_ANALYSIS_MODE ? MAX_CREATION_REFERENCE_IMAGES : MAX_REFERENCE_IMAGES;
 
@@ -1222,6 +1232,8 @@ async function handlePromptAgentAnalyze(request, response) {
     image: images[0],
     images,
     mode,
+    targetLanguage: targetLanguageInput,
+    targetLanguageLabel: targetLanguageLabelInput,
     responsesModel: config.responsesModel,
     reasoningEffort,
   });
@@ -2908,16 +2920,19 @@ async function handleCreationRepair(request, response) {
     const repairItemId = formData.get("itemId");
     const promptOverride = formData.get("promptOverride");
     const marketingCopyOverride = formData.get("marketingCopyOverride");
-    const repairItems = selectCreationRepairItems(existingSet, {
-      itemId: repairItemId,
-      scope: formData.get("scope"),
-    }).map((item) =>
-      repairItemId
-        ? applyCreationRepairOverrides(item, {
-            promptOverride,
-            marketingCopyOverride,
-          })
-        : item,
+    const repairItems = hydrateCreationRepairSkuSubjects(
+      selectCreationRepairItems(existingSet, {
+        itemId: repairItemId,
+        scope: formData.get("scope"),
+      }).map((item) =>
+        repairItemId
+          ? applyCreationRepairOverrides(item, {
+              promptOverride,
+              marketingCopyOverride,
+            })
+          : item,
+      ),
+      existingSet,
     );
     if (repairItems.length === 0) {
       writeSseEvent(response, "error", {
@@ -3251,7 +3266,9 @@ async function handleGenerate(request, response) {
     const generationMode = normalizeGenerationMode(generationModeInput);
     generationRequestScope = getStudioGenerationRequestScope(generationMode);
     const isImageDecomposition = generationMode === IMAGE_DECOMPOSITION_MODE;
+    const isReferenceAnalysis = generationMode === "reference-analysis";
     const targetLanguageInput = String(formData.get("targetLanguage") || "").trim();
+    const targetLanguageLabelInput = String(formData.get("targetLanguageLabel") || "").trim();
     const customTargetLanguageInput = String(formData.get("customTargetLanguage") || "").trim();
     const featureCardsEnabled = normalizeImageDecompositionFeatureCards(formData.get("featureCardsEnabled"));
     const styleTransferSourceImageName = String(formData.get("styleTransferSourceImageName") || "").trim();
@@ -3332,6 +3349,16 @@ async function handleGenerate(request, response) {
         sourceImageName,
         assetKind,
         featureCardsEnabled,
+      });
+    }
+
+    if (isReferenceAnalysis) {
+      prompt = appendReferenceAnalysisLanguageInstruction(prompt, targetLanguageInput, targetLanguageLabelInput);
+      const language = normalizeReferenceAnalysisLanguage(targetLanguageInput, targetLanguageLabelInput);
+      targetLanguage = language.label;
+      generationTaskStore.updateTask(clientSessionId, taskId, {
+        prompt,
+        targetLanguage,
       });
     }
 

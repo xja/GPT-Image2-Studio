@@ -119,3 +119,43 @@ test("creation material item reference images keep primary product plus material
     { filename: "scale-detail.png" },
   ]);
 });
+
+test("creation package references stay scoped to the package image role", () => {
+  const images = [
+    { filename: "lure-main.png" },
+    { filename: "lure-alt.png" },
+    { filename: "package-info.png" },
+    { filename: "joint-detail.png" },
+    { filename: "lake-scene.png" },
+    { filename: "campaign-style.png" },
+  ];
+  const roles = [
+    { filename: "lure-main.png", role: "product" },
+    { filename: "lure-alt.png", role: "product" },
+    { filename: "package-info.png", role: "package" },
+    { filename: "joint-detail.png", role: "material" },
+    { filename: "lake-scene.png", role: "scene" },
+    { filename: "campaign-style.png", role: "style" },
+  ];
+
+  assert.deepEqual(
+    buildCreationItemReferenceImages({ role: "detail-trust" }, images, roles).map((image) => image.filename),
+    ["lure-main.png", "joint-detail.png"],
+  );
+  assert.deepEqual(
+    buildCreationItemReferenceImages({ role: "comparison" }, images, roles).map((image) => image.filename),
+    ["lure-main.png", "lure-alt.png", "joint-detail.png"],
+  );
+  assert.deepEqual(
+    buildCreationItemReferenceImages({ role: "promotion" }, images, roles).map((image) => image.filename),
+    ["lure-main.png", "campaign-style.png"],
+  );
+  assert.deepEqual(
+    buildCreationItemReferenceImages({ role: "review-qa" }, images, roles).map((image) => image.filename),
+    ["lure-main.png", "joint-detail.png"],
+  );
+  assert.deepEqual(
+    buildCreationItemReferenceImages({ role: "package" }, images, roles).map((image) => image.filename),
+    ["lure-main.png", "package-info.png"],
+  );
+});

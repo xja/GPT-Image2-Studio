@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import {
+  REFERENCE_ORCHESTRATION_JSON_SCHEMA,
   buildPromptAgentInput,
   consumePromptAgentSse,
   createPromptAgentRequestBody,
@@ -99,6 +100,44 @@ test("prompt agent request can orchestrate multiple reference images into scene 
   assert.equal(requestBody.text.format.name, "reference_orchestration_prompt_json");
   assert.equal("tools" in requestBody, false);
   assert.ok(requestBody.text.format.schema.required.includes("prompts"));
+});
+
+test("reference orchestration analysis can request English output prompts", () => {
+  const images = [
+    {
+      filename: "product.png",
+      mimeType: "image/png",
+      base64: "cHJvZHVjdA==",
+    },
+  ];
+
+  const input = buildPromptAgentInput({
+    images,
+    mode: "reference-orchestration",
+    targetLanguage: "en",
+    targetLanguageLabel: "English",
+  });
+  const requestBody = createPromptAgentRequestBody({
+    images,
+    mode: "reference-orchestration",
+    targetLanguage: "en",
+    targetLanguageLabel: "English",
+    responsesModel: "gpt-5.4",
+  });
+
+  assert.match(input[0].content[0].text, /Target output language: English/);
+  assert.match(input[0].content[0].text, /All generated scene prompts must be written in English/);
+  assert.match(requestBody.input[0].content[0].text, /All visible text, headings, labels, callouts, annotations, and short copy must use English/);
+});
+
+test("reference orchestration schema does not hard-code Chinese output language", () => {
+  const titleDescription = REFERENCE_ORCHESTRATION_JSON_SCHEMA.properties.title.description;
+  const promptDescription = REFERENCE_ORCHESTRATION_JSON_SCHEMA.properties.prompts.items.properties.prompt.description;
+  const schemaText = JSON.stringify(REFERENCE_ORCHESTRATION_JSON_SCHEMA);
+
+  assert.match(titleDescription, /目标语言/);
+  assert.match(promptDescription, /目标语言/);
+  assert.doesNotMatch(schemaText, /完整中文提示词|使用简体中文/);
 });
 
 test("prompt agent request can identify ecommerce creation reference roles", () => {
