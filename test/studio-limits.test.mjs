@@ -3,21 +3,33 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 import {
+  MAX_CREATION_REFERENCE_IMAGES,
   MAX_CONCURRENT_TASKS_PER_SESSION,
   MAX_PARALLEL_TASKS_PER_SESSION,
+  MAX_REFERENCE_IMAGES,
 } from "../lib/studio-constants.mjs";
 
 const appPath = new URL("../public/app.js", import.meta.url);
 const serverPath = new URL("../server.mjs", import.meta.url);
 
-test("studio task limits keep 20 queued tasks and allow four parallel tasks", async () => {
-  assert.equal(MAX_CONCURRENT_TASKS_PER_SESSION, 20);
-  assert.equal(MAX_PARALLEL_TASKS_PER_SESSION, 4);
+test("studio task limits keep 25 queued tasks and allow ten parallel tasks", async () => {
+  assert.equal(MAX_CONCURRENT_TASKS_PER_SESSION, 25);
+  assert.equal(MAX_PARALLEL_TASKS_PER_SESSION, 10);
 
   const app = await readFile(appPath, "utf8");
 
-  assert.match(app, /maxConcurrentTasksPerSession:\s*20/);
-  assert.match(app, /maxParallelTasksPerSession:\s*4/);
+  assert.match(app, /maxConcurrentTasksPerSession:\s*25/);
+  assert.match(app, /maxParallelTasksPerSession:\s*10/);
+});
+
+test("studio reference limits keep standard references at six and creation references at nine", async () => {
+  assert.equal(MAX_REFERENCE_IMAGES, 6);
+  assert.equal(MAX_CREATION_REFERENCE_IMAGES, 9);
+
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /maxReferenceImages:\s*6/);
+  assert.match(app, /maxCreationReferenceImages:\s*9/);
 });
 
 test("local server counts active generation slots per request mode", async () => {

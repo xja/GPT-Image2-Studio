@@ -77,6 +77,7 @@ import {
   readBrowserCachedGalleryItems,
 } from "/lib/browser-image-cache.mjs";
 import { consumeSse, requestGenerationStream } from "/lib/generation-client.mjs";
+import { buildCreationSkuSubjectsForPayload, normalizeCreationSkuBundleCountForPayload, normalizeCreationSkuSubjectForPayload } from "/lib/creation-sku-subjects.mjs";
 const SURPRISE_PROMPTS = [
   {
     name: "清晨通勤",
@@ -133,12 +134,13 @@ const REASONING_ESTIMATES = {
   high: "150s+",
   xhigh: "210s+",
 };
-
 const DEFAULT_LIMITS = {
-  maxConcurrentTasksPerSession: 20,
-  maxParallelTasksPerSession: 4,
+  maxConcurrentTasksPerSession: 25,
+  maxParallelTasksPerSession: 10,
   maxReferenceImages: 6,
+  maxCreationReferenceImages: 9,
 };
+const DEFAULT_PROMPT_ENHANCE_TEXT = ",sharp focus, macro details, rich textures, crisp edges, photorealistic texture, visible grain, detailed surface material, cinematic lighting"; function buildPromptModePrompt() { const prompt = refs.promptInput.value.trim(); if (!state.promptEnhanceEnabled) { return prompt; } const enhanceText = String(refs.promptEnhanceInput?.value || "").trim(); return enhanceText ? `${prompt}${enhanceText.startsWith(",") ? "" : "\n\n"}${enhanceText}` : prompt; } function syncPromptEnhanceMode() { refs.promptEnhanceToggle.classList.toggle("is-active", state.promptEnhanceEnabled); refs.promptEnhanceToggle.setAttribute("aria-checked", String(state.promptEnhanceEnabled)); refs.promptEnhanceToggle.querySelector("small").textContent = state.promptEnhanceEnabled ? "开启" : "关闭"; refs.promptEnhanceField.classList.toggle("hidden", !state.promptEnhanceEnabled); } function togglePromptEnhanceMode() { state.promptEnhanceEnabled = !state.promptEnhanceEnabled; syncPromptEnhanceMode(); if (state.promptEnhanceEnabled) { refs.promptEnhanceInput.focus(); } }
 const PROMPT_TEMPLATE_STORAGE_KEY = "image-studio-prompt-templates-v2";
 const DEFAULT_PROMPT_TEMPLATES = SURPRISE_PROMPTS.map((template, index) => ({
   id: `default-template-${index + 1}`,
@@ -484,7 +486,7 @@ const state = {
       slideNumber: 0,
     },
   },
-  promptTemplates: [],
+  promptTemplates: [], promptEnhanceEnabled: false,
   reasoningEfforts: [...DEFAULT_REASONING_EFFORTS],
   referenceAnalysis: {
     files: [],
@@ -647,6 +649,7 @@ const refs = {
   creationSetOnly: [...document.querySelectorAll("[data-creation-set-only]")],
   creationSetMeta: document.querySelector("#creationSetMeta"),
   creationSizeInput: document.querySelector("#creationSizeInput"),
+  creationSkuBundleCountInput: document.querySelector("#creationSkuBundleCountInput"),
   creationRatioInput: document.querySelector("#creationRatioInput"),
   creationTargetLanguageInput: document.querySelector("#creationTargetLanguageInput"),
   errorBanner: document.querySelector("#errorBanner"),
@@ -710,7 +713,7 @@ const refs = {
   previewPlaceholder: document.querySelector("#previewPlaceholder"),
   previewSize: document.querySelector("#previewSize"),
   previewTime: document.querySelector("#previewTime"),
-  promptCounter: document.querySelector("#promptCounter"),
+  promptCounter: document.querySelector("#promptCounter"), promptEnhanceField: document.querySelector("#promptEnhanceField"), promptEnhanceInput: document.querySelector("#promptEnhanceInput"), promptEnhanceToggle: document.querySelector("#promptEnhanceToggle"),
   promptAgentAnalyzeButton: document.querySelector("#promptAgentAnalyzeButton"),
   promptAgentBackdrop: document.querySelector("#promptAgentBackdrop"),
   promptAgentCloseButton: document.querySelector("#promptAgentCloseButton"),
@@ -1923,6 +1926,8 @@ function getMaxQueuedJobCount() {
 function getMaxParallelJobCount() {
   return state.limits.maxParallelTasksPerSession || DEFAULT_LIMITS.maxParallelTasksPerSession;
 }
+
+function getCreationMaxReferenceImageCount() { return state.limits.maxCreationReferenceImages || DEFAULT_LIMITS.maxCreationReferenceImages || state.limits.maxReferenceImages || DEFAULT_LIMITS.maxReferenceImages; }
 
 function updateGenerateButton() {
   const runningCount = getRunningJobCount();
@@ -4560,6 +4565,7 @@ function syncConfigUi(config) {
       "maxConcurrentTasksPerSession" in configLimits
         ? configLimits.maxConcurrentTasksPerSession || DEFAULT_LIMITS.maxConcurrentTasksPerSession
         : DEFAULT_LIMITS.maxConcurrentTasksPerSession,
+    maxCreationReferenceImages: "maxCreationReferenceImages" in configLimits ? configLimits.maxCreationReferenceImages || DEFAULT_LIMITS.maxCreationReferenceImages : DEFAULT_LIMITS.maxCreationReferenceImages,
   };
   state.reasoningEfforts = [...(config.reasoningEfforts || DEFAULT_REASONING_EFFORTS)];
 
@@ -8414,6 +8420,8 @@ function normalizeCreationSetForView(set = {}) {
           }))
           .filter((item) => item.filename)
       : [],
+    skuSubjects: Array.isArray(set.skuSubjects) ? set.skuSubjects.map((item, index) => normalizeCreationSkuSubjectForPayload(item, index)).filter(Boolean) : [],
+    skuBundleCount: normalizeCreationSkuBundleCountForPayload(set.skuBundleCount || set.sku_bundle_count || set.skuSubjects?.[0]?.bundleCount || "1"),
     logo: normalizeCreationLogoPayload(set.logo || set.creationLogo || null),
     createdAt: String(set.createdAt || nowIso()),
     updatedAt: String(set.updatedAt || set.createdAt || nowIso()),
@@ -8655,6 +8663,7 @@ function applyCreationSetToForm(set) {
   refs.creationProductDescriptionInput.value = normalized.productDescription || "";
   refs.creationSellingPointsInput.value = normalized.sellingPoints.join("\n");
   refs.creationDimensionSpecsInput.value = normalized.dimensionSpecs || "";
+  if (refs.creationSkuBundleCountInput) refs.creationSkuBundleCountInput.value = String(normalized.skuBundleCount || 1);
   setCreationSelectValue(refs.creationDimensionUnitModeInput, normalized.dimensionUnitMode, "both");
   setCreationSelectValue(refs.creationTargetLanguageInput, normalized.targetLanguage, "en");
   setCreationSelectValue(refs.creationScenarioInput, normalized.scenario, "standard");
@@ -9750,13 +9759,14 @@ function applyCreationReferenceFiles(fileList) {
     return;
   }
 
+  const maxReferenceImages = getCreationMaxReferenceImageCount();
   const next = [...state.creationReferenceFiles];
   let restoreQueue = [...state.creationReferenceRestoreQueue];
   const fingerprints = new Set(next.map((item) => item.fingerprint));
   let overflowed = false;
 
   for (const file of incomingFiles) {
-    if (next.length >= state.limits.maxReferenceImages) {
+    if (next.length >= maxReferenceImages) {
       overflowed = true;
       break;
     }
@@ -9807,7 +9817,7 @@ function applyCreationReferenceFiles(fileList) {
   renderCreationView();
 
   if (overflowed) {
-    showError(`套图参考图最多支持 ${state.limits.maxReferenceImages} 张。`);
+    showError(`套图参考图最多支持 ${maxReferenceImages} 张。`);
   }
 }
 
@@ -9848,7 +9858,8 @@ function renderCreationReferenceGrid() {
   }
 
   refs.creationReferenceGrid.innerHTML = "";
-  refs.creationReferenceCount.textContent = `${state.creationReferenceFiles.length} / ${state.limits.maxReferenceImages}`;
+  const maxReferenceImages = getCreationMaxReferenceImageCount();
+  refs.creationReferenceCount.textContent = `${state.creationReferenceFiles.length} / ${maxReferenceImages}`;
   syncReferenceDropzoneCompact(refs.creationReferenceDropzone, state.creationReferenceFiles.length > 0);
   refs.creationReferenceGrid.classList.toggle("hidden", state.creationReferenceFiles.length === 0);
 
@@ -9921,7 +9932,7 @@ function renderCreationReferenceGrid() {
 
     refs.creationReferenceGrid.appendChild(card);
   });
-  if (state.creationReferenceFiles.length > 0 && state.creationReferenceFiles.length < state.limits.maxReferenceImages) {
+  if (state.creationReferenceFiles.length > 0 && state.creationReferenceFiles.length < maxReferenceImages) {
     refs.creationReferenceGrid.appendChild(
       createReferenceAddCard({
         input: refs.creationReferenceInput,
@@ -9941,6 +9952,8 @@ function buildCreationReferenceRolePayload() {
     note: item.note || "",
   }));
 }
+
+function buildCreationSkuSubjectPayload() { return buildCreationSkuSubjectsForPayload({ analysis: state.creationReferenceAnalysis.result, applied: state.creationReferenceAnalysis.applied, dirty: state.creationReferenceAnalysis.dirty, referenceRoles: buildCreationReferenceRolePayload() }); }
 
 function getCreationLogoPayload() {
   const logoFile = getCreationLogoGenerationFile();
@@ -10036,12 +10049,14 @@ function normalizeCreationReferenceAnalysisPayload(payload = {}) {
         .map((entry, index) => normalizeCreationReferenceAnalysisRecommendation(entry, index))
         .filter(Boolean)
     : [];
+  const rawSkuSubjects = Array.isArray(analysis?.skuSubjects) ? analysis.skuSubjects : Array.isArray(analysis?.sku_subjects) ? analysis.sku_subjects : [];
 
   return {
     summary: String(analysis?.summary || "已识别套图参考图用途").trim(),
     categoryHint: String(analysis?.categoryHint || analysis?.category_hint || analysis?.category || "").trim(),
     categoryPath: String(analysis?.categoryPath || analysis?.category_path || "").trim(),
     recommendations,
+    skuSubjects: rawSkuSubjects.map((entry, index) => normalizeCreationSkuSubjectForPayload(entry, index)).filter(Boolean),
     risks: Array.isArray(analysis?.risks) ? analysis.risks.map((item) => String(item).trim()).filter(Boolean) : [],
   };
 }
@@ -10418,6 +10433,8 @@ function buildCreationPlanPreviewFormData() {
   formData.set("industryTemplate", refs.creationIndustryTemplateInput.value);
   formData.set("selectedRoles", JSON.stringify(getCreationSelectedRoles()));
   formData.set("referenceImageRoles", JSON.stringify(buildCreationReferenceRolePayload()));
+  formData.set("skuSubjects", JSON.stringify(buildCreationSkuSubjectPayload()));
+  formData.set("skuBundleCount", refs.creationSkuBundleCountInput?.value || "1");
   formData.set("logoOptions", JSON.stringify(getCreationLogoPayload()));
   formData.set("planOverrides", JSON.stringify(getCreationPlanOverrides()));
 
@@ -10746,6 +10763,8 @@ async function previewCreationPlan() {
       selectedRoles: plan.selectedRoles || getCreationSelectedRoles(),
       referenceImageNames: state.creationReferenceFiles.map((item) => item.file?.name || "").filter(Boolean),
       referenceImageRoles: plan.referenceImageRoles || buildCreationReferenceRolePayload(),
+      skuSubjects: plan.skuSubjects || buildCreationSkuSubjectPayload(),
+      skuBundleCount: plan.skuBundleCount || normalizeCreationSkuBundleCountForPayload(refs.creationSkuBundleCountInput?.value || "1"),
       createdAt: previousDraft?.createdAt || createdAt,
       updatedAt: createdAt,
       status: "planning",
@@ -10897,6 +10916,8 @@ async function startCreationGeneration(event) {
       selectedRoles,
       referenceImageNames: state.creationReferenceFiles.map((item) => item.file?.name || "").filter(Boolean),
       referenceImageRoles: buildCreationReferenceRolePayload(),
+      skuSubjects: buildCreationSkuSubjectPayload(),
+      skuBundleCount: normalizeCreationSkuBundleCountForPayload(refs.creationSkuBundleCountInput?.value || "1"),
       createdAt,
       updatedAt: createdAt,
       status: "generating",
@@ -11378,7 +11399,7 @@ function createJob() {
   return {
     id: `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: nowIso(),
-    prompt: refs.promptInput.value.trim(),
+    prompt: buildPromptModePrompt(),
     ratio: ratioOption?.value || DEFAULT_UI_RATIO,
     ratioLabel: ratioOption?.label || DEFAULT_UI_RATIO_LABEL,
     sizeSetting,
@@ -12824,6 +12845,7 @@ function bindEvents() {
     );
   });
   refs.creationImageCountInput.addEventListener("change", syncCreationSelectedRolesToCount);
+  refs.creationSkuBundleCountInput?.addEventListener("input", resetCreationDraftPreview);
   refs.creationScenarioInput.addEventListener("change", syncCreationSelectedRolesToScenario);
   refs.creationIndustryTemplateTrigger.addEventListener("click", async () => {
     const shouldOpenCreationIndustryTemplateBrowser = refs.creationIndustryTemplatePopover?.hidden !== false;
@@ -13061,7 +13083,7 @@ function bindEvents() {
   refs.deletePromptTemplateButton.addEventListener("click", deletePromptTemplate);
   refs.promptInput.addEventListener("input", updatePromptCounter);
   refs.promptInput.addEventListener("keydown", handlePromptGenerationShortcut);
-  refs.promptInput.addEventListener("paste", handleStudioImagePaste);
+  refs.promptInput.addEventListener("paste", handleStudioImagePaste); refs.promptEnhanceToggle.addEventListener("click", togglePromptEnhanceMode); refs.promptEnhanceInput.addEventListener("keydown", handlePromptGenerationShortcut);
   refs.styleTransferInstructionInput.addEventListener("keydown", handlePromptGenerationShortcut);
   refs.styleTransferInstructionInput.addEventListener("paste", handleStudioImagePaste);
   refs.styleTransferPresetInput.addEventListener("change", handleStyleTransferPresetChange);

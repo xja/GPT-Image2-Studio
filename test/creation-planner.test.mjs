@@ -15,6 +15,7 @@ import {
   normalizeCreationReferenceRoles,
   normalizeCreationScenario,
   normalizeCreationSelectedRoles,
+  normalizeCreationSkuSubjects,
   normalizeCreationTargetLanguage,
 } from "../lib/creation-planner.mjs";
 
@@ -337,6 +338,166 @@ test("creation planner expands ecommerce scenario sets to twelve images", () => 
   assert.ok(plan.items.some((item) => item.prompt.includes("multi-window material detail")));
   assert.ok(plan.items.some((item) => item.prompt.includes("how to use")));
   assert.ok(plan.items.some((item) => item.prompt.includes("dimensions")));
+});
+
+test("creation planner appends distinct SKU images after twelve carousel roles", () => {
+  const plan = buildCreationPlan({
+    productName: "Fishing lure assortment",
+    productDescription: "Three sellable lure colors photographed on white background",
+    sellingPoints: "lifelike swim action, sharp treble hooks, durable finish",
+    targetLanguage: "en",
+    imageCount: "12",
+    referenceImageRoles: [
+      { filename: "blue-white-bg.png", role: "product", note: "Blue lure SKU subject" },
+      { filename: "green-white-bg.png", role: "product", note: "Green lure SKU subject" },
+      { filename: "red-white-bg.png", role: "product", note: "Red lure SKU subject" },
+    ],
+    skuSubjects: [
+      { id: "blue", title: "Blue lure", filenames: ["blue-white-bg.png"], note: "Blue lure SKU subject" },
+      { id: "green", title: "Green lure", filenames: ["green-white-bg.png"], note: "Green lure SKU subject" },
+      { id: "red", title: "Red lure", filenames: ["red-white-bg.png"], note: "Red lure SKU subject" },
+    ],
+    logoOptions: {
+      enabled: true,
+      filename: "brand-logo.png",
+      placement: "bottom-right",
+      background: "transparent",
+    },
+  });
+
+  const carouselRoles = plan.items.slice(0, 12).map((item) => item.role);
+  const skuItems = plan.items.slice(12);
+
+  assert.equal(plan.imageCount, 12);
+  assert.equal(plan.skuImageCount, 3);
+  assert.deepEqual(carouselRoles, [
+    "hero",
+    "benefit",
+    "scene",
+    "detail-trust",
+    "comparison",
+    "social-proof",
+    "package",
+    "promotion",
+    "material-closeup",
+    "usage-steps",
+    "dimensions",
+    "review-qa",
+  ]);
+  assert.deepEqual(skuItems.map((item) => item.role), ["sku", "sku", "sku"]);
+  assert.deepEqual(skuItems.map((item) => item.slotIndex), [13, 14, 15]);
+  assert.ok(skuItems.every((item) => item.prompt.includes("SKU product image")));
+  assert.ok(skuItems.every((item) => item.prompt.includes("Change the background")));
+  assert.ok(skuItems.every((item) => item.prompt.includes("Do not alter, remove, redraw, cover, or replace any existing product logo")));
+  assert.ok(skuItems.every((item) => item.prompt.includes("brand-logo.png")));
+  assert.match(skuItems[0].prompt, /blue-white-bg\.png/);
+  assert.match(skuItems[1].prompt, /green-white-bg\.png/);
+  assert.match(skuItems[2].prompt, /red-white-bg\.png/);
+});
+
+test("creation planner renders same-SKU combination packs without changing the subject", () => {
+  const plan = buildCreationPlan({
+    productName: "Fishing lure assortment",
+    productDescription: "Blue sellable lure photographed on white background",
+    sellingPoints: "lifelike swim action, sharp treble hooks",
+    targetLanguage: "en",
+    selectedRoles: ["hero"],
+    referenceImageRoles: [
+      { filename: "blue-white-bg.png", role: "product", note: "Blue lure SKU subject" },
+    ],
+    skuSubjects: [
+      { id: "blue", title: "Blue lure", filenames: ["blue-white-bg.png"], note: "Blue lure SKU subject" },
+    ],
+    skuBundleCount: "5",
+  });
+
+  const skuItem = plan.items[1];
+
+  assert.equal(plan.skuBundleCount, 5);
+  assert.equal(plan.skuImageCount, 1);
+  assert.equal(skuItem.skuSubject.bundleCount, 5);
+  assert.match(skuItem.prompt, /Render exactly 5 identical copies of this same SKU subject/);
+  assert.match(skuItem.prompt, /The final SKU image must show exactly 5 complete visible product units/);
+  assert.match(skuItem.prompt, /Do not output one enlarged product unit when the requested combination count is 5/);
+  assert.match(skuItem.prompt, /copying and arranging the supplied main SKU subject/);
+  assert.match(skuItem.prompt, /Do not change any individual copy's shape, proportions, colors, materials, markings, labels, printed text, hooks, hardware, logo, or visible structure/);
+  assert.match(skuItem.prompt, /do not introduce a second distinct SKU/);
+});
+
+test("creation planner accepts Chinese numerals for same-SKU combination packs", () => {
+  const plan = buildCreationPlan({
+    productName: "Fishing lure assortment",
+    productDescription: "Blue sellable lure photographed on white background",
+    sellingPoints: "lifelike swim action",
+    targetLanguage: "en",
+    selectedRoles: ["hero"],
+    referenceImageRoles: [
+      { filename: "blue-white-bg.png", role: "product", note: "Blue lure SKU subject" },
+    ],
+    skuSubjects: [
+      { id: "blue", title: "Blue lure", filenames: ["blue-white-bg.png"], note: "Blue lure SKU subject" },
+    ],
+    skuBundleCount: "二",
+  });
+
+  assert.equal(plan.skuBundleCount, 2);
+  assert.equal(plan.items[1].skuSubject.bundleCount, 2);
+  assert.match(plan.items[1].prompt, /Render exactly 2 identical copies of this same SKU subject/);
+  assert.match(plan.items[1].prompt, /The final SKU image must show exactly 2 complete visible product units/);
+});
+
+test("creation planner keeps single SKU packs on the previous single-subject prompt", () => {
+  const plan = buildCreationPlan({
+    productName: "Fishing lure assortment",
+    productDescription: "Blue sellable lure photographed on white background",
+    sellingPoints: "lifelike swim action",
+    targetLanguage: "en",
+    selectedRoles: ["hero"],
+    referenceImageRoles: [
+      { filename: "blue-white-bg.png", role: "product", note: "Blue lure SKU subject" },
+    ],
+    skuSubjects: [
+      { id: "blue", title: "Blue lure", filenames: ["blue-white-bg.png"], note: "Blue lure SKU subject" },
+    ],
+    skuBundleCount: "1",
+  });
+
+  assert.equal(plan.skuBundleCount, 1);
+  assert.equal(plan.items[1].skuSubject.bundleCount, 1);
+  assert.match(plan.items[1].prompt, /Create one SKU product image/);
+  assert.doesNotMatch(plan.items[1].prompt, /identical copies of this same SKU subject/);
+});
+
+test("creation planner does not create SKU images for accessory or package references", () => {
+  const skuSubjects = normalizeCreationSkuSubjects(
+    [
+      { id: "lure-a", title: "Main lure", filenames: ["lure-a.png"], note: "Primary sellable lure" },
+      { id: "hooks", title: "Accessory hooks", filenames: ["hooks.png"], kind: "accessory", note: "Replacement hook pack" },
+    ],
+    [
+      { filename: "lure-a.png", role: "product", note: "Primary sellable lure" },
+      { filename: "hooks.png", role: "package", note: "Accessory pack" },
+    ],
+  );
+  const plan = buildCreationPlan({
+    productName: "Fishing lure assortment",
+    productDescription: "One sellable lure and one accessory pack",
+    sellingPoints: "durable finish",
+    targetLanguage: "en",
+    selectedRoles: ["hero", "benefit"],
+    referenceImageRoles: [
+      { filename: "lure-a.png", role: "product", note: "Primary sellable lure" },
+      { filename: "hooks.png", role: "package", note: "Accessory pack" },
+    ],
+    skuSubjects,
+  });
+
+  assert.deepEqual(skuSubjects.map((subject) => subject.id), ["lure-a"]);
+  assert.equal(plan.imageCount, 2);
+  assert.equal(plan.skuImageCount, 1);
+  assert.deepEqual(plan.items.map((item) => item.role), ["hero", "benefit", "sku"]);
+  assert.match(plan.items[2].prompt, /lure-a\.png/);
+  assert.doesNotMatch(plan.items[2].prompt, /hooks\.png/);
 });
 
 test("creation planner uses selected ecommerce role set when provided", () => {

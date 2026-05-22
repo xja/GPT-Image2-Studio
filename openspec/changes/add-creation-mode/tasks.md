@@ -187,3 +187,13 @@
 - [x] 30.4 Remove the previous broad industry templates from the visible Creation Mode template choices.
 - [x] 30.5 Change the category browser into a floating cascading dropdown that shows only the active level and current category name in the form.
 - [x] 30.6 Restrict category search to category codes plus third-level and fourth-level category names, excluding first-level and second-level name matches.
+
+## 31. Creation SKU Images
+
+- [x] 31.1 Add planner tests for appending SKU images after the selected carousel roles.
+- [x] 31.2 Extend Creation reference analysis with distinct sellable SKU subject groups.
+- [x] 31.3 Pass SKU subject groups through local server, Cloudflare Worker, and browser plan/generation payloads.
+- [x] 31.4 Preserve product identity and existing logos while changing SKU backgrounds and applying the supplied Logo reference.
+- [x] 31.5 Add same-SKU combination count controls and prompt constraints for duplicating the unchanged subject into 2, 5, or other selected counts.
+- [x] 31.6 Filter SKU generation references to the matched subject files so combination packs do not use the entire uploaded reference set.
+- [x] 31.7 Filter non-SKU generation references by image role so single-subject roles do not receive every uploaded product variant.

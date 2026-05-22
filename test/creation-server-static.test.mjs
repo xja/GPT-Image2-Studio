@@ -162,6 +162,70 @@ test("creation generation accepts references image count marketing scenario and 
   assert.doesNotMatch(worker, /runCreationGenerate[\s\S]*referenceImages:\s*\[\]/);
 });
 
+test("creation generation labels uploaded reference image count and file order", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+
+  assert.match(server, /buildCreationItemReferenceImages/);
+  assert.match(worker, /buildCreationItemReferenceImages/);
+  assert.match(server, /buildCreationReferenceImageLabels/);
+  assert.match(worker, /buildCreationReferenceImageLabels/);
+  assert.match(
+    server,
+    /const itemReferenceImages = buildCreationItemReferenceImages\(item,\s*referenceImages,\s*referenceImageRoles\);[\s\S]*referenceImageLabels:\s*buildCreationReferenceImageLabels\(itemReferenceImages,\s*referenceImageRoles\)/,
+  );
+  assert.match(
+    worker,
+    /const itemReferenceImages = buildCreationItemReferenceImages\(item,\s*referenceImages,\s*plan\.referenceImageRoles\);[\s\S]*referenceImageLabels:\s*buildCreationReferenceImageLabels\(itemReferenceImages,\s*plan\.referenceImageRoles\)/,
+  );
+  assert.match(worker, /normalizeCreationReferenceRoles\(formData\.get\("referenceImageRoles"\)\)/);
+  assert.match(worker, /referenceImageRoles,\s*\n\s*skuSubjects:\s*formData\.get\("skuSubjects"\),\s*\n\s*skuBundleCount:\s*formData\.get\("skuBundleCount"\),\s*\n\s*logoOptions:/);
+});
+
+test("creation generation passes SKU subjects through local and worker planning", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+
+  assert.match(server, /formData\.get\("skuSubjects"\)/);
+  assert.match(worker, /formData\.get\("skuSubjects"\)/);
+  assert.match(server, /formData\.get\("skuBundleCount"\)/);
+  assert.match(worker, /formData\.get\("skuBundleCount"\)/);
+  assert.match(
+    server,
+    /buildCreationPlan\(\{[\s\S]*skuSubjects:\s*formData\.get\("skuSubjects"\),\s*\n\s*skuBundleCount:\s*formData\.get\("skuBundleCount"\)[\s\S]*logoOptions:/,
+  );
+  assert.match(
+    worker,
+    /buildCreationPlan\(\{[\s\S]*skuSubjects:\s*formData\.get\("skuSubjects"\),\s*\n\s*skuBundleCount:\s*formData\.get\("skuBundleCount"\)[\s\S]*logoOptions:/,
+  );
+  assert.match(server, /skuSubjects:\s*plan\.skuSubjects/);
+  assert.match(worker, /skuSubjects:\s*plan\.skuSubjects/);
+  assert.match(server, /skuBundleCount:\s*plan\.skuBundleCount/);
+  assert.match(worker, /skuBundleCount:\s*plan\.skuBundleCount/);
+});
+
+test("creation reference uploads use the dedicated nine-image limit", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+  const analyzeHandler =
+    server.match(/async function handleCreationReferenceAnalyze[\s\S]*?\r?\n}\r?\n\r?\nasync function handleCreationPlan/)?.[0] || "";
+  const generateHandler =
+    server.match(/async function handleCreationGenerate[\s\S]*?\r?\n}\r?\n\r?\nasync function handleCreationRepair/)?.[0] || "";
+  const repairHandler =
+    server.match(/async function handleCreationRepair[\s\S]*?\r?\n}\r?\n\r?\nasync function handleGenerate/)?.[0] || "";
+  const workerGenerateHandler =
+    worker.match(/async function runCreationGenerate[\s\S]*?\r?\n}\r?\n\r?\nfunction streamCreationGenerate/)?.[0] || "";
+
+  assert.match(server, /MAX_CREATION_REFERENCE_IMAGES/);
+  assert.match(worker, /MAX_CREATION_REFERENCE_IMAGES/);
+  assert.match(analyzeHandler, /referenceImages\.length > MAX_CREATION_REFERENCE_IMAGES/);
+  assert.match(generateHandler, /referenceImages\.length > MAX_CREATION_REFERENCE_IMAGES/);
+  assert.match(repairHandler, /referenceImages\.length > MAX_CREATION_REFERENCE_IMAGES/);
+  assert.match(workerGenerateHandler, /referenceImages\.length > MAX_CREATION_REFERENCE_IMAGES/);
+  assert.match(server, /sourceImages\.length > MAX_REFERENCE_IMAGES/);
+  assert.match(worker, /sourceImages\.length > MAX_REFERENCE_IMAGES/);
+});
+
 test("creation batch generation runs items with the configured parallel limit", async () => {
   const server = await readFile(serverPath, "utf8");
   const worker = await readFile(cloudflareWorkerPath, "utf8");
@@ -250,6 +314,7 @@ test("creation repair route regenerates selected set items", async () => {
   assert.match(server, /applyCreationRepairOverrides/);
   assert.match(server, /filename:\s*item\.filename \|\| buildCreationImageFilename/);
   assert.match(server, /prompt:\s*repairItem\.prompt/);
-  assert.match(server, /referenceImages,/);
+  assert.match(server, /buildCreationItemReferenceImages\(repairItem,\s*referenceImages,\s*referenceImageRoles\)/);
+  assert.match(server, /buildCreationReferenceImageLabels\(itemReferenceImages,\s*referenceImageRoles\)/);
   assert.match(server, /writeSseEvent\(response, "repair_started"/);
 });

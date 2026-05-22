@@ -23,9 +23,10 @@ test("config store returns empty public config before any save", async () => {
     reasoningEffort: "xhigh",
   });
   assert.deepEqual(config.limits, {
-    maxConcurrentTasksPerSession: 20,
-    maxParallelTasksPerSession: 4,
+    maxConcurrentTasksPerSession: 25,
+    maxParallelTasksPerSession: 10,
     maxReferenceImages: 6,
+    maxCreationReferenceImages: 9,
   });
   assert.deepEqual(config.reasoningEfforts, ["low", "medium", "high", "xhigh"]);
 });

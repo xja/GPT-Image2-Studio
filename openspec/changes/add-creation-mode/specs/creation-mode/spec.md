@@ -18,6 +18,7 @@ The system SHALL generate one set for one product with quick presets of 4, 6, 8,
 - **WHEN** the user submits product information and a target language in Creation Mode
 - **THEN** the system creates the selected number of planned image items
 - **AND** the first four items use hero, benefit, scene, and detail/trust roles
+- **AND** generation requests use only the references relevant to the current image role instead of attaching the full uploaded reference set to every image
 
 #### Scenario: User selects eight images
 - **WHEN** the user starts a Creation Mode set with 8 selected
@@ -26,6 +27,21 @@ The system SHALL generate one set for one product with quick presets of 4, 6, 8,
 #### Scenario: User selects twelve images
 - **WHEN** the user starts a Creation Mode set with 12 selected
 - **THEN** the planned set includes material close-up, usage steps, dimensions, and review/Q&A roles after the first eight ecommerce roles
+
+#### Scenario: User adds SKU images from distinct product references
+- **WHEN** Creation reference analysis identifies distinct sellable product subjects from uploaded white-background product images
+- **THEN** the planned set appends one SKU image item for each distinct sellable product subject after the selected carousel roles
+- **AND** SKU image items do not count against the selected 4, 6, 8, 10, or 12 carousel image count
+- **AND** accessory-only, package-only, material-only, scene, and style references do not create standalone SKU image items
+- **AND** each SKU prompt changes the background while preserving the subject shape, colors, markings, identifiers, and existing product logos
+- **AND** if the user uploaded a Logo reference, each SKU prompt also applies that supplied logo without covering existing product identifiers
+
+#### Scenario: User sets a same-SKU combination pack count
+- **WHEN** the user sets the SKU combination count to 2, 5, or an equivalent Chinese numeral before planning or generating a Creation Mode set
+- **THEN** every appended SKU image prompt requires exactly that many identical copies of the same SKU subject
+- **AND** the prompt treats the count change as copy-and-arrange duplication of the main subject, not as a request to redraw, redesign, recolor, relabel, or introduce a second SKU
+- **AND** each SKU generation request attaches only the matched SKU subject reference images, plus the optional Logo reference, so unrelated uploaded product, package, scene, material, or style references cannot become the SKU subject
+- **AND** a count of 1 keeps the previous single-subject SKU image behavior
 
 #### Scenario: User customizes selected image roles
 - **WHEN** the user selects a custom subset of Creation Mode image roles before generation
@@ -94,8 +110,8 @@ The system SHALL allow Creation Mode to upload its own reference images and choo
 
 #### Scenario: User edits Creation Mode generation parameters
 - **WHEN** the user opens the Creation Mode parameter area
-- **THEN** set count, marketing scenario, target language, output format, ratio, and resolution are presented as one six-control grid
-- **AND** the desktop layout places those controls in two rows of three without sharing prompt-mode parameter state
+- **THEN** set count, SKU combination count, marketing scenario, target language, output format, ratio, and resolution are presented in one compact control grid
+- **AND** the desktop layout keeps those controls compact without sharing prompt-mode parameter state
 - **AND** changing the Creation Mode ratio refreshes only the Creation Mode resolution options
 
 #### Scenario: User tags reference image roles

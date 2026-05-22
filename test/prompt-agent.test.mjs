@@ -127,6 +127,7 @@ test("prompt agent request can identify ecommerce creation reference roles", () 
   });
 
   assert.match(input[0].content[0].text, /套图参考图识别/);
+  assert.match(input[0].content[0].text, /1 到 9 张电商套图参考图/);
   assert.match(input[0].content[0].text, /商品主体|包装清单|材质细节/);
   assert.match(input[0].content[0].text, /四级类目/);
   assert.deepEqual(input[0].content.slice(1), [
@@ -149,7 +150,10 @@ test("prompt agent request can identify ecommerce creation reference roles", () 
   ]);
   assert.equal(requestBody.text.format.name, "creation_reference_analysis_json");
   assert.ok(requestBody.text.format.schema.required.includes("reference_roles"));
+  assert.ok(requestBody.text.format.schema.required.includes("sku_subjects"));
   assert.ok(requestBody.text.format.schema.required.includes("category_hint"));
+  assert.equal(requestBody.text.format.schema.properties.sku_subjects.maxItems, 9);
+  assert.match(input[0].content[0].text, /SKU/);
 });
 
 test("prompt agent normalizes creation reference category hints", () => {
@@ -174,6 +178,46 @@ test("prompt agent normalizes creation reference category hints", () => {
 
   assert.equal(result.category_hint, "智能手机");
   assert.equal(result.category_path, "数码电子 > 手机通讯 > 手机 > 智能手机");
+});
+
+test("prompt agent normalizes creation SKU subject groups", () => {
+  const result = extractPromptAgentJson({
+    output: [
+      {
+        content: [
+          {
+            type: "output_text",
+            text: JSON.stringify({
+              summary: "Three white-background product references and one accessory reference.",
+              category_hint: "Fishing lure",
+              category_path: "Sports > Fishing > Lures > Hard bait",
+              reference_roles: [
+                { index: 1, filename: "blue.png", role: "product", note: "Blue SKU." },
+                { index: 2, filename: "green.png", role: "product", note: "Green SKU." },
+                { index: 3, filename: "red.png", role: "product", note: "Red SKU." },
+                { index: 4, filename: "hooks.png", role: "package", note: "Accessory pack." },
+              ],
+              sku_subjects: [
+                { id: "blue", title: "Blue lure", reference_indexes: [1], filenames: ["blue.png"], note: "Blue sellable subject." },
+                { id: "green", title: "Green lure", reference_indexes: [2], filenames: ["green.png"], note: "Green sellable subject." },
+                { id: "red", title: "Red lure", reference_indexes: [3], filenames: ["red.png"], note: "Red sellable subject." },
+              ],
+              risks: ["Accessory image is not a distinct SKU subject."],
+            }),
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    result.sku_subjects.map((subject) => [subject.id, subject.filenames, subject.reference_indexes]),
+    [
+      ["blue", ["blue.png"], [1]],
+      ["green", ["green.png"], [2]],
+      ["red", ["red.png"], [3]],
+    ],
+  );
 });
 
 test("prompt agent labels every reference image so the model can compare all images", () => {

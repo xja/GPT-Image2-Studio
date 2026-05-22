@@ -23,7 +23,11 @@ import {
   GENERATION_STREAM_EVENTS,
   buildFinalImageChunkPayloads,
 } from "./lib/generation-stream-protocol.mjs";
-import { buildCreationPlan, normalizeCreationLogoOptions } from "./lib/creation-planner.mjs";
+import {
+  buildCreationPlan,
+  normalizeCreationLogoOptions,
+  normalizeCreationReferenceRoles,
+} from "./lib/creation-planner.mjs";
 import {
   CREATION_LOGO_BATCH_REFERENCE_LABELS,
   buildCreationLogoBatchPlan,
@@ -38,11 +42,16 @@ import {
 import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
 import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
 import { runWithConcurrency } from "./lib/limited-concurrency.mjs";
-import { requestPromptAgentAnalysis } from "./lib/prompt-agent.mjs";
+import { CREATION_REFERENCE_ANALYSIS_MODE, requestPromptAgentAnalysis } from "./lib/prompt-agent.mjs";
 import { writeWorkerSseEvent } from "./lib/sse-writer.mjs";
+import {
+  buildCreationItemReferenceImages,
+  buildCreationReferenceImageLabels,
+} from "./lib/creation-reference-labels.mjs";
 import {
   DEFAULT_BASE_URL,
   DEFAULT_REASONING_EFFORT,
+  MAX_CREATION_REFERENCE_IMAGES,
   MAX_CONCURRENT_TASKS_PER_SESSION,
   MAX_PARALLEL_TASKS_PER_SESSION,
   MAX_REFERENCE_IMAGES,
@@ -118,6 +127,7 @@ function buildPublicConfig() {
       maxConcurrentTasksPerSession: MAX_CONCURRENT_TASKS_PER_SESSION,
       maxParallelTasksPerSession: MAX_PARALLEL_TASKS_PER_SESSION,
       maxReferenceImages: MAX_REFERENCE_IMAGES,
+      maxCreationReferenceImages: MAX_CREATION_REFERENCE_IMAGES,
     },
     reasoningEfforts: [...REASONING_EFFORT_OPTIONS],
     aspectRatios: getAspectRatioOptions(),
@@ -149,6 +159,9 @@ async function handlePromptAgentAnalyze(request, fetchImpl) {
     ...formData.getAll("referenceImage"),
   ];
   const images = await toReferenceImages(rawImages);
+  const mode = String(formData.get("mode") || "").trim();
+  const maxReferenceImages =
+    mode === CREATION_REFERENCE_ANALYSIS_MODE ? MAX_CREATION_REFERENCE_IMAGES : MAX_REFERENCE_IMAGES;
 
   if (images.length === 0) {
     return jsonResponse({ message: "请先上传一张图片。" }, 400);
@@ -158,15 +171,14 @@ async function handlePromptAgentAnalyze(request, fetchImpl) {
     return jsonResponse({ message: "仅支持图片文件。" }, 400);
   }
 
-  if (images.length > MAX_REFERENCE_IMAGES) {
-    return jsonResponse({ message: `参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。` }, 400);
+  if (images.length > maxReferenceImages) {
+    return jsonResponse({ message: `参考图最多支持 ${maxReferenceImages} 张。` }, 400);
   }
 
   const config = normalizePrivateConfig(formData);
   const reasoningEffort = normalizeReasoningEffort(
     formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
   );
-  const mode = String(formData.get("mode") || "").trim();
   const json = await requestPromptAgentAnalysis({
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
@@ -1331,6 +1343,8 @@ function buildCloudCreationSet({ setId, plan, createdAt, updatedAt, status, item
     selectedRoles: plan.selectedRoles,
     referenceImageNames,
     referenceImageRoles: plan.referenceImageRoles || [],
+    skuSubjects: plan.skuSubjects || [],
+    skuBundleCount: plan.skuBundleCount || 1,
     logo: plan.logo || null,
     createdAt,
     updatedAt: updatedAt || createdAt,
@@ -1364,14 +1378,14 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
     ...formData.getAll("referenceImage"),
   ]);
   const logoImage = await readCreationLogoImage(formData);
-  if (referenceImages.length > MAX_REFERENCE_IMAGES) {
-    throw new Error(`参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`);
+  if (referenceImages.length > MAX_CREATION_REFERENCE_IMAGES) {
+    throw new Error(`参考图最多支持 ${MAX_CREATION_REFERENCE_IMAGES} 张。`);
   }
   if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
     throw new Error("仅支持图片参考文件。");
   }
-  const generationReferenceImages = appendCreationLogoReference(referenceImages, logoImage);
   const referenceImageNames = referenceImages.map((image) => image.filename).filter(Boolean);
+  const referenceImageRoles = normalizeCreationReferenceRoles(formData.get("referenceImageRoles"));
   const plan = buildCreationPlan({
     productName: formData.get("productName"),
     productDescription: formData.get("productDescription"),
@@ -1383,6 +1397,9 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
     scenario: formData.get("scenario"),
     industryTemplate: formData.get("industryTemplate"),
     selectedRoles: formData.get("selectedRoles"),
+    referenceImageRoles,
+    skuSubjects: formData.get("skuSubjects"),
+    skuBundleCount: formData.get("skuBundleCount"),
     logoOptions: buildCreationLogoOptionsFromFormData(formData, logoImage),
   });
   const config = normalizePrivateConfig(formData);
@@ -1431,11 +1448,14 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
       );
       await writeSseEvent(writer, "item_started", { setId, itemId: item.itemId, role: item.role });
 
+      const itemReferenceImages = buildCreationItemReferenceImages(item, referenceImages, plan.referenceImageRoles);
+      const itemGenerationReferenceImages = appendCreationLogoReference(itemReferenceImages, logoImage);
       const generationResult = await requestImageGeneration({
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
         prompt: appendRatioHintToPrompt(item.prompt, ratioOption),
-        referenceImages: generationReferenceImages,
+        referenceImages: itemGenerationReferenceImages,
+        referenceImageLabels: buildCreationReferenceImageLabels(itemReferenceImages, plan.referenceImageRoles),
         size: finalSize,
         quality: finalQuality,
         format: toApiOutputFormat(finalFormat),

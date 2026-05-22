@@ -510,6 +510,27 @@ test("prompt field can start generation with Ctrl+Enter", async () => {
   assert.match(app, /refs\.promptInput\.addEventListener\("keydown", handlePromptGenerationShortcut\);/);
 });
 
+test("prompt mode exposes optional enhancement text and appends it to submitted prompts", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+  const defaultEnhancePrompt =
+    ",sharp focus, macro details, rich textures, crisp edges, photorealistic texture, visible grain, detailed surface material, cinematic lighting";
+
+  assert.match(html, /id="promptEnhanceToggle"[\s\S]*role="switch"[\s\S]*aria-checked="false"/);
+  assert.match(html, /id="promptEnhanceInput"/);
+  assert.ok(html.includes(defaultEnhancePrompt));
+  assert.match(styles, /\.prompt-enhance-panel\s*\{/);
+  assert.match(styles, /\.prompt-enhance-toggle\.is-active[\s\S]*\.prompt-enhance-switch-track/);
+  assert.match(app, /const DEFAULT_PROMPT_ENHANCE_TEXT = ",sharp focus, macro details, rich textures, crisp edges, photorealistic texture, visible grain, detailed surface material, cinematic lighting";/);
+  assert.match(app, /promptEnhanceEnabled:\s*false/);
+  assert.match(app, /promptEnhanceToggle:\s*document\.querySelector\("#promptEnhanceToggle"\)/);
+  assert.match(app, /function buildPromptModePrompt\(\) \{[\s\S]*state\.promptEnhanceEnabled[\s\S]*refs\.promptEnhanceInput/);
+  assert.match(app, /prompt:\s*buildPromptModePrompt\(\),/);
+  assert.match(app, /refs\.promptEnhanceToggle\.addEventListener\("click", togglePromptEnhanceMode\);/);
+  assert.match(app, /refs\.promptEnhanceInput\.addEventListener\("keydown", handlePromptGenerationShortcut\);/);
+});
+
 test("studio rendering preserves the settings form scroll position during generation updates", async () => {
   const app = await readFile(appPath, "utf8");
 
@@ -1474,6 +1495,7 @@ test("creation mode has independent references count and scenario controls", asy
   const app = await readFile(appPath, "utf8");
 
   assert.match(html, /id="creationReferenceDropzone"/);
+  assert.match(html, /id="creationReferenceCount">0 \/ 9/);
   assert.match(html, /id="creationReferenceInput"[\s\S]*name="creationReferenceImages"/);
   assert.match(html, /id="creationReferenceGrid"/);
   assert.match(html, /id="creationReferenceAnalyzeButton"[\s\S]*智能识别/);
@@ -1481,6 +1503,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(html, /id="creationReferenceAnalysisFeedback"/);
   assert.match(html, /id="creationReferenceAnalysisPanel"/);
   assert.match(html, /id="creationReferenceAnalysisList"/);
+  assert.match(html, /SKU 组合件数[\s\S]*id="creationSkuBundleCountInput"[\s\S]*name="skuBundleCount"/);
   assert.match(html, /id="creationImageCountInput"[\s\S]*<option value="8">8/);
   assert.match(html, /id="creationImageCountInput"[\s\S]*<option value="12">12/);
   assert.match(html, /id="creationScenarioInput"[\s\S]*value="social-seeding"/);
@@ -1549,12 +1572,14 @@ test("creation mode has independent references count and scenario controls", asy
   assert.doesNotMatch(styles, /\.creation-card-brief\s*\{/);
 
   assert.match(app, /creationReferenceFiles:\s*\[\]/);
+  assert.match(app, /function getCreationMaxReferenceImageCount\(\) \{/);
   assert.match(app, /creationIndustryTemplateBrowser:\s*\{/);
   assert.match(app, /creationReferenceAnalysis:\s*\{/);
   assert.match(app, /creationReferenceAnalyzeButton: document\.querySelector\("#creationReferenceAnalyzeButton"\)/);
   assert.match(app, /creationReferenceApplyAnalysisButton: document\.querySelector\("#creationReferenceApplyAnalysisButton"\)/);
   assert.match(app, /creationReferenceAnalysisList: document\.querySelector\("#creationReferenceAnalysisList"\)/);
   assert.match(app, /creationReferenceAnalysisPanel: document\.querySelector\("#creationReferenceAnalysisPanel"\)/);
+  assert.match(app, /creationSkuBundleCountInput: document\.querySelector\("#creationSkuBundleCountInput"\)/);
   assert.match(app, /creationDimensionSpecsInput: document\.querySelector\("#creationDimensionSpecsInput"\)/);
   assert.match(app, /creationDimensionUnitModeInput: document\.querySelector\("#creationDimensionUnitModeInput"\)/);
   assert.match(app, /creationIndustryTemplateBrowser: document\.querySelector\("#creationIndustryTemplateBrowser"\)/);
@@ -1603,6 +1628,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function renderCreationReferenceAnalysis\(\) \{/);
   assert.match(app, /function updateCreationReferenceRole\(referenceId, role\) \{/);
   assert.match(app, /function buildCreationReferenceRolePayload\(\) \{/);
+  assert.match(app, /function buildCreationSkuSubjectPayload\(\) \{/);
   assert.match(app, /function buildCreationPlanPreviewFormData\(\) \{/);
   assert.match(app, /creationIndustryTemplateInput: document\.querySelector\("#creationIndustryTemplateInput"\)/);
   assert.doesNotMatch(app, /const CREATION_SCENARIO_HINTS = \{/);
@@ -1638,6 +1664,8 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /formData\.set\("dimensionSpecs", refs\.creationDimensionSpecsInput\.value\.trim\(\)\)/);
   assert.match(app, /formData\.set\("dimensionUnitMode", refs\.creationDimensionUnitModeInput\.value \|\| "both"\)/);
   assert.match(app, /formData\.set\("referenceImageRoles", JSON\.stringify\(buildCreationReferenceRolePayload\(\)\)\)/);
+  assert.match(app, /formData\.set\("skuSubjects", JSON\.stringify\(buildCreationSkuSubjectPayload\(\)\)\)/);
+  assert.match(app, /formData\.set\("skuBundleCount", refs\.creationSkuBundleCountInput\?\.value \|\| "1"\)/);
   assert.match(app, /formData\.set\("planOverrides", JSON\.stringify\(getCreationPlanOverrides\(\)\)\)/);
   assert.match(app, /fetch\("\/api\/creation\/reference\/analyze"/);
   assert.match(app, /fetch\("\/api\/creation\/plan"/);

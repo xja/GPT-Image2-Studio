@@ -13,6 +13,7 @@ export const PUBLIC_LIB_SYNC_TARGETS = [
   "browser-config.mjs",
   "browser-image-cache.mjs",
   "creation-category-templates.mjs",
+  "creation-sku-subjects.mjs",
   "gallery-metadata-recovery.mjs",
   "gallery-organizer.mjs",
   "generation-activity-feed.mjs",

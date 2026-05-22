@@ -256,6 +256,30 @@
                   </label>
                 </div>
 
+                <div class="prompt-enhance-panel" data-prompt-mode-block>
+                  <button
+                    class="prompt-enhance-toggle"
+                    id="promptEnhanceToggle"
+                    type="button"
+                    role="switch"
+                    aria-checked="false"
+                    aria-controls="promptEnhanceField"
+                    aria-label="开启或关闭提示词增强模式"
+                  >
+                    <span class="prompt-enhance-toggle-copy">
+                      <strong>增强模式</strong>
+                      <small id="promptEnhanceStatus">关闭</small>
+                    </span>
+                    <span class="prompt-enhance-switch-track" aria-hidden="true">
+                      <span class="prompt-enhance-switch-thumb"></span>
+                    </span>
+                  </button>
+                  <label class="prompt-enhance-field hidden" id="promptEnhanceField">
+                    <span>增强提示词</span>
+                    <textarea id="promptEnhanceInput" rows="3" maxlength="500">,sharp focus, macro details, rich textures, crisp edges, photorealistic texture, visible grain, detailed surface material, cinematic lighting</textarea>
+                  </label>
+                </div>
+
                 <button
                   class="generate-button"
                   id="generateButton"
@@ -839,7 +863,7 @@
                     <div>
                       <span>套图参考图</span>
                     </div>
-                    <small id="creationReferenceCount">0 / 6</small>
+                    <small id="creationReferenceCount">0 / 9</small>
                   </div>
                   <label class="reference-dropzone creation-reference-dropzone" id="creationReferenceDropzone">
                     <input id="creationReferenceInput" name="creationReferenceImages" type="file" accept="image/*" multiple />
@@ -924,6 +948,11 @@
                       <option value="10">10 张</option>
                       <option value="12">12 张</option>
                     </select>
+                  </label>
+
+                  <label class="compact-field creation-sku-bundle-field" data-creation-set-only>
+                    <span>SKU 组合件数</span>
+                    <input id="creationSkuBundleCountInput" name="skuBundleCount" type="text" inputmode="numeric" value="1" maxlength="6" />
                   </label>
 
                   <label class="compact-field" data-creation-set-only>

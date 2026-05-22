@@ -181,6 +181,222 @@ test("Cloudflare creation filenames use Chinese image type names", async () => {
   assert.equal(imageBucket.objects.size, 2);
 });
 
+test("Cloudflare creation generation accepts nine set reference images", async () => {
+  const seenRequests = [];
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("productName", "Jointed fishing lure");
+  formData.set("productDescription", "Segmented lifelike lure");
+  formData.set("sellingPoints", "realistic swim action");
+  formData.set("targetLanguage", "en");
+  formData.set("imageCount", "4");
+  formData.set("scenario", "standard");
+  formData.set("industryTemplate", "general");
+  formData.set("selectedRoles", JSON.stringify(["hero"]));
+  formData.set("ratio", "1:1");
+  formData.set("size", "1024x1024");
+  formData.set("format", "png");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  for (let index = 1; index <= 9; index += 1) {
+    formData.append("referenceImages", new File([`ref-${index}`], `ref-${index}.png`, { type: "image/png" }));
+  }
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/creation/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+        body: JSON.parse(init.body),
+      });
+      return makeSseResponse();
+    },
+  });
+
+  const text = await response.text();
+  const events = parseSseEvents(text);
+  const complete = events.find((event) => event.eventName === "complete");
+  const inputImages = seenRequests[0]?.body.input[0].content.filter((item) => item.type === "input_image") || [];
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(inputImages.length, 9);
+  assert.equal(complete.payload.set.referenceImageNames.length, 9);
+  assert.equal(imageBucket.objects.size, 1);
+  assert.doesNotMatch(text, /参考图最多支持/);
+});
+
+test("Cloudflare creation generation labels reference count order roles and excludes logo from the reference list", async () => {
+  const seenRequests = [];
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("productName", "Jointed fishing lure");
+  formData.set("productDescription", "Segmented lifelike lure");
+  formData.set("sellingPoints", "realistic swim action");
+  formData.set("targetLanguage", "en");
+  formData.set("imageCount", "4");
+  formData.set("scenario", "standard");
+  formData.set("industryTemplate", "general");
+  formData.set("selectedRoles", JSON.stringify(["hero"]));
+  formData.set(
+    "referenceImageRoles",
+    JSON.stringify([
+      {
+        filename: "yellow-red.png",
+        role: "product",
+        note: "yellow red SKU",
+      },
+      {
+        filename: "silver-black.png",
+        role: "style",
+        note: "silver black finish",
+      },
+    ]),
+  );
+  formData.set("logoOptions", JSON.stringify({
+    enabled: true,
+    filename: "brand-mark.png",
+    placement: "bottom-right",
+    background: "transparent",
+  }));
+  formData.set("ratio", "1:1");
+  formData.set("size", "1024x1024");
+  formData.set("format", "png");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("referenceImages", new File(["ref-1"], "yellow-red.png", { type: "image/png" }));
+  formData.append("referenceImages", new File(["ref-2"], "silver-black.png", { type: "image/png" }));
+  formData.append("logoImage", new File(["logo"], "brand-mark.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/creation/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+        body: JSON.parse(init.body),
+      });
+      return makeSseResponse();
+    },
+  });
+
+  await response.text();
+  const content = seenRequests[0]?.body.input[0].content || [];
+  const inputImages = content.filter((item) => item.type === "input_image");
+  const inputText = content
+    .filter((item) => item.type === "input_text")
+    .map((item) => item.text)
+    .join("\n");
+
+  assert.equal(response.status, 200);
+  assert.equal(inputImages.length, 3);
+  assert.match(inputText, /Creation reference image 1 of 2: yellow-red\.png\./);
+  assert.match(inputText, /Creation reference image 2 of 2: silver-black\.png\./);
+  assert.match(inputText, /Uploaded reference count: 2\./);
+  assert.match(inputText, /Uploaded reference files: 1\. yellow-red\.png; 2\. silver-black\.png\./);
+  assert.match(inputText, /Role: product subject\./);
+  assert.match(inputText, /Note: yellow red SKU\./);
+  assert.match(inputText, /Role: visual style reference\./);
+  assert.match(inputText, /Note: silver black finish\./);
+  assert.doesNotMatch(inputText, /Uploaded reference files:[^\n]*brand-mark\.png/);
+});
+
+test("Cloudflare creation SKU bundle generation only sends the selected SKU subject reference", async () => {
+  const seenRequests = [];
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("productName", "Jointed fishing lure");
+  formData.set("productDescription", "Segmented lifelike lure");
+  formData.set("sellingPoints", "realistic swim action");
+  formData.set("targetLanguage", "en");
+  formData.set("imageCount", "4");
+  formData.set("scenario", "standard");
+  formData.set("industryTemplate", "general");
+  formData.set("selectedRoles", JSON.stringify(["hero"]));
+  formData.set(
+    "referenceImageRoles",
+    JSON.stringify([
+      { filename: "blue-lure.png", role: "product", note: "blue lure SKU" },
+      { filename: "silver-lure.png", role: "product", note: "silver lure SKU" },
+      { filename: "package.png", role: "package", note: "retail package" },
+    ]),
+  );
+  formData.set(
+    "skuSubjects",
+    JSON.stringify([
+      {
+        id: "silver",
+        title: "Silver lure",
+        filenames: ["silver-lure.png"],
+        note: "silver lure SKU",
+      },
+    ]),
+  );
+  formData.set("skuBundleCount", "2");
+  formData.set("logoOptions", JSON.stringify({
+    enabled: true,
+    filename: "brand-mark.png",
+    placement: "bottom-right",
+    background: "transparent",
+  }));
+  formData.set("ratio", "1:1");
+  formData.set("size", "1024x1024");
+  formData.set("format", "png");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("referenceImages", new File(["blue"], "blue-lure.png", { type: "image/png" }));
+  formData.append("referenceImages", new File(["silver"], "silver-lure.png", { type: "image/png" }));
+  formData.append("referenceImages", new File(["package"], "package.png", { type: "image/png" }));
+  formData.append("logoImage", new File(["logo"], "brand-mark.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/creation/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+        body: JSON.parse(init.body),
+      });
+      return makeSseResponse();
+    },
+  });
+
+  await response.text();
+  const skuRequest = seenRequests.find((request) =>
+    request.body.input[0].content.some(
+      (item) => item.type === "input_text" && /Render exactly 2 identical copies/.test(item.text),
+    ),
+  );
+  const content = skuRequest?.body.input[0].content || [];
+  const inputImages = content.filter((item) => item.type === "input_image");
+  const inputText = content
+    .filter((item) => item.type === "input_text")
+    .map((item) => item.text)
+    .join("\n");
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 2);
+  assert.ok(skuRequest, "expected one SKU generation request");
+  assert.equal(inputImages.length, 2);
+  assert.match(inputText, /Creation reference image 1 of 1: silver-lure\.png\./);
+  assert.match(inputText, /Uploaded reference count: 1\./);
+  assert.doesNotMatch(inputText, /blue-lure\.png/);
+  assert.doesNotMatch(inputText, /package\.png/);
+});
+
 test("Cloudflare creation logo batch edits each uploaded source with the shared logo", async () => {
   const seenRequests = [];
   const imageBucket = makeImageBucket();

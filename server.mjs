@@ -49,6 +49,7 @@ import { createGenerationTaskStore } from "./lib/generation-task-store.mjs";
 import { runWithConcurrency } from "./lib/limited-concurrency.mjs";
 import {
   DEFAULT_REASONING_EFFORT,
+  MAX_CREATION_REFERENCE_IMAGES,
   MAX_CONCURRENT_TASKS_PER_SESSION,
   MAX_PARALLEL_TASKS_PER_SESSION,
   MAX_REFERENCE_IMAGES,
@@ -67,6 +68,10 @@ import {
 } from "./lib/ppt-completion.mjs";
 import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
 import { migrateOutputDirectoryMonths } from "./lib/output-directory-migration.mjs";
+import {
+  buildCreationItemReferenceImages,
+  buildCreationReferenceImageLabels,
+} from "./lib/creation-reference-labels.mjs";
 import {
   applyCreationPlanOverrides,
   buildCreationPlan,
@@ -1178,6 +1183,9 @@ async function handlePromptAgentAnalyze(request, response) {
     ...formData.getAll("referenceImage"),
   ];
   const images = await toReferenceImages(rawImages);
+  const mode = String(formData.get("mode") || "").trim();
+  const maxReferenceImages =
+    mode === CREATION_REFERENCE_ANALYSIS_MODE ? MAX_CREATION_REFERENCE_IMAGES : MAX_REFERENCE_IMAGES;
 
   if (images.length === 0) {
     return sendJson(response, 400, {
@@ -1191,9 +1199,9 @@ async function handlePromptAgentAnalyze(request, response) {
     });
   }
 
-  if (images.length > MAX_REFERENCE_IMAGES) {
+  if (images.length > maxReferenceImages) {
     return sendJson(response, 400, {
-      message: `参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`,
+      message: `参考图最多支持 ${maxReferenceImages} 张。`,
     });
   }
 
@@ -1207,7 +1215,6 @@ async function handlePromptAgentAnalyze(request, response) {
   const reasoningEffort = normalizeReasoningEffort(
     formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
   );
-  const mode = String(formData.get("mode") || "").trim();
   const createdAt = new Date().toISOString();
   const json = await requestPromptAgentAnalysis({
     baseUrl: config.baseUrl,
@@ -1356,6 +1363,8 @@ function buildCreationSetManifest({
     selectedRoles: plan.selectedRoles || items.map((item) => item.role).filter(Boolean),
     referenceImageNames,
     referenceImageRoles: plan.referenceImageRoles || referenceImageRoles,
+    skuSubjects: plan.skuSubjects || [],
+    skuBundleCount: plan.skuBundleCount || 1,
     logo: plan.logo || null,
     createdAt,
     updatedAt: updatedAt || createdAt,
@@ -2130,9 +2139,9 @@ async function handleCreationReferenceAnalyze(request, response) {
     });
   }
 
-  if (referenceImages.length > MAX_REFERENCE_IMAGES) {
+  if (referenceImages.length > MAX_CREATION_REFERENCE_IMAGES) {
     return sendJson(response, 400, {
-      message: `参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`,
+      message: `参考图最多支持 ${MAX_CREATION_REFERENCE_IMAGES} 张。`,
     });
   }
 
@@ -2188,6 +2197,8 @@ async function handleCreationPlan(request, response) {
       industryTemplate: formData.get("industryTemplate"),
       selectedRoles: formData.get("selectedRoles"),
       referenceImageRoles,
+      skuSubjects: formData.get("skuSubjects"),
+      skuBundleCount: formData.get("skuBundleCount"),
       logoOptions: buildCreationLogoOptionsFromFormData(formData),
     });
     plan = applyCreationPlanOverrides(plan, formData.get("planOverrides"));
@@ -2230,8 +2241,8 @@ async function handleCreationGenerate(request, response) {
       ...formData.getAll("referenceImage"),
     ]);
     logoImage = await readCreationLogoImage(formData);
-    if (referenceImages.length > MAX_REFERENCE_IMAGES) {
-      throw new Error(`参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`);
+    if (referenceImages.length > MAX_CREATION_REFERENCE_IMAGES) {
+      throw new Error(`参考图最多支持 ${MAX_CREATION_REFERENCE_IMAGES} 张。`);
     }
     if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
       throw new Error("仅支持图片参考文件。");
@@ -2251,6 +2262,8 @@ async function handleCreationGenerate(request, response) {
       industryTemplate: formData.get("industryTemplate"),
       selectedRoles: formData.get("selectedRoles"),
       referenceImageRoles,
+      skuSubjects: formData.get("skuSubjects"),
+      skuBundleCount: formData.get("skuBundleCount"),
       logoOptions: buildCreationLogoOptionsFromFormData(formData, logoImage),
     });
     plan = applyCreationPlanOverrides(plan, formData.get("planOverrides"));
@@ -2328,11 +2341,14 @@ async function handleCreationGenerate(request, response) {
         writeSseEvent(response, "item_started", { setId, itemId: item.itemId, role: item.role });
 
         const finalPrompt = appendRatioHintToPrompt(item.prompt, ratioOption);
+        const itemReferenceImages = buildCreationItemReferenceImages(item, referenceImages, referenceImageRoles);
+        const itemGenerationReferenceImages = appendCreationLogoReference(itemReferenceImages, logoImage);
         const generationResult = await requestStudioImageGeneration({
           baseUrl: config.baseUrl,
           apiKey: config.apiKey,
           prompt: finalPrompt,
-          referenceImages: generationReferenceImages,
+          referenceImages: itemGenerationReferenceImages,
+          referenceImageLabels: buildCreationReferenceImageLabels(itemReferenceImages, referenceImageRoles),
           size: finalSize,
           quality: finalQuality,
           format: toApiOutputFormat(finalFormat),
@@ -2860,8 +2876,8 @@ async function handleCreationRepair(request, response) {
       ...formData.getAll("referenceImage"),
     ]);
     const logoImage = await readCreationLogoImage(formData);
-    if (referenceImages.length > MAX_REFERENCE_IMAGES) {
-      throw new Error(`参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`);
+    if (referenceImages.length > MAX_CREATION_REFERENCE_IMAGES) {
+      throw new Error(`参考图最多支持 ${MAX_CREATION_REFERENCE_IMAGES} 张。`);
     }
     if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
       throw new Error("仅支持图片参考文件。");
@@ -2926,6 +2942,8 @@ async function handleCreationRepair(request, response) {
       industryTemplateLabel: existingSet.industryTemplateLabel || "",
       industryTemplatePath: existingSet.industryTemplatePath || "",
       referenceImageRoles,
+      skuSubjects: existingSet.skuSubjects || [],
+      skuBundleCount: existingSet.skuBundleCount || 1,
       logo: normalizedLogoOptions.enabled ? normalizedLogoOptions : existingSet.logo || null,
     };
 
@@ -3003,11 +3021,14 @@ async function handleCreationRepair(request, response) {
         writeSseEvent(response, "item_started", { setId, itemId: item.itemId, role: repairItem.role });
 
         const finalPrompt = appendRatioHintToPrompt(repairItem.prompt, ratioOption);
+        const itemReferenceImages = buildCreationItemReferenceImages(repairItem, referenceImages, referenceImageRoles);
+        const itemGenerationReferenceImages = appendCreationLogoReference(itemReferenceImages, logoImage);
         const generationResult = await requestStudioImageGeneration({
           baseUrl: config.baseUrl,
           apiKey: config.apiKey,
           prompt: finalPrompt,
-          referenceImages: generationReferenceImages,
+          referenceImages: itemGenerationReferenceImages,
+          referenceImageLabels: buildCreationReferenceImageLabels(itemReferenceImages, referenceImageRoles),
           size: finalSize,
           quality: finalQuality,
           format: toApiOutputFormat(finalFormat),

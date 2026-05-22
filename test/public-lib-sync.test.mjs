@@ -10,6 +10,7 @@ const syncedModules = [
   "gallery-organizer.mjs",
   "generation-size-options.mjs",
   "creation-category-templates.mjs",
+  "creation-sku-subjects.mjs",
 ];
 
 async function sha256(path) {
