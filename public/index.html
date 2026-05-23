@@ -56,7 +56,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260519-topbar-reveal-2" />
+    <link rel="stylesheet" href="./styles.css?v=20260523-portrait-cosplay-color-assets-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -90,6 +90,7 @@
                     <a class="mega-menu-link" href="#reference-analysis">融图分析</a>
                     <a class="mega-menu-link" href="#image-decomposition">图片拆解</a>
                     <a class="mega-menu-link" href="#creation">套图模式</a>
+                    <a class="mega-menu-link" href="#portrait">写真模式</a>
                     <a class="mega-menu-link" href="#article-illustration">文章插图</a>
                     <a class="mega-menu-link" href="#ppt">PPT生成</a>
                   </section>
@@ -112,6 +113,7 @@
                     <a class="mega-menu-link large" href="#gallery">瀑布画廊</a>
                     <a class="mega-menu-link" href="#article-record">文章插图记录</a>
                     <a class="mega-menu-link" href="#creation-record">套图记录</a>
+                    <a class="mega-menu-link" href="#portrait-record">写真记录</a>
                     <a class="mega-menu-link" href="#ppt-record">PPT记录</a>
                   </section>
                   <section class="mega-menu-column" aria-label="资产工具">
@@ -980,6 +982,23 @@
                   </label>
 
                   <label class="compact-field" data-creation-set-only>
+                    <span>视觉语言</span>
+                    <select id="creationVisualLanguageInput" name="visualLanguage">
+                      <option value="classic-commercial" selected>经典商业摄影</option>
+                      <option value="premium-studio">高端棚拍</option>
+                      <option value="clean-marketplace">平台清爽白底</option>
+                      <option value="lifestyle-editorial">生活方式杂志</option>
+                      <option value="social-ugc">社媒实拍</option>
+                      <option value="detail-infographic">详情页信息图</option>
+                      <option value="macro-material">微距材质</option>
+                      <option value="outdoor-context">户外场景</option>
+                      <option value="minimal-luxury">极简奢华</option>
+                      <option value="bold-campaign">活动海报</option>
+                      <option value="warm-handcrafted">手作温度</option>
+                    </select>
+                  </label>
+
+                  <label class="compact-field" data-creation-set-only>
                     <span>目标语言</span>
                     <select id="creationTargetLanguageInput" name="targetLanguage">
                       <option value="zh-CN">简体中文</option>
@@ -1089,6 +1108,236 @@
           </div>
         </section>
 
+        <section class="view-panel portrait-view hidden" data-view-panel="portrait">
+          <div class="portrait-workspace">
+            <section class="studio-panel portrait-settings-panel">
+              <form class="portrait-form" id="portraitForm">
+                <div class="panel-title between">
+                  <div>
+                    <h2>写真模式</h2>
+                  </div>
+                  <span class="count-pill small" id="portraitProgressText">0 / 12</span>
+                </div>
+
+                <div class="portrait-reference-block">
+                  <div class="field-head">
+                    <div>
+                      <span>人物参考图</span>
+                    </div>
+                    <small id="portraitReferenceCount">0 / 3</small>
+                  </div>
+                  <label class="reference-dropzone portrait-reference-dropzone" id="portraitReferenceDropzone">
+                    <input id="portraitReferenceInput" name="portraitReferenceImages" type="file" accept="image/*" multiple />
+                    <div class="reference-icon" aria-hidden="true"></div>
+                    <span>上传人物参考图</span>
+                  </label>
+                  <div class="portrait-reference-grid hidden" id="portraitReferenceGrid"></div>
+                </div>
+
+                <div class="portrait-reference-block">
+                  <div class="field-head portrait-accessory-head">
+                    <div>
+                      <span>服装道具配饰参考图</span>
+                    </div>
+                    <div class="portrait-accessory-head-actions">
+                      <small id="portraitAccessoryReferenceCount">0 / 9</small>
+                      <button
+                        class="mini-action portrait-accessory-asset-button"
+                        id="portraitAccessoryAssetButton"
+                        type="button"
+                        aria-expanded="false"
+                        aria-haspopup="dialog"
+                        aria-controls="portraitAccessoryAssetPopover"
+                      >搭配库</button>
+                    </div>
+                  </div>
+                  <label class="reference-dropzone portrait-reference-dropzone" id="portraitAccessoryReferenceDropzone">
+                    <input id="portraitAccessoryReferenceInput" name="portraitAccessoryReferenceImages" type="file" accept="image/*" multiple />
+                    <div class="reference-icon" aria-hidden="true"></div>
+                    <span>上传服装、道具、配饰参考图</span>
+                  </label>
+                  <div class="portrait-reference-grid hidden" id="portraitAccessoryReferenceGrid"></div>
+                </div>
+
+                <div class="portrait-analysis-actions">
+                  <button class="toolbar-button" id="portraitReferenceAnalyzeButton" type="button">分析人物</button>
+                  <button class="toolbar-button" id="portraitApplyAnalysisButton" type="button" disabled>应用建议</button>
+                  <button
+                    class="toolbar-button portrait-analysis-toggle"
+                    id="portraitAnalysisToggleButton"
+                    type="button"
+                    aria-controls="portraitAnalysisPanel"
+                    aria-expanded="false"
+                    hidden
+                  >展开建议</button>
+                </div>
+                <div class="portrait-analysis-panel" id="portraitAnalysisPanel" hidden>
+                  <div class="creation-record-detail" id="portraitAnalysisSummary"></div>
+                </div>
+
+                <label class="compact-field">
+                  <span>人物名称</span>
+                  <input id="portraitSubjectNameInput" name="subjectName" type="text" maxlength="80" placeholder="例如：品牌主理人" />
+                </label>
+
+                <label class="compact-field">
+                  <span>人物摘要</span>
+                  <textarea id="portraitSubjectSummaryInput" name="subjectSummary" rows="4" maxlength="900" placeholder="可粘贴手写人物描述，也可分析参考图后应用为草稿。"></textarea>
+                </label>
+
+                <label class="compact-field">
+                  <span>数量</span>
+                  <input id="portraitImageCountInput" name="imageCount" type="number" min="1" max="100" value="12" />
+                </label>
+
+                <section class="portrait-style-section" aria-label="写真风格">
+                  <div class="field-head">
+                    <div>
+                      <span>摄影风格</span>
+                    </div>
+                  </div>
+                  <div class="portrait-style-grid">
+                    <label><input name="portraitStyles" type="checkbox" value="business-profile" checked />商务形象</label>
+                    <label><input name="portraitStyles" type="checkbox" value="fashion-magazine" />时尚杂志</label>
+                    <label><input name="portraitStyles" type="checkbox" value="cinematic-street" />电影街拍</label>
+                    <label><input name="portraitStyles" type="checkbox" value="studio-texture" />棚拍质感</label>
+                    <label><input name="portraitStyles" type="checkbox" value="natural-light-lifestyle" />自然光生活</label>
+                    <label><input name="portraitStyles" type="checkbox" value="retro-film" />复古胶片</label>
+                    <label><input name="portraitStyles" type="checkbox" value="black-white-portrait" />黑白肖像</label>
+                    <label><input name="portraitStyles" type="checkbox" value="outdoor-travel" />户外旅拍</label>
+                    <label><input name="portraitStyles" type="checkbox" value="social-avatar" />社媒头像</label>
+                  </div>
+                </section>
+
+                <section class="portrait-shot-section" aria-label="写真景别">
+                  <div class="field-head">
+                    <div>
+                      <span>景别</span>
+                    </div>
+                  </div>
+                  <div class="portrait-shot-grid">
+                    <label><input name="portraitShotTypes" type="checkbox" value="long-shot" checked />远景</label>
+                    <label><input name="portraitShotTypes" type="checkbox" value="full-body" checked />全身</label>
+                    <label><input name="portraitShotTypes" type="checkbox" value="medium-shot" checked />中景</label>
+                    <label><input name="portraitShotTypes" type="checkbox" value="close-up" checked />近景</label>
+                    <label><input name="portraitShotTypes" type="checkbox" value="extreme-close-up" checked />特写</label>
+                  </div>
+                </section>
+
+                <section class="portrait-action-section" aria-label="写真动作">
+                  <div class="field-head">
+                    <div>
+                      <span>动作</span>
+                    </div>
+                  </div>
+                  <div class="portrait-action-grid">
+                    <label class="portrait-action-card">
+                      <input name="portraitActions" type="checkbox" value="standing-relaxed" checked />
+                      <img src="./assets/portrait-actions/action-standing.png" alt="站立动作图示" loading="lazy" decoding="async" />
+                      <span>站立</span>
+                    </label>
+                    <label class="portrait-action-card">
+                      <input name="portraitActions" type="checkbox" value="walking-step" checked />
+                      <img src="./assets/portrait-actions/action-walking.png" alt="行走动作图示" loading="lazy" decoding="async" />
+                      <span>行走</span>
+                    </label>
+                    <label class="portrait-action-card">
+                      <input name="portraitActions" type="checkbox" value="seated-pose" checked />
+                      <img src="./assets/portrait-actions/action-seated.png" alt="坐姿动作图示" loading="lazy" decoding="async" />
+                      <span>坐姿</span>
+                    </label>
+                    <label class="portrait-action-card">
+                      <input name="portraitActions" type="checkbox" value="leaning-wall" checked />
+                      <img src="./assets/portrait-actions/action-leaning.png" alt="倚靠动作图示" loading="lazy" decoding="async" />
+                      <span>倚靠</span>
+                    </label>
+                    <label class="portrait-action-card">
+                      <input name="portraitActions" type="checkbox" value="looking-back" checked />
+                      <img src="./assets/portrait-actions/action-looking-back.png" alt="回眸动作图示" loading="lazy" decoding="async" />
+                      <span>回眸</span>
+                    </label>
+                    <label class="portrait-action-card">
+                      <input name="portraitActions" type="checkbox" value="adjusting-sleeve" checked />
+                      <img src="./assets/portrait-actions/action-adjusting-sleeve.png" alt="整理衣袖动作图示" loading="lazy" decoding="async" />
+                      <span>整理衣袖</span>
+                    </label>
+                    <label class="portrait-action-card">
+                      <input name="portraitActions" type="checkbox" value="holding-prop" checked />
+                      <img src="./assets/portrait-actions/action-holding-prop.png" alt="手持道具动作图示" loading="lazy" decoding="async" />
+                      <span>手持道具</span>
+                    </label>
+                    <label class="portrait-action-card">
+                      <input name="portraitActions" type="checkbox" value="turning-motion" checked />
+                      <img src="./assets/portrait-actions/action-turning.png" alt="转身动感动作图示" loading="lazy" decoding="async" />
+                      <span>转身动感</span>
+                    </label>
+                  </div>
+                </section>
+
+                <label class="compact-field">
+                  <span>自定义风格</span>
+                  <input id="portraitCustomStyleInput" name="customStyle" type="text" maxlength="220" placeholder="例如：暖色画廊自然光写真" />
+                </label>
+
+                <label class="compact-field">
+                  <span>摄影补充</span>
+                  <textarea id="portraitNotesInput" name="notes" rows="2" maxlength="500" placeholder="景别、光线、背景、表情或服装限制。"></textarea>
+                </label>
+
+                <div class="creation-options-grid">
+                  <label class="compact-field">
+                    <span>比例</span>
+                    <select id="portraitRatioInput" name="ratio">
+                      <option value="1:1">1:1</option>
+                      <option value="4:3">4:3</option>
+                      <option value="3:4">3:4</option>
+                      <option value="16:9">16:9</option>
+                      <option value="9:16">9:16</option>
+                      <option value="5:4">5:4</option>
+                      <option value="21:9">21:9</option>
+                      <option value="3:2">3:2</option>
+                      <option value="4:5" selected>4:5</option>
+                      <option value="2:3">2:3</option>
+                    </select>
+                  </label>
+                  <label class="compact-field">
+                    <span>分辨率</span>
+                    <select id="portraitSizeInput" name="size">
+                      <option value="auto" selected>自动</option>
+                      <option value="1024x1280">1024×1280</option>
+                      <option value="1152x1536">1152×1536</option>
+                    </select>
+                  </label>
+                  <label class="compact-field">
+                    <span>格式</span>
+                    <select id="portraitOutputFormatInput" name="format">
+                      <option value="png" selected>PNG</option>
+                      <option value="jpg">JPG</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="creation-plan-actions">
+                  <button class="toolbar-button" id="portraitPlanButton" type="button">预览计划</button>
+                </div>
+                <button class="generate-button" id="portraitGenerateButton" type="submit">生成写真</button>
+                <p class="ppt-feedback" id="portraitFeedback"></p>
+              </form>
+            </section>
+
+            <section class="studio-panel portrait-output-panel">
+              <div class="panel-title between">
+                <div>
+                  <h2>写真产物</h2>
+                  <p id="portraitSetMeta">等待生成</p>
+                </div>
+              </div>
+              <div class="creation-record-detail" id="portraitDetail"></div>
+              <div class="creation-result-grid portrait-result-grid" id="portraitResultGrid"></div>
+            </section>
+          </div>
+        </section>
+
         <section class="view-panel ppt-view hidden" data-view-panel="ppt">
           <div class="ppt-workspace">
             <section class="studio-panel ppt-settings-panel">
@@ -1167,6 +1416,21 @@
                   </label>
                 </div>
 
+                <div class="ppt-analysis-card">
+                  <div class="ppt-analysis-head">
+                    <div>
+                      <strong>分析文档</strong>
+                      <span id="pptAnalysisMeta"></span>
+                    </div>
+                    <button class="inline-button" id="pptAnalyzeButton" type="button">分析文档</button>
+                  </div>
+                  <div class="ppt-analysis-panel hidden" id="pptAnalysisPanel">
+                    <p id="pptAnalysisSummary"></p>
+                    <ul id="pptAnalysisSections"></ul>
+                  </div>
+                  <p class="ppt-feedback" id="pptAnalysisFeedback"></p>
+                </div>
+
                 <div class="ppt-control-grid">
                   <label class="compact-field">
                     <span>页数</span>
@@ -1189,6 +1453,13 @@
                       <option value="chinese">东方雅致</option>
                       <option value="luxury">高端品牌</option>
                       <option value="sales">销售战报</option>
+                    </select>
+                  </label>
+                  <label class="compact-field">
+                    <span>PPTX 导出方式</span>
+                    <select id="pptExportModeInput" name="exportMode">
+                      <option value="flat-image">整页图片</option>
+                      <option value="editable-reconstruction">可编辑重建</option>
                     </select>
                   </label>
                 </div>
@@ -1247,6 +1518,7 @@
                   <span class="ppt-completion-ratio" id="pptCompletionRatio">0 / 0 页成功</span>
                   <button class="toolbar-button hidden" id="pptCompleteMissingButton" type="button">补齐缺页</button>
                   <a class="toolbar-button disabled" id="pptDownloadLink" href="#" download aria-disabled="true">下载 PPTX</a>
+                  <a class="toolbar-button disabled ppt-editable-download-link" id="pptEditableDownloadLink" href="#" download aria-disabled="true">可编辑 PPTX</a>
                 </div>
               </div>
               <div class="ppt-progress">
@@ -1475,6 +1747,38 @@
           </section>
         </section>
 
+        <section class="view-panel portrait-record-view hidden" data-view-panel="portrait-record">
+          <section class="studio-panel portrait-record-panel">
+            <div class="panel-title between">
+              <div>
+                <h2>写真记录</h2>
+              </div>
+              <div class="creation-record-actions">
+                <label class="creation-record-search">
+                  <span>搜索</span>
+                  <input id="portraitRecordSearchInput" type="search" placeholder="人物、风格、提示词" autocomplete="off" />
+                </label>
+                <span class="count-pill" id="portraitRecordCount">0 组</span>
+                <button class="toolbar-button" id="portraitRecordOpenFolderButton" type="button" disabled>打开文件夹</button>
+                <button class="toolbar-button" id="portraitRecordCopyPathsButton" type="button" disabled>复制路径</button>
+                <button class="toolbar-button" id="portraitRecordCopyPromptsButton" type="button" disabled>复制提示词</button>
+                <button class="toolbar-button" id="portraitRecordExportPromptsButton" type="button" disabled>导出提示词</button>
+                <button class="toolbar-button" id="portraitRecordExportManifestButton" type="button" disabled>导出清单</button>
+                <button class="toolbar-button" id="portraitRecordReuseButton" type="button" disabled>复用到当前写真</button>
+                <button class="toolbar-button" id="portraitRecordRefreshButton" type="button">刷新记录</button>
+                <p class="prompt-agent-feedback creation-record-feedback" id="portraitRecordActionFeedback" aria-live="polite"></p>
+              </div>
+            </div>
+            <div class="portrait-record-browser">
+              <div class="creation-set-list portrait-record-list" id="portraitRecordSetList"></div>
+              <article class="creation-record-archive portrait-record-archive" aria-live="polite" tabindex="-1">
+                <div class="creation-record-detail" id="portraitRecordArchiveDetail"></div>
+                <div class="creation-result-grid portrait-record-result-grid" id="portraitRecordResultGrid"></div>
+              </article>
+            </div>
+          </section>
+        </section>
+
         <section class="view-panel ppt-record-view hidden" data-view-panel="ppt-record">
           <section class="studio-panel ppt-record-panel">
             <div class="panel-title between">
@@ -1520,20 +1824,20 @@
           <div class="lightbox-image-shell">
             <img id="lightboxImage" alt="放大预览" />
           </div>
-        </div>
 
-        <div class="lightbox-fields">
-          <div class="detail-field">
-            <div class="detail-field-head">
-              <span id="lightboxPromptLabel">提示词</span>
-              <button class="inline-button detail-copy-button" id="copyPromptButton" type="button">复制</button>
+          <div class="lightbox-fields">
+            <div class="detail-field">
+              <div class="detail-field-head">
+                <span id="lightboxPromptLabel">提示词</span>
+                <button class="inline-button detail-copy-button" id="copyPromptButton" type="button">复制</button>
+              </div>
+              <textarea id="lightboxPrompt" rows="4" readonly aria-labelledby="lightboxPromptLabel"></textarea>
             </div>
-            <textarea id="lightboxPrompt" rows="4" readonly aria-labelledby="lightboxPromptLabel"></textarea>
-          </div>
 
-          <div class="detail-field">
-            <span id="lightboxParamsLabel">参数</span>
-            <textarea id="lightboxParams" rows="6" readonly aria-labelledby="lightboxParamsLabel"></textarea>
+            <div class="detail-field">
+              <span id="lightboxParamsLabel">参数</span>
+              <textarea id="lightboxParams" rows="6" readonly aria-labelledby="lightboxParamsLabel"></textarea>
+            </div>
           </div>
         </div>
       </div>
@@ -1694,6 +1998,23 @@
       </div>
     </aside>
 
+    <aside class="portrait-accessory-asset-popover hidden" id="portraitAccessoryAssetPopover" aria-hidden="true">
+      <div class="portrait-accessory-asset-panel" role="dialog" aria-modal="false" aria-label="服装道具配饰资产库">
+        <div class="portrait-accessory-asset-head">
+          <div>
+            <p class="drawer-eyebrow">Wardrobe Library</p>
+            <h2>服装道具配饰资产库</h2>
+          </div>
+          <button class="icon-button" id="portraitAccessoryAssetCloseButton" type="button" aria-label="关闭服装道具配饰资产库">x</button>
+        </div>
+        <div class="portrait-accessory-asset-body">
+          <div class="portrait-accessory-asset-tabs" id="portraitAccessoryAssetTabs" role="tablist" aria-label="服饰分类"></div>
+          <div class="portrait-accessory-asset-list" id="portraitAccessoryAssetList"></div>
+          <p class="config-note" id="portraitAccessoryAssetFeedback"></p>
+        </div>
+      </div>
+    </aside>
+
     <aside class="prompt-template-popover hidden" id="promptTemplatePopover" aria-hidden="true">
       <div class="prompt-template-panel" role="dialog" aria-modal="false" aria-label="提示词模板">
         <div class="prompt-template-head">
@@ -1767,6 +2088,6 @@
       </div>
     </aside>
 
-    <script type="module" src="./app.js?v=20260517-view-modules-1"></script>
+    <script type="module" src="./app.js?v=20260523-portrait-cosplay-color-assets-1"></script>
   </body>
 </html>

@@ -4,9 +4,11 @@ import assert from "node:assert/strict";
 import {
   applyCreationPlanOverrides,
   buildCreationPlan,
+  CREATION_VISUAL_LANGUAGE_OPTIONS,
   getCreationIndustryRolePreset,
   getCreationScenarioRoleInstruction,
   getCreationScenarioRolePreset,
+  normalizeCreationVisualLanguage,
   normalizeCreationLogoOptions,
   normalizeCreationDimensionUnitMode,
   normalizeCreationReferenceAnalysis,
@@ -71,6 +73,92 @@ test("creation planner builds the fixed four-image ecommerce set", () => {
   assert.match(plan.items[1].prompt, /benefit/i);
   assert.match(plan.items[2].prompt, /lifestyle/i);
   assert.match(plan.items[3].prompt, /trust/i);
+});
+
+test("creation planner defaults to the existing visual language without changing prompts", () => {
+  const plan = buildCreationPlan({
+    productName: "AeroPress Clear",
+    productDescription: "Transparent portable coffee brewer",
+    sellingPoints: "lightweight, easy to clean, stable taste",
+    targetLanguage: "en",
+  });
+
+  assert.equal(plan.visualLanguage, "classic-commercial");
+  assert.equal(plan.visualLanguageLabel, "经典商业摄影");
+  assert.equal(CREATION_VISUAL_LANGUAGE_OPTIONS.length, 11);
+  assert.equal(normalizeCreationVisualLanguage("unknown").value, "classic-commercial");
+  assert.ok(plan.items.every((item) => !item.prompt.includes("Shared visual language:")));
+});
+
+test("creation planner applies one selected visual language consistently across the whole set", () => {
+  const plan = buildCreationPlan({
+    productName: "AeroPress Clear",
+    productDescription: "Transparent portable coffee brewer",
+    sellingPoints: "lightweight, easy to clean, stable taste",
+    targetLanguage: "en",
+    visualLanguage: "lifestyle-editorial",
+    selectedRoles: ["hero", "benefit", "scene"],
+  });
+
+  assert.equal(plan.visualLanguage, "lifestyle-editorial");
+  assert.equal(plan.visualLanguageLabel, "生活方式杂志");
+  assert.ok(plan.items.every((item) => item.prompt.includes("Shared visual language: 生活方式杂志")));
+  assert.ok(plan.items.every((item) => item.prompt.includes("Keep the whole set visually consistent")));
+  assert.ok(plan.items.every((item) => item.prompt.includes("lifestyle magazine editorial")));
+});
+
+test("creation planner makes non-default visual languages decisive instead of drifting to generic commercial lighting", () => {
+  const expectations = [
+    ["premium-studio", "deep controlled studio set with visible softbox shaping"],
+    ["clean-marketplace", "pure white or near-white marketplace system"],
+    ["lifestyle-editorial", "magazine-like lived-in environment"],
+    ["social-ugc", "phone-camera creator realism"],
+    ["detail-infographic", "modular ecommerce information layout"],
+    ["macro-material", "texture-led macro crop"],
+    ["outdoor-context", "real outdoor environmental light"],
+    ["minimal-luxury", "quiet luxury negative space"],
+    ["bold-campaign", "poster-grade campaign composition"],
+    ["warm-handcrafted", "warm tactile handcrafted setting"],
+  ];
+
+  for (const [visualLanguage, signature] of expectations) {
+    const plan = buildCreationPlan({
+      productName: "AeroPress Clear",
+      productDescription: "Transparent portable coffee brewer",
+      sellingPoints: "lightweight, easy to clean, stable taste",
+      targetLanguage: "en",
+      visualLanguage,
+      selectedRoles: ["hero", "benefit"],
+    });
+
+    assert.ok(plan.items.every((item) => item.prompt.includes("VISUAL LANGUAGE LOCK")));
+    assert.ok(plan.items.every((item) => item.prompt.includes(signature)), visualLanguage);
+    assert.ok(plan.items.every((item) => item.prompt.includes("must override the generic ecommerce baseline")));
+    assert.ok(plan.items.every((item) => !item.prompt.includes("polished commercial lighting.")));
+  }
+});
+
+test("creation planner applies the visual language lock to SKU prompts without forcing premium studio lighting", () => {
+  const plan = buildCreationPlan({
+    productName: "Fishing lure assortment",
+    productDescription: "Three sellable lure colors photographed on white background",
+    sellingPoints: "lifelike swim action, sharp treble hooks, durable finish",
+    targetLanguage: "en",
+    imageCount: "4",
+    visualLanguage: "social-ugc",
+    referenceImageRoles: [
+      { filename: "blue-white-bg.png", role: "product", note: "Blue lure SKU subject" },
+    ],
+    skuSubjects: [
+      { id: "blue", title: "Blue lure", filenames: ["blue-white-bg.png"], note: "Blue lure SKU subject" },
+    ],
+  });
+  const skuItem = plan.items.find((item) => item.role === "sku");
+
+  assert.ok(skuItem);
+  assert.match(skuItem.prompt, /VISUAL LANGUAGE LOCK/);
+  assert.match(skuItem.prompt, /phone-camera creator realism/);
+  assert.doesNotMatch(skuItem.prompt, /clean premium ecommerce background with polished commercial lighting/);
 });
 
 test("creation planner rewrites Chinese visible copy when target language is English", () => {

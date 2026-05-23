@@ -33,11 +33,17 @@ import {
   normalizeCreationReferenceRoles,
 } from "./lib/creation-planner.mjs";
 import {
+  applyPortraitPlanOverrides,
+  buildPortraitPlan,
+} from "./lib/portrait-planner.mjs";
+import {
   CREATION_LOGO_BATCH_REFERENCE_LABELS,
   buildCreationLogoBatchPlan,
 } from "./lib/creation-logo-batch.mjs";
 import { generatePptDeckOutline } from "./lib/ppt-deck-workflow.mjs";
+import { analyzePptDocument } from "./lib/ppt-document-analysis.mjs";
 import { buildSlideEditPrompt, buildSlideImagePrompts } from "./lib/ppt-slide-prompts.mjs";
+import { isEditablePptExportMode, normalizePptExportMode } from "./lib/ppt-export-mode.mjs";
 import {
   getMissingPptSlideNumbers,
   mergePptSlides,
@@ -46,7 +52,11 @@ import {
 import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
 import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
 import { runWithConcurrency } from "./lib/limited-concurrency.mjs";
-import { CREATION_REFERENCE_ANALYSIS_MODE, requestPromptAgentAnalysis } from "./lib/prompt-agent.mjs";
+import {
+  CREATION_REFERENCE_ANALYSIS_MODE,
+  PORTRAIT_REFERENCE_ANALYSIS_MODE,
+  requestPromptAgentAnalysis,
+} from "./lib/prompt-agent.mjs";
 import { writeWorkerSseEvent } from "./lib/sse-writer.mjs";
 import {
   buildCreationItemReferenceImages,
@@ -58,6 +68,8 @@ import {
   MAX_CREATION_REFERENCE_IMAGES,
   MAX_CONCURRENT_TASKS_PER_SESSION,
   MAX_PARALLEL_TASKS_PER_SESSION,
+  MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES,
+  MAX_PORTRAIT_PERSON_REFERENCE_IMAGES,
   MAX_REFERENCE_IMAGES,
   REASONING_EFFORT_OPTIONS,
 } from "./lib/studio-constants.mjs";
@@ -79,7 +91,22 @@ const STYLE_TRANSFER_REFERENCE_IMAGE_LABELS = [
   "Reference image 2: STYLE reference. This image is the style authority for final rendering, realism level, lighting, texture, color, and material finish.",
 ];
 const STYLE_TRANSFER_SOURCE_IMAGE_LABELS = [STYLE_TRANSFER_REFERENCE_IMAGE_LABELS[0]];
-const GENERATION_MODES = new Set(["style-transfer", "reference-analysis", IMAGE_DECOMPOSITION_MODE]);
+
+function buildPortraitReferenceImageLabels(personReferenceImages = [], accessoryReferenceImages = []) {
+  const personCount = personReferenceImages.length;
+  const accessoryCount = accessoryReferenceImages.length;
+  return [
+    ...personReferenceImages.map(
+      (image, index) =>
+        `Portrait person reference ${index + 1} of ${personCount}: ${image.filename || "person reference image"}. Preserve visible identity, face, body proportions, hairstyle, and non-sensitive appearance cues from this person reference.`,
+    ),
+    ...accessoryReferenceImages.map(
+      (image, index) =>
+        `Portrait clothing, prop, and accessory reference ${index + 1} of ${accessoryCount}: ${image.filename || "styling reference image"}. Use this only for outfit, fabric, prop, accessory, styling, color, and material cues; do not treat it as another person identity.`,
+    ),
+  ];
+}
+const GENERATION_MODES = new Set(["style-transfer", "reference-analysis", IMAGE_DECOMPOSITION_MODE, "portrait"]);
 const SERVER_IMAGE_BUCKET_MISSING_MESSAGE = "服务器图片存储未配置 IMAGE_BUCKET";
 const GENERATION_QUEUE_MISSING_MESSAGE = "服务器异步生成队列未配置 GENERATION_QUEUE";
 const DEFAULT_CONFIG = {
@@ -132,6 +159,8 @@ function buildPublicConfig() {
       maxParallelTasksPerSession: MAX_PARALLEL_TASKS_PER_SESSION,
       maxReferenceImages: MAX_REFERENCE_IMAGES,
       maxCreationReferenceImages: MAX_CREATION_REFERENCE_IMAGES,
+      maxPortraitPersonReferenceImages: MAX_PORTRAIT_PERSON_REFERENCE_IMAGES,
+      maxPortraitAccessoryReferenceImages: MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES,
     },
     reasoningEfforts: [...REASONING_EFFORT_OPTIONS],
     aspectRatios: getAspectRatioOptions(),
@@ -1030,7 +1059,17 @@ function buildCloudPptFilename({ deckId, title }) {
   return `${safeTitle}-${suffix}.pptx`;
 }
 
-function buildCloudPptDeck({ deckId, outline, slides, createdAt, sources = {}, config, reasoningEffort, motion = {} }) {
+function buildCloudPptDeck({
+  deckId,
+  outline,
+  slides,
+  createdAt,
+  sources = {},
+  config,
+  reasoningEffort,
+  motion = {},
+  exportMode = "flat-image",
+}) {
   const sortedSlides = [...slides].sort((left, right) => Number(left.slideNumber) - Number(right.slideNumber));
   const pptxFilename = buildCloudPptFilename({ deckId, title: outline.title });
   const pptxBase64 = createPptxBase64({ title: outline.title, slides: sortedSlides });
@@ -1045,6 +1084,10 @@ function buildCloudPptDeck({ deckId, outline, slides, createdAt, sources = {}, c
     pptxFilename,
     pptxMimeType: PPTX_MIME_TYPE,
     pptxUrl: `data:${PPTX_MIME_TYPE};base64,${pptxBase64}`,
+    editablePptxUrl: "",
+    editablePptxFilename: "",
+    editablePptxWarnings: [],
+    exportMode: normalizePptExportMode(exportMode),
     baseUrl: config.baseUrl,
     responsesModel: config.responsesModel,
     reasoningEffort,
@@ -1352,6 +1395,8 @@ function buildCloudCreationSet({ setId, plan, createdAt, updatedAt, status, item
     imageCount: plan.imageCount,
     scenario: plan.scenario,
     scenarioLabel: plan.scenarioLabel,
+    visualLanguage: plan.visualLanguage,
+    visualLanguageLabel: plan.visualLanguageLabel,
     industryTemplate: plan.industryTemplate,
     industryTemplateLabel: plan.industryTemplateLabel,
     industryTemplatePath: plan.industryTemplatePath,
@@ -1377,6 +1422,118 @@ function buildCloudCreationFilename({ setId, item, createdAt, format }) {
     format,
   });
   return `${String(item.slotIndex).padStart(2, "0")}-${filenameToken}-${cloudFilename}`;
+}
+
+function parseJsonObject(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function buildPortraitPlanFromFormData(formData) {
+  return buildPortraitPlan({
+    subjectName: formData.get("subjectName"),
+    subjectSummary: formData.get("subjectSummary"),
+    visibleProfile: parseJsonObject(formData.get("analysis") || formData.get("visibleProfile")),
+    imageCount: formData.get("imageCount"),
+    selectedStyles: formData.get("selectedStyles"),
+    selectedShotTypes: formData.get("selectedShotTypes"),
+    selectedActions: formData.get("selectedActions"),
+    customStyle: formData.get("customStyle"),
+    notes: formData.get("notes") || formData.get("photographyNotes"),
+    ratio: formData.get("ratio"),
+    size: formData.get("size"),
+    format: formData.get("format"),
+    promptOverrides: formData.get("promptOverrides") || formData.get("planOverrides"),
+  });
+}
+
+async function handlePortraitReferenceAnalyze(request, fetchImpl) {
+  const formData = await request.formData();
+  const personReferenceImages = await toReferenceImages([
+    ...formData.getAll("portraitReferenceImages"),
+    ...formData.getAll("referenceImages"),
+    ...formData.getAll("referenceImage"),
+  ]);
+
+  if (personReferenceImages.length === 0) {
+    return jsonResponse({ message: "请先上传人物参考图。" }, 400);
+  }
+  if (personReferenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+    return jsonResponse({ message: "仅支持图片文件。" }, 400);
+  }
+  if (personReferenceImages.length > MAX_PORTRAIT_PERSON_REFERENCE_IMAGES) {
+    return jsonResponse({ message: `人物参考图最多支持 ${MAX_PORTRAIT_PERSON_REFERENCE_IMAGES} 张。` }, 400);
+  }
+
+  const config = normalizePrivateConfig(formData);
+  const reasoningEffort = normalizeReasoningEffort(
+    formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+  );
+  const analysis = await requestPromptAgentAnalysis({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    image: personReferenceImages[0],
+    images: personReferenceImages,
+    mode: PORTRAIT_REFERENCE_ANALYSIS_MODE,
+    responsesModel: config.responsesModel,
+    reasoningEffort,
+    fetchImpl,
+  });
+
+  return jsonResponse({ ok: true, analysis });
+}
+
+async function handlePortraitPlan(request) {
+  try {
+    const formData = await request.formData();
+    let plan = buildPortraitPlanFromFormData(formData);
+    plan = applyPortraitPlanOverrides(plan, formData.get("planOverrides"));
+    return jsonResponse({ ok: true, plan });
+  } catch (error) {
+    return jsonResponse({ message: error instanceof Error ? error.message : String(error) }, 400);
+  }
+}
+
+function buildCloudPortraitSet({ setId, plan, createdAt, updatedAt, status, items, referenceImageNames = [] }) {
+  return {
+    setId,
+    subjectName: plan.subjectName,
+    subjectSummary: plan.subjectSummary,
+    analysis: plan.visibleProfile,
+    selectedStyles: plan.selectedStyles,
+    selectedShotTypes: plan.selectedShotTypes,
+    selectedActions: plan.selectedActions,
+    customStyle: plan.customStyle,
+    notes: plan.notes,
+    ratio: plan.ratio,
+    size: plan.size,
+    format: plan.format,
+    imageCount: plan.imageCount,
+    referenceImageNames,
+    createdAt,
+    updatedAt: updatedAt || createdAt,
+    status,
+    relativeDir: "",
+    items,
+  };
+}
+
+function buildCloudPortraitFilename({ setId, item, createdAt, format }) {
+  const filenameToken = sanitizeCreationFilenameToken(item.shotType || item.style || item.itemId, "portrait");
+  const cloudFilename = buildCloudFilename({
+    taskId: `${setId}-${item.slotIndex || item.itemId}`,
+    createdAt,
+    format,
+  });
+  return `${String(item.slotIndex).padStart(3, "0")}-${filenameToken}-${cloudFilename}`;
 }
 
 async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
@@ -1410,6 +1567,7 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
     targetLanguage: formData.get("targetLanguage"),
     imageCount: formData.get("imageCount"),
     scenario: formData.get("scenario"),
+    visualLanguage: formData.get("visualLanguage"),
     industryTemplate: formData.get("industryTemplate"),
     selectedRoles: formData.get("selectedRoles"),
     referenceImageRoles,
@@ -1583,6 +1741,210 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
 
   await writeSseEvent(writer, "complete", {
     set: buildCloudCreationSet({
+      setId,
+      plan,
+      createdAt,
+      updatedAt: new Date().toISOString(),
+      status: getCloudCreationSetStatus(items),
+      items,
+      referenceImageNames,
+    }),
+  });
+}
+
+async function runPortraitGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
+  if (!imageBucket) {
+    await writeSseEvent(writer, "error", { message: SERVER_IMAGE_BUCKET_MISSING_MESSAGE });
+    return;
+  }
+
+  const formData = await request.formData();
+  const setId = `portrait-set-${crypto.randomUUID()}`;
+  const createdAt = new Date().toISOString();
+  const personReferenceImages = await toReferenceImages([
+    ...formData.getAll("portraitReferenceImages"),
+    ...formData.getAll("referenceImages"),
+    ...formData.getAll("referenceImage"),
+  ]);
+  const accessoryReferenceImages = await toReferenceImages([
+    ...formData.getAll("portraitAccessoryReferenceImages"),
+  ]);
+  if (personReferenceImages.length === 0) {
+    throw new Error("请先上传人物参考图。");
+  }
+  if (personReferenceImages.length > MAX_PORTRAIT_PERSON_REFERENCE_IMAGES) {
+    throw new Error(`人物参考图最多支持 ${MAX_PORTRAIT_PERSON_REFERENCE_IMAGES} 张。`);
+  }
+  if (accessoryReferenceImages.length > MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES) {
+    throw new Error(`服装道具配饰参考图最多支持 ${MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES} 张。`);
+  }
+  const referenceImages = [...personReferenceImages, ...accessoryReferenceImages];
+  const referenceImageLabels = buildPortraitReferenceImageLabels(personReferenceImages, accessoryReferenceImages);
+  if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+    throw new Error("仅支持图片参考文件。");
+  }
+  const referenceImageNames = referenceImages.map((image) => image.filename).filter(Boolean);
+  let plan = buildPortraitPlanFromFormData(formData);
+  plan = applyPortraitPlanOverrides(plan, formData.get("planOverrides"));
+  const config = normalizePrivateConfig(formData);
+  const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || plan.ratio || "4:5"));
+  const requestedSizeInput = String(formData.get("size") || plan.size || "auto").trim().toLowerCase();
+  const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
+  if (requestedSize !== requestedSizeInput && requestedSizeInput !== "") {
+    throw new Error(`当前比例 ${ratioOption.value} 不支持分辨率 ${requestedSizeInput}`);
+  }
+
+  const finalSize = requestedSize === "auto" ? getDefaultGenerationSize(ratioOption.value) : requestedSize;
+  const finalQuality = config.defaults.quality;
+  const finalFormat = normalizeOutputFormat(formData.get("format") || plan.format || config.defaults.format);
+  const reasoningEffort = normalizeReasoningEffort(
+    formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+  );
+  let items = plan.items.map((item) => ({
+    ...item,
+    status: "queued",
+    filename: "",
+    relativePath: "",
+    imageUrl: "",
+    thumbnailUrl: "",
+    error: "",
+  }));
+  let set = buildCloudPortraitSet({
+    setId,
+    plan,
+    createdAt,
+    status: "generating",
+    items,
+    referenceImageNames,
+  });
+
+  await writeSseEvent(writer, "set_started", { set });
+  await writeSseEvent(writer, "plan", { setId, items });
+
+  await runWithConcurrency(plan.items, MAX_PARALLEL_TASKS_PER_SESSION, async (item) => {
+    const generationStartedAt = new Date().toISOString();
+    const generationStartedAtMs = Date.now();
+    let finalBase64 = "";
+
+    try {
+      items = items.map((entry) =>
+        entry.itemId === item.itemId ? { ...entry, status: "generating", generationStartedAt } : entry,
+      );
+      await writeSseEvent(writer, "item_started", { setId, itemId: item.itemId, shotType: item.shotType });
+
+      const generationResult = await requestImageGeneration({
+        baseUrl: config.baseUrl,
+        apiKey: config.apiKey,
+        prompt: appendRatioHintToPrompt(item.prompt, ratioOption),
+        referenceImages,
+        referenceImageLabels,
+        size: finalSize,
+        quality: finalQuality,
+        format: toApiOutputFormat(finalFormat),
+        responsesModel: config.responsesModel,
+        reasoningEffort,
+        statusHeartbeatMs: UPSTREAM_STATUS_HEARTBEAT_MS,
+        fetchImpl,
+        async onEvent(event) {
+          if (event.type === "status") {
+            await writeSseEvent(writer, "item_status", {
+              setId,
+              itemId: item.itemId,
+              stage: event.stage,
+              message: event.message,
+            });
+            return;
+          }
+
+          if (event.type === "partial_image") {
+            await writeSseEvent(writer, "item_partial_image", {
+              setId,
+              itemId: item.itemId,
+              dataUrl: event.dataUrl,
+            });
+            return;
+          }
+
+          if (event.type === "final_image") {
+            finalBase64 = event.base64;
+            await writeSseEvent(writer, "item_final_image", {
+              setId,
+              itemId: item.itemId,
+              dataUrl: makeImageDataUrl(event.base64, finalFormat),
+            });
+          }
+        },
+      });
+
+      finalBase64 = finalBase64 || generationResult.finalImageBase64;
+      if (!finalBase64) {
+        throw new Error("上游响应结束，但没有拿到最终图片。");
+      }
+
+      const generationCompletedAt = new Date().toISOString();
+      const generationDurationMs = Math.max(0, Date.now() - generationStartedAtMs);
+      const savedSize = generationResult.effectiveSize || finalSize;
+      const filename = buildCloudPortraitFilename({ setId, item, createdAt, format: finalFormat });
+      const storedImage = await storeFinalImage({
+        imageBucket,
+        filename,
+        createdAt,
+        format: finalFormat,
+        base64: finalBase64,
+      });
+
+      items = items.map((entry) =>
+        entry.itemId === item.itemId
+          ? {
+              ...entry,
+              status: "completed",
+              filename,
+              imageUrl: storedImage.imageUrl,
+              thumbnailUrl: storedImage.imageUrl,
+              storageKey: storedImage.storageKey,
+              expiresAt: storedImage.expiresAt,
+              generationStartedAt,
+              generationCompletedAt,
+              generationDurationMs,
+              size: savedSize,
+              format: finalFormat,
+            }
+          : entry,
+      );
+      set = buildCloudPortraitSet({
+        setId,
+        plan,
+        createdAt,
+        updatedAt: generationCompletedAt,
+        status: getCloudCreationSetStatus(items),
+        items,
+        referenceImageNames,
+      });
+      await writeSseEvent(writer, "item_saved", {
+        setId,
+        item: set.items.find((entry) => entry.itemId === item.itemId),
+        set,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      items = items.map((entry) =>
+        entry.itemId === item.itemId ? { ...entry, status: "failed", error: message } : entry,
+      );
+      set = buildCloudPortraitSet({
+        setId,
+        plan,
+        createdAt,
+        updatedAt: new Date().toISOString(),
+        status: getCloudCreationSetStatus(items),
+        items,
+        referenceImageNames,
+      });
+      await writeSseEvent(writer, "item_failed", { setId, itemId: item.itemId, message, set });
+    }
+  });
+
+  await writeSseEvent(writer, "complete", {
+    set: buildCloudPortraitSet({
       setId,
       plan,
       createdAt,
@@ -1854,6 +2216,30 @@ function streamCreationGenerate(request, options = {}) {
   });
 }
 
+function streamPortraitGenerate(request, options = {}) {
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+
+  const work = async () => {
+    try {
+      await runPortraitGenerate(request, writer, options);
+    } catch (error) {
+      await writeSseEvent(writer, "error", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      await writer.close();
+    }
+  };
+
+  void work();
+
+  return new Response(readable, {
+    status: 200,
+    headers: SSE_HEADERS,
+  });
+}
+
 function streamGenerate(request, options = {}) {
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -2049,6 +2435,7 @@ async function runPptGenerate(request, writer, fetchImpl) {
   const topic = String(formData.get("topic") || "").trim();
   const pageCount = Number.parseInt(String(formData.get("pageCount") || "0"), 10);
   const stylePreset = String(formData.get("stylePreset") || "").trim();
+  const exportMode = normalizePptExportMode(formData.get("exportMode"));
   const motion = normalizePptMotionOptions({
     dynamicPreset: formData.get("dynamicPreset"),
     transitionPreset: formData.get("transitionPreset"),
@@ -2112,20 +2499,71 @@ async function runPptGenerate(request, writer, fetchImpl) {
       hasSourceText: Boolean(sourceText),
       topic,
       stylePreset,
+      exportMode,
       ...motion,
     },
     config,
     reasoningEffort,
     motion,
+    exportMode,
   });
+
+  if (isEditablePptExportMode(exportMode)) {
+    await writeSseEvent(writer, "editable_reconstruction_warning", {
+      message: "Editable PPT reconstruction is local-only and is not available in Cloudflare Worker.",
+      exportMode,
+    });
+  }
 
   await writeSseEvent(writer, "deck_saved", { deck });
   await writeSseEvent(writer, "complete", { deck, missingSlideNumbers: [] });
 }
 
+async function handlePptAnalyze(request, fetchImpl) {
+  try {
+    const formData = await request.formData();
+    const config = normalizePrivateConfig(formData);
+    const sourceDocuments = await toPptSourceDocuments([
+      ...formData.getAll("sourceFiles"),
+      ...formData.getAll("sourceFiles[]"),
+    ]);
+    const sourceText = String(formData.get("sourceText") || "").trim();
+    const topic = String(formData.get("topic") || "").trim();
+    const currentPageCount = Number.parseInt(String(formData.get("pageCount") || "0"), 10);
+    const currentStylePreset = String(formData.get("stylePreset") || "").trim();
+    const reasoningEffort = normalizeReasoningEffort(
+      formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    );
+
+    const analysis = await analyzePptDocument({
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      responsesModel: config.responsesModel,
+      reasoningEffort,
+      sourceDocuments,
+      sourceText,
+      topic,
+      currentPageCount,
+      currentStylePreset,
+      fetchImpl,
+    });
+
+    return jsonResponse({ ok: true, analysis });
+  } catch (error) {
+    return jsonResponse(
+      {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+      },
+      400,
+    );
+  }
+}
+
 async function runPptComplete(request, writer, fetchImpl) {
   const payload = await request.json();
   const config = normalizePrivateConfigPayload(payload);
+  const exportMode = normalizePptExportMode(payload.exportMode || payload.sources?.exportMode);
   const motion = normalizePptMotionOptions({
     dynamicPreset: payload.dynamicPreset,
     transitionPreset: payload.transitionPreset,
@@ -2191,7 +2629,14 @@ async function runPptComplete(request, writer, fetchImpl) {
       config,
       reasoningEffort,
       motion,
+      exportMode,
     });
+    if (isEditablePptExportMode(exportMode)) {
+      await writeSseEvent(writer, "editable_reconstruction_warning", {
+        message: "Editable PPT reconstruction is local-only and is not available in Cloudflare Worker.",
+        exportMode,
+      });
+    }
     await writeSseEvent(writer, "deck_saved", { deck });
   }
 
@@ -2212,6 +2657,7 @@ async function runPptSlideEdit(request, writer, fetchImpl) {
   const existingSlides = JSON.parse(String(formData.get("existingSlides") || "[]"));
   const slideNumber = Number.parseInt(String(formData.get("slideNumber") || "0"), 10);
   const stylePreset = String(formData.get("stylePreset") || "").trim();
+  const exportMode = normalizePptExportMode(formData.get("exportMode"));
   const motion = normalizePptMotionOptions({
     dynamicPreset: formData.get("dynamicPreset"),
     transitionPreset: formData.get("transitionPreset"),
@@ -2273,11 +2719,18 @@ async function runPptSlideEdit(request, writer, fetchImpl) {
       outline: completion.outline,
       slides: mergedSlides,
       createdAt,
-      sources: { editedSlideNumber: slideNumber, stylePreset, ...motion },
+      sources: { editedSlideNumber: slideNumber, stylePreset, exportMode, ...motion },
       config,
       reasoningEffort,
       motion,
+      exportMode,
     });
+    if (isEditablePptExportMode(exportMode)) {
+      await writeSseEvent(writer, "editable_reconstruction_warning", {
+        message: "Editable PPT reconstruction is local-only and is not available in Cloudflare Worker.",
+        exportMode,
+      });
+    }
     await writeSseEvent(writer, "deck_saved", { deck });
   }
 
@@ -2376,6 +2829,10 @@ export async function handleApiRequest(request, options = {}) {
     return jsonResponse([]);
   }
 
+  if (request.method === "GET" && url.pathname === "/api/portrait/sets") {
+    return jsonResponse([]);
+  }
+
   if (
     request.method === "GET" &&
     ["/api/gallery", "/api/prompt-agent/history", "/api/ppt/decks"].includes(url.pathname)
@@ -2391,8 +2848,33 @@ export async function handleApiRequest(request, options = {}) {
     return streamCreationGenerate(request, { fetchImpl, imageBucket });
   }
 
+  if (request.method === "POST" && url.pathname === "/api/portrait/generate") {
+    return streamPortraitGenerate(request, { fetchImpl, imageBucket });
+  }
+
   if (request.method === "POST" && url.pathname === "/api/creation/logo-batch") {
     return streamCreationLogoBatchGenerate(request, { fetchImpl, imageBucket });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/portrait/reference/analyze") {
+    return handlePortraitReferenceAnalyze(request, fetchImpl);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/portrait/plan") {
+    return handlePortraitPlan(request);
+  }
+
+  if (
+    request.method === "POST" &&
+    ["/api/portrait/repair", "/api/portrait/sets/open-folder", "/api/portrait/sets/paths"].includes(url.pathname)
+  ) {
+    return new Response(
+      `${JSON.stringify(buildUnsupportedRuntimeCapabilityPayload("cloudflare", request.method, url.pathname), null, 2)}\n`,
+      {
+        status: 400,
+        headers: JSON_HEADERS,
+      },
+    );
   }
 
   if (request.method === "GET" && url.pathname.startsWith(SERVER_IMAGE_ROUTE_PREFIX)) {
@@ -2409,6 +2891,10 @@ export async function handleApiRequest(request, options = {}) {
 
   if (request.method === "POST" && url.pathname === "/api/output/open") {
     return unsupportedFeature(request, "Cloudflare 部署版不支持打开本机输出目录，请使用预览区的下载按钮保存图片。");
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/ppt/analyze") {
+    return handlePptAnalyze(request, fetchImpl);
   }
 
   if (request.method === "POST" && url.pathname === "/api/ppt/generate") {

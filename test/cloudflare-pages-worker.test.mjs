@@ -181,6 +181,81 @@ test("Cloudflare creation filenames use Chinese image type names", async () => {
   assert.equal(imageBucket.objects.size, 2);
 });
 
+test("Cloudflare portrait generation uses browser settings, split references and three digit filenames", async () => {
+  const seenRequests = [];
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("subjectName", "Studio model");
+  formData.set("subjectSummary", "adult subject in a navy blazer");
+  formData.set("analysis", JSON.stringify({
+    visiblePresentation: "feminine-presenting",
+    heightImpression: "unclear",
+    bodyBuild: "slim",
+    clothing: "navy blazer",
+    hair: "short dark hair",
+  }));
+  formData.set("imageCount", "2");
+  formData.set("selectedStyles", JSON.stringify(["business-profile"]));
+  formData.set("ratio", "4:5");
+  formData.set("size", "1024x1280");
+  formData.set("format", "png");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("portraitReferenceImages", new File(["person"], "person.png", { type: "image/png" }));
+  formData.append("portraitAccessoryReferenceImages", new File(["jacket"], "jacket.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/portrait/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+        body: JSON.parse(init.body),
+      });
+      return makeSseResponse();
+    },
+  });
+
+  const text = await response.text();
+  const events = parseSseEvents(text);
+  const complete = events.find((event) => event.eventName === "complete");
+  const filenames = complete.payload.set.items.map((item) => item.filename);
+  const inputImages = seenRequests[0]?.body.input[0].content.filter((item) => item.type === "input_image") || [];
+  const requestText = JSON.stringify(seenRequests[0]?.body || {});
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 2);
+  assert.equal(seenRequests[0].url, "https://example.test/v1/responses");
+  assert.equal(seenRequests[0].auth, "Bearer test-browser-key");
+  assert.equal(inputImages.length, 2);
+  assert.match(requestText, /Portrait person reference 1 of 1/);
+  assert.match(requestText, /Portrait clothing, prop, and accessory reference 1 of 1/);
+  assert.match(requestText, /do not treat it as another person identity/);
+  assert.match(filenames[0], /^001-long-shot-cloudflare-/);
+  assert.match(filenames[1], /^002-full-body-cloudflare-/);
+  assert.equal(complete.payload.set.subjectSummary, "adult subject in a navy blazer");
+  assert.deepEqual(complete.payload.set.referenceImageNames, ["person.png", "jacket.png"]);
+  assert.equal(imageBucket.objects.size, 2);
+  assert.doesNotMatch(text, /test-browser-key/);
+});
+
+test("Cloudflare portrait local record actions return unsupported capability contract", async () => {
+  const response = await handleApiRequest(new Request("https://studio.example/api/portrait/sets/paths", {
+    method: "POST",
+  }));
+  const payload = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.code, "unsupported_runtime_capability");
+  assert.equal(payload.runtime, "cloudflare");
+  assert.equal(payload.path, "/api/portrait/sets/paths");
+});
+
 test("Cloudflare creation generation accepts nine set reference images", async () => {
   const seenRequests = [];
   const imageBucket = makeImageBucket();
@@ -241,6 +316,7 @@ test("Cloudflare creation generation labels reference count order roles and excl
   formData.set("targetLanguage", "en");
   formData.set("imageCount", "4");
   formData.set("scenario", "standard");
+  formData.set("visualLanguage", "lifestyle-editorial");
   formData.set("industryTemplate", "general");
   formData.set("selectedRoles", JSON.stringify(["hero"]));
   formData.set(
@@ -289,7 +365,8 @@ test("Cloudflare creation generation labels reference count order roles and excl
     },
   });
 
-  await response.text();
+  const text = await response.text();
+  const complete = parseSseEvents(text).find((event) => event.eventName === "complete");
   const content = seenRequests[0]?.body.input[0].content || [];
   const inputImages = content.filter((item) => item.type === "input_image");
   const inputText = content
@@ -298,7 +375,11 @@ test("Cloudflare creation generation labels reference count order roles and excl
     .join("\n");
 
   assert.equal(response.status, 200);
+  assert.equal(complete?.payload?.set?.visualLanguage, "lifestyle-editorial");
+  assert.equal(complete?.payload?.set?.visualLanguageLabel, "生活方式杂志");
   assert.equal(inputImages.length, 3);
+  assert.match(inputText, /Shared visual language: 生活方式杂志/);
+  assert.match(inputText, /lifestyle magazine editorial/);
   assert.match(inputText, /Creation reference image 1 of 2: yellow-red\.png\./);
   assert.match(inputText, /Creation reference image 2 of 2: silver-black\.png\./);
   assert.match(inputText, /Uploaded reference count: 2\./);
@@ -845,6 +926,60 @@ test("Cloudflare config endpoint never returns a saved API key", async () => {
   assert.equal(payload.defaults.size, "896x1120");
 });
 
+test("Cloudflare PPT analysis uses browser API settings and returns parameter recommendations", async () => {
+  const seenRequests = [];
+  const formData = new FormData();
+  formData.set("sourceText", "Quarterly sales grew 22%. Next quarter focuses on channel expansion.");
+  formData.set("topic", "Quarterly review");
+  formData.set("pageCount", "8");
+  formData.set("stylePreset", "business");
+  formData.set("reasoningEffort", "high");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/ppt/analyze", {
+    method: "POST",
+    body: formData,
+  }), {
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+        body: JSON.parse(init.body),
+      });
+      return new Response(
+        JSON.stringify({
+          output_text: JSON.stringify({
+            summary: "Quarterly review with growth and channel expansion.",
+            recommendedPageCount: 6,
+            recommendedStylePreset: "finance",
+            rationale: "Data-heavy executive update.",
+            sections: [
+              { title: "Performance", keyMessage: "Sales grew 22%", suggestedSlides: 2 },
+              { title: "Next Quarter", keyMessage: "Expand channels", suggestedSlides: 4 },
+            ],
+          }),
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(seenRequests[0].url, "https://example.test/v1/responses");
+  assert.equal(seenRequests[0].auth, "Bearer test-browser-key");
+  assert.equal(seenRequests[0].body.text.format.name, "ppt_document_analysis");
+  assert.equal(payload.ok, true);
+  assert.equal(payload.analysis.recommendedPageCount, 6);
+  assert.equal(payload.analysis.recommendedStylePreset, "finance");
+  assert.equal(payload.analysis.sections.length, 2);
+  assert.doesNotMatch(JSON.stringify(payload), /test-browser-key/);
+});
+
 test("Cloudflare PPT generation uses browser-provided API settings and returns a downloadable deck", async () => {
   const seenRequests = [];
   const formData = new FormData();
@@ -917,5 +1052,73 @@ test("Cloudflare PPT generation uses browser-provided API settings and returns a
   assert.match(text, /event: slide_saved/);
   assert.match(text, /event: deck_saved/);
   assert.match(text, /data:application\/vnd\.openxmlformats-officedocument\.presentationml\.presentation;base64,/);
+  assert.doesNotMatch(text, /test-browser-key/);
+});
+
+test("Cloudflare PPT generation reports editable reconstruction as local-only while preserving ordinary PPTX", async () => {
+  const seenRequests = [];
+  const formData = new FormData();
+  formData.set("topic", "Quarterly launch recap");
+  formData.set("pageCount", "1");
+  formData.set("stylePreset", "business");
+  formData.set("exportMode", "editable-reconstruction");
+  formData.set("dynamicPreset", "none");
+  formData.set("transitionPreset", "none");
+  formData.set("transitionSpeed", "medium");
+  formData.set("autoAdvanceSeconds", "0");
+  formData.set("reasoningEffort", "high");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/ppt/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    async fetchImpl(url, init) {
+      const body = JSON.parse(init.body);
+      seenRequests.push({ url, auth: init.headers.Authorization, body });
+
+      if (body?.text?.format?.name === "ppt_deck_outline") {
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              title: "Quarterly launch recap",
+              summary: "One-slide recap",
+              slides: [
+                {
+                  slideNumber: 1,
+                  title: "Launch recap",
+                  keyMessage: "Growth is on track",
+                  visualBrief: "Clean business slide",
+                  speakerNotes: "Discuss launch metrics",
+                },
+              ],
+            }),
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
+
+      return makeSseResponse("aW1hZ2UtYnl0ZXM=");
+    },
+  });
+
+  const text = await response.text();
+  const events = parseSseEvents(text);
+  const deck = events.find((event) => event.eventName === "deck_saved")?.payload.deck;
+  const warning = events.find((event) => event.eventName === "editable_reconstruction_warning");
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 2);
+  assert.match(text, /event: deck_saved/);
+  assert.match(deck.pptxUrl, /^data:application\/vnd\.openxmlformats-officedocument\.presentationml\.presentation;base64,/);
+  assert.equal(deck.editablePptxUrl, "");
+  assert.equal(deck.exportMode, "editable-reconstruction");
+  assert.ok(warning);
+  assert.match(warning.payload.message, /local-only/i);
   assert.doesNotMatch(text, /test-browser-key/);
 });

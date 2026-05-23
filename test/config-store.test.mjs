@@ -27,6 +27,8 @@ test("config store returns empty public config before any save", async () => {
     maxParallelTasksPerSession: 10,
     maxReferenceImages: 6,
     maxCreationReferenceImages: 9,
+    maxPortraitPersonReferenceImages: 3,
+    maxPortraitAccessoryReferenceImages: 9,
   });
   assert.deepEqual(config.reasoningEfforts, ["low", "medium", "high", "xhigh"]);
 });

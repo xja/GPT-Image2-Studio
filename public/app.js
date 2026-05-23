@@ -45,7 +45,10 @@ import {
   readBrowserCachedGalleryItems,
 } from "/lib/browser-image-cache.mjs";
 import { consumeSse, requestGenerationStream } from "/lib/generation-client.mjs";
+import { createPptAnalysisController } from "/lib/ppt-analysis-client.mjs";
+import { appendPptDeckDownloadLinks } from "/lib/ppt-record-links.mjs";
 import { buildCreationSkuSubjectsForPayload, normalizeCreationSkuBundleCountForPayload, normalizeCreationSkuSubjectForPayload } from "/lib/creation-sku-subjects.mjs";
+import { DEFAULT_PORTRAIT_ACCESSORY_ASSETS, PORTRAIT_ACCESSORY_ASSET_CATEGORIES, getPortraitAccessoryAssetFileDescriptor } from "/lib/portrait-accessory-assets.mjs?v=20260523-portrait-cosplay-color-assets-1";
 const SURPRISE_PROMPTS = [
   {
     name: "清晨通勤",
@@ -107,6 +110,8 @@ const DEFAULT_LIMITS = {
   maxParallelTasksPerSession: 10,
   maxReferenceImages: 6,
   maxCreationReferenceImages: 9,
+  maxPortraitPersonReferenceImages: 3,
+  maxPortraitAccessoryReferenceImages: 9,
 };
 const DEFAULT_PROMPT_ENHANCE_TEXT = ",sharp focus, macro details, rich textures, crisp edges, photorealistic texture, visible grain, detailed surface material, cinematic lighting"; function buildPromptModePrompt() { const prompt = refs.promptInput.value.trim(); if (!state.promptEnhanceEnabled) { return prompt; } const enhanceText = String(refs.promptEnhanceInput?.value || "").trim(); return enhanceText ? `${prompt}${enhanceText.startsWith(",") ? "" : "\n\n"}${enhanceText}` : prompt; } function syncPromptEnhanceMode() { refs.promptEnhanceToggle.classList.toggle("is-active", state.promptEnhanceEnabled); refs.promptEnhanceToggle.setAttribute("aria-checked", String(state.promptEnhanceEnabled)); refs.promptEnhanceToggle.querySelector("small").textContent = state.promptEnhanceEnabled ? "开启" : "关闭"; refs.promptEnhanceField.classList.toggle("hidden", !state.promptEnhanceEnabled); } function togglePromptEnhanceMode() { state.promptEnhanceEnabled = !state.promptEnhanceEnabled; syncPromptEnhanceMode(); if (state.promptEnhanceEnabled) { refs.promptEnhanceInput.focus(); } }
 const PROMPT_TEMPLATE_STORAGE_KEY = "image-studio-prompt-templates-v2";
@@ -115,7 +120,6 @@ const DEFAULT_PROMPT_TEMPLATES = SURPRISE_PROMPTS.map((template, index) => ({
   name: template.name,
   prompt: template.prompt,
 }));
-
 const DEFAULT_GALLERY_CONTROLS = {
   query: "",
   window: "all",
@@ -131,6 +135,36 @@ const DEFAULT_ARTICLE_RECORD_COLUMN_PRESET = 4;
 const DEFAULT_ARTICLE_ILLUSTRATION_STYLE_PRESET = "realist-magazine";
 const DEFAULT_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
 const DEFAULT_UI_RATIO = "1:1";
+const DEFAULT_PORTRAIT_RATIO = "4:5";
+const PORTRAIT_ANALYSIS_FEEDBACK_MIN_MS = 520;
+const PORTRAIT_STYLE_LABELS = {
+  "business-profile": "商务形象",
+  "fashion-magazine": "时尚杂志",
+  "cinematic-street": "电影街拍",
+  "studio-texture": "棚拍质感",
+  "natural-light-lifestyle": "自然光生活",
+  "retro-film": "复古胶片",
+  "black-white-portrait": "黑白肖像",
+  "outdoor-travel": "户外旅拍",
+  "social-avatar": "社媒头像",
+  custom: "自定义风格",
+};
+const PORTRAIT_STATUS_LABELS = {
+  idle: "待生成",
+  planning: "计划中",
+  queued: "排队中",
+  generating: "生成中",
+  completed: "已完成",
+  failed: "失败",
+  partial_failed: "部分失败",
+};
+const PORTRAIT_SHOT_TYPE_LABELS = {
+  "long-shot": "远景",
+  "full-body": "全身",
+  "medium-shot": "中景",
+  "close-up": "近景",
+  "extreme-close-up": "特写",
+};
 const DEFAULT_UI_RATIO_LABEL = "方形 1:1";
 const CREATION_LOGO_PLACEMENTS = new Set([
   "top-left",
@@ -328,10 +362,11 @@ const CREATE_VIEW_IDS = new Set([
   "reference-analysis",
   "image-decomposition",
   "creation",
+  "portrait",
   "article-illustration",
   "ppt",
 ]);
-const ASSET_VIEW_IDS = new Set(["gallery", "article-record", "ppt-record", "creation-record"]);
+const ASSET_VIEW_IDS = new Set(["gallery", "article-record", "ppt-record", "creation-record", "portrait-record"]);
 
 let studioHeightSyncFrame = 0;
 let studioHeightObserver = null;
@@ -344,6 +379,7 @@ let galleryScrollSyncFrame = 0;
 let galleryScrollObserver = null;
 let generationTaskPollTimer = 0;
 let creationRecordRefreshPromise = null;
+let portraitRecordRefreshPromise = null;
 let promptCopyFeedbackTimer = 0;
 let previewLoadingShellNodes = null;
 let referenceAnalysisLoadingShellNodes = null;
@@ -381,6 +417,22 @@ const state = {
     generationScope: "",
     generating: false,
     itemDrafts: {},
+    planning: false,
+    recordQuery: "",
+    recordSetId: "",
+    sets: [],
+  },
+  portrait: {
+    analysis: null,
+    analysisCollapsed: false,
+    analyzing: false,
+    accessoryAssetCategory: "upper",
+    accessoryAssetColors: {},
+    currentSet: null,
+    feedback: "",
+    accessoryFiles: [],
+    files: [],
+    generating: false,
     planning: false,
     recordQuery: "",
     recordSetId: "",
@@ -444,6 +496,7 @@ const state = {
     files: [],
     generating: false,
     outline: null,
+    editablePptxUrl: "",
     pptxUrl: "",
     slides: [],
     sourceMode: "upload",
@@ -594,6 +647,57 @@ const refs = {
   creationReferenceGrid: document.querySelector("#creationReferenceGrid"),
   creationReferenceInput: document.querySelector("#creationReferenceInput"),
   creationReferenceRestoreList: document.querySelector("#creationReferenceRestoreList"),
+  portraitAnalysisPanel: document.querySelector("#portraitAnalysisPanel"),
+  portraitAnalysisSummary: document.querySelector("#portraitAnalysisSummary"),
+  portraitAnalysisToggleButton: document.querySelector("#portraitAnalysisToggleButton"),
+  portraitApplyAnalysisButton: document.querySelector("#portraitApplyAnalysisButton"),
+  portraitCustomStyleInput: document.querySelector("#portraitCustomStyleInput"),
+  portraitDetail: document.querySelector("#portraitDetail"),
+  portraitFeedback: document.querySelector("#portraitFeedback"),
+  portraitForm: document.querySelector("#portraitForm"),
+  portraitGenerateButton: document.querySelector("#portraitGenerateButton"),
+  portraitImageCountInput: document.querySelector("#portraitImageCountInput"),
+  portraitNotesInput: document.querySelector("#portraitNotesInput"),
+  portraitOutputFormatInput: document.querySelector("#portraitOutputFormatInput"),
+  portraitPlanButton: document.querySelector("#portraitPlanButton"),
+  portraitProgressText: document.querySelector("#portraitProgressText"),
+  portraitRatioInput: document.querySelector("#portraitRatioInput"),
+  portraitRecordActionFeedback: document.querySelector("#portraitRecordActionFeedback"),
+  portraitRecordArchiveDetail: document.querySelector("#portraitRecordArchiveDetail"),
+  portraitRecordCopyPromptsButton: document.querySelector("#portraitRecordCopyPromptsButton"),
+  portraitRecordCopyPathsButton: document.querySelector("#portraitRecordCopyPathsButton"),
+  portraitRecordCount: document.querySelector("#portraitRecordCount"),
+  portraitRecordExportManifestButton: document.querySelector("#portraitRecordExportManifestButton"),
+  portraitRecordExportPromptsButton: document.querySelector("#portraitRecordExportPromptsButton"),
+  portraitRecordOpenFolderButton: document.querySelector("#portraitRecordOpenFolderButton"),
+  portraitRecordRefreshButton: document.querySelector("#portraitRecordRefreshButton"),
+  portraitRecordResultGrid: document.querySelector("#portraitRecordResultGrid"),
+  portraitRecordReuseButton: document.querySelector("#portraitRecordReuseButton"),
+  portraitRecordSearchInput: document.querySelector("#portraitRecordSearchInput"),
+  portraitRecordSetList: document.querySelector("#portraitRecordSetList"),
+  portraitAccessoryAssetButton: document.querySelector("#portraitAccessoryAssetButton"),
+  portraitAccessoryAssetCloseButton: document.querySelector("#portraitAccessoryAssetCloseButton"),
+  portraitAccessoryAssetFeedback: document.querySelector("#portraitAccessoryAssetFeedback"),
+  portraitAccessoryAssetList: document.querySelector("#portraitAccessoryAssetList"),
+  portraitAccessoryAssetPopover: document.querySelector("#portraitAccessoryAssetPopover"),
+  portraitAccessoryAssetTabs: document.querySelector("#portraitAccessoryAssetTabs"),
+  portraitAccessoryReferenceCount: document.querySelector("#portraitAccessoryReferenceCount"),
+  portraitAccessoryReferenceDropzone: document.querySelector("#portraitAccessoryReferenceDropzone"),
+  portraitAccessoryReferenceGrid: document.querySelector("#portraitAccessoryReferenceGrid"),
+  portraitAccessoryReferenceInput: document.querySelector("#portraitAccessoryReferenceInput"),
+  portraitActionInputs: [...document.querySelectorAll("[name=\"portraitActions\"]")],
+  portraitReferenceAnalyzeButton: document.querySelector("#portraitReferenceAnalyzeButton"),
+  portraitReferenceCount: document.querySelector("#portraitReferenceCount"),
+  portraitReferenceDropzone: document.querySelector("#portraitReferenceDropzone"),
+  portraitReferenceGrid: document.querySelector("#portraitReferenceGrid"),
+  portraitReferenceInput: document.querySelector("#portraitReferenceInput"),
+  portraitResultGrid: document.querySelector("#portraitResultGrid"),
+  portraitSetMeta: document.querySelector("#portraitSetMeta"),
+  portraitShotTypeInputs: [...document.querySelectorAll("[name=\"portraitShotTypes\"]")],
+  portraitSizeInput: document.querySelector("#portraitSizeInput"),
+  portraitStyleInputs: [...document.querySelectorAll("[name=\"portraitStyles\"]")],
+  portraitSubjectNameInput: document.querySelector("#portraitSubjectNameInput"),
+  portraitSubjectSummaryInput: document.querySelector("#portraitSubjectSummaryInput"),
   creationRecordActionFeedback: document.querySelector("#creationRecordActionFeedback"),
   creationRecordArchiveDetail: document.querySelector("#creationRecordArchiveDetail"),
   creationRecordCopyFullPathsButton: document.querySelector("#creationRecordCopyFullPathsButton"),
@@ -621,6 +725,7 @@ const refs = {
   creationSkuBundleCountInput: document.querySelector("#creationSkuBundleCountInput"),
   creationRatioInput: document.querySelector("#creationRatioInput"),
   creationTargetLanguageInput: document.querySelector("#creationTargetLanguageInput"),
+  creationVisualLanguageInput: document.querySelector("#creationVisualLanguageInput"),
   errorBanner: document.querySelector("#errorBanner"),
   filmstrip: document.querySelector("#filmstrip"),
   focusGalleryButton: document.querySelector("#focusGalleryButton"),
@@ -708,9 +813,11 @@ const refs = {
   pptCompleteMissingButton: document.querySelector("#pptCompleteMissingButton"),
   pptCompletionRatio: document.querySelector("#pptCompletionRatio"),
   pptDownloadLink: document.querySelector("#pptDownloadLink"),
+  pptEditableDownloadLink: document.querySelector("#pptEditableDownloadLink"),
   pptDropzone: document.querySelector("#pptDropzone"),
   pptAutoAdvanceInput: document.querySelector("#pptAutoAdvanceInput"),
   pptDynamicPresetInput: document.querySelector("#pptDynamicPresetInput"),
+  pptExportModeInput: document.querySelector("#pptExportModeInput"),
   pptEditBackdrop: document.querySelector("#pptEditBackdrop"),
   pptEditCanvas: document.querySelector("#pptEditCanvas"),
   pptEditClearButton: document.querySelector("#pptEditClearButton"),
@@ -858,6 +965,13 @@ const refs = {
   zoomOutButton: document.querySelector("#zoomOutButton"),
   zoomResetButton: document.querySelector("#zoomResetButton"),
 };
+
+const pptAnalysis = createPptAnalysisController({
+  state,
+  buildFormData: buildPptFormData,
+  compactErrorMessage,
+  renderPptView,
+});
 
 function pad(value) {
   return String(value).padStart(2, "0");
@@ -1485,6 +1599,9 @@ function getViewFromHash() {
   if (window.location.hash === "#creation") {
     return "creation";
   }
+  if (window.location.hash === "#portrait") {
+    return "portrait";
+  }
   if (window.location.hash === "#article-illustration") {
     return "article-illustration";
   }
@@ -1497,6 +1614,9 @@ function getViewFromHash() {
   if (window.location.hash === "#creation-record") {
     return "creation-record";
   }
+  if (window.location.hash === "#portrait-record") {
+    return "portrait-record";
+  }
   if (window.location.hash === "#ppt-record") {
     return "ppt-record";
   }
@@ -1508,7 +1628,7 @@ function getViewFromHash() {
 
 function syncHash(view) {
   const nextHash =
-    view === "creation" ? "#creation" : view === "style-transfer"
+    view === "portrait" ? "#portrait" : view === "creation" ? "#creation" : view === "style-transfer"
         ? "#style-transfer"
         : view === "reference-analysis"
           ? "#reference-analysis"
@@ -1520,6 +1640,8 @@ function syncHash(view) {
             ? "#gallery"
             : view === "article-record"
               ? "#article-record"
+            : view === "portrait-record"
+              ? "#portrait-record"
             : view === "creation-record"
               ? "#creation-record"
               : view === "ppt-record"
@@ -1869,6 +1991,9 @@ async function setActiveView(view) {
   if (view === "creation-record") {
     refreshCreationRecordSets();
   }
+  if (view === "portrait-record") {
+    loadPortraitSets().catch((error) => setPortraitRecordFeedback(error.message, "error"));
+  }
   renderActiveView();
   syncGalleryLayoutMode();
   scheduleStudioHeightSync();
@@ -1898,6 +2023,23 @@ function getMaxParallelJobCount() {
 }
 
 function getCreationMaxReferenceImageCount() { return state.limits.maxCreationReferenceImages || DEFAULT_LIMITS.maxCreationReferenceImages || state.limits.maxReferenceImages || DEFAULT_LIMITS.maxReferenceImages; }
+
+function getPortraitPersonMaxReferenceImageCount() {
+  return (
+    state.limits.maxPortraitPersonReferenceImages ||
+    DEFAULT_LIMITS.maxPortraitPersonReferenceImages ||
+    state.limits.maxReferenceImages ||
+    DEFAULT_LIMITS.maxReferenceImages
+  );
+}
+
+function getPortraitAccessoryMaxReferenceImageCount() {
+  return (
+    state.limits.maxPortraitAccessoryReferenceImages ||
+    DEFAULT_LIMITS.maxPortraitAccessoryReferenceImages ||
+    getCreationMaxReferenceImageCount()
+  );
+}
 
 function updateGenerateButton() {
   const runningCount = getRunningJobCount();
@@ -3673,10 +3815,14 @@ function createReferenceAnalysisCard(option, index) {
   prompt.textContent = option.prompt;
 
   const button = document.createElement("button");
-  button.className = "inline-button";
+  const isSelected = state.referenceAnalysis.selectedPrompt === option.prompt;
+  button.className = "inline-button reference-analysis-apply-pill";
+  button.classList.toggle("is-selected", isSelected);
   button.type = "button";
   button.dataset.referenceAnalysisPromptIndex = String(index);
-  button.textContent = "选用";
+  button.textContent = isSelected ? "已应用" : "应用提示词";
+  button.setAttribute("aria-pressed", String(isSelected));
+  button.setAttribute("aria-label", `${button.textContent}: ${option.title || `编排提示词 ${index + 1}`}`);
 
   card.append(title, intent, prompt, button);
   return card;
@@ -4168,6 +4314,57 @@ function renderCreationSizeOptions() {
   refs.creationSizeInput.value = currentValue;
 }
 
+function renderPortraitRatioOptions() {
+  if (!refs.portraitRatioInput) {
+    return;
+  }
+  const currentValue = refs.portraitRatioInput.value || DEFAULT_PORTRAIT_RATIO;
+  const options = getVisibleRatios();
+  refs.portraitRatioInput.innerHTML = "";
+
+  options.forEach((option) => {
+    const element = document.createElement("option");
+    element.value = option.value;
+    element.textContent = option.value;
+    refs.portraitRatioInput.appendChild(element);
+  });
+
+  refs.portraitRatioInput.value = options.some((option) => option.value === currentValue)
+    ? currentValue
+    : DEFAULT_PORTRAIT_RATIO;
+  renderPortraitSizeOptions();
+}
+
+function renderPortraitSizeOptions() {
+  if (!refs.portraitSizeInput || !refs.portraitRatioInput) {
+    return;
+  }
+  const ratioValue = refs.portraitRatioInput.value || DEFAULT_PORTRAIT_RATIO;
+  const currentValue = normalizeGenerationSize(ratioValue, refs.portraitSizeInput.value || "auto");
+  refs.portraitSizeInput.innerHTML = "";
+
+  getGenerationSizeOptions(ratioValue).forEach((option) => {
+    const element = document.createElement("option");
+    element.value = option.value;
+    element.textContent = option.label;
+    refs.portraitSizeInput.appendChild(element);
+  });
+
+  refs.portraitSizeInput.value = currentValue;
+}
+
+function syncPortraitRatio(value) {
+  const nextValue = getRatioOption(value)?.value || DEFAULT_PORTRAIT_RATIO;
+  refs.portraitRatioInput.value = nextValue;
+  renderPortraitSizeOptions();
+  renderPortraitView();
+}
+
+function syncPortraitSize(value) {
+  const ratioValue = refs.portraitRatioInput.value || DEFAULT_PORTRAIT_RATIO;
+  refs.portraitSizeInput.value = normalizeGenerationSize(ratioValue, value || "auto");
+}
+
 function getSettingsFormScrollTop() {
   return refs.generateForm?.scrollTop || 0;
 }
@@ -4536,6 +4733,14 @@ function syncConfigUi(config) {
         ? configLimits.maxConcurrentTasksPerSession || DEFAULT_LIMITS.maxConcurrentTasksPerSession
         : DEFAULT_LIMITS.maxConcurrentTasksPerSession,
     maxCreationReferenceImages: "maxCreationReferenceImages" in configLimits ? configLimits.maxCreationReferenceImages || DEFAULT_LIMITS.maxCreationReferenceImages : DEFAULT_LIMITS.maxCreationReferenceImages,
+    maxPortraitPersonReferenceImages:
+      "maxPortraitPersonReferenceImages" in configLimits
+        ? configLimits.maxPortraitPersonReferenceImages || DEFAULT_LIMITS.maxPortraitPersonReferenceImages
+        : DEFAULT_LIMITS.maxPortraitPersonReferenceImages,
+    maxPortraitAccessoryReferenceImages:
+      "maxPortraitAccessoryReferenceImages" in configLimits
+        ? configLimits.maxPortraitAccessoryReferenceImages || DEFAULT_LIMITS.maxPortraitAccessoryReferenceImages
+        : DEFAULT_LIMITS.maxPortraitAccessoryReferenceImages,
   };
   state.reasoningEfforts = [...(config.reasoningEfforts || DEFAULT_REASONING_EFFORTS)];
 
@@ -4567,6 +4772,7 @@ function syncConfigUi(config) {
   renderReferenceAnalysisSizeOptions();
   renderImageDecompositionSizeOptions();
   renderCreationRatioOptions();
+  renderPortraitRatioOptions();
   syncConnectionState();
   updateGenerateButton();
   renderReferenceGrid();
@@ -5195,14 +5401,25 @@ function renderPreview() {
   }
 
   refs.previewPlaceholder.classList.add("hidden");
-  refs.previewImage.classList.remove("is-visible");
+  const currentPreviewImageSrc = refs.previewImage.getAttribute("src") || "";
+  const shouldUpdatePreviewImage = currentPreviewImageSrc !== imageUrl;
+  if (shouldUpdatePreviewImage && !currentPreviewImageSrc) {
+    refs.previewImage.classList.remove("is-visible");
+  }
   refs.previewImage.classList.add("is-mounted");
   refs.previewImage.onload = () => {
     refs.previewImage.classList.add("is-visible");
   };
   refs.previewImage.style.transform = `scale(${state.zoom})`;
-  refs.previewImage.src = imageUrl;
   refs.previewImage.alt = getDisplayPrompt(item);
+  if (shouldUpdatePreviewImage) {
+    refs.previewImage.src = imageUrl;
+    if (refs.previewImage.complete) {
+      refs.previewImage.classList.add("is-visible");
+    }
+  } else {
+    refs.previewImage.classList.add("is-visible");
+  }
   refs.previewDownloadButton.href = imageUrl;
   refs.previewDownloadButton.download = item.filename || "preview.png";
   refs.previewDownloadButton.classList.remove("disabled");
@@ -5226,60 +5443,107 @@ function getFilmstripItems() {
   return [...activeJobs, ...recentGallery].slice(0, 14);
 }
 
-function renderFilmstrip() {
-  refs.filmstrip.innerHTML = "";
+function createFilmstripEntry(key) {
+  const shell = document.createElement("div");
+  shell.className = "filmstrip-entry";
+  shell.dataset.filmstripKey = key;
 
-  getFilmstripItems().forEach(({ key, item, label }) => {
-    const shell = document.createElement("div");
-    shell.className = "filmstrip-entry";
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "filmstrip-item";
-    if (key === state.selectedPreviewKey) {
-      button.classList.add("active");
-    }
-
-    const imageUrl = getImageUrl(item);
-    if (imageUrl) {
-      const image = document.createElement("img");
-      image.src = imageUrl;
-      image.alt = getDisplayPrompt(item);
-      image.loading = "lazy";
-      button.appendChild(image);
-    } else {
-      const ghost = document.createElement("div");
-      ghost.className = "filmstrip-ghost";
-      ghost.textContent = "处理中";
-      button.appendChild(ghost);
-    }
-
-    const caption = document.createElement("span");
-    caption.textContent = label;
-    button.appendChild(caption);
-
-    button.addEventListener("click", () => {
-      setSelectedPreviewKey(key);
-    });
-
-    shell.appendChild(button);
-
-    if (key.startsWith("job:") && isQueuedGenerationJob(item)) {
-      const cancelButton = document.createElement("button");
-      cancelButton.type = "button";
-      cancelButton.className = "filmstrip-cancel";
-      cancelButton.textContent = "×";
-      cancelButton.title = "取消排队任务";
-      cancelButton.setAttribute("aria-label", "取消排队任务");
-      cancelButton.addEventListener("click", (event) => {
-        event.stopPropagation();
-        cancelQueuedJob(item.id);
-      });
-      shell.appendChild(cancelButton);
-    }
-
-    refs.filmstrip.appendChild(shell);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "filmstrip-item";
+  button.addEventListener("click", () => {
+    setSelectedPreviewKey(key);
   });
+
+  shell.appendChild(button);
+  return shell;
+}
+
+function syncFilmstripMedia(button, item) {
+  const imageUrl = getImageUrl(item);
+  const existingImage = button.querySelector("img");
+  const existingGhost = button.querySelector(".filmstrip-ghost");
+
+  if (imageUrl) {
+    const image = existingImage || document.createElement("img");
+    if (image.getAttribute("src") !== imageUrl) {
+      image.src = imageUrl;
+    }
+    image.alt = getDisplayPrompt(item);
+    image.loading = "lazy";
+    if (!existingImage) {
+      existingGhost?.remove();
+      button.insertBefore(image, button.firstChild);
+    }
+    return;
+  }
+
+  const ghost = existingGhost || document.createElement("div");
+  ghost.className = "filmstrip-ghost";
+  ghost.textContent = "处理中";
+  if (!existingGhost) {
+    existingImage?.remove();
+    button.insertBefore(ghost, button.firstChild);
+  }
+}
+
+function syncFilmstripCancelButton(shell, key, item) {
+  const existingCancelButton = shell.querySelector(".filmstrip-cancel");
+  const shouldRenderCancelButton = key.startsWith("job:") && isQueuedGenerationJob(item);
+  if (!shouldRenderCancelButton) {
+    existingCancelButton?.remove();
+    return;
+  }
+
+  if (existingCancelButton) {
+    return;
+  }
+
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.className = "filmstrip-cancel";
+  cancelButton.textContent = "×";
+  cancelButton.title = "取消排队任务";
+  cancelButton.setAttribute("aria-label", "取消排队任务");
+  cancelButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    cancelQueuedJob(item.id);
+  });
+  shell.appendChild(cancelButton);
+}
+
+function syncFilmstripEntry(shell, { key, item, label }) {
+  const button = shell.querySelector(".filmstrip-item");
+  button.classList.toggle("active", key === state.selectedPreviewKey);
+  syncFilmstripMedia(button, item);
+
+  let caption = button.querySelector("[data-filmstrip-label]");
+  if (!caption) {
+    caption = document.createElement("span");
+    caption.dataset.filmstripLabel = "true";
+    button.appendChild(caption);
+  }
+  caption.textContent = label;
+
+  syncFilmstripCancelButton(shell, key, item);
+}
+
+function renderFilmstrip() {
+  const existingEntries = new Map(
+    [...refs.filmstrip.querySelectorAll(".filmstrip-entry[data-filmstrip-key]")].map((entry) => [
+      entry.dataset.filmstripKey,
+      entry,
+    ]),
+  );
+  const fragment = document.createDocumentFragment();
+
+  getFilmstripItems().forEach((entry) => {
+    const shell = existingEntries.get(entry.key) || createFilmstripEntry(entry.key);
+    syncFilmstripEntry(shell, entry);
+    fragment.appendChild(shell);
+  });
+
+  refs.filmstrip.replaceChildren(fragment);
 }
 
 function createRecentOutputItem(item) {
@@ -5615,6 +5879,8 @@ const VIEW_RENDERERS = Object.freeze({
   articleRecord: renderArticleRecordView,
   creation: renderCreationView,
   creationRecord: renderCreationRecordView,
+  portrait: renderPortraitView,
+  portraitRecord: renderPortraitRecordView,
   ppt: renderPptView,
   pptRecord: renderPptRecordView,
   gallery: renderGalleryView,
@@ -5890,6 +6156,7 @@ function setPromptTemplatePopoverOpen(open) {
   refs.surprisePromptButton.setAttribute("aria-expanded", open ? "true" : "false");
 
   if (open) {
+    setPortraitAccessoryAssetPopoverOpen(false);
     if (!state.selectedPromptTemplateId && state.promptTemplates.length > 0) {
       state.selectedPromptTemplateId = state.promptTemplates[0].id;
     }
@@ -5994,6 +6261,7 @@ function setPptSourceMode(mode) {
 
 function applyPptFiles(files) {
   state.ppt.files = [...(files || [])];
+  pptAnalysis.clear();
   renderPptView();
 }
 
@@ -6020,6 +6288,7 @@ function renderPptFiles() {
 function resetPptGenerationState() {
   state.ppt.deckId = "";
   state.ppt.outline = null;
+  state.ppt.editablePptxUrl = "";
   state.ppt.pptxUrl = "";
   state.ppt.slides = [];
   state.ppt.statusText = "正在生成 PPT 大纲";
@@ -6264,6 +6533,7 @@ async function requestPptSlideEditStream() {
   formData.set("existingSlides", JSON.stringify(getCompletedPptSlides()));
   formData.set("slideNumber", String(slideNumber));
   formData.set("stylePreset", refs.pptStylePresetInput.value);
+  formData.set("exportMode", refs.pptExportModeInput.value);
   formData.set("dynamicPreset", refs.pptDynamicPresetInput.value);
   formData.set("transitionPreset", refs.pptTransitionPresetInput.value);
   formData.set("transitionSpeed", refs.pptTransitionSpeedInput.value);
@@ -6315,6 +6585,7 @@ function buildPptFormData() {
   formData.set("topic", refs.pptTopicInput.value.trim());
   formData.set("pageCount", refs.pptPageCountInput.value);
   formData.set("stylePreset", refs.pptStylePresetInput.value);
+  formData.set("exportMode", refs.pptExportModeInput.value);
   formData.set("dynamicPreset", refs.pptDynamicPresetInput.value);
   formData.set("transitionPreset", refs.pptTransitionPresetInput.value);
   formData.set("transitionSpeed", refs.pptTransitionSpeedInput.value);
@@ -6332,6 +6603,7 @@ function buildPptCompletionRequest(slideNumbers) {
     existingSlides: getCompletedPptSlides(),
     slideNumbers,
     stylePreset: refs.pptStylePresetInput.value,
+    exportMode: refs.pptExportModeInput.value,
     dynamicPreset: refs.pptDynamicPresetInput.value,
     transitionPreset: refs.pptTransitionPresetInput.value,
     transitionSpeed: refs.pptTransitionSpeedInput.value,
@@ -6417,6 +6689,7 @@ function handlePptStreamEvent(eventName, payload) {
   if (eventName === "deck_saved") {
     const deck = payload.deck;
     state.ppt.pptxUrl = deck?.pptxUrl || "";
+    state.ppt.editablePptxUrl = deck?.editablePptxUrl || state.ppt.editablePptxUrl || "";
     state.ppt.statusText = "PPTX 已生成";
     if (deck) {
       state.ppt.decks = [deck, ...state.ppt.decks.filter((entry) => entry.deckId !== deck.deckId)];
@@ -6425,12 +6698,27 @@ function handlePptStreamEvent(eventName, payload) {
     return;
   }
 
+  if (eventName === "editable_reconstruction_started" || eventName === "editable_reconstruction_warning") {
+    state.ppt.statusText = eventName === "editable_reconstruction_started" ? "正在重建可编辑 PPTX" : compactErrorMessage(payload.message, "可编辑 PPTX 重建降级");
+    renderPptView();
+    return;
+  }
+
+  if (eventName === "editable_deck_saved") {
+    state.ppt.editablePptxUrl = payload.editablePptxUrl || payload.deck?.editablePptxUrl || state.ppt.editablePptxUrl || "";
+    state.ppt.statusText = "可编辑 PPTX 已生成";
+    if (payload.deck) {
+      state.ppt.decks = [payload.deck, ...state.ppt.decks.filter((entry) => entry.deckId !== payload.deck.deckId)];
+    }
+    renderPptView();
+    return;
+  }
+
   if (eventName === "complete") {
     const missing = Array.isArray(payload.missingSlideNumbers) ? payload.missingSlideNumbers : getPptMissingSlideNumbers();
     state.ppt.statusText = missing.length > 0 ? `仍有 ${missing.length} 页未完成` : "生成完成";
-    if (payload.deck?.pptxUrl) {
-      state.ppt.pptxUrl = payload.deck.pptxUrl;
-    }
+    if (payload.deck?.pptxUrl) state.ppt.pptxUrl = payload.deck.pptxUrl;
+    state.ppt.editablePptxUrl = payload.deck?.editablePptxUrl || state.ppt.editablePptxUrl;
     renderPptView();
     return;
   }
@@ -6457,11 +6745,7 @@ async function startPptGeneration(event) {
   clearError();
   setPptFeedback("");
 
-  const hasInput =
-    state.ppt.files.length > 0 ||
-    refs.pptSourceTextInput.value.trim().length > 0 ||
-    refs.pptTopicInput.value.trim().length > 0;
-  if (!hasInput) {
+  if (!pptAnalysis.hasInput()) {
     setPptFeedback("请先上传文档、输入文本或输入主题。", "error");
     return;
   }
@@ -6545,23 +6829,9 @@ const CREATION_PREVIEW_SLOTS = [
   { itemId: "12-review-qa", role: "review-qa", title: "口碑问答图", brief: "回答购买前常见疑虑" },
 ];
 
-const CREATION_SCENARIO_LABELS = {
-  standard: "标准电商",
-  "detail-page": "详情页转化",
-  "social-seeding": "社媒种草",
-  launch: "新品发布",
-  promotion: "活动促销",
-  livestream: "直播电商",
-  "gift-guide": "礼品推荐",
-  "marketplace-search": "平台搜索",
-  "brand-story": "品牌故事",
-};
-
-const CREATION_DIMENSION_UNIT_MODE_LABELS = {
-  metric: "公制",
-  imperial: "英制",
-  both: "公制和英制",
-};
+const CREATION_SCENARIO_LABELS = { standard: "标准电商", "detail-page": "详情页转化", "social-seeding": "社媒种草", launch: "新品发布", promotion: "活动促销", livestream: "直播电商", "gift-guide": "礼品推荐", "marketplace-search": "平台搜索", "brand-story": "品牌故事" };
+const CREATION_VISUAL_LANGUAGE_LABELS = { "classic-commercial": "经典商业摄影", "premium-studio": "高端棚拍", "clean-marketplace": "平台清爽白底", "lifestyle-editorial": "生活方式杂志", "social-ugc": "社媒实拍", "detail-infographic": "详情页信息图", "macro-material": "微距材质", "outdoor-context": "户外场景", "minimal-luxury": "极简奢华", "bold-campaign": "活动海报", "warm-handcrafted": "手作温度" };
+const CREATION_DIMENSION_UNIT_MODE_LABELS = { metric: "公制", imperial: "英制", both: "公制和英制" };
 
 const CREATION_CATEGORY_TEMPLATE_MODULE_URL = "/lib/creation-category-templates.mjs?v=20260509-category-search-2";
 const CREATION_BASE_INDUSTRY_TEMPLATE_OPTIONS = [
@@ -7254,6 +7524,10 @@ function normalizeCreationDimensionUnitMode(value) {
 function formatCreationDimensionUnitModeLabel(value) {
   return CREATION_DIMENSION_UNIT_MODE_LABELS[normalizeCreationDimensionUnitMode(value)];
 }
+
+function normalizeCreationVisualLanguage(value) { const normalized = String(value || "").trim(); return CREATION_VISUAL_LANGUAGE_LABELS[normalized] ? normalized : "classic-commercial"; }
+
+function formatCreationVisualLanguageLabel(value) { return CREATION_VISUAL_LANGUAGE_LABELS[normalizeCreationVisualLanguage(value)]; }
 
 function getCreationSelectedDimensionUnitMode() {
   return normalizeCreationDimensionUnitMode(refs.creationDimensionUnitModeInput?.value || "both");
@@ -8359,6 +8633,7 @@ function normalizeCreationSetForView(set = {}) {
           ? "generating"
           : "planning");
   const industryTemplate = normalizeCreationIndustryTemplate(set.industryTemplate || "general");
+  const visualLanguage = normalizeCreationVisualLanguage(set.visualLanguage);
 
   return {
     setId: String(set.setId || ""),
@@ -8374,6 +8649,8 @@ function normalizeCreationSetForView(set = {}) {
     selectedRoles: normalizeCreationRoleIds(set.selectedRoles || items.map((item) => item.role)),
     scenario: String(set.scenario || "standard"),
     scenarioLabel: String(set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || ""),
+    visualLanguage,
+    visualLanguageLabel: String(set.visualLanguageLabel || formatCreationVisualLanguageLabel(visualLanguage)),
     industryTemplate: String(set.industryTemplate || industryTemplate.value || "general"),
     industryTemplateLabel: String(set.industryTemplateLabel || industryTemplate.label || ""),
     industryTemplatePath: String(set.industryTemplatePath || industryTemplate.categoryPath || ""),
@@ -8637,6 +8914,7 @@ function applyCreationSetToForm(set) {
   setCreationSelectValue(refs.creationDimensionUnitModeInput, normalized.dimensionUnitMode, "both");
   setCreationSelectValue(refs.creationTargetLanguageInput, normalized.targetLanguage, "en");
   setCreationSelectValue(refs.creationScenarioInput, normalized.scenario, "standard");
+  setCreationSelectValue(refs.creationVisualLanguageInput, normalized.visualLanguage, "classic-commercial");
   setCreationIndustryTemplateValue(normalized.industryTemplate, {
     searchText: normalized.industryTemplatePath || "",
   });
@@ -8755,6 +9033,7 @@ function renderCreationRecordDetail(set) {
     ["场景", set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || "标准电商"],
     ["行业", set.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[set.industryTemplate] || "通用电商"],
     ["类目路径", set.industryTemplatePath || ""],
+    ["视觉语言", set.visualLanguageLabel || formatCreationVisualLanguageLabel(set.visualLanguage)],
     ["尺寸规格", set.dimensionSpecs || ""],
     ["规格单位", set.dimensionUnitModeLabel || formatCreationDimensionUnitModeLabel(set.dimensionUnitMode)],
     ["语言", set.targetLanguageLabel || set.targetLanguage || "English"],
@@ -8869,6 +9148,7 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
   card.className = "creation-card";
   card.classList.toggle("is-record-card", showRecordActions);
   card.classList.toggle("is-generating", isLoadingCard);
+  card.classList.toggle("is-sku", item.role === "sku"); card.classList.toggle("is-sku-start", options.isSkuStart === true);
 
   const head = document.createElement("div");
   head.className = "creation-card-head";
@@ -9015,6 +9295,8 @@ function getCreationRecordSearchText(set = {}) {
     set.productDescription,
     set.scenario,
     set.scenarioLabel,
+    set.visualLanguage,
+    set.visualLanguageLabel,
     set.industryTemplate,
     set.industryTemplateLabel,
     set.industryTemplatePath,
@@ -9407,6 +9689,7 @@ function renderCreationRecordArchiveDetail(set) {
     ["场景", set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || "标准电商"],
     ["行业", set.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[set.industryTemplate] || "通用电商"],
     ["类目路径", set.industryTemplatePath || ""],
+    ["视觉语言", set.visualLanguageLabel || formatCreationVisualLanguageLabel(set.visualLanguage)],
     ["尺寸规格", set.dimensionSpecs || ""],
     ["规格单位", set.dimensionUnitModeLabel || formatCreationDimensionUnitModeLabel(set.dimensionUnitMode)],
     ["语言", set.targetLanguageLabel || set.targetLanguage || "English"],
@@ -10140,9 +10423,10 @@ function renderCreationReferenceAnalysis() {
     return;
   }
 
-  refs.creationReferenceAnalyzeButton.disabled =
-    state.creationReferenceAnalysis.running || state.creation.generating || state.creationReferenceFiles.length === 0;
-  refs.creationReferenceAnalyzeButton.textContent = state.creationReferenceAnalysis.running ? "识别中..." : "智能识别";
+  const analyzingReferences = state.creationReferenceAnalysis.running;
+  refs.creationReferenceAnalyzeButton.disabled = analyzingReferences || state.creation.generating || state.creationReferenceFiles.length === 0;
+  refs.creationReferenceAnalyzeButton.classList.toggle("is-loading", analyzingReferences);
+  refs.creationReferenceAnalyzeButton.replaceChildren(analyzingReferences ? "识别中" : "智能识别", ...(analyzingReferences ? [Object.assign(document.createElement("span"), { className: "creation-reference-analyze-spinner", ariaHidden: "true" })] : []));
 
   const analysis = state.creationReferenceAnalysis.result;
   if (refs.creationReferenceApplyAnalysisButton) {
@@ -10224,7 +10508,7 @@ async function analyzeCreationReferenceImages() {
   }
 
   state.creationReferenceAnalysis.running = true;
-  setCreationReferenceAnalysisFeedback("正在识别参考图用途...", "busy");
+  setCreationReferenceAnalysisFeedback("", "busy");
   renderCreationReferenceAnalysis();
 
   try {
@@ -10346,8 +10630,9 @@ function renderCreationView() {
   renderCreationLogoBatchSourceGrid();
   renderCreationLogo();
   const currentIndustryLabel = currentSet?.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[currentSet?.industryTemplate] || "通用电商";
+  const currentVisualLanguageLabel = currentSet?.visualLanguageLabel || formatCreationVisualLanguageLabel(currentSet?.visualLanguage);
   refs.creationSetMeta.textContent = currentSet
-    ? `${currentSet.productName || "未命名商品"} · ${currentSet.scenarioLabel || CREATION_SCENARIO_LABELS[currentSet.scenario] || "标准电商"} · ${currentIndustryLabel} · ${targetLanguageLabel} · ${CREATION_ITEM_STATUS_LABELS[currentSet.status] || currentSet.status} · ${formatClock(currentSet.createdAt)}`
+    ? `${currentSet.productName || "未命名商品"} · ${currentSet.scenarioLabel || CREATION_SCENARIO_LABELS[currentSet.scenario] || "标准电商"} · ${currentIndustryLabel} · ${currentVisualLanguageLabel} · ${targetLanguageLabel} · ${CREATION_ITEM_STATUS_LABELS[currentSet.status] || currentSet.status} · ${formatClock(currentSet.createdAt)}`
     : logoBatchBranch
       ? state.creationLogoBatchFiles.length > 0
         ? `${state.creationLogoBatchFiles.length} 张待添加 Logo · ${getCreationLogoGenerationFile() ? "Logo 已上传" : "待上传 Logo"}`
@@ -10358,9 +10643,8 @@ function renderCreationView() {
 
   refs.creationResultGrid.innerHTML = "";
   refs.creationPromptEditorLayer?.replaceChildren();
-  items.forEach((item, index) => {
-    refs.creationResultGrid.appendChild(createCreationCard(item, index));
-  });
+  const firstSkuItem = items.find((item) => item.role === "sku");
+  items.forEach((item, index) => refs.creationResultGrid.appendChild(createCreationCard(item, index, { isSkuStart: item === firstSkuItem })));
 }
 
 function getCreationPlanOverrides() {
@@ -10399,6 +10683,7 @@ function buildCreationPlanPreviewFormData() {
   formData.set("targetLanguage", targetLanguage.value);
   formData.set("imageCount", String(selectedRoles.length || getCreationSelectedImageCount()));
   formData.set("scenario", refs.creationScenarioInput.value);
+  formData.set("visualLanguage", refs.creationVisualLanguageInput?.value || "classic-commercial");
   formData.set("industryTemplate", refs.creationIndustryTemplateInput.value);
   formData.set("selectedRoles", JSON.stringify(getCreationSelectedRoles()));
   formData.set("referenceImageRoles", JSON.stringify(buildCreationReferenceRolePayload()));
@@ -10461,10 +10746,10 @@ function buildCreationLogoBatchFormData() {
 }
 
 function buildCreationRepairFormData({ itemId = "", scope = "incomplete" } = {}) {
-  const formData = new FormData();
-  const currentSet = getCreationCurrentSet();
+  const formData = new FormData(), currentSet = getCreationCurrentSet();
 
   formData.set("setId", currentSet?.setId || "");
+  for (const [key, value] of buildCreationPlanPreviewFormData().entries()) formData.set(key, value);
   if (itemId) {
     formData.set("itemId", itemId);
     const promptOverride = getCreationItemDraft(itemId, currentSet);
@@ -10726,6 +11011,8 @@ async function previewCreationPlan() {
       imageCount: plan.imageCount || items.length || getCreationSelectedRoles().length,
       scenario: plan.scenario || getCreationSelectedScenario().value,
       scenarioLabel: plan.scenarioLabel || getCreationSelectedScenario().label,
+      visualLanguage: plan.visualLanguage || normalizeCreationVisualLanguage(refs.creationVisualLanguageInput?.value),
+      visualLanguageLabel: plan.visualLanguageLabel || formatCreationVisualLanguageLabel(refs.creationVisualLanguageInput?.value),
       industryTemplate: plan.industryTemplate || getCreationSelectedIndustryTemplate().value,
       industryTemplateLabel: plan.industryTemplateLabel || getCreationSelectedIndustryTemplate().label,
       industryTemplatePath: plan.industryTemplatePath || getCreationSelectedIndustryTemplate().categoryPath,
@@ -10880,6 +11167,8 @@ async function startCreationGeneration(event) {
       imageCount,
       scenario: scenario.value,
       scenarioLabel: scenario.label,
+      visualLanguage: normalizeCreationVisualLanguage(refs.creationVisualLanguageInput?.value),
+      visualLanguageLabel: formatCreationVisualLanguageLabel(refs.creationVisualLanguageInput?.value),
       industryTemplate: industryTemplate.value,
       industryTemplateLabel: industryTemplate.label,
       industryTemplatePath: industryTemplate.categoryPath || "",
@@ -10981,6 +11270,1435 @@ async function repairCreationItems({ itemId = "", scope = "incomplete" } = {}) {
     state.creation.generationScope = "";
     renderCreationView();
   }
+}
+
+function normalizePortraitItemForView(item = {}, fallbackIndex = 0) {
+  const imageUrl = String(item.imageUrl || item.thumbnailUrl || item.previewUrl || "");
+  const status = String(item.status || (imageUrl ? "completed" : "idle"));
+  const style = String(item.style || "");
+  return {
+    itemId: String(item.itemId || `portrait-slot-${fallbackIndex + 1}`),
+    slotIndex: Number(item.slotIndex) || fallbackIndex + 1,
+    title: String(item.title || `写真 ${String(fallbackIndex + 1).padStart(3, "0")}`),
+    style,
+    styleLabel: String(item.styleLabel || PORTRAIT_STYLE_LABELS[style] || style),
+    customStyle: String(item.customStyle || ""),
+    shotType: String(item.shotType || ""),
+    shotLabel: String(item.shotLabel || ""),
+    action: String(item.action || ""),
+    actionLabel: String(item.actionLabel || item.action || ""),
+    actionInstruction: String(item.actionInstruction || ""),
+    lens: String(item.lens || ""),
+    aperture: String(item.aperture || ""),
+    depthOfField: String(item.depthOfField || ""),
+    lighting: String(item.lighting || ""),
+    scene: String(item.scene || ""),
+    filename: String(item.filename || ""),
+    relativePath: String(item.relativePath || ""),
+    prompt: String(item.prompt || ""),
+    status,
+    imageUrl,
+    thumbnailUrl: String(item.thumbnailUrl || imageUrl),
+    error: String(item.error || ""),
+    generationStartedAt: String(item.generationStartedAt || ""),
+    generationCompletedAt: String(item.generationCompletedAt || ""),
+    generationDurationMs: String(item.generationDurationMs || ""),
+  };
+}
+
+function normalizePortraitSetForView(set = {}) {
+  const items = (Array.isArray(set.items) ? set.items : [])
+    .map((item, index) => normalizePortraitItemForView(item, index))
+    .sort((left, right) => left.slotIndex - right.slotIndex);
+  const status = String(set.status || "");
+  const resolvedStatus =
+    status || (items.every((item) => item.status === "completed") && items.length > 0
+      ? "completed"
+      : items.some((item) => item.status === "failed")
+        ? "partial_failed"
+        : items.some((item) => item.status === "generating" || item.status === "queued")
+          ? "generating"
+          : "planning");
+
+  return {
+    setId: String(set.setId || ""),
+    subjectName: String(set.subjectName || ""),
+    subjectSummary: String(set.subjectSummary || ""),
+    analysis: set.analysis && typeof set.analysis === "object" ? set.analysis : null,
+    referenceImageNames: Array.isArray(set.referenceImageNames)
+      ? set.referenceImageNames.map((item) => String(item)).filter(Boolean)
+      : [],
+    selectedStyles: Array.isArray(set.selectedStyles)
+      ? set.selectedStyles.map((item) => String(item)).filter(Boolean)
+      : [],
+    selectedShotTypes: Array.isArray(set.selectedShotTypes)
+      ? set.selectedShotTypes.map((item) => String(item)).filter(Boolean)
+      : [],
+    selectedActions: Array.isArray(set.selectedActions) ? set.selectedActions.map((item) => String(item)).filter(Boolean) : [],
+    customStyle: String(set.customStyle || ""),
+    notes: String(set.notes || ""),
+    ratio: String(set.ratio || DEFAULT_PORTRAIT_RATIO),
+    size: String(set.size || "auto"),
+    format: String(set.format || "png"),
+    imageCount: Number(set.imageCount) || items.length || 12,
+    createdAt: String(set.createdAt || nowIso()),
+    updatedAt: String(set.updatedAt || set.createdAt || nowIso()),
+    status: resolvedStatus,
+    relativeDir: String(set.relativeDir || ""),
+    items,
+  };
+}
+
+function getPortraitCurrentSet() {
+  return state.portrait.currentSet ? normalizePortraitSetForView(state.portrait.currentSet) : null;
+}
+
+function isPortraitDraftSet(set = getPortraitCurrentSet()) {
+  const setId = String(set?.setId || "");
+  return setId.startsWith("portrait-local-") || setId.startsWith("portrait-draft-");
+}
+
+function getPortraitProgressSummary(set = getPortraitCurrentSet()) {
+  const items = Array.isArray(set?.items) ? set.items : [];
+  const total = items.length || Number(set?.imageCount) || clampPortraitImageCount(undefined, { write: false });
+  const completed = items.filter((item) => item.status === "completed").length;
+  const failed = items.filter((item) => item.status === "failed").length;
+  return { total, completed, failed };
+}
+
+function getPortraitStatusLabel(status) {
+  return PORTRAIT_STATUS_LABELS[String(status || "")] || "处理中";
+}
+
+function setPortraitFeedback(message = "", kind = "") {
+  if (!refs.portraitFeedback) {
+    return;
+  }
+  refs.portraitFeedback.textContent = message || "";
+  refs.portraitFeedback.dataset.state = kind || "";
+  state.portrait.feedback = message || "";
+}
+
+function getPortraitAnalysisFeedbackNow() {
+  return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+}
+
+function waitForPortraitAnalysisFeedback(startedAt) {
+  const remaining = PORTRAIT_ANALYSIS_FEEDBACK_MIN_MS - (getPortraitAnalysisFeedbackNow() - startedAt);
+  if (remaining <= 0) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => window.setTimeout(resolve, remaining));
+}
+
+function setPortraitRecordFeedback(message = "", kind = "") {
+  if (!refs.portraitRecordActionFeedback) {
+    return;
+  }
+  refs.portraitRecordActionFeedback.textContent = message || "";
+  refs.portraitRecordActionFeedback.dataset.state = kind || "";
+}
+
+function getPortraitSelectedStyles() {
+  return refs.portraitStyleInputs.filter((input) => input.checked).map((input) => input.value);
+}
+
+function getPortraitSelectedShotTypes() {
+  return refs.portraitShotTypeInputs.filter((input) => input.checked).map((input) => input.value);
+}
+
+function getPortraitSelectedActions() { return refs.portraitActionInputs.filter((input) => input.checked).map((input) => input.value); }
+
+function clampPortraitImageCount(value = refs.portraitImageCountInput?.value, { write = true } = {}) {
+  const parsed = Number.parseInt(String(value || "").trim(), 10);
+  const nextValue = Number.isFinite(parsed) ? Math.min(100, Math.max(1, parsed)) : 12;
+  if (write && refs.portraitImageCountInput) {
+    refs.portraitImageCountInput.value = String(nextValue);
+  }
+  return nextValue;
+}
+
+function updatePortraitCurrentItem(itemId, patch = {}) {
+  const currentSet = getPortraitCurrentSet();
+  if (!currentSet || !itemId) {
+    return null;
+  }
+  const nextItems = [...currentSet.items];
+  const index = nextItems.findIndex((item) => item.itemId === itemId);
+  const existing = index >= 0 ? nextItems[index] : { itemId };
+  const nextItem = normalizePortraitItemForView({ ...existing, ...patch, itemId }, index >= 0 ? index : nextItems.length);
+  if (index >= 0) {
+    nextItems[index] = nextItem;
+  } else {
+    nextItems.push(nextItem);
+  }
+  const nextSet = normalizePortraitSetForView({
+    ...currentSet,
+    ...patch.set,
+    items: nextItems,
+    updatedAt: patch.updatedAt || nowIso(),
+    status: patch.setStatus || currentSet.status,
+  });
+  state.portrait.currentSet = nextSet;
+  if (!isPortraitDraftSet(nextSet)) {
+    state.portrait.sets = [nextSet, ...state.portrait.sets.filter((entry) => entry.setId !== nextSet.setId)];
+  }
+  return nextSet;
+}
+
+function upsertPortraitSet(set) {
+  const normalized = normalizePortraitSetForView(set);
+  if (!normalized.setId) {
+    return null;
+  }
+  state.portrait.sets = [normalized, ...state.portrait.sets.filter((entry) => entry.setId !== normalized.setId)];
+  const currentSetId = state.portrait.currentSet?.setId || "";
+  if (!currentSetId || currentSetId === normalized.setId || currentSetId.startsWith("portrait-local-") || state.portrait.generating) {
+    state.portrait.currentSet = normalized;
+  }
+  renderPortraitRecordView();
+  return normalized;
+}
+
+function buildPortraitAnalysisText(analysis = state.portrait.analysis) {
+  if (!analysis) return "";
+  const lines = [
+    analysis.summary,
+    analysis.visiblePresentation ? `可见呈现：${analysis.visiblePresentation}` : "",
+    analysis.heightImpression ? `身高印象：${analysis.heightImpression}` : "",
+    analysis.bodyBuild ? `体型印象：${analysis.bodyBuild}` : "",
+    analysis.pose ? `姿态：${analysis.pose}` : "",
+    analysis.clothing ? `服装：${analysis.clothing}` : "",
+    analysis.hair ? `发型：${analysis.hair}` : "",
+    analysis.faceVisibility ? `面部可见度：${analysis.faceVisibility}` : "",
+    Array.isArray(analysis.distinctVisibleFeatures) && analysis.distinctVisibleFeatures.length ? `可见细节：${analysis.distinctVisibleFeatures.join("、")}` : "",
+    analysis.safety ? `安全边界：${analysis.safety}` : "",
+  ];
+  return lines.map((line) => String(line || "").trim()).filter(Boolean).join("\n");
+}
+
+function renderPortraitAnalysis() {
+  if (!refs.portraitAnalysisPanel || !refs.portraitAnalysisSummary) {
+    return;
+  }
+  const hasPortraitAnalysis = Boolean(state.portrait.analysis);
+  if (!hasPortraitAnalysis) state.portrait.analysisCollapsed = false;
+  refs.portraitAnalysisPanel.hidden = !hasPortraitAnalysis || state.portrait.analysisCollapsed;
+  if (refs.portraitAnalysisToggleButton) { refs.portraitAnalysisToggleButton.hidden = !hasPortraitAnalysis; refs.portraitAnalysisToggleButton.disabled = !hasPortraitAnalysis; refs.portraitAnalysisToggleButton.setAttribute("aria-expanded", String(hasPortraitAnalysis && !state.portrait.analysisCollapsed)); refs.portraitAnalysisToggleButton.textContent = !hasPortraitAnalysis || state.portrait.analysisCollapsed ? "展开建议" : "折叠建议"; }
+  refs.portraitAnalysisSummary.innerHTML = "";
+  if (!hasPortraitAnalysis) return;
+  buildPortraitAnalysisText().split("\n").filter(Boolean).forEach((line) => {
+    const item = document.createElement("span"); item.textContent = line; refs.portraitAnalysisSummary.appendChild(item);
+  });
+}
+
+function togglePortraitAnalysisPanel() { if (!state.portrait.analysis) return; state.portrait.analysisCollapsed = !state.portrait.analysisCollapsed; renderPortraitAnalysis(); }
+
+function applyPortraitAnalysis() {
+  const text = buildPortraitAnalysisText();
+  if (!text) {
+    setPortraitFeedback("请先分析人物参考图，或直接手写人物描述。", "error");
+    return;
+  }
+  refs.portraitSubjectSummaryInput.value = text;
+  setPortraitFeedback("已将可见特征草稿应用到人物描述，可继续编辑后生成。", "success");
+  renderPortraitView();
+}
+
+function revokePortraitReferenceFiles() {
+  [...state.portrait.files, ...state.portrait.accessoryFiles].forEach((item) => {
+    if (item.previewUrl) {
+      URL.revokeObjectURL(item.previewUrl);
+    }
+  });
+}
+
+function getPortraitReferenceBucketConfig(bucket = "person") {
+  if (bucket === "accessory") {
+    return {
+      filesKey: "accessoryFiles",
+      input: refs.portraitAccessoryReferenceInput,
+      count: refs.portraitAccessoryReferenceCount,
+      dropzone: refs.portraitAccessoryReferenceDropzone,
+      grid: refs.portraitAccessoryReferenceGrid,
+      maxCount: getPortraitAccessoryMaxReferenceImageCount(),
+      idPrefix: "portrait-accessory-reference",
+      removeDatasetKey: "portraitAccessoryReferenceRemoveId",
+      removeAttribute: "data-portrait-accessory-reference-remove-id",
+      title: "服装道具配饰参考图",
+      addLabel: "继续上传服装道具配饰参考图",
+      overflowMessage: "服装道具配饰参考图最多支持",
+      clearsAnalysis: false,
+    };
+  }
+
+  return {
+    filesKey: "files",
+    input: refs.portraitReferenceInput,
+    count: refs.portraitReferenceCount,
+    dropzone: refs.portraitReferenceDropzone,
+    grid: refs.portraitReferenceGrid,
+    maxCount: getPortraitPersonMaxReferenceImageCount(),
+    idPrefix: "portrait-reference",
+    removeDatasetKey: "portraitReferenceRemoveId",
+    removeAttribute: "data-portrait-reference-remove-id",
+    title: "人物参考图",
+    addLabel: "继续上传人物参考图",
+    overflowMessage: "人物参考图最多支持",
+    clearsAnalysis: true,
+  };
+}
+
+function applyPortraitReferenceFiles(fileList, bucket = "person", options = {}) {
+  const config = getPortraitReferenceBucketConfig(bucket);
+  const incomingFiles = [...(fileList || [])].filter((file) => file.type.startsWith("image/"));
+  if (incomingFiles.length === 0) {
+    return;
+  }
+  const assetMetadata = options.asset && incomingFiles.length === 1
+    ? {
+        assetId: options.asset.id || "",
+        assetLabel: options.asset.label || "",
+        assetPrompt: options.asset.prompt || "",
+      }
+    : {};
+  const next = [...state.portrait[config.filesKey]];
+  const fingerprints = new Set(next.map((item) => item.fingerprint));
+  let overflowed = false;
+
+  for (const file of incomingFiles) {
+    if (next.length >= config.maxCount) {
+      overflowed = true;
+      break;
+    }
+    const fingerprint = buildReferenceFingerprint(file);
+    if (fingerprints.has(fingerprint)) {
+      continue;
+    }
+    next.push({
+      id: `${config.idPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      fingerprint,
+      file,
+      previewUrl: URL.createObjectURL(file),
+      ...(assetMetadata.assetId ? { assetId: assetMetadata.assetId } : {}),
+      ...(assetMetadata.assetLabel ? { assetLabel: assetMetadata.assetLabel } : {}),
+      ...(assetMetadata.assetPrompt ? { assetPrompt: assetMetadata.assetPrompt } : {}),
+    });
+    fingerprints.add(fingerprint);
+  }
+
+  state.portrait[config.filesKey] = next;
+  if (config.clearsAnalysis) {
+    state.portrait.analysis = null;
+    state.portrait.analysisCollapsed = false;
+  }
+  if (!state.portrait.generating && !state.portrait.planning) {
+    state.portrait.currentSet = null;
+  }
+  if (config.input) {
+    config.input.value = "";
+  }
+  setPortraitFeedback("");
+  clearError();
+  renderPortraitView();
+
+  if (overflowed) {
+    showError(`${config.overflowMessage} ${config.maxCount} 张。`);
+  }
+}
+
+function applyPortraitAccessoryReferenceFiles(fileList, options = {}) {
+  applyPortraitReferenceFiles(fileList, "accessory", options);
+}
+
+function getPortraitAccessoryPromptSummary() {
+  const prompts = state.portrait.accessoryFiles
+    .map((item, index) => {
+      const prompt = String(item.assetPrompt || "").trim();
+      if (!prompt) {
+        return "";
+      }
+      const label = String(item.assetLabel || "").trim();
+      return `COS cosplay reference ${index + 1}${label ? ` (${label})` : ""}: ${prompt}`;
+    })
+    .filter(Boolean);
+  return prompts.length > 0 ? prompts.join("\n") : "";
+}
+
+function setPortraitAccessoryAssetFeedback(message = "", kind = "") {
+  if (!refs.portraitAccessoryAssetFeedback) return;
+  refs.portraitAccessoryAssetFeedback.textContent = message; refs.portraitAccessoryAssetFeedback.dataset.state = kind;
+}
+
+function setPortraitAccessoryAssetPopoverOpen(open) {
+  if (!refs.portraitAccessoryAssetPopover) return;
+  refs.portraitAccessoryAssetPopover.classList.toggle("hidden", !open);
+  refs.portraitAccessoryAssetPopover.setAttribute("aria-hidden", open ? "false" : "true");
+  refs.portraitAccessoryAssetButton?.setAttribute("aria-expanded", open ? "true" : "false");
+  if (open) { setPromptTemplatePopoverOpen(false); renderPortraitAccessoryAssetLibrary(); } else { setPortraitAccessoryAssetFeedback(""); }
+}
+
+function renderPortraitAccessoryAssetLibrary() {
+  if (!refs.portraitAccessoryAssetTabs || !refs.portraitAccessoryAssetList) return;
+  const selectedCategory = PORTRAIT_ACCESSORY_ASSET_CATEGORIES.some((category) => category.value === state.portrait.accessoryAssetCategory) ? state.portrait.accessoryAssetCategory : PORTRAIT_ACCESSORY_ASSET_CATEGORIES[0].value;
+  const maxCount = getPortraitAccessoryMaxReferenceImageCount(), isFull = state.portrait.accessoryFiles.length >= maxCount;
+  refs.portraitAccessoryAssetTabs.replaceChildren();
+  PORTRAIT_ACCESSORY_ASSET_CATEGORIES.forEach((category) => {
+    const button = document.createElement("button");
+    Object.assign(button, { type: "button", className: "portrait-accessory-asset-tab", textContent: category.label });
+    button.classList.toggle("is-active", category.value === selectedCategory);
+    button.dataset.portraitAccessoryAssetCategory = category.value;
+    button.setAttribute("role", "tab"); button.setAttribute("aria-selected", String(category.value === selectedCategory));
+    refs.portraitAccessoryAssetTabs.appendChild(button);
+  });
+  refs.portraitAccessoryAssetList.replaceChildren();
+  DEFAULT_PORTRAIT_ACCESSORY_ASSETS
+    .filter((asset) => asset.category === selectedCategory)
+    .forEach((asset) => {
+      const selectedVariant = getPortraitAccessoryAssetFileDescriptor(asset, state.portrait.accessoryAssetColors[asset.id]);
+      const item = document.createElement("article");
+      const button = document.createElement("button");
+      item.className = "portrait-accessory-asset-item";
+      Object.assign(button, { type: "button", className: "portrait-accessory-asset-add", disabled: isFull, title: isFull ? `服装道具配饰参考图最多支持 ${maxCount} 张` : `添加${selectedVariant.label}到参考图` });
+      button.dataset.portraitAccessoryAssetId = asset.id;
+      const image = document.createElement("img");
+      Object.assign(image, { src: selectedVariant.src, alt: selectedVariant.label, loading: "lazy", decoding: "async" });
+      button.appendChild(image);
+      const label = document.createElement("span"); label.textContent = selectedVariant.label; button.appendChild(label);
+      item.appendChild(button);
+      if (Array.isArray(asset.colors) && asset.colors.length > 0) {
+        const colorGrid = document.createElement("div");
+        colorGrid.className = "portrait-accessory-color-grid";
+        asset.colors.forEach((color) => {
+          const colorButton = document.createElement("button");
+          Object.assign(colorButton, { type: "button", className: "portrait-accessory-color-option", title: `${asset.label} · ${color.label}` });
+          colorButton.classList.toggle("is-active", color.id === selectedVariant.colorId);
+          colorButton.dataset.portraitAccessoryAssetId = asset.id; colorButton.dataset.portraitAccessoryColorId = color.id;
+          colorButton.setAttribute("aria-label", `选择${asset.label} ${color.label}`); colorButton.setAttribute("aria-pressed", String(color.id === selectedVariant.colorId));
+          const colorImage = document.createElement("img");
+          Object.assign(colorImage, { src: color.src, alt: "", loading: "lazy", decoding: "async" });
+          colorButton.appendChild(colorImage);
+          colorGrid.appendChild(colorButton);
+        });
+        item.appendChild(colorGrid);
+      }
+      refs.portraitAccessoryAssetList.appendChild(item);
+    });
+}
+
+async function rasterizePortraitAccessoryAsset(blob) {
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const image = new Image();
+    image.decoding = "async";
+    image.src = objectUrl;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = 1024;
+    canvas.height = 1024;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return blob;
+    }
+    context.fillStyle = "#f8fafc";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    const scale = Math.min(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
+    const width = image.naturalWidth * scale;
+    const height = image.naturalHeight * scale;
+    const x = (canvas.width - width) / 2;
+    const y = (canvas.height - height) / 2;
+    context.drawImage(image, x, y, width, height);
+    return await new Promise((resolve) => {
+      canvas.toBlob((pngBlob) => resolve(pngBlob || blob), "image/png", 0.92);
+    });
+  } catch {
+    return blob;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function loadPortraitAccessoryAssetBlob(asset) {
+  const selectedVariant = getPortraitAccessoryAssetFileDescriptor(asset, state.portrait.accessoryAssetColors[asset.id]);
+  const response = await fetch(selectedVariant.src);
+  if (!response.ok) {
+    throw new Error(`无法读取服饰资产：${selectedVariant.label}`);
+  }
+  const sourceBlob = await response.blob();
+  return rasterizePortraitAccessoryAsset(sourceBlob);
+}
+
+async function addPortraitAccessoryAssetReference(assetId) {
+  const asset = DEFAULT_PORTRAIT_ACCESSORY_ASSETS.find((entry) => entry.id === assetId);
+  if (!asset) {
+    return;
+  }
+  if (state.portrait.accessoryFiles.length >= getPortraitAccessoryMaxReferenceImageCount()) {
+    setPortraitAccessoryAssetFeedback("服装道具配饰参考图已达到上限。", "error");
+    return;
+  }
+
+  const selectedVariant = getPortraitAccessoryAssetFileDescriptor(asset, state.portrait.accessoryAssetColors[asset.id]);
+  setPortraitAccessoryAssetFeedback(`正在添加${selectedVariant.label}...`, "busy");
+  try {
+    const blob = await loadPortraitAccessoryAssetBlob(asset);
+    const file = new File([blob], selectedVariant.filename, { type: blob.type || "image/png", lastModified: 1 });
+    applyPortraitAccessoryReferenceFiles([file], { asset: selectedVariant });
+    setPortraitAccessoryAssetFeedback(`已添加${selectedVariant.label}。`, "success");
+    renderPortraitAccessoryAssetLibrary();
+  } catch (error) {
+    setPortraitAccessoryAssetFeedback(error instanceof Error ? error.message : String(error), "error");
+  }
+}
+
+function removePortraitReferenceFile(referenceId) {
+  removePortraitReferenceFileFromBucket(referenceId, "person");
+}
+
+function removePortraitAccessoryReferenceFile(referenceId) {
+  removePortraitReferenceFileFromBucket(referenceId, "accessory");
+}
+
+function removePortraitReferenceFileFromBucket(referenceId, bucket = "person") {
+  const config = getPortraitReferenceBucketConfig(bucket);
+  const target = state.portrait[config.filesKey].find((item) => item.id === referenceId);
+  if (target?.previewUrl) {
+    URL.revokeObjectURL(target.previewUrl);
+  }
+  state.portrait[config.filesKey] = state.portrait[config.filesKey].filter((item) => item.id !== referenceId);
+  if (config.clearsAnalysis) {
+    state.portrait.analysis = null;
+    state.portrait.analysisCollapsed = false;
+  }
+  if (!state.portrait.generating && !state.portrait.planning) {
+    state.portrait.currentSet = null;
+  }
+  renderPortraitView();
+}
+
+function renderPortraitReferenceGrid() {
+  renderPortraitReferenceGridForBucket("person");
+  renderPortraitReferenceGridForBucket("accessory");
+}
+
+function renderPortraitReferenceGridForBucket(bucket = "person") {
+  const config = getPortraitReferenceBucketConfig(bucket);
+  if (!config.grid) {
+    return;
+  }
+  const files = state.portrait[config.filesKey];
+  config.grid.innerHTML = "";
+  if (config.count) {
+    config.count.textContent = `${files.length} / ${config.maxCount}`;
+  }
+  syncReferenceDropzoneCompact(config.dropzone, files.length > 0);
+  config.grid.classList.toggle("hidden", files.length === 0);
+
+  files.forEach((item, index) => {
+    const card = document.createElement("div");
+    card.className = "reference-card portrait-reference-card";
+    card.classList.toggle("is-analyzing", config.clearsAnalysis && state.portrait.analyzing);
+
+    const preview = document.createElement("div");
+    preview.className = "reference-preview-button";
+    const image = document.createElement("img");
+    image.src = item.previewUrl;
+    image.alt = `${config.title} ${index + 1}`;
+    preview.appendChild(image);
+    card.appendChild(preview);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "reference-remove";
+    remove.textContent = "x";
+    remove.dataset[config.removeDatasetKey] = item.id;
+    remove.setAttribute("aria-label", `移除${config.title}`);
+    card.appendChild(remove);
+
+    const name = document.createElement("span");
+    name.className = "portrait-reference-name";
+    name.textContent = item.file?.name || `参考图 ${index + 1}`;
+    card.appendChild(name);
+
+    config.grid.appendChild(card);
+  });
+
+  if (files.length > 0 && files.length < config.maxCount) {
+    config.grid.appendChild(
+      createReferenceAddCard({
+        input: config.input,
+        label: config.addLabel,
+        onFiles: (fileList) => applyPortraitReferenceFiles(fileList, bucket),
+      }),
+    );
+  }
+}
+
+function buildPortraitFormData({ includeFiles = true, repair = false, includeAccessoryFiles = true } = {}) {
+  const formData = new FormData();
+  const currentSet = getPortraitCurrentSet();
+  formData.set("subjectName", refs.portraitSubjectNameInput?.value.trim() || "");
+  formData.set("subjectSummary", refs.portraitSubjectSummaryInput?.value.trim() || "");
+  formData.set("imageCount", String(clampPortraitImageCount(refs.portraitImageCountInput?.value || currentSet?.imageCount || "12")));
+  formData.set("selectedStyles", JSON.stringify(getPortraitSelectedStyles()));
+  formData.set("selectedShotTypes", JSON.stringify(getPortraitSelectedShotTypes()));
+  formData.set("selectedActions", JSON.stringify(getPortraitSelectedActions()));
+  formData.set("customStyle", refs.portraitCustomStyleInput?.value.trim() || "");
+  const rawPortraitNotes = refs.portraitNotesInput?.value.trim() || "";
+  formData.set("notes", [rawPortraitNotes, getPortraitAccessoryPromptSummary()].filter(Boolean).join("\n\n"));
+  formData.set("ratio", refs.portraitRatioInput?.value || DEFAULT_PORTRAIT_RATIO);
+  formData.set("size", refs.portraitSizeInput?.value || "auto");
+  formData.set("format", normalizeOutputFormat(refs.portraitOutputFormatInput?.value || state.config?.defaults?.format || "png"));
+  formData.set("analysis", JSON.stringify(state.portrait.analysis || currentSet?.analysis || {}));
+  formData.set("reasoningEffort", refs.reasoningEffortInput?.value || state.config?.defaults?.reasoningEffort || "xhigh");
+  formData.set("clientSessionId", state.clientSessionId);
+  if (repair && currentSet?.setId) {
+    formData.set("setId", currentSet.setId);
+  }
+  if (includeFiles) {
+    state.portrait.files.forEach((item) => {
+      if (item.file) {
+        formData.append("portraitReferenceImages", item.file);
+      }
+    });
+    if (includeAccessoryFiles) {
+      state.portrait.accessoryFiles.forEach((item) => {
+        if (item.file) {
+          formData.append("portraitAccessoryReferenceImages", item.file);
+        }
+      });
+    }
+  }
+  appendBrowserConfigToFormData(formData);
+  return formData;
+}
+
+function getPortraitReferenceFileNames() {
+  return [...state.portrait.files, ...state.portrait.accessoryFiles]
+    .map((item) => item.file?.name || "")
+    .filter(Boolean);
+}
+
+function buildPortraitPreviewItems(count = refs.portraitImageCountInput?.value || 12) {
+  const total = clampPortraitImageCount(count, { write: false });
+  return Array.from({ length: total }, (_, index) => normalizePortraitItemForView({
+    itemId: `portrait-preview-${index + 1}`,
+    slotIndex: index + 1,
+    title: `写真 ${String(index + 1).padStart(3, "0")}`,
+    status: state.portrait.generating ? "queued" : "idle",
+  }, index));
+}
+
+function renderPortraitDetail(set) {
+  if (!refs.portraitDetail) {
+    return;
+  }
+  refs.portraitDetail.innerHTML = "";
+  refs.portraitDetail.hidden = true;
+}
+
+function formatPortraitStyleSummary(set = {}) {
+  const labels = Array.isArray(set.items)
+    ? [...new Set(set.items.map((item) => item.styleLabel || PORTRAIT_STYLE_LABELS[item.style]).filter(Boolean))]
+    : [];
+  if (set.customStyle) {
+    labels.push(set.customStyle);
+  }
+  if (labels.length > 0) {
+    return labels.join("、");
+  }
+  return (Array.isArray(set.selectedStyles) ? set.selectedStyles : [])
+    .map((style) => PORTRAIT_STYLE_LABELS[style] || style)
+    .filter(Boolean)
+    .join("、") || "商务形象";
+}
+
+function createPortraitCardLoading() {
+  const loading = document.createElement("div");
+  loading.className = "creation-card-loading portrait-card-loading";
+  const motion = document.createElement("div");
+  motion.className = "creation-card-loading-motion";
+  motion.setAttribute("aria-hidden", "true");
+  for (let index = 0; index < 3; index += 1) {
+    motion.appendChild(document.createElement("span"));
+  }
+  const label = document.createElement("strong");
+  label.textContent = "生成中";
+  const detail = document.createElement("span");
+  detail.className = "creation-card-loading-detail";
+  detail.textContent = "正在生成写真图";
+  loading.append(motion, label, detail);
+  return loading;
+}
+
+function createPortraitCard(item = {}, fallbackIndex = 0, options = {}) {
+  const showRecordActions = options.showRecordActions === true;
+  const isLoadingCard = !showRecordActions && state.portrait.generating && !getImageUrl(item) && !["completed", "failed"].includes(item.status);
+  const card = document.createElement("article");
+  card.className = "creation-card portrait-card";
+  card.classList.toggle("is-record-card", showRecordActions);
+  card.classList.toggle("is-generating", isLoadingCard);
+
+  const head = document.createElement("div");
+  head.className = "creation-card-head";
+  const title = document.createElement("strong");
+  title.textContent = item.title || `写真 ${fallbackIndex + 1}`;
+  head.appendChild(title);
+  const status = document.createElement("span");
+  status.className = "creation-card-status";
+  status.textContent = isLoadingCard ? "生成中" : getPortraitStatusLabel(item.status);
+  head.appendChild(status);
+  card.appendChild(head);
+
+  const imageUrl = getImageUrl(item);
+  const media = document.createElement(showRecordActions && imageUrl ? "button" : "div");
+  media.className = "creation-card-media";
+  if (showRecordActions && imageUrl) {
+    media.type = "button";
+    media.classList.add("creation-record-preview-media");
+    media.dataset.portraitRecordPreviewItemId = item.itemId;
+    media.setAttribute("aria-label", `${item.title || "写真"}查看大图`);
+  }
+  if (isLoadingCard) {
+    media.classList.add("is-loading");
+    media.setAttribute("aria-busy", "true");
+    media.appendChild(createPortraitCardLoading());
+  } else if (imageUrl) {
+    const image = document.createElement("img");
+    image.loading = "lazy";
+    image.decoding = "async";
+    image.alt = item.title || `写真 ${fallbackIndex + 1}`;
+    image.src = imageUrl;
+    media.appendChild(image);
+  } else {
+    const placeholder = document.createElement("span");
+    placeholder.textContent = item.status === "failed" ? item.error || "生成失败" : "等待生成";
+    media.appendChild(placeholder);
+  }
+  card.appendChild(media);
+
+  const meta = document.createElement("p");
+  meta.className = "creation-card-copy portrait-card-meta";
+  meta.textContent = [
+    item.styleLabel,
+    item.shotLabel,
+    item.actionLabel,
+    item.lens && item.aperture ? `${item.lens} ${item.aperture}` : "",
+    item.depthOfField,
+  ].filter(Boolean).join(" · ");
+  card.appendChild(meta);
+
+  if (showRecordActions) {
+    const actions = document.createElement("div");
+    actions.className = "creation-card-actions creation-record-card-actions portrait-record-card-actions";
+    const previewButton = document.createElement("button");
+    previewButton.className = "mini-action";
+    previewButton.type = "button";
+    previewButton.dataset.portraitRecordPreviewItemId = item.itemId;
+    previewButton.textContent = "查看";
+    previewButton.disabled = !imageUrl;
+    actions.appendChild(previewButton);
+
+    const copyPromptButton = document.createElement("button");
+    copyPromptButton.className = "mini-action";
+    copyPromptButton.type = "button";
+    copyPromptButton.dataset.portraitRecordCopyPromptItemId = item.itemId;
+    copyPromptButton.textContent = "复制提示词";
+    copyPromptButton.disabled = !item.prompt;
+    actions.appendChild(copyPromptButton);
+    card.appendChild(actions);
+  }
+
+  return card;
+}
+
+function renderPortraitView() {
+  if (!refs.portraitResultGrid) {
+    return;
+  }
+  const currentSet = getPortraitCurrentSet();
+  const inputCount = clampPortraitImageCount(undefined, { write: false });
+  const progress = currentSet ? getPortraitProgressSummary(currentSet) : { total: inputCount, completed: 0, failed: 0 };
+  if (refs.portraitGenerateButton) {
+    refs.portraitGenerateButton.textContent = state.portrait.generating ? "生成中..." : "生成写真";
+    refs.portraitGenerateButton.disabled = state.portrait.generating || state.portrait.planning;
+  }
+  if (refs.portraitPlanButton) {
+    refs.portraitPlanButton.textContent = state.portrait.planning ? "预览中..." : "预览计划";
+    refs.portraitPlanButton.disabled = state.portrait.generating || state.portrait.planning;
+  }
+  if (refs.portraitReferenceAnalyzeButton) {
+    refs.portraitReferenceAnalyzeButton.disabled =
+      state.portrait.generating || state.portrait.analyzing || state.portrait.files.length === 0;
+    refs.portraitReferenceAnalyzeButton.classList.toggle("is-loading", state.portrait.analyzing);
+    refs.portraitReferenceAnalyzeButton.setAttribute("aria-busy", String(state.portrait.analyzing));
+    refs.portraitReferenceAnalyzeButton.textContent = state.portrait.analyzing ? "分析中" : "分析人物";
+  }
+  if (refs.portraitApplyAnalysisButton) {
+    refs.portraitApplyAnalysisButton.disabled = state.portrait.analyzing || !state.portrait.analysis;
+  }
+  if (refs.portraitProgressText) {
+    refs.portraitProgressText.textContent = `${progress.completed} / ${progress.total}`;
+  }
+  if (refs.portraitSetMeta) {
+    refs.portraitSetMeta.hidden = !currentSet;
+    refs.portraitSetMeta.textContent = currentSet
+      ? `${currentSet.subjectName || "未命名人物"} · ${formatPortraitStyleSummary(currentSet)} · ${PORTRAIT_STATUS_LABELS[currentSet.status] || currentSet.status} · ${formatClock(currentSet.createdAt)}`
+      : "等待生成";
+  }
+
+  renderPortraitReferenceGrid();
+  renderPortraitAccessoryAssetLibrary();
+  renderPortraitAnalysis();
+  renderPortraitDetail(currentSet);
+
+  const items = currentSet?.items?.length ? currentSet.items : buildPortraitPreviewItems();
+  refs.portraitResultGrid.innerHTML = "";
+  items.forEach((item, index) => {
+    refs.portraitResultGrid.appendChild(createPortraitCard(item, index));
+  });
+}
+
+async function analyzePortraitReference() {
+  if (state.portrait.files.length === 0) {
+    const message = "请先上传人物参考图。";
+    setPortraitFeedback(message, "error");
+    showError(message);
+    return;
+  }
+  clearError();
+  const analysisStartedAt = getPortraitAnalysisFeedbackNow();
+  setPortraitFeedback("正在分析人物参考图...", "busy");
+  state.portrait.analyzing = true;
+  renderPortraitView();
+  try {
+    const formData = buildPortraitFormData({ includeFiles: true, includeAccessoryFiles: false });
+    const response = await fetch("/api/portrait/reference/analyze", {
+      method: "POST",
+      body: formData,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.message || "人物参考图分析失败");
+    }
+    state.portrait.analysis = payload.analysis || null;
+    state.portrait.analysisCollapsed = true;
+    setPortraitFeedback("人物可见特征草稿已生成，请确认或编辑后再生成写真。", "success");
+  } finally {
+    await waitForPortraitAnalysisFeedback(analysisStartedAt);
+    state.portrait.analyzing = false;
+    renderPortraitView();
+  }
+}
+
+async function previewPortraitPlan() {
+  if (state.portrait.generating || state.portrait.planning) {
+    return;
+  }
+  clearError();
+  setPortraitFeedback("");
+  if (!refs.portraitSubjectSummaryInput.value.trim()) {
+    const message = "请先填写人物描述，或上传参考图后点击分析人物。";
+    setPortraitFeedback(message, "error");
+    showError(message);
+    return;
+  }
+  state.portrait.planning = true;
+  setPortraitFeedback("正在生成写真分镜计划...", "busy");
+  renderPortraitView();
+  try {
+    const response = await fetch("/api/portrait/plan", {
+      method: "POST",
+      body: buildPortraitFormData({ includeFiles: false }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.message || "写真计划生成失败");
+    }
+    const plan = payload.plan || {};
+    const createdAt = nowIso();
+    state.portrait.currentSet = normalizePortraitSetForView({
+      setId: `portrait-draft-${Date.now()}`,
+      subjectName: plan.subjectName || refs.portraitSubjectNameInput.value.trim(),
+      subjectSummary: plan.subjectSummary || refs.portraitSubjectSummaryInput.value.trim(),
+      analysis: plan.visibleProfile || state.portrait.analysis || null,
+      selectedStyles: plan.selectedStyles || getPortraitSelectedStyles(),
+      selectedShotTypes: plan.selectedShotTypes || getPortraitSelectedShotTypes(),
+      selectedActions: plan.selectedActions || getPortraitSelectedActions(),
+      customStyle: plan.customStyle || refs.portraitCustomStyleInput.value.trim(),
+      notes: plan.notes || refs.portraitNotesInput.value.trim(),
+      ratio: plan.ratio || refs.portraitRatioInput.value || DEFAULT_PORTRAIT_RATIO,
+      size: plan.size || refs.portraitSizeInput.value || "auto",
+      format: plan.format || refs.portraitOutputFormatInput.value || "png",
+      imageCount: plan.imageCount || plan.items?.length || clampPortraitImageCount(undefined, { write: false }),
+      referenceImageNames: getPortraitReferenceFileNames(),
+      createdAt,
+      updatedAt: createdAt,
+      status: "planning",
+      items: Array.isArray(plan.items)
+        ? plan.items.map((item, index) => ({
+            ...item,
+            slotIndex: item.slotIndex || index + 1,
+            status: "idle",
+          }))
+        : [],
+    });
+    setPortraitFeedback(`已生成 ${state.portrait.currentSet.items.length} 张写真计划，可以正式生成。`, "success");
+  } catch (error) {
+    const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "写真计划生成失败");
+    setPortraitFeedback(message, "error");
+    showError(message);
+  } finally {
+    state.portrait.planning = false;
+    renderPortraitView();
+  }
+}
+
+function handlePortraitStreamEvent(eventName, payload = {}) {
+  if (eventName === "set_started") {
+    upsertPortraitSet(payload.set);
+    setPortraitFeedback(`写真任务已创建，正在生成 ${payload.set?.imageCount || refs.portraitImageCountInput?.value || 12} 张图片。`, "busy");
+    renderPortraitView();
+    return;
+  }
+  if (eventName === "plan") {
+    if (payload.setId && state.portrait.currentSet?.setId !== payload.setId && Array.isArray(payload.items)) {
+      upsertPortraitSet({
+        ...state.portrait.currentSet,
+        setId: payload.setId,
+        items: payload.items,
+      });
+    }
+    renderPortraitView();
+    return;
+  }
+  if (eventName === "item_started") {
+    updatePortraitCurrentItem(payload.itemId, {
+      status: "generating",
+      updatedAt: nowIso(),
+    });
+    setPortraitFeedback(`正在生成 ${payload.itemId || "写真图"}...`, "busy");
+    renderPortraitView();
+    return;
+  }
+  if (eventName === "item_status") {
+    updatePortraitCurrentItem(payload.itemId, {
+      status: "generating",
+      updatedAt: nowIso(),
+    });
+    if (payload.message) {
+      setPortraitFeedback(payload.message, "busy");
+    }
+    renderPortraitView();
+    return;
+  }
+  if (eventName === "item_partial_image" || eventName === "item_final_image") {
+    updatePortraitCurrentItem(payload.itemId, {
+      status: "generating",
+      imageUrl: payload.dataUrl,
+      thumbnailUrl: payload.dataUrl,
+      updatedAt: nowIso(),
+    });
+    renderPortraitView();
+    return;
+  }
+  if (eventName === "item_saved") {
+    if (payload.set) {
+      upsertPortraitSet(payload.set);
+    } else if (payload.item) {
+      updatePortraitCurrentItem(payload.item.itemId, {
+        ...payload.item,
+        status: "completed",
+        updatedAt: nowIso(),
+      });
+    }
+    setPortraitFeedback("已生成一张写真图。", "success");
+    renderPortraitView();
+    return;
+  }
+  if (eventName === "item_failed") {
+    if (payload.set) {
+      upsertPortraitSet(payload.set);
+    } else if (payload.itemId) {
+      updatePortraitCurrentItem(payload.itemId, {
+        status: "failed",
+        error: payload.message || "",
+        updatedAt: nowIso(),
+      });
+    }
+    setPortraitFeedback(payload.message || "写真图生成失败。", "error");
+    renderPortraitView();
+    return;
+  }
+  if (eventName === "complete") {
+    if (payload.set) {
+      upsertPortraitSet(payload.set);
+    }
+    setPortraitFeedback("写真生成完成。", "success");
+    renderPortraitView();
+    return;
+  }
+  if (eventName === "error") {
+    const message = compactErrorMessage(payload.message, "写真生成请求失败");
+    const currentSet = getPortraitCurrentSet();
+    if (currentSet) {
+      state.portrait.currentSet = normalizePortraitSetForView({
+        ...currentSet,
+        status: "failed",
+        updatedAt: nowIso(),
+        items: currentSet.items.map((item) =>
+          item.status === "completed"
+            ? item
+            : {
+                ...item,
+                status: "failed",
+                error: message,
+              },
+        ),
+      });
+    }
+    setPortraitFeedback(message, "error");
+    showError(message);
+    renderPortraitView();
+  }
+}
+
+async function runPortraitStream(response) {
+  await consumeSse(response.body, async (eventName, payload) => {
+    handlePortraitStreamEvent(eventName, payload);
+  });
+}
+
+async function startPortraitGeneration(event) {
+  event?.preventDefault();
+  if (state.portrait.generating || state.portrait.planning) {
+    return;
+  }
+  clearError();
+  setPortraitFeedback("");
+  if (state.portrait.files.length === 0) {
+    const message = "请先上传人物参考图。";
+    setPortraitFeedback(message, "error");
+    showError(message);
+    return;
+  }
+  if (!refs.portraitSubjectSummaryInput.value.trim()) {
+    const message = "请先填写人物描述，或上传参考图后点击分析人物。";
+    setPortraitFeedback(message, "error");
+    showError(message);
+    return;
+  }
+  state.portrait.generating = true;
+    renderPortraitView();
+  try {
+    const draftSet = isPortraitDraftSet() ? getPortraitCurrentSet() : null;
+    const createdAt = nowIso();
+    state.portrait.currentSet = normalizePortraitSetForView({
+      ...(draftSet || {}),
+      setId: `portrait-local-${Date.now()}`,
+      subjectName: refs.portraitSubjectNameInput.value.trim(),
+      subjectSummary: refs.portraitSubjectSummaryInput.value.trim(),
+      analysis: state.portrait.analysis || draftSet?.analysis || null,
+      selectedStyles: getPortraitSelectedStyles(),
+      selectedShotTypes: getPortraitSelectedShotTypes(),
+      selectedActions: getPortraitSelectedActions(),
+      customStyle: refs.portraitCustomStyleInput.value.trim(),
+      notes: refs.portraitNotesInput.value.trim(),
+      ratio: refs.portraitRatioInput.value || DEFAULT_PORTRAIT_RATIO,
+      size: refs.portraitSizeInput.value || "auto",
+      format: refs.portraitOutputFormatInput.value || "png",
+      imageCount: draftSet?.items?.length || clampPortraitImageCount(undefined, { write: false }),
+      referenceImageNames: getPortraitReferenceFileNames(),
+      createdAt: draftSet?.createdAt || createdAt,
+      updatedAt: createdAt,
+      status: "generating",
+      items: (draftSet?.items?.length ? draftSet.items : buildPortraitPreviewItems()).map((item, index) => ({
+        ...item,
+        slotIndex: index + 1,
+        status: "queued",
+      })),
+    });
+    renderPortraitView();
+    const response = await requestGenerationStream("/api/portrait/generate", {
+      body: buildPortraitFormData({ includeFiles: true }),
+      clientSessionId: state.clientSessionId,
+    });
+    await runPortraitStream(response);
+    await loadPortraitSets();
+  } catch (error) {
+    const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "写真生成请求失败");
+    setPortraitFeedback(message, "error");
+    showError(message);
+  } finally {
+    state.portrait.generating = false;
+    renderPortraitView();
+  }
+}
+
+async function loadPortraitSets() {
+  const response = await fetch("/api/portrait/sets", {
+    cache: "no-store",
+  });
+  if (response.status === 404) {
+    state.portrait.sets = [];
+    state.portrait.recordSetId = "";
+    renderPortraitView();
+    renderPortraitRecordView();
+    return;
+  }
+  if (!response.ok) {
+    throw new Error("读取写真记录失败");
+  }
+  const payload = await response.json();
+  const nextSets = Array.isArray(payload) ? payload.map(normalizePortraitSetForView).filter(Boolean) : [];
+  const currentSetId = state.portrait.currentSet?.setId || "";
+  state.portrait.sets = nextSets;
+  if (currentSetId) {
+    const matchedCurrentSet = nextSets.find((set) => set.setId === currentSetId);
+    if (matchedCurrentSet) {
+      state.portrait.currentSet = normalizePortraitSetForView(matchedCurrentSet);
+    }
+  }
+  if (state.portrait.recordSetId && !nextSets.some((set) => set.setId === state.portrait.recordSetId)) {
+    state.portrait.recordSetId = "";
+  }
+  renderPortraitView();
+  renderPortraitRecordView();
+}
+
+function refreshPortraitRecordSets() {
+  if (state.portrait.generating || state.portrait.planning || portraitRecordRefreshPromise) {
+    return;
+  }
+  portraitRecordRefreshPromise = loadPortraitSets()
+    .catch((error) => {
+      setPortraitRecordFeedback(error instanceof Error ? error.message : String(error), "error");
+    })
+    .finally(() => {
+      portraitRecordRefreshPromise = null;
+    });
+}
+
+function getPortraitRecordSearchText(set = {}) {
+  return [
+    set.subjectName,
+    set.subjectSummary,
+    formatPortraitStyleSummary(set),
+    set.customStyle,
+    set.notes,
+    ...(Array.isArray(set.referenceImageNames) ? set.referenceImageNames : []),
+    ...(Array.isArray(set.items)
+      ? set.items.flatMap((item) => [item.title, item.styleLabel, item.shotLabel, item.actionLabel, item.prompt, item.filename, item.relativePath])
+      : []),
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function filterPortraitRecordSets() {
+  const query = String(state.portrait.recordQuery || "").trim().toLowerCase();
+  if (!query) {
+    return state.portrait.sets;
+  }
+  return state.portrait.sets.filter((set) => getPortraitRecordSearchText(set).includes(query));
+}
+
+function getPortraitRecordSelectedSet() {
+  const sets = filterPortraitRecordSets();
+  return sets.find((set) => set.setId === state.portrait.recordSetId) || sets[0] || null;
+}
+
+function selectPortraitRecord(setId) {
+  const set = filterPortraitRecordSets().find((entry) => entry.setId === setId);
+  if (!set) {
+    return;
+  }
+  state.portrait.recordSetId = set.setId;
+  setPortraitRecordFeedback();
+  renderPortraitRecordView();
+}
+
+function getPortraitRecordImagePaths(set) {
+  return Array.isArray(set?.items) ? set.items.map((item) => item.relativePath).filter(Boolean) : [];
+}
+
+function buildPortraitRecordPathText(set) {
+  const paths = getPortraitRecordImagePaths(set);
+  if (!set || paths.length === 0) {
+    return "";
+  }
+  return [
+    `写真: ${set.subjectName || "未命名人物"}`,
+    `目录: ${set.relativeDir || "未记录目录"}`,
+    "图片:",
+    ...paths.map((path, index) => `${index + 1}. ${path}`),
+  ].join("\n");
+}
+
+function buildPortraitRecordPromptText(set) {
+  const items = Array.isArray(set?.items) ? set.items : [];
+  if (!set || items.length === 0) {
+    return "";
+  }
+  return [
+    `写真: ${set.subjectName || "未命名人物"}`,
+    `记录: ${set.setId || "unknown"}`,
+    `风格: ${formatPortraitStyleSummary(set)}`,
+    "",
+    ...items.flatMap((item, index) => [
+      `${index + 1}. ${item.title || item.itemId || "写真单张"}`,
+      item.prompt ? item.prompt : "",
+      "",
+    ]),
+  ].map((line) => String(line || "").trimEnd()).join("\n").trim();
+}
+
+async function openPortraitRecordFolder() {
+  const selectedSet = getPortraitRecordSelectedSet();
+  if (!selectedSet?.setId) {
+    setPortraitRecordFeedback("请先选择一组写真记录。", "error");
+    return;
+  }
+  const response = await fetch("/api/portrait/sets/open-folder", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      setId: selectedSet.setId,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.message || "打开写真文件夹失败。");
+  }
+  setPortraitRecordFeedback("已打开写真文件夹。", "success");
+}
+
+async function copyPortraitRecordPaths() {
+  const selectedSet = getPortraitRecordSelectedSet();
+  const text = buildPortraitRecordPathText(selectedSet);
+  if (!text) {
+    setPortraitRecordFeedback("当前写真还没有可复制的图片路径。", "error");
+    return;
+  }
+  await writeTextToClipboard(text, "当前浏览器不支持复制写真路径。");
+  setPortraitRecordFeedback("已复制当前写真图片路径。", "success");
+}
+
+async function copyPortraitRecordPrompts() {
+  const selectedSet = getPortraitRecordSelectedSet();
+  const text = buildPortraitRecordPromptText(selectedSet);
+  if (!text) {
+    setPortraitRecordFeedback("当前写真还没有可复制的提示词。", "error");
+    return;
+  }
+  await writeTextToClipboard(text, "当前浏览器不支持复制写真提示词。");
+  setPortraitRecordFeedback("已复制当前写真提示词。", "success");
+}
+
+function exportPortraitRecordPrompts() {
+  const selectedSet = getPortraitRecordSelectedSet();
+  const text = buildPortraitRecordPromptText(selectedSet);
+  if (!text) {
+    setPortraitRecordFeedback("当前写真还没有可导出的提示词。", "error");
+    return;
+  }
+  triggerBrowserTextDownload(text, `portrait-prompts-${selectedSet.setId || "record"}.txt`);
+  setPortraitRecordFeedback("已导出当前写真提示词。", "success");
+}
+
+function exportPortraitRecordManifest() {
+  const selectedSet = getPortraitRecordSelectedSet();
+  if (!selectedSet) {
+    setPortraitRecordFeedback("请先选择一组写真记录。", "error");
+    return;
+  }
+  triggerBrowserTextDownload(
+    `${JSON.stringify(selectedSet, null, 2)}\n`,
+    `portrait-record-${selectedSet.setId || "record"}.json`,
+    "application/json;charset=utf-8",
+  );
+  setPortraitRecordFeedback("已导出当前写真清单。", "success");
+}
+
+function reusePortraitRecordSet() {
+  const selectedSet = getPortraitRecordSelectedSet();
+  if (!selectedSet) {
+    return;
+  }
+  refs.portraitSubjectNameInput.value = selectedSet.subjectName || "";
+  refs.portraitSubjectSummaryInput.value = selectedSet.subjectSummary || "";
+  refs.portraitImageCountInput.value = String(clampPortraitImageCount(selectedSet.imageCount || selectedSet.items.length || 12));
+  refs.portraitCustomStyleInput.value = selectedSet.customStyle || "";
+  refs.portraitNotesInput.value = selectedSet.notes || "";
+  refs.portraitRatioInput.value = selectedSet.ratio || DEFAULT_PORTRAIT_RATIO;
+  renderPortraitSizeOptions();
+  refs.portraitSizeInput.value = selectedSet.size || "auto";
+  refs.portraitOutputFormatInput.value = normalizeOutputFormat(selectedSet.format || "png");
+  const selectedStyles = new Set(selectedSet.selectedStyles || []);
+  refs.portraitStyleInputs.forEach((input) => {
+    input.checked = selectedStyles.size > 0 ? selectedStyles.has(input.value) : input.value === "business-profile";
+  });
+  const selectedShotTypes = new Set(selectedSet.selectedShotTypes || []);
+  refs.portraitShotTypeInputs.forEach((input) => {
+    input.checked = selectedShotTypes.size > 0 ? selectedShotTypes.has(input.value) : true;
+  });
+  const selectedActions = new Set(selectedSet.selectedActions || []);
+  refs.portraitActionInputs.forEach((input) => {
+    input.checked = selectedActions.size > 0 ? selectedActions.has(input.value) : true;
+  });
+  revokePortraitReferenceFiles();
+  state.portrait.files = [];
+  state.portrait.accessoryFiles = [];
+  state.portrait.analysis = selectedSet.analysis || null;
+  state.portrait.currentSet = normalizePortraitSetForView(selectedSet);
+  if (refs.portraitReferenceInput) {
+    refs.portraitReferenceInput.value = "";
+  }
+  if (refs.portraitAccessoryReferenceInput) {
+    refs.portraitAccessoryReferenceInput.value = "";
+  }
+  setPortraitFeedback("已复用写真记录的人物描述和提示词；参考图需要重新上传。", "success");
+  setActiveView("portrait");
+  renderPortraitView();
+}
+
+function renderPortraitRecordSetList() {
+  if (!refs.portraitRecordSetList) {
+    return;
+  }
+  refs.portraitRecordSetList.innerHTML = "";
+  const selectedSet = getPortraitRecordSelectedSet();
+  const selectedSetId = selectedSet?.setId || "";
+  const sets = filterPortraitRecordSets().slice(0, 60);
+  if (sets.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "creation-record portrait-record";
+    empty.textContent = state.portrait.recordQuery ? "没有匹配的写真记录" : "暂无写真记录";
+    refs.portraitRecordSetList.appendChild(empty);
+    return;
+  }
+  sets.forEach((set) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "creation-record portrait-record";
+    button.dataset.portraitRecordSetId = set.setId;
+    button.classList.toggle("active", set.setId === selectedSetId);
+
+    const title = document.createElement("strong");
+    title.className = "creation-record-title";
+    title.textContent = set.subjectName || "未命名人物";
+    button.appendChild(title);
+
+    const meta = document.createElement("span");
+    meta.className = "creation-record-meta";
+    const progress = getPortraitProgressSummary(set);
+    meta.textContent = `${formatPortraitStyleSummary(set)} · ${progress.completed}/${progress.total} · ${formatClock(set.createdAt)}`;
+    button.appendChild(meta);
+    refs.portraitRecordSetList.appendChild(button);
+  });
+}
+
+function renderPortraitRecordArchiveDetail(set) {
+  if (!refs.portraitRecordArchiveDetail) {
+    return;
+  }
+  refs.portraitRecordArchiveDetail.innerHTML = "";
+  const archive = refs.portraitRecordArchiveDetail.closest(".portrait-record-archive");
+  archive?.classList.toggle("is-empty", !set);
+  if (!set) {
+    const empty = document.createElement("span");
+    empty.textContent = "还没有写真记录。";
+    refs.portraitRecordArchiveDetail.appendChild(empty);
+    return;
+  }
+  const progress = getPortraitProgressSummary(set);
+  const detailItems = [
+    ["人物", set.subjectName || "未命名人物"],
+    ["风格", formatPortraitStyleSummary(set)],
+    ["进度", `${progress.completed}/${progress.total}`],
+    ["比例", set.ratio || DEFAULT_PORTRAIT_RATIO],
+    ["目录", set.relativeDir || ""],
+    ["创建时间", formatClock(set.createdAt)],
+    ["参考图", set.referenceImageNames.length > 0 ? set.referenceImageNames.join("、") : "未记录"],
+  ];
+  detailItems.filter(([, value]) => value).forEach(([label, value]) => {
+    const item = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = `${label}: `;
+    item.appendChild(strong);
+    item.append(document.createTextNode(value));
+    refs.portraitRecordArchiveDetail.appendChild(item);
+  });
+}
+
+function renderPortraitRecordView() {
+  const filteredSets = filterPortraitRecordSets();
+  const selectedSet = getPortraitRecordSelectedSet();
+  if (refs.portraitRecordSearchInput && refs.portraitRecordSearchInput.value !== state.portrait.recordQuery) {
+    refs.portraitRecordSearchInput.value = state.portrait.recordQuery;
+  }
+  if (refs.portraitRecordCount) {
+    refs.portraitRecordCount.textContent = state.portrait.recordQuery
+      ? `${filteredSets.length} / ${state.portrait.sets.length} 组`
+      : `${state.portrait.sets.length} 组`;
+  }
+  if (refs.portraitRecordReuseButton) refs.portraitRecordReuseButton.disabled = !selectedSet;
+  if (refs.portraitRecordOpenFolderButton) refs.portraitRecordOpenFolderButton.disabled = !selectedSet?.relativeDir;
+  if (refs.portraitRecordCopyPathsButton) refs.portraitRecordCopyPathsButton.disabled = getPortraitRecordImagePaths(selectedSet).length === 0;
+  if (refs.portraitRecordCopyPromptsButton) refs.portraitRecordCopyPromptsButton.disabled = !buildPortraitRecordPromptText(selectedSet);
+  if (refs.portraitRecordExportPromptsButton) refs.portraitRecordExportPromptsButton.disabled = !buildPortraitRecordPromptText(selectedSet);
+  if (refs.portraitRecordExportManifestButton) refs.portraitRecordExportManifestButton.disabled = !selectedSet;
+
+  renderPortraitRecordSetList();
+  state.portrait.recordSetId = selectedSet?.setId || "";
+  renderPortraitRecordArchiveDetail(selectedSet);
+
+  if (!refs.portraitRecordResultGrid) {
+    return;
+  }
+  refs.portraitRecordResultGrid.innerHTML = "";
+  refs.portraitRecordResultGrid.classList.toggle("hidden", !selectedSet);
+  if (!selectedSet) {
+    return;
+  }
+  selectedSet.items.forEach((item, index) => {
+    refs.portraitRecordResultGrid.appendChild(createPortraitCard(item, index, { showActions: false, showRecordActions: true }));
+  });
+}
+
+function getPortraitRecordItemById(itemId, setId = "") {
+  const selectedSet = setId
+    ? state.portrait.sets.find((set) => set.setId === setId) || null
+    : getPortraitRecordSelectedSet();
+  if (!selectedSet || !itemId) {
+    return null;
+  }
+  const item = selectedSet.items.find((entry) => entry.itemId === itemId) || null;
+  return item ? { item, set: selectedSet } : null;
+}
+
+function buildPortraitRecordLightboxItem(item, set) {
+  const relativeFilename = String(item.relativePath || "").split(/[\\/]/).filter(Boolean).pop() || "";
+  return {
+    ...item,
+    id: `portrait-record:${set.setId}:${item.itemId || item.filename || relativeFilename}`,
+    portraitItemId: item.itemId || "",
+    portraitSetId: set.setId || "",
+    filename: item.filename || relativeFilename || "portrait-item.png",
+    createdAt: item.generationCompletedAt || set.updatedAt || set.createdAt || nowIso(),
+    prompt: item.prompt || "",
+    imageModel: item.imageModel || "gpt-image-2",
+    isPortraitRecordItem: true,
+  };
+}
+
+function openPortraitRecordItemPreview(itemId) {
+  const record = getPortraitRecordItemById(itemId);
+  if (!record?.item || !getImageUrl(record.item)) {
+    setPortraitRecordFeedback("当前单张还没有可查看的大图。", "error");
+    return;
+  }
+  openLightbox(buildPortraitRecordLightboxItem(record.item, record.set));
 }
 
 async function loadPptDecks() {
@@ -11152,16 +12870,7 @@ function createPptDeckRecordItem(deck) {
   previewButton.textContent = "预览";
   actions.appendChild(previewButton);
 
-  const link = document.createElement("a");
-  link.className = "toolbar-button";
-  link.href = deck.pptxUrl || "#";
-  link.download = deck.pptxFilename || "";
-  link.textContent = "下载 PPTX";
-  if (!deck.pptxUrl) {
-    link.classList.add("disabled");
-    link.setAttribute("aria-disabled", "true");
-  }
-  actions.appendChild(link);
+  appendPptDeckDownloadLinks(actions, deck);
   item.appendChild(actions);
 
   return item;
@@ -11221,16 +12930,7 @@ function renderPptRecordDetail(deck) {
   backButton.textContent = "返回记录";
   actions.appendChild(backButton);
 
-  const link = document.createElement("a");
-  link.className = "toolbar-button";
-  link.href = deck.pptxUrl || "#";
-  link.download = deck.pptxFilename || "";
-  link.textContent = "下载 PPTX";
-  if (!deck.pptxUrl) {
-    link.classList.add("disabled");
-    link.setAttribute("aria-disabled", "true");
-  }
-  actions.appendChild(link);
+  appendPptDeckDownloadLinks(actions, deck);
   header.appendChild(actions);
   refs.pptRecordDetail.appendChild(header);
 
@@ -11302,6 +13002,7 @@ function renderPptRecordView() {
 function renderPptView() {
   setPptSourceMode(state.ppt.sourceMode);
   renderPptFiles();
+  pptAnalysis.render();
 
   const stats = getPptCompletionStats();
   const missing = getPptMissingSlideNumbers();
@@ -11317,6 +13018,9 @@ function renderPptView() {
   refs.pptDownloadLink.href = state.ppt.pptxUrl || "#";
   refs.pptDownloadLink.classList.toggle("disabled", !state.ppt.pptxUrl);
   refs.pptDownloadLink.setAttribute("aria-disabled", String(!state.ppt.pptxUrl));
+  refs.pptEditableDownloadLink.href = state.ppt.editablePptxUrl || "#";
+  refs.pptEditableDownloadLink.classList.toggle("disabled", !state.ppt.editablePptxUrl);
+  refs.pptEditableDownloadLink.setAttribute("aria-disabled", String(!state.ppt.editablePptxUrl));
 
   if (state.ppt.outline) {
     refs.pptOutlineBox.textContent = `${state.ppt.outline.title} · ${state.ppt.outline.slides.length} 页`;
@@ -12782,6 +14486,151 @@ function bindEvents() {
       return;
     }
   });
+  refs.portraitForm.addEventListener("submit", startPortraitGeneration);
+  refs.portraitPlanButton.addEventListener("click", () => {
+    previewPortraitPlan().catch((error) => setPortraitFeedback(error.message, "error"));
+  });
+  refs.portraitReferenceAnalyzeButton.addEventListener("click", () => {
+    analyzePortraitReference().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      setPortraitFeedback(message, "error");
+      showError(message);
+    });
+  });
+  refs.portraitApplyAnalysisButton.addEventListener("click", applyPortraitAnalysis);
+  refs.portraitAnalysisToggleButton.addEventListener("click", togglePortraitAnalysisPanel);
+  refs.portraitReferenceInput.addEventListener("change", (event) => {
+    applyPortraitReferenceFiles(event.target.files);
+  });
+  refs.portraitAccessoryReferenceInput.addEventListener("change", (event) => {
+    applyPortraitAccessoryReferenceFiles(event.target.files);
+  });
+  refs.portraitReferenceDropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    refs.portraitReferenceDropzone.classList.add("dragover");
+  });
+  refs.portraitReferenceDropzone.addEventListener("dragleave", () => {
+    refs.portraitReferenceDropzone.classList.remove("dragover");
+  });
+  refs.portraitReferenceDropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    refs.portraitReferenceDropzone.classList.remove("dragover");
+    applyPortraitReferenceFiles(event.dataTransfer?.files);
+  });
+  refs.portraitAccessoryReferenceDropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    refs.portraitAccessoryReferenceDropzone.classList.add("dragover");
+  });
+  refs.portraitAccessoryReferenceDropzone.addEventListener("dragleave", () => {
+    refs.portraitAccessoryReferenceDropzone.classList.remove("dragover");
+  });
+  refs.portraitAccessoryReferenceDropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    refs.portraitAccessoryReferenceDropzone.classList.remove("dragover");
+    applyPortraitAccessoryReferenceFiles(event.dataTransfer?.files);
+  });
+  refs.portraitReferenceGrid.addEventListener("click", (event) => {
+    const removeButton = event.target.closest("[data-portrait-reference-remove-id]");
+    if (removeButton) {
+      removePortraitReferenceFile(removeButton.dataset.portraitReferenceRemoveId);
+    }
+  });
+  refs.portraitAccessoryReferenceGrid.addEventListener("click", (event) => {
+    const removeButton = event.target.closest("[data-portrait-accessory-reference-remove-id]");
+    if (removeButton) {
+      removePortraitAccessoryReferenceFile(removeButton.dataset.portraitAccessoryReferenceRemoveId);
+    }
+  });
+  refs.portraitAccessoryAssetButton?.addEventListener("click", () => {
+    const isOpen =
+      refs.portraitAccessoryAssetPopover &&
+      !refs.portraitAccessoryAssetPopover.classList.contains("hidden");
+    setPortraitAccessoryAssetPopoverOpen(!isOpen);
+  });
+  refs.portraitAccessoryAssetCloseButton?.addEventListener("click", () => {
+    setPortraitAccessoryAssetPopoverOpen(false);
+  });
+  refs.portraitAccessoryAssetTabs?.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target.closest("[data-portrait-accessory-asset-category]") : null;
+    if (!target) return;
+    state.portrait.accessoryAssetCategory = target.dataset.portraitAccessoryAssetCategory;
+    renderPortraitAccessoryAssetLibrary();
+  });
+  refs.portraitAccessoryAssetList?.addEventListener("click", (event) => {
+    const colorTarget = event.target instanceof Element ? event.target.closest("[data-portrait-accessory-color-id]") : null;
+    if (colorTarget) {
+      const assetId = colorTarget.dataset.portraitAccessoryAssetId || "";
+      state.portrait.accessoryAssetColors[assetId] = colorTarget.dataset.portraitAccessoryColorId || "";
+      renderPortraitAccessoryAssetLibrary();
+      return;
+    }
+    const target = event.target instanceof Element ? event.target.closest("[data-portrait-accessory-asset-id]") : null;
+    if (!target) return;
+    addPortraitAccessoryAssetReference(target.dataset.portraitAccessoryAssetId);
+  });
+  refs.portraitImageCountInput.addEventListener("input", () => {
+    clampPortraitImageCount();
+    renderPortraitView();
+  });
+  refs.portraitImageCountInput.addEventListener("change", () => {
+    clampPortraitImageCount();
+    renderPortraitView();
+  });
+  refs.portraitStyleInputs.forEach((input) => {
+    input.addEventListener("change", renderPortraitView);
+  });
+  refs.portraitShotTypeInputs.forEach((input) => {
+    input.addEventListener("change", renderPortraitView);
+  });
+  refs.portraitActionInputs.forEach((input) => {
+    input.addEventListener("change", renderPortraitView);
+  });
+  refs.portraitRatioInput.addEventListener("change", (event) => {
+    syncPortraitRatio(event.target.value);
+  });
+  refs.portraitSizeInput.addEventListener("change", (event) => {
+    syncPortraitSize(event.target.value);
+  });
+  refs.portraitRecordRefreshButton.addEventListener("click", refreshPortraitRecordSets);
+  refs.portraitRecordReuseButton.addEventListener("click", reusePortraitRecordSet);
+  refs.portraitRecordOpenFolderButton.addEventListener("click", () => {
+    openPortraitRecordFolder().catch((error) => setPortraitRecordFeedback(error.message, "error"));
+  });
+  refs.portraitRecordCopyPathsButton.addEventListener("click", () => {
+    copyPortraitRecordPaths().catch((error) => setPortraitRecordFeedback(error.message, "error"));
+  });
+  refs.portraitRecordCopyPromptsButton.addEventListener("click", () => {
+    copyPortraitRecordPrompts().catch((error) => setPortraitRecordFeedback(error.message, "error"));
+  });
+  refs.portraitRecordExportPromptsButton.addEventListener("click", exportPortraitRecordPrompts);
+  refs.portraitRecordExportManifestButton.addEventListener("click", exportPortraitRecordManifest);
+  refs.portraitRecordSearchInput.addEventListener("input", (event) => {
+    state.portrait.recordQuery = event.target.value;
+    renderPortraitRecordView();
+  });
+  refs.portraitRecordSetList.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-portrait-record-set-id]");
+    if (!target) {
+      return;
+    }
+    selectPortraitRecord(target.dataset.portraitRecordSetId);
+  });
+  refs.portraitRecordResultGrid.addEventListener("click", (event) => {
+    const previewButton = event.target.closest("[data-portrait-record-preview-item-id]");
+    if (previewButton) {
+      openPortraitRecordItemPreview(previewButton.dataset.portraitRecordPreviewItemId);
+      return;
+    }
+
+    const copyPromptButton = event.target.closest("[data-portrait-record-copy-prompt-item-id]");
+    if (copyPromptButton) {
+      const selectedSet = getPortraitRecordSelectedSet();
+      const item = selectedSet?.items?.find((entry) => entry.itemId === copyPromptButton.dataset.portraitRecordCopyPromptItemId);
+      writeTextToClipboard(item?.prompt || "", "当前浏览器不支持复制写真提示词。").catch((error) =>
+        setPortraitRecordFeedback(error.message, "error"),
+      );
+    }
+  });
   refs.creationPromptEditorLayer.addEventListener("click", (event) => {
     const closeButton = event.target.closest("[data-creation-close-prompt-editor]");
     if (closeButton) {
@@ -12888,23 +14737,11 @@ function bindEvents() {
       }
     });
   });
-  refs.creationReferenceInput.addEventListener("change", (event) => {
-    applyCreationReferenceFiles(event.target.files);
-  });
-  refs.creationLogoBatchSourceInput.addEventListener("change", (event) => {
-    applyCreationLogoBatchSourceFiles(event.target.files);
-  });
-  refs.creationLogoInput.addEventListener("change", (event) => {
-    applyCreationLogoFile(event.target.files);
-  });
-  refs.creationLogoPlacementInput.addEventListener("change", () => {
-    state.creationLogo.placement = normalizeCreationLogoPlacement(refs.creationLogoPlacementInput.value);
-    renderCreationView();
-  });
-  refs.creationLogoBackgroundInput.addEventListener("change", () => {
-    state.creationLogo.background = normalizeCreationLogoBackground(refs.creationLogoBackgroundInput.value);
-    renderCreationView();
-  });
+  refs.creationReferenceInput.addEventListener("change", (event) => applyCreationReferenceFiles(event.target.files));
+  refs.creationLogoBatchSourceInput.addEventListener("change", (event) => applyCreationLogoBatchSourceFiles(event.target.files));
+  refs.creationLogoInput.addEventListener("change", (event) => applyCreationLogoFile(event.target.files));
+  refs.creationLogoPlacementInput.addEventListener("change", () => { state.creationLogo.placement = normalizeCreationLogoPlacement(refs.creationLogoPlacementInput.value); renderCreationView(); });
+  refs.creationLogoBackgroundInput.addEventListener("change", () => { state.creationLogo.background = normalizeCreationLogoBackground(refs.creationLogoBackgroundInput.value); renderCreationView(); });
   refs.creationLogoRemoveButton.addEventListener("click", removeCreationLogoFile);
   refs.creationReferenceAnalyzeButton.addEventListener("click", () => {
     analyzeCreationReferenceImages().catch((error) => {
@@ -12973,6 +14810,7 @@ function bindEvents() {
     applyCreationLogoFile(event.dataTransfer?.files);
   });
   refs.pptForm.addEventListener("submit", startPptGeneration);
+  pptAnalysis.bind();
   refs.pptCompleteMissingButton.addEventListener("click", completeMissingPptSlides);
   refs.pptRecordRefreshButton.addEventListener("click", () => {
     loadPptDecks().catch((error) => showError(error.message));
@@ -13431,6 +15269,14 @@ function bindEvents() {
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
+      if (
+        refs.portraitAccessoryAssetPopover &&
+        !refs.portraitAccessoryAssetPopover.classList.contains("hidden")
+      ) {
+        setPortraitAccessoryAssetPopoverOpen(false);
+        return;
+      }
+
       if (!refs.promptTemplatePopover.classList.contains("hidden")) {
         setPromptTemplatePopoverOpen(false);
         return;
@@ -13467,6 +15313,20 @@ function bindEvents() {
       if (!refs.creationIndustryTemplateBrowser.contains(event.target)) {
         setCreationIndustryTemplateBrowserOpen(false);
       }
+    }
+
+    if (
+      refs.portraitAccessoryAssetPopover &&
+      !refs.portraitAccessoryAssetPopover.classList.contains("hidden")
+    ) {
+      if (
+        refs.portraitAccessoryAssetPopover.contains(event.target) ||
+        refs.portraitAccessoryAssetButton?.contains(event.target)
+      ) {
+        return;
+      }
+
+      setPortraitAccessoryAssetPopoverOpen(false);
     }
 
     if (refs.promptTemplatePopover.classList.contains("hidden")) {

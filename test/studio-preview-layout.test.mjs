@@ -10,6 +10,15 @@ const workerPath = new URL("../cloudflare-pages-worker.mjs", import.meta.url);
 const browserConfigPath = new URL("../lib/browser-config.mjs", import.meta.url);
 const browserImageCachePath = new URL("../lib/browser-image-cache.mjs", import.meta.url);
 const generationClientPath = new URL("../lib/generation-client.mjs", import.meta.url);
+const pptAnalysisClientPath = new URL("../lib/ppt-analysis-client.mjs", import.meta.url);
+const assetVersion = "20260523-portrait-cosplay-color-assets-1";
+
+test("static assets use the current cache-busting version", async () => {
+  const html = await readFile(indexPath, "utf8");
+
+  assert.match(html, new RegExp(`\\.\\/styles\\.css\\?v=${assetVersion}`));
+  assert.match(html, new RegExp(`\\.\\/app\\.js\\?v=${assetVersion}`));
+});
 
 function readCssRule(styles, selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -53,17 +62,56 @@ test("preview image uses contain sizing to fill the available canvas without cli
   assert.match(app, /refs\.previewImage\.style\.transform = `scale\(\$\{state\.zoom\}\)`;/);
 });
 
+test("preview image keeps the mounted frame visible when render refreshes the same source", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /const currentPreviewImageSrc = refs\.previewImage\.getAttribute\("src"\) \|\| "";/);
+  assert.match(app, /const shouldUpdatePreviewImage = currentPreviewImageSrc !== imageUrl;/);
+  assert.match(app, /if \(shouldUpdatePreviewImage && !currentPreviewImageSrc\) \{[\s\S]*refs\.previewImage\.classList\.remove\("is-visible"\);[\s\S]*\}/);
+  assert.match(app, /if \(shouldUpdatePreviewImage\) \{[\s\S]*refs\.previewImage\.src = imageUrl;[\s\S]*\} else \{[\s\S]*refs\.previewImage\.classList\.add\("is-visible"\);[\s\S]*\}/);
+  assert.doesNotMatch(
+    app,
+    /refs\.previewImage\.classList\.remove\("is-visible"\);\s*refs\.previewImage\.classList\.add\("is-mounted"\);[\s\S]*refs\.previewImage\.src = imageUrl;/,
+  );
+});
+
 test("lightbox detail image can be clicked to magnify inside the detail view", async () => {
+  const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
+  assert.match(
+    html,
+    /<div class="lightbox-media-stage">[\s\S]*<div class="lightbox-image-shell">[\s\S]*<\/div>\s*<div class="lightbox-fields">[\s\S]*id="lightboxPrompt"[\s\S]*id="lightboxParams"[\s\S]*<\/div>\s*<\/div>/,
+  );
   assert.match(styles, /#lightboxImage\s*\{[\s\S]*object-fit:\s*contain;[\s\S]*cursor:\s*zoom-in;/);
+  assert.match(
+    styles,
+    /\.lightbox-dialog\s*\{[\s\S]*width:\s*min\(1440px,\s*calc\(100vw - 32px\)\);[\s\S]*max-height:\s*calc\(100svh - 24px\);/,
+  );
+  assert.match(
+    styles,
+    /\.lightbox-media-stage\s*\{[\s\S]*min-height:\s*min\(74svh,\s*calc\(100svh - 188px\)\);[\s\S]*grid-template-columns:\s*clamp\(280px,\s*18vw,\s*340px\)\s+minmax\(0,\s*1fr\)\s+clamp\(280px,\s*18vw,\s*340px\);/,
+  );
+  assert.match(styles, /\.lightbox-media-stage\s*\{[\s\S]*gap:\s*clamp\(18px,\s*1\.7vw,\s*28px\);[\s\S]*padding:\s*0;/);
+  assert.match(styles, /#lightboxImage\s*\{[\s\S]*max-height:\s*min\(78svh,\s*calc\(100svh - 178px\)\);/);
   assert.match(styles, /\.lightbox-media-stage\s*\{[^}]*overflow:\s*hidden;/);
   assert.match(styles, /\.lightbox-media-stage\.is-zoomed\s*\{[^}]*overflow:\s*auto;/);
+  assert.match(styles, /\.lightbox-fields\s*\{[\s\S]*display:\s*contents;/);
+  assert.match(styles, /\.lightbox-image-shell\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1;/);
+  assert.match(styles, /\.lightbox-fields \.detail-field\s*\{[\s\S]*grid-row:\s*1;[\s\S]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);/);
+  assert.match(styles, /\.lightbox-fields \.detail-field-head,[\s\S]*\.lightbox-fields \.detail-field > span\s*\{[\s\S]*min-height:\s*44px;/);
+  assert.match(styles, /\.lightbox-fields \.detail-field:first-child\s*\{[\s\S]*grid-column:\s*1;/);
+  assert.match(styles, /\.lightbox-fields \.detail-field:last-child\s*\{[\s\S]*grid-column:\s*3;/);
+  assert.match(styles, /\.lightbox-fields \.detail-field textarea\s*\{[\s\S]*min-height:\s*0;[\s\S]*max-height:\s*none;/);
   assert.match(styles, /#lightboxImage\.is-zoomed\s*\{[\s\S]*cursor:\s*zoom-out;/);
   assert.match(
     styles,
     /html\[data-ui-layout="tablet"\]\s+\.lightbox-fields,\s*[\r\n]+\s*html\[data-ui-layout="mobile"\]\s+\.lightbox-fields\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\);/,
+  );
+  assert.match(
+    styles,
+    /html\[data-ui-layout="tablet"\]\s+\.lightbox-image-shell,[\s\S]*html\[data-ui-layout="mobile"\]\s+\.lightbox-fields \.detail-field\s*\{[\s\S]*grid-column:\s*1;[\s\S]*grid-row:\s*auto;/,
   );
   assert.match(app, /refs\.lightboxImage\.addEventListener\("click",[\s\S]*state\.lightboxZoomed = !state\.lightboxZoomed;/);
   assert.match(app, /refs\.lightboxImage\.classList\.toggle\("is-zoomed",\s*state\.lightboxZoomed\)/);
@@ -104,6 +152,17 @@ test("filmstrip thumbnails stay square, fill the available rail, and keep labels
   assert.match(app, /function formatFilmstripSizeLabel\(item\) \{[\s\S]*return formatCompactSizeLabel\(item\?\.size\);/);
   assert.match(app, /label: formatFilmstripSizeLabel\(job\) \|\| job\.statusText \|\| formatClock\(job\.createdAt\)/);
   assert.match(app, /label: formatFilmstripSizeLabel\(item\) \|\| formatClock\(item\.createdAt\)/);
+});
+
+test("filmstrip rendering reuses keyed thumbnail nodes instead of clearing the rail", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /shell\.dataset\.filmstripKey = key;/);
+  assert.match(app, /refs\.filmstrip\.querySelectorAll\("\.filmstrip-entry\[data-filmstrip-key\]"\)/);
+  assert.match(app, /const fragment = document\.createDocumentFragment\(\);/);
+  assert.match(app, /refs\.filmstrip\.replaceChildren\(fragment\);/);
+  assert.match(app, /if \(image\.getAttribute\("src"\) !== imageUrl\) \{[\s\S]*image\.src = imageUrl;[\s\S]*\}/);
+  assert.doesNotMatch(app, /refs\.filmstrip\.innerHTML = "";/);
 });
 
 test("generation activity moves into settings while studio workspace reflows to two columns", async () => {
@@ -154,10 +213,8 @@ test("live feed shows a floating unread indicator without forcing scroll to newe
 });
 
 test("live feed keeps existing task order stable while activity text changes", async () => {
-  const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
-  assert.match(html, /\.\/app\.js\?v=20260517-view-modules-1/);
   assert.match(app, /upsertGenerationActivityEntry/);
   assert.match(app, /orderAt:\s*String\(entry\?\.orderAt \|\| entry\?\.at \|\| ""\)/);
   assert.match(app, /state\.activityFeed = upsertGenerationActivityEntry\(state\.activityFeed,/);
@@ -170,13 +227,32 @@ test("scrollable surfaces use subtle themed scrollbars instead of default browse
   assert.match(styles, /--scrollbar-size:\s*10px;/);
   assert.match(
     styles,
-    /\.settings-form,[\s\S]*\.lightbox-dialog,[\s\S]*\.article-illustration-form,[\s\S]*\.article-board-sections,[\s\S]*textarea\s*\{[\s\S]*scrollbar-width:\s*thin;[\s\S]*scrollbar-color:\s*var\(--scrollbar-thumb-color,\s*rgba\(132,\s*147,\s*255,\s*0\.42\)\)\s*var\(--scrollbar-track-color,\s*rgba\(255,\s*255,\s*255,\s*0\.06\)\);/,
+    /\.settings-form,[\s\S]*\.creation-form,[\s\S]*\.creation-result-grid,[\s\S]*\.portrait-form,[\s\S]*\.portrait-result-grid,[\s\S]*\.ppt-form,[\s\S]*\.ppt-slide-list,[\s\S]*\.image-decomposition-form,[\s\S]*textarea\s*\{[\s\S]*scrollbar-width:\s*thin;[\s\S]*scrollbar-color:\s*var\(--scrollbar-thumb-color,\s*rgba\(132,\s*147,\s*255,\s*0\.42\)\)\s*var\(--scrollbar-track-color,\s*rgba\(255,\s*255,\s*255,\s*0\.06\)\);/,
   );
   assert.match(
     styles,
-    /\.settings-form::-webkit-scrollbar,[\s\S]*\.lightbox-dialog::-webkit-scrollbar,[\s\S]*\.article-illustration-form::-webkit-scrollbar,[\s\S]*\.article-board-sections::-webkit-scrollbar,[\s\S]*textarea::-webkit-scrollbar\s*\{[\s\S]*width:\s*var\(--scrollbar-size,\s*10px\);[\s\S]*height:\s*var\(--scrollbar-size,\s*10px\);/,
+    /\.settings-form::-webkit-scrollbar,[\s\S]*\.creation-form::-webkit-scrollbar,[\s\S]*\.creation-result-grid::-webkit-scrollbar,[\s\S]*\.portrait-form::-webkit-scrollbar,[\s\S]*\.portrait-result-grid::-webkit-scrollbar,[\s\S]*\.ppt-form::-webkit-scrollbar,[\s\S]*\.ppt-slide-list::-webkit-scrollbar,[\s\S]*\.image-decomposition-form::-webkit-scrollbar,[\s\S]*textarea::-webkit-scrollbar\s*\{[\s\S]*width:\s*var\(--scrollbar-size,\s*10px\);[\s\S]*height:\s*var\(--scrollbar-size,\s*10px\);/,
   );
   assert.match(styles, /\.settings-form::-webkit-scrollbar-thumb,[\s\S]*background:\s*linear-gradient\(180deg,\s*rgba\(156,\s*170,\s*255,\s*0\.58\),\s*rgba\(111,\s*124,\s*255,\s*0\.34\)\);/);
+});
+
+test("creation workbench layouts inherit the prompt studio column split", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+
+  [".creation-workspace", ".article-illustration-workspace", ".portrait-workspace", ".ppt-workspace"].forEach((selector) => {
+    const rule = readCssRuleContaining(styles, selector, "display: grid");
+    assert.match(
+      rule,
+      /grid-template-columns:\s*var\(--studio-grid-left,\s*392px\)\s*minmax\(0,\s*1fr\);/,
+      `${selector} should use the same left/right split as .studio-grid`,
+    );
+    assert.match(rule, /gap:\s*var\(--studio-grid-gap,\s*14px\);/);
+  });
+
+  assert.match(
+    styles,
+    /html\[data-ui-layout="narrow-desktop"\] \.studio-grid,[\s\S]*html\[data-ui-layout="narrow-desktop"\] \.creation-workspace,[\s\S]*html\[data-ui-layout="narrow-desktop"\] \.article-illustration-workspace,[\s\S]*html\[data-ui-layout="narrow-desktop"\] \.portrait-workspace,[\s\S]*html\[data-ui-layout="narrow-desktop"\] \.ppt-workspace\s*\{[\s\S]*grid-template-columns:\s*360px\s*minmax\(0,\s*1fr\);/,
+  );
 });
 
 test("config drawer opens with a wider panel for form editing", async () => {
@@ -409,7 +485,8 @@ test("style transfer mode keeps the shared studio height sync and mode styling h
   assert.match(app, /if \(refs\.studioView\) \{[\s\S]*refs\.studioView\.dataset\.studioMode = nextMode;[\s\S]*\}/);
   assert.match(app, /const isStudioLikeView =[\s\S]*state\.activeView === "studio" \|\| state\.activeView === "style-transfer" \|\| state\.activeView === "image-decomposition";/);
   assert.match(app, /if \(STACKED_STUDIO_LAYOUT_MODES\.has\(getCurrentStudioLayoutMode\(\)\) \|\| !isStudioLikeView\) \{/);
-  assert.match(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.studio-grid \{/);
+  assert.doesNotMatch(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.studio-grid\s*\{[\s\S]*--studio-grid-left:/);
+  assert.doesNotMatch(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.studio-grid\s*\{[\s\S]*--studio-grid-gap:/);
   assert.match(styles, /\.studio-view\[data-studio-mode="style-transfer"\] \.style-transfer-upload-grid \{/);
 });
 
@@ -960,6 +1037,8 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(styles, /\.reference-analysis-panel\s*\{/);
   assert.match(styles, /\.reference-analysis-card\s*\{/);
   assert.match(styles, /\.reference-analysis-card p\s*\{[\s\S]*font-size:\s*var\(--type-body-size\);/);
+  assert.match(styles, /\.reference-analysis-apply-pill\s*\{[\s\S]*border-radius:\s*999px;[\s\S]*background:\s*linear-gradient\(135deg, rgba\(112, 226, 162, 0\.96\), rgba\(145, 159, 255, 0\.9\)\);/);
+  assert.match(styles, /\.reference-analysis-apply-pill\.is-selected\s*\{/);
   assert.match(styles, /\.reference-analysis-selected\s*\{/);
   assert.match(styles, /\.reference-analysis-selected\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\);/);
   assert.match(styles, /\.reference-analysis-selected textarea\s*\{[\s\S]*grid-column:\s*1 \/ -1;[\s\S]*width:\s*100%;/);
@@ -1058,6 +1137,9 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(app, /refs\.referenceAnalysisAutoCollapseButton\.setAttribute\("aria-checked", String\(state\.referenceAnalysis\.autoCollapseOnApply\)\);/);
   assert.match(app, /refs\.referenceAnalysisToggleButton\.textContent = state\.referenceAnalysis\.collapsed \? "展开提示词" : "折叠提示词";/);
   assert.match(app, /roleGroup\.className = "reference-analysis-roles";/);
+  assert.match(app, /button\.className = "inline-button reference-analysis-apply-pill";/);
+  assert.match(app, /button\.classList\.toggle\("is-selected", isSelected\);/);
+  assert.match(app, /button\.textContent = isSelected \? "已应用" : "应用提示词";/);
   assert.match(app, /async function buildReferenceAnalysisFormData\(\) \{/);
   assert.match(app, /formData\.set\("mode", "reference-orchestration"\);/);
   assert.match(app, /state\.referenceAnalysis\.files\.map\(\(item\) => preparePromptAnalysisImageFile\(item\.file\)\)/);
@@ -1187,7 +1269,6 @@ test("mobile and Pad studio layout uses dedicated compact workbench layouts", as
   assert.match(html, /dataset\.uiLayout = "mobile";[\s\S]*dataset\.uiLayout = "tablet";/);
   assert.match(html, /devicePixelRatio[\s\S]*isPhonePhysicalSize[\s\S]*isTabletPhysicalSize[\s\S]*physicalTouchWidth/);
   assert.match(html, /const viewportWidth = outerWidth > innerWidth \? outerWidth : innerWidth;/);
-  assert.match(html, /\.\/styles\.css\?v=20260519-topbar-reveal-2/);
   assert.doesNotMatch(referenceAdaptiveSection, /\sopen(?:\s|>)/);
   assert.doesNotMatch(parameterAdaptiveSection, /\sopen(?:\s|>)/);
   assert.match(styles, /html,\s*[\r\n]+body\s*\{[\s\S]*overflow-x:\s*clip;/);
@@ -1277,11 +1358,9 @@ test("studio stores API settings in the browser and sends them with cloud genera
 });
 
 test("studio caches generated browser images for persistent preview and download", async () => {
-  const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
   const browserImageCache = await readFile(browserImageCachePath, "utf8");
 
-  assert.match(html, /\/app\.js\?v=20260517-view-modules-1/);
   assert.match(app, /from "\/lib\/browser-image-cache\.mjs";/);
   assert.match(browserImageCache, /export const BROWSER_IMAGE_CACHE_INDEX_KEY = "image-studio-browser-image-cache-index-v1";/);
   assert.match(browserImageCache, /export function openBrowserImageCacheDB\(\) \{/);
@@ -1440,6 +1519,7 @@ test("PPT view exposes source options, page count, progress, retry and PPTX down
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
+  const pptAnalysisClient = await readFile(pptAnalysisClientPath, "utf8");
 
   assert.doesNotMatch(html, /data-view-tab="ppt"/);
   assert.match(html, /data-nav-section="create"[\s\S]*href="#ppt"[\s\S]*PPT生成/);
@@ -1450,6 +1530,8 @@ test("PPT view exposes source options, page count, progress, retry and PPTX down
   assert.match(html, /id="pptSourceInput"[\s\S]*sourceFiles/);
   assert.match(html, /id="pptSourceTextInput"[\s\S]*sourceText/);
   assert.match(html, /id="pptTopicInput"[\s\S]*topic/);
+  assert.match(html, /id="pptAnalyzeButton"[\s\S]*分析文档/);
+  assert.match(html, /id="pptAnalysisPanel"/);
   assert.match(html, /id="pptPageCountInput"[\s\S]*pageCount/);
   assert.match(html, /id="pptCompletionRatio"/);
   assert.match(html, /id="pptCompleteMissingButton"[\s\S]*补齐缺页/);
@@ -1457,12 +1539,19 @@ test("PPT view exposes source options, page count, progress, retry and PPTX down
   assert.doesNotMatch(html, /id="pptDeckCount"|class="studio-panel ppt-history-panel"|id="pptRefreshHistoryButton"|id="pptHistoryEmpty"|id="pptHistoryList"|历史演示/);
 
   assert.match(styles, /\.ppt-workspace\s*\{/);
+  assert.match(styles, /\.ppt-analysis-card\s*\{/);
   assert.match(styles, /\.ppt-source-options\s*\{/);
   assert.match(styles, /\.ppt-output-actions\s*\{/);
   assert.match(styles, /\.ppt-slide-retry-button\s*\{/);
   assert.doesNotMatch(styles, /\.ppt-history-panel|\.ppt-history-list|\.ppt-history-item|\.ppt-history-actions/);
 
   assert.match(app, /ppt:\s*\{/);
+  assert.match(app, /createPptAnalysisController/);
+  assert.match(app, /pptAnalysis\.render\(\)/);
+  assert.match(app, /pptAnalysis\.bind\(\)/);
+  assert.match(pptAnalysisClient, /fetch\("\/api\/ppt\/analyze"/);
+  assert.match(pptAnalysisClient, /refs\.pageCountInput\.value = String\(recommendedPageCount\)/);
+  assert.match(pptAnalysisClient, /refs\.stylePresetInput\.value = recommendedStylePreset/);
   assert.match(app, /fetch\("\/api\/ppt\/generate"/);
   assert.match(app, /fetch\("\/api\/ppt\/complete"/);
   assert.match(app, /function getPptCompletionStats\(\)/);
@@ -1539,6 +1628,10 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(html, /id="creationReferenceAnalysisFeedback"/);
   assert.match(html, /id="creationReferenceAnalysisPanel"/);
   assert.match(html, /id="creationReferenceAnalysisList"/);
+  assert.doesNotMatch(app, /识别中\.\.\./);
+  assert.doesNotMatch(app, /正在识别参考图用途\.\.\./);
+  assert.match(app, /refs\.creationReferenceAnalyzeButton\.replaceChildren\(analyzingReferences \? "识别中" : "智能识别"/);
+  assert.match(app, /className: "creation-reference-analyze-spinner", ariaHidden: "true"/);
   assert.match(html, /SKU 组合件数[\s\S]*id="creationSkuBundleCountInput"[\s\S]*name="skuBundleCount"/);
   assert.match(html, /id="creationImageCountInput"[\s\S]*<option value="8">8/);
   assert.match(html, /id="creationImageCountInput"[\s\S]*<option value="12">12/);
@@ -1572,7 +1665,8 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(html, /id="creationProductDescriptionInput"[\s\S]*rows="2"/);
   assert.match(html, /id="creationSellingPointsInput"[\s\S]*rows="1"/);
   assert.match(html, /id="creationDimensionSpecsInput"[\s\S]*rows="1"/);
-  assert.match(html, /<div class="creation-control-row creation-option-grid">[\s\S]*id="creationImageCountInput"[\s\S]*id="creationScenarioInput"[\s\S]*id="creationTargetLanguageInput"[\s\S]*id="creationOutputFormatInput"[\s\S]*id="creationRatioInput"[\s\S]*id="creationSizeInput"[\s\S]*id="creationIndustryTemplateBrowser"/);
+  assert.match(html, /<div class="creation-control-row creation-option-grid">[\s\S]*id="creationImageCountInput"[\s\S]*id="creationScenarioInput"[\s\S]*id="creationVisualLanguageInput"[\s\S]*id="creationTargetLanguageInput"[\s\S]*id="creationOutputFormatInput"[\s\S]*id="creationRatioInput"[\s\S]*id="creationSizeInput"[\s\S]*id="creationIndustryTemplateBrowser"/);
+  assert.match(html, /id="creationVisualLanguageInput"[\s\S]*name="visualLanguage"[\s\S]*<option value="classic-commercial" selected>经典商业摄影<\/option>[\s\S]*<option value="premium-studio">高端棚拍<\/option>[\s\S]*<option value="warm-handcrafted">手作温度<\/option>/);
   assert.match(html, /<select id="creationRatioInput" name="ratio">[\s\S]*<option value="1:1">1:1<\/option>[\s\S]*<\/select>/);
   assert.match(html, /<select id="creationSizeInput" name="size">[\s\S]*<option value="auto">自动<\/option>[\s\S]*<\/select>/);
   assert.doesNotMatch(html, /id="creationScenarioHint"/);
@@ -1589,6 +1683,12 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(styles, /#creationProductDescriptionInput,\s*#creationSellingPointsInput,\s*#creationDimensionSpecsInput\s*\{[\s\S]*overflow-y:\s*hidden;[\s\S]*resize:\s*vertical;/);
   assert.doesNotMatch(styles, /#creationSellingPointsInput,\s*#creationDimensionSpecsInput\s*\{[^}]*resize:\s*none;/);
   assert.match(styles, /\.creation-reference-analysis-panel\s*\{/);
+  assert.match(styles, /\.creation-reference-analysis-actions\s*\{[\s\S]*border:\s*1px solid color-mix\(in srgb, var\(--accent\) 18%, var\(--border\)\);[\s\S]*background:[\s\S]*linear-gradient\(135deg, color-mix\(in srgb, var\(--accent\) 10%, transparent\), color-mix\(in srgb, var\(--success\) 8%, transparent\)\)/);
+  assert.match(styles, /\.creation-reference-analysis-actions \.reference-analysis-button\s*\{[\s\S]*background:[\s\S]*color-mix\(in srgb, var\(--accent\) 18%, var\(--control-bg\)\)/);
+  assert.match(styles, /\.creation-reference-analysis-actions \.prompt-agent-feedback:empty\s*\{[\s\S]*display:\s*none;/);
+  assert.match(styles, /\.creation-reference-analyze-spinner\s*\{[\s\S]*animation:\s*creation-reference-analyze-spin 1800ms linear infinite;/);
+  assert.match(styles, /@keyframes creation-reference-analyze-spin/);
+  assert.match(styles, /\.creation-reference-analysis-actions #creationReferenceApplyAnalysisButton\s*\{[\s\S]*background:[\s\S]*color-mix\(in srgb, var\(--success\) 24%, var\(--control-bg\)\)/);
   assert.match(styles, /\.creation-reference-note\s*\{/);
   assert.match(styles, /\.creation-template-search\s*\{/);
   assert.match(styles, /\.creation-industry-browser\s*\{/);
@@ -1617,6 +1717,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /creationReferenceAnalysisList: document\.querySelector\("#creationReferenceAnalysisList"\)/);
   assert.match(app, /creationReferenceAnalysisPanel: document\.querySelector\("#creationReferenceAnalysisPanel"\)/);
   assert.match(app, /creationSkuBundleCountInput: document\.querySelector\("#creationSkuBundleCountInput"\)/);
+  assert.match(app, /creationVisualLanguageInput: document\.querySelector\("#creationVisualLanguageInput"\)/);
   assert.match(app, /creationDimensionSpecsInput: document\.querySelector\("#creationDimensionSpecsInput"\)/);
   assert.match(app, /creationDimensionUnitModeInput: document\.querySelector\("#creationDimensionUnitModeInput"\)/);
   assert.match(app, /creationIndustryTemplateBrowser: document\.querySelector\("#creationIndustryTemplateBrowser"\)/);
@@ -1641,6 +1742,10 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /creationSelectedRoles:\s*\[\]/);
   assert.match(app, /const CREATION_REFERENCE_ROLE_OPTIONS = \[/);
   assert.match(app, /const CREATION_SCENARIO_ROLE_PRESETS = \{/);
+  assert.match(app, /const CREATION_VISUAL_LANGUAGE_LABELS = \{/);
+  assert.match(app, /const visualLanguage = normalizeCreationVisualLanguage\(set\.visualLanguage\)/);
+  assert.match(app, /visualLanguage,\s*[\r\n]+\s*visualLanguageLabel:\s*String\(set\.visualLanguageLabel \|\| formatCreationVisualLanguageLabel\(visualLanguage\)\)/);
+  assert.match(app, /\["视觉语言", set\.visualLanguageLabel \|\| formatCreationVisualLanguageLabel\(set\.visualLanguage\)\]/);
   assert.match(app, /material-closeup/);
   assert.match(app, /usage-steps/);
   assert.match(app, /review-qa/);
@@ -1703,6 +1808,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /formData\.set\("referenceImageRoles", JSON\.stringify\(buildCreationReferenceRolePayload\(\)\)\)/);
   assert.match(app, /formData\.set\("skuSubjects", JSON\.stringify\(buildCreationSkuSubjectPayload\(\)\)\)/);
   assert.match(app, /formData\.set\("skuBundleCount", refs\.creationSkuBundleCountInput\?\.value \|\| "1"\)/);
+  assert.match(app, /formData\.set\("visualLanguage", refs\.creationVisualLanguageInput\?\.value \|\| "classic-commercial"\)/);
   assert.match(app, /formData\.set\("planOverrides", JSON\.stringify\(getCreationPlanOverrides\(\)\)\)/);
   assert.match(app, /fetch\("\/api\/creation\/reference\/analyze"/);
   assert.match(app, /fetch\("\/api\/creation\/plan"/);
@@ -1725,11 +1831,11 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /document\.addEventListener\("keydown"/);
   assert.match(app, /refs\.creationRatioInput\.addEventListener\("change", renderCreationSizeOptions\)/);
   assert.match(app, /setCreationSelectValue\(refs\.creationDimensionUnitModeInput, normalized\.dimensionUnitMode, "both"\)/);
+  assert.match(app, /setCreationSelectValue\(refs\.creationVisualLanguageInput, normalized\.visualLanguage, "classic-commercial"\)/);
   assert.match(app, /refs\.creationPlanButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
-  assert.match(html, /app\.js\?v=20260517-view-modules-1/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
@@ -1826,6 +1932,8 @@ test("creation mode exposes record detail and item repair actions", async () => 
   assert.match(styles, /\.creation-card-path\s*\{/);
   assert.match(styles, /\.creation-card\s*\{[\s\S]*position:\s*relative;[\s\S]*isolation:\s*isolate;[\s\S]*gap:\s*8px;[\s\S]*min-height:\s*max-content;[\s\S]*padding:\s*8px;/);
   assert.match(styles, /\.creation-result-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\);[\s\S]*grid-auto-rows:\s*max-content;[\s\S]*gap:\s*10px;/);
+  assert.match(styles, /\.creation-card\.is-sku\s*\{[\s\S]*order:\s*2;/);
+  assert.match(styles, /\.creation-card\.is-sku-start\s*\{[\s\S]*grid-column-start:\s*1;/);
   assert.match(styles, /\.creation-card-media\s*\{[\s\S]*width:\s*min\(100%,\s*220px\);[\s\S]*aspect-ratio:\s*1\s*\/\s*1;/);
   assert.match(styles, /\.creation-card-actions \.mini-action\s*\{[\s\S]*height:\s*30px;/);
   assert.match(styles, /\.creation-card-editor\s*\{[\s\S]*position:\s*fixed;[\s\S]*right:\s*24px;[\s\S]*bottom:\s*24px;[\s\S]*z-index:\s*75;[\s\S]*width:\s*min\(520px,\s*calc\(100vw - 32px\)\);/);
@@ -1857,6 +1965,10 @@ test("creation mode exposes record detail and item repair actions", async () => 
   assert.match(app, /saveButton\.dataset\.creationSavePromptItemId = item\.itemId;/);
   assert.match(app, /textarea\.dataset\.creationPromptEditor = item\.itemId;/);
   assert.match(app, /path\.className = "creation-card-path";/);
+  assert.match(app, /card\.classList\.toggle\("is-sku", item\.role === "sku"\);/);
+  assert.match(app, /card\.classList\.toggle\("is-sku-start", options\.isSkuStart === true\);/);
+  assert.match(app, /const firstSkuItem = items\.find\(\(item\) => item\.role === "sku"\);/);
+  assert.match(app, /createCreationCard\(item, index, \{ isSkuStart: item === firstSkuItem \}\)/);
   assert.match(app, /const shouldRenderPath = !imageUrl && !showRecordActions && !hideGenerationDetails;/);
   assert.match(app, /path\.textContent = item\.error \|\| "";/);
   assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationRetryItemId/);
@@ -2043,6 +2155,14 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.doesNotMatch(app, /state\.creation\.currentSet = selectedSet \? normalizeCreationSetForView\(selectedSet\) : null;/);
 });
 
+test("creation record desktop grid keeps six cards per row", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+  const creationRecordGridRule = readCssRule(styles, ".creation-record-result-grid");
+
+  assert.match(creationRecordGridRule, /grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\);/);
+  assert.doesNotMatch(creationRecordGridRule, /grid-template-columns:\s*repeat\(4,/);
+});
+
 test("asset views define compact tablet and mobile layouts", async () => {
   const styles = await readFile(stylesPath, "utf8");
 
@@ -2193,4 +2313,40 @@ test("PPT view exposes dynamic components and transition effect controls", async
   assert.match(app, /formData\.set\("dynamicPreset", refs\.pptDynamicPresetInput\.value\)/);
   assert.match(app, /formData\.set\("transitionPreset", refs\.pptTransitionPresetInput\.value\)/);
   assert.match(app, /transitionSpeed: refs\.pptTransitionSpeedInput\.value/);
+});
+
+test("PPT view exposes editable reconstruction export controls and download state", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /id="pptExportModeInput"/);
+  assert.match(html, /name="exportMode"/);
+  assert.match(html, /value="flat-image"/);
+  assert.match(html, /value="editable-reconstruction"/);
+  assert.match(html, /id="pptEditableDownloadLink"/);
+
+  assert.match(styles, /\.ppt-editable-download-link\s*\{/);
+
+  assert.match(app, /pptExportModeInput: document\.querySelector\("#pptExportModeInput"\)/);
+  assert.match(app, /pptEditableDownloadLink: document\.querySelector\("#pptEditableDownloadLink"\)/);
+  assert.match(app, /formData\.set\("exportMode", refs\.pptExportModeInput\.value\)/);
+  assert.match(app, /eventName === "editable_deck_saved"/);
+  assert.match(app, /editablePptxUrl/);
+});
+
+test("local PPT generation integrates editable reconstruction after ordinary PPTX export", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const ordinaryExportIndex = server.indexOf("await exportPptxDeck({");
+  const editableModeIndex = server.indexOf("if (isEditablePptExportMode(normalizedExportMode))");
+
+  assert.match(server, /import \{ buildEditablePptxFilename, buildEditablePptxReconstruction \}/);
+  assert.notEqual(ordinaryExportIndex, -1);
+  assert.notEqual(editableModeIndex, -1);
+  assert.ok(ordinaryExportIndex < editableModeIndex);
+  assert.match(server.slice(ordinaryExportIndex, editableModeIndex), /outputPath: pptxAbsolutePath/);
+  assert.match(server, /const editableResult = await buildEditablePptxReconstruction\(\{[\s\S]*?outputPath: resolveOutputAssetPath\(editablePptxRelativePath\)[\s\S]*?\}\);/);
+  assert.match(server, /editablePptxRelativePath,[\s\S]*editablePptxFilename,[\s\S]*editablePptxWarnings,[\s\S]*exportMode: normalizedExportMode/);
+  assert.match(server, /writeSseEventPayload\(onEvent, "editable_reconstruction_warning"/);
+  assert.match(server, /writeSseEventPayload\(onEvent, "editable_deck_saved"/);
 });

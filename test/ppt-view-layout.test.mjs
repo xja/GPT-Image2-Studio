@@ -27,7 +27,7 @@ test("PPT desktop workspace keeps all sections inside the active viewport", asyn
   assert.match(pptViewRule, /height:\s*100%;/);
   assert.match(
     pptWorkspaceRule,
-    /grid-template-columns:\s*minmax\(320px,\s*var\(--studio-grid-left,\s*392px\)\)\s*minmax\(0,\s*1fr\);/,
+    /grid-template-columns:\s*var\(--studio-grid-left,\s*392px\)\s*minmax\(0,\s*1fr\);/,
   );
   assert.match(pptWorkspaceRule, /min-height:\s*0;/);
   assert.match(pptWorkspaceRule, /height:\s*100%;/);

@@ -12,7 +12,7 @@ The system SHALL expose Creation Mode as a separate tab under the creation works
 - **THEN** the prompt-mode activity feed and default gallery-visible history are not updated as if the images were prompt-mode single-image jobs
 
 ### Requirement: Creation Mode generates configurable ecommerce sets
-The system SHALL generate one set for one product with quick presets of 4, 6, 8, 10, or 12 ecommerce marketing roles and SHALL allow the user to customize which of the 12 image roles are generated for the current set. The system SHALL also allow the user to choose an industry template for general ecommerce, apparel, beauty, food, consumer electronics, home/living products, or a searchable fourth-level ecommerce category template. When the user uses a preset without custom role changes and no non-general industry template is selected, the first four roles SHALL remain hero image, benefit image, lifestyle scene, and detail/trust image.
+The system SHALL generate one set for one product with quick presets of 4, 6, 8, 10, or 12 ecommerce marketing roles and SHALL allow the user to customize which of the 12 image roles are generated for the current set. The system SHALL also allow the user to choose an industry template for general ecommerce, apparel, beauty, food, consumer electronics, home/living products, or a searchable fourth-level ecommerce category template. The system SHALL support a set-level visual-language selector that defaults to `classic-commercial` and keeps the generated set visually consistent across lighting, tone, material treatment, realism level, and brand atmosphere. When the user uses a preset without custom role changes and no non-general industry template is selected, the first four roles SHALL remain hero image, benefit image, lifestyle scene, and detail/trust image.
 
 #### Scenario: User starts a creation set
 - **WHEN** the user submits product information and a target language in Creation Mode
@@ -54,6 +54,15 @@ The system SHALL generate one set for one product with quick presets of 4, 6, 8,
 - **THEN** the system returns the same planned ecommerce image items without requiring API credentials
 - **AND** the user can adjust one planned item prompt before generation
 - **AND** the generation request uses that adjusted prompt only for the matching planned item
+
+#### Scenario: User chooses a set visual language
+- **WHEN** the user selects a visual language before previewing or generating a Creation Mode set
+- **THEN** the plan-preview and generation requests include the selected `visualLanguage`
+- **AND** every planned item prompt includes the same shared visual-language guidance
+- **AND** individual item roles may still vary camera angle, framing, scene density, props, and information layout without switching to another visual language
+- **AND** the generated set manifest stores both `visualLanguage` and `visualLanguageLabel`
+- **AND** missing or unknown visual-language values fall back to `classic-commercial`
+- **AND** the upload-image logo branch does not display or submit the visual-language selector
 
 #### Scenario: User changes marketing scenario
 - **WHEN** the user selects a Creation Mode marketing scenario such as livestream, marketplace search, gift guide, or brand story
@@ -110,7 +119,7 @@ The system SHALL allow Creation Mode to upload its own reference images and choo
 
 #### Scenario: User edits Creation Mode generation parameters
 - **WHEN** the user opens the Creation Mode parameter area
-- **THEN** set count, SKU combination count, marketing scenario, target language, output format, ratio, and resolution are presented in one compact control grid
+- **THEN** set count, SKU combination count, marketing scenario, visual language, target language, output format, ratio, and resolution are presented in one compact control grid
 - **AND** the desktop layout keeps those controls compact without sharing prompt-mode parameter state
 - **AND** changing the Creation Mode ratio refreshes only the Creation Mode resolution options
 
@@ -155,7 +164,7 @@ The system SHALL save Creation Mode generated images under `Pictures/YYYY-MM/MM-
 - **THEN** the same date folder contains creation, prompt, style-transfer, reference-analysis, image-decomposition, article, and ppt output folders
 
 ### Requirement: Creation records are set-based
-The system SHALL persist Creation Mode records as set manifests with set-level input, target language, marketing scenario, industry template, industry template path when available, item roles, item statuses, prompts, image paths, and partial-failure status.
+The system SHALL persist Creation Mode records as set manifests with set-level input, target language, marketing scenario, visual language, industry template, industry template path when available, item roles, item statuses, prompts, image paths, and partial-failure status.
 
 #### Scenario: All items complete
 - **WHEN** all Creation Mode items save successfully
@@ -166,7 +175,7 @@ The system SHALL persist Creation Mode records as set manifests with set-level i
 - **THEN** the set manifest status is `partial_failed` and saved item records remain available
 
 ### Requirement: Creation set records expose details and item repair
-The system SHALL provide Creation Mode set record details that show the set-level input, target language, marketing scenario, industry template, reference image names, item roles, prompts, statuses, failure messages, and saved image paths. From the detail view, the system SHALL allow users to regenerate a saved item, fill a missing item, retry failed items, preview saved item images, copy item prompts, copy relative or full item paths, export set prompts, and export the set manifest without creating a new set record.
+The system SHALL provide Creation Mode set record details that show the set-level input, target language, marketing scenario, visual language, industry template, reference image names, item roles, prompts, statuses, failure messages, and saved image paths. From the detail view, the system SHALL allow users to regenerate a saved item, fill a missing item, retry failed items, preview saved item images, copy item prompts, copy relative or full item paths, export set prompts, and export the set manifest without creating a new set record.
 
 #### Scenario: User opens a set record detail
 - **WHEN** the user opens a Creation Mode set record
@@ -182,6 +191,7 @@ The system SHALL provide Creation Mode set record details that show the set-leve
 - **WHEN** the user requests regeneration for a completed item in a Creation Mode set record
 - **THEN** only that item is generated again using the set metadata and item role prompt
 - **AND** the set manifest keeps the same set identity and updates that item's status, prompt, and image path
+- **AND** the repair uses the visual language saved on the original set manifest
 
 #### Scenario: User edits one item prompt before regeneration
 - **WHEN** the user saves a prompt adjustment on one Creation Mode item and regenerates that item
@@ -223,7 +233,7 @@ The system SHALL group waterfall gallery browsing, PPT records, Creation Mode se
 #### Scenario: User reuses a Creation set record
 - **WHEN** the user explicitly reuses a selected Creation Mode set record
 - **THEN** the selected record is loaded into the active Creation Mode workspace
-- **AND** the Creation Mode form controls reflect the selected record's product input, target language, marketing scenario, industry template, image count, and selected roles
+- **AND** the Creation Mode form controls reflect the selected record's product input, target language, marketing scenario, visual language, industry template, image count, and selected roles
 - **AND** local reference-image file inputs are cleared because saved manifests cannot restore browser `File` objects
 - **AND** saved reference image names, roles, and notes are shown as items that need reupload
 - **AND** the app switches to the Creation Mode workspace so the user can continue item prompt edits, regeneration, or repair

@@ -8,6 +8,8 @@ export const VIEW_MODULE_URLS = Object.freeze({
   gallery: "/lib/views/gallery-view.mjs",
   "article-record": "/lib/views/article-record-view.mjs",
   "creation-record": "/lib/views/creation-record-view.mjs",
+  portrait: "/lib/views/portrait-view.mjs",
+  "portrait-record": "/lib/views/portrait-record-view.mjs",
   "ppt-record": "/lib/views/ppt-record-view.mjs",
 });
 

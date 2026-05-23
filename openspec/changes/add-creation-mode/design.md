@@ -9,6 +9,7 @@ GPT-Image2-Studio currently has prompt-driven single image generation, PPT gener
 - Add a Creation Mode tab under the existing creation workspace.
 - Generate a fixed first-version set of four ecommerce marketing images for one product.
 - Support a target language selector that is injected into every generated marketing prompt.
+- Support a set-level visual-language selector so one generated set can vary image roles while sharing the same lighting, tonal treatment, material handling, and brand atmosphere.
 - Persist the creation set as a set-level manifest and persist generated images under `YYYY-MM-DD-creation/<set-folder>/`.
 - Avoid reading from or writing to prompt-mode form state, Prompt Kit templates, reference image state, job feed, or default gallery visibility.
 - Group saved gallery, waterfall gallery, PPT records, and Creation Mode set records under the Assets navigation.
@@ -78,6 +79,10 @@ GPT-Image2-Studio currently has prompt-driven single image generation, PPT gener
    - Rationale: A saved manifest can restore reference names, roles, and notes, but the browser cannot restore the original `File` objects. The active workspace must show those historical references as missing until the user uploads matching files, then apply the saved role and note to the new file object.
    - Alternative considered: keep sending saved reference metadata when no file is uploaded. This was rejected because it makes the UI imply that reference images are available when only text metadata exists.
 
+14. **Treat visual language as a set-level constraint, not a per-image style.**
+   - Rationale: A Creation Mode set should look like one ecommerce asset family. The selected visual language anchors lighting, color grading, materials, realism level, and brand tone across every planned item, while item roles still control camera angle, composition, scene density, props, and information layout.
+   - Alternative considered: reuse the existing strong style-transfer presets for each image. This was rejected because cyber, comic, watercolor, and similar art styles can break product fidelity and make the set feel like an inconsistent collage.
+
 ## Risks / Trade-offs
 
 - **Long-running generation can partially fail** -> Preserve saved items and mark the set `partial_failed`, with failed item errors visible.
@@ -88,3 +93,4 @@ GPT-Image2-Studio currently has prompt-driven single image generation, PPT gener
 - **Opening local folders is platform-specific** -> Keep this action local-server-only, return a clear error when the saved folder is missing, and keep copy-path export available as the low-friction fallback.
 - **Historical reference image binaries cannot be restored from manifests** -> Clear browser file inputs on record reuse and tell the user to re-upload originals when they want reference images in the next request.
 - **Saved reference role metadata can drift from current file inputs** -> Prefer current uploads for new requests, keep manifest role metadata visible, and mark missing historical files as requiring reupload before they participate in preview, generation, or repair.
+- **Visual variation can reduce set consistency** -> Keep the visual language on the set manifest and inject it as shared prompt guidance for every item, with the default `classic-commercial` preserving the previous behavior.

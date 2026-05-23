@@ -105,6 +105,7 @@ function makeCreationForm(overrides = {}) {
   formData.set("targetLanguage", "en");
   formData.set("imageCount", "4");
   formData.set("scenario", "detail-page");
+  formData.set("visualLanguage", "lifestyle-editorial");
   formData.set("industryTemplate", "beauty");
   formData.set("selectedRoles", JSON.stringify(["hero", "benefit", "package", "review-qa"]));
   formData.set(
@@ -302,10 +303,13 @@ test("creation workflow reuses history, reuploads references, tweaks prompts, re
   const planBody = await planResponse.json();
   assert.equal(planBody.ok, true);
   assert.equal(planBody.plan.industryTemplate, "beauty");
+  assert.equal(planBody.plan.visualLanguage, "lifestyle-editorial");
   assert.equal(planBody.plan.items.length, 4);
   assert.equal(planBody.plan.items[0].itemId, "1-hero");
   assert.match(planBody.plan.items[0].prompt, /manual historical binding/);
   assert.match(planBody.plan.items[0].prompt, /Industry template:/);
+  assert.match(planBody.plan.items[1].prompt, /Shared visual language:/);
+  assert.match(planBody.plan.items[1].prompt, /lifestyle magazine editorial/);
 
   const generateResult = await postForm(
     baseUrl,
@@ -325,11 +329,15 @@ test("creation workflow reuses history, reuploads references, tweaks prompts, re
   const generatedSet = getCompleteSet(generateResult.events);
   assert.equal(generatedSet.status, "completed");
   assert.equal(generatedSet.industryTemplate, "beauty");
+  assert.equal(generatedSet.visualLanguage, "lifestyle-editorial");
+  assert.equal(generatedSet.visualLanguageLabel, "生活方式杂志");
   assert.equal(generatedSet.referenceImageRoles[0].filename, "front.png");
   assert.equal(generatedSet.referenceImageRoles[0].note, "manual historical binding");
   assert.equal(generatedSet.items.length, 4);
   assert.equal(generatedSet.items.filter((item) => item.status === "completed").length, 4);
   assert.equal(generatedSet.items[0].prompt, "Custom hero prompt from regression.");
+  assert.match(generatedSet.items[1].prompt, /Shared visual language:/);
+  assert.match(generatedSet.items[1].prompt, /lifestyle magazine editorial/);
   assert.ok(generatedSet.items[0].relativePath);
   assert.match(generatedSet.items[0].filename, /^01-主图-\d{6}-主图-\d{6}-[a-z0-9]{4}\.png$/u);
   assert.match(generatedSet.items[1].filename, /^02-卖点图-\d{6}-卖点图-\d{6}-[a-z0-9]{4}\.png$/u);

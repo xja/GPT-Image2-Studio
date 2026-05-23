@@ -197,3 +197,9 @@
 - [x] 31.5 Add same-SKU combination count controls and prompt constraints for duplicating the unchanged subject into 2, 5, or other selected counts.
 - [x] 31.6 Filter SKU generation references to the matched subject files so combination packs do not use the entire uploaded reference set.
 - [x] 31.7 Filter non-SKU generation references by image role so single-subject roles do not receive every uploaded product variant.
+
+## 32. Creation Set Visual Language
+
+- [x] 32.1 Add planner and store regression tests for default visual-language fallback, selected visual-language prompt guidance, and legacy manifest normalization.
+- [x] 32.2 Pass set-level visual language through plan preview, local generation, Cloudflare generation, manifests, record details, reuse, and repair flows.
+- [x] 32.3 Add a Creation Mode-only visual-language selector while keeping the upload-image logo branch unchanged.

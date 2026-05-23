@@ -62,15 +62,40 @@ function wait(milliseconds) {
   });
 }
 
-export async function requestGenerationStream({
-  job,
-  clientSessionId,
-  buildGenerationFormData,
-  fetchImpl = fetch,
-  retryPlan = getGenerationRequestRetryPlan,
-  updateJob = () => {},
-  waitMs = wait,
-} = {}) {
+export async function requestGenerationStream(endpointOrOptions = {}, directOptions = {}) {
+  if (typeof endpointOrOptions === "string") {
+    const {
+      body,
+      clientSessionId = "",
+      fetchImpl = fetch,
+      headers = {},
+      method = "POST",
+    } = directOptions || {};
+    const requestHeaders = { ...headers };
+    if (clientSessionId) {
+      requestHeaders["x-client-session-id"] = clientSessionId;
+    }
+    const response = await fetchImpl(endpointOrOptions, {
+      method,
+      headers: requestHeaders,
+      body,
+    });
+    if (!response.ok || !response.body) {
+      throw new Error("生成请求失败");
+    }
+    return response;
+  }
+
+  const {
+    job,
+    clientSessionId,
+    buildGenerationFormData,
+    fetchImpl = fetch,
+    retryPlan = getGenerationRequestRetryPlan,
+    updateJob = () => {},
+    waitMs = wait,
+  } = endpointOrOptions || {};
+
   while (true) {
     try {
       const response = await fetchImpl("/api/generate", {

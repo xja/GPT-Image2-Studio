@@ -16,6 +16,20 @@ import {
   normalizePptTransitionPreset,
 } from "../lib/ppt-motion-presets.mjs";
 import { createPptDeckStore } from "../lib/ppt-deck-store.mjs";
+import {
+  PPT_EXPORT_MODE_EDITABLE_RECONSTRUCTION,
+  PPT_EXPORT_MODE_FLAT_IMAGE,
+  isEditablePptExportMode,
+  normalizePptExportMode,
+} from "../lib/ppt-export-mode.mjs";
+import {
+  buildEditablePptxReconstruction,
+  buildPptArtifactModulePrompt,
+  buildPptReconstructionPrompt,
+  discoverPresentationsSkillDir,
+  normalizePptArtifactSlideModule,
+  normalizePptReconstructionManifest,
+} from "../lib/ppt-editable-reconstruction.mjs";
 import { exportPptxDeck } from "../lib/ppt-export.mjs";
 
 const png1x1 = Buffer.from(
@@ -95,6 +109,356 @@ test("PPT motion presets expose dynamic component and transition choices", () =>
   assert.equal(normalizePptTransitionPreset("unknown").value, "smooth");
   assert.ok(PPT_TRANSITION_PRESETS.some((preset) => preset.value === "smooth"));
   assert.ok(PPT_TRANSITION_PRESETS.some((preset) => preset.value === "morph-flow"));
+});
+
+test("PPT export mode defaults to flat image and recognizes editable reconstruction", () => {
+  assert.equal(normalizePptExportMode(""), PPT_EXPORT_MODE_FLAT_IMAGE);
+  assert.equal(normalizePptExportMode("unknown"), PPT_EXPORT_MODE_FLAT_IMAGE);
+  assert.equal(normalizePptExportMode("flat-image"), PPT_EXPORT_MODE_FLAT_IMAGE);
+  assert.equal(normalizePptExportMode("editable-reconstruction"), PPT_EXPORT_MODE_EDITABLE_RECONSTRUCTION);
+  assert.equal(isEditablePptExportMode("editable-reconstruction"), true);
+  assert.equal(isEditablePptExportMode("flat-image"), false);
+});
+
+test("PPT reconstruction manifest normalizes element bounds and low-confidence fallback", () => {
+  const manifest = normalizePptReconstructionManifest(
+    {
+      slideNumber: 3,
+      sourceImage: "slide-03.png",
+      canvas: { width: 2048, height: 1152 },
+      elements: [
+        {
+          id: "title",
+          type: "text",
+          editable: "text",
+          bbox: [100.4, 80.2, 640.9, 90.1],
+          text: "Readable title",
+          confidence: 0.94,
+        },
+        {
+          id: "uncertain-table",
+          type: "table",
+          editable: "table",
+          bbox: [-10, 1100, 400, 120],
+          confidence: 0.42,
+        },
+      ],
+      warnings: ["small footer omitted"],
+    },
+    { fallbackImagePath: "slide-03.png" },
+  );
+
+  assert.equal(manifest.slideNumber, 3);
+  assert.deepEqual(manifest.canvas, { width: 2048, height: 1152 });
+  assert.deepEqual(manifest.elements[0].bbox, [100, 80, 641, 90]);
+  assert.equal(manifest.elements[0].editable, "text");
+  assert.equal(manifest.elements[1].type, "image-region");
+  assert.equal(manifest.elements[1].editable, "image");
+  assert.deepEqual(manifest.elements[1].bbox, [0, 1100, 400, 52]);
+  assert.match(manifest.warnings.join("\n"), /low confidence/i);
+  assert.match(manifest.warnings.join("\n"), /small footer omitted/);
+});
+
+test("PPT reconstruction prompt asks for editable PowerPoint elements and fallback layers", () => {
+  const prompt = buildPptReconstructionPrompt({
+    title: "季度发布复盘",
+    slideNumber: 2,
+    slideTitle: "增长保持稳定",
+  });
+
+  assert.match(prompt, /editable PowerPoint reconstruction manifest/);
+  assert.match(prompt, /text boxes/i);
+  assert.match(prompt, /tables/i);
+  assert.match(prompt, /fallback image-region/i);
+  assert.match(prompt, /do not guess unreadable text/i);
+  assert.match(prompt, /季度发布复盘/);
+  assert.match(prompt, /增长保持稳定/);
+});
+
+test("PPT artifact module prompt asks for artifact-tool editable slide modules", () => {
+  const prompt = buildPptArtifactModulePrompt({
+    title: "季度发布复盘",
+    slideNumber: 2,
+    slideTitle: "增长保持稳定",
+  });
+
+  assert.match(prompt, /artifact-tool PowerPoint slide module/);
+  assert.match(prompt, /export async function slide02\(presentation, ctx\)/);
+  assert.match(prompt, /ctx\.addText/);
+  assert.match(prompt, /ctx\.addShape/);
+  assert.match(prompt, /1280x720/);
+  assert.match(prompt, /Do not import modules/);
+});
+
+test("PPT artifact module normalization accepts safe modules and blocks local code access", () => {
+  const moduleSource = [
+    "export async function slide02(presentation, ctx) {",
+    "  const slide = presentation.slides.add();",
+    "  ctx.addText(slide, { x: 80, y: 80, width: 640, height: 90, text: '增长保持稳定', fontSize: 42 });",
+    "  return slide;",
+    "}",
+    "",
+  ].join("\n");
+
+  const normalized = normalizePptArtifactSlideModule({
+    slideNumber: 2,
+    moduleSource,
+    warnings: ["Chart approximated with editable shapes"],
+  });
+
+  assert.equal(normalized.slideNumber, 2);
+  assert.match(normalized.moduleSource, /slide02/);
+  assert.match(normalized.moduleSource, /createArtifactCompatCtx/);
+  assert.deepEqual(normalized.warnings, ["Chart approximated with editable shapes"]);
+  assert.throws(
+    () => normalizePptArtifactSlideModule({
+      slideNumber: 2,
+      moduleSource: "import fs from 'node:fs';\nexport async function slide02(presentation, ctx) { const slide = presentation.slides.add(); return slide; }",
+    }),
+    /blocked construct/i,
+  );
+});
+
+test("PPT artifact module normalization adapts pptxgen-style helper options", () => {
+  const normalized = normalizePptArtifactSlideModule({
+    slideNumber: 1,
+    moduleSource: [
+      "export async function slide01(presentation, ctx) {",
+      "  const slide = presentation.slides.add();",
+      "  ctx.addShape(slide, { type: 'roundRect', x: 10, y: 10, width: 100, height: 50, fill: { color: 'FFFFFF' }, line: { color: '062B6F', width: 1 } });",
+      "  ctx.addText(slide, { x: 20, y: 20, width: 80, height: 24, text: '标题', fontFace: 'Microsoft YaHei', margin: 0, color: '062B6F' });",
+      "  return slide;",
+      "}",
+    ].join("\n"),
+  });
+
+  assert.match(normalized.moduleSource, /normalizeColor/);
+  assert.match(normalized.moduleSource, /geometry: options\.geometry \|\| options\.type/);
+  assert.match(normalized.moduleSource, /typeface: options\.typeface \|\| options\.fontFace/);
+  assert.match(normalized.moduleSource, /insets: normalizeInsets/);
+});
+
+test("PPT presentations runtime discovery supports explicit and environment skill directories", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ppt-skill-discovery-"));
+  const explicitSkillDir = join(dir, "explicit-skill");
+  const envSkillDir = join(dir, "env-skill");
+  await mkdir(join(explicitSkillDir, "scripts"), { recursive: true });
+  await mkdir(join(envSkillDir, "scripts"), { recursive: true });
+  await writeFile(join(explicitSkillDir, "scripts", "build_artifact_deck.mjs"), "export {};\n", "utf8");
+  await writeFile(join(envSkillDir, "scripts", "build_artifact_deck.mjs"), "export {};\n", "utf8");
+
+  const explicit = await discoverPresentationsSkillDir({ skillDir: explicitSkillDir, defaultBaseDir: join(dir, "missing") });
+  assert.equal(explicit.ok, true);
+  assert.equal(explicit.skillDir, explicitSkillDir);
+
+  const fromEnv = await discoverPresentationsSkillDir({
+    env: { PRESENTATIONS_SKILL_DIR: envSkillDir },
+    defaultBaseDir: join(dir, "missing"),
+  });
+  assert.equal(fromEnv.ok, true);
+  assert.equal(fromEnv.skillDir, envSkillDir);
+
+  const missing = await discoverPresentationsSkillDir({ env: {}, defaultBaseDir: join(dir, "missing") });
+  assert.equal(missing.ok, false);
+  assert.match(missing.message, /runtime was not found/i);
+});
+
+test("PPT editable reconstruction wrapper writes artifact modules and reports slide fallback warnings", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ppt-editable-wrapper-"));
+  const skillDir = join(dir, "presentations");
+  const workspaceDir = join(dir, "workspace");
+  const imagePath = join(dir, "slide.png");
+  const outputPath = join(dir, "editable.pptx");
+  await mkdir(join(skillDir, "scripts"), { recursive: true });
+  await writeFile(imagePath, png1x1);
+  await writeFile(
+    join(skillDir, "scripts", "build_artifact_deck.mjs"),
+    [
+      'import { mkdir, writeFile } from "node:fs/promises";',
+      'import { dirname } from "node:path";',
+      'const outIndex = process.argv.indexOf("--out");',
+      'const manifestIndex = process.argv.indexOf("--manifest");',
+      'const outputPath = process.argv[outIndex + 1];',
+      'const manifestPath = process.argv[manifestIndex + 1];',
+      "await mkdir(dirname(outputPath), { recursive: true });",
+      "await writeFile(manifestPath, JSON.stringify({ ok: true }));",
+      'await writeFile(outputPath, "fake editable pptx");',
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const events = [];
+  const result = await buildEditablePptxReconstruction({
+    skillDir,
+    workspaceDir,
+    outputPath,
+    title: "可编辑重建测试",
+    outline: {
+      title: "可编辑重建测试",
+      slides: [{ slideNumber: 1, title: "第一页" }],
+    },
+    slides: [{ slideNumber: 1, title: "第一页", absolutePath: imagePath }],
+    baseUrl: "https://api.openai.com/v1",
+    apiKey: "sk-test",
+    fetchImpl: async () => {
+      throw new Error("simulated reconstruction failure");
+    },
+    onEvent: (eventName, payload) => events.push({ eventName, payload }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.ok(result.outputBytes > 0);
+  assert.match(result.warnings.join("\n"), /simulated reconstruction failure/);
+  assert.deepEqual(
+    events.map((event) => event.eventName),
+    [
+      "editable_reconstruction_started",
+      "editable_reconstruction_slide_started",
+      "editable_reconstruction_warning",
+      "editable_reconstruction_warning",
+    ],
+  );
+
+  const slideModule = await readFile(join(workspaceDir, "slides", "slide-01.mjs"), "utf8");
+  const manifestJson = await readFile(join(workspaceDir, "manifests", "slide-01.json"), "utf8");
+  assert.match(slideModule, /source-slide-image/);
+  assert.match(slideModule, /editable-slide-title/);
+  assert.match(manifestJson, /Used full-slide image fallback/);
+});
+
+test("PPT editable reconstruction wrapper prefers artifact slide modules", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ppt-editable-artifact-module-"));
+  const skillDir = join(dir, "presentations");
+  const workspaceDir = join(dir, "workspace");
+  const imagePath = join(dir, "slide.png");
+  const outputPath = join(dir, "editable.pptx");
+  await mkdir(join(skillDir, "scripts"), { recursive: true });
+  await writeFile(imagePath, png1x1);
+  await writeFile(
+    join(skillDir, "scripts", "build_artifact_deck.mjs"),
+    [
+      'import { mkdir, readFile, writeFile } from "node:fs/promises";',
+      'import { dirname, join } from "node:path";',
+      'const outIndex = process.argv.indexOf("--out");',
+      'const slidesIndex = process.argv.indexOf("--slides-dir");',
+      'const outputPath = process.argv[outIndex + 1];',
+      'const slidesDir = process.argv[slidesIndex + 1];',
+      'const source = await readFile(join(slidesDir, "slide-01.mjs"), "utf8");',
+      "await mkdir(dirname(outputPath), { recursive: true });",
+      "await writeFile(outputPath, source.includes('artifact-module-title') ? 'artifact module deck' : 'fallback deck');",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const result = await buildEditablePptxReconstruction({
+    skillDir,
+    workspaceDir,
+    outputPath,
+    title: "可编辑重建测试",
+    outline: {
+      title: "可编辑重建测试",
+      slides: [{ slideNumber: 1, title: "第一页" }],
+    },
+    slides: [{ slideNumber: 1, title: "第一页", absolutePath: imagePath }],
+    baseUrl: "https://api.openai.com/v1",
+    apiKey: "sk-test",
+    fetchImpl: async () => new Response(JSON.stringify({
+      output_text: JSON.stringify({
+        slideNumber: 1,
+        moduleSource: [
+          "export async function slide01(presentation, ctx) {",
+          "  const slide = presentation.slides.add();",
+          "  ctx.addText(slide, { x: 80, y: 80, width: 640, height: 90, name: 'artifact-module-title', text: '第一页', fontSize: 42 });",
+          "  return slide;",
+          "}",
+        ].join("\n"),
+        warnings: [],
+      }),
+    }), { status: 200 }),
+  });
+
+  assert.equal(result.ok, true);
+  const slideModule = await readFile(join(workspaceDir, "slides", "slide-01.mjs"), "utf8");
+  const output = await readFile(outputPath, "utf8");
+  assert.match(slideModule, /artifact-module-title/);
+  assert.equal(output, "artifact module deck");
+});
+
+test("PPT editable reconstruction retries element fallback when artifact module build fails", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ppt-editable-artifact-retry-"));
+  const skillDir = join(dir, "presentations");
+  const workspaceDir = join(dir, "workspace");
+  const imagePath = join(dir, "slide.png");
+  const outputPath = join(dir, "editable.pptx");
+  await mkdir(join(skillDir, "scripts"), { recursive: true });
+  await writeFile(imagePath, png1x1);
+  await writeFile(
+    join(skillDir, "scripts", "build_artifact_deck.mjs"),
+    [
+      'import { mkdir, readFile, writeFile } from "node:fs/promises";',
+      'import { dirname, join } from "node:path";',
+      'const outIndex = process.argv.indexOf("--out");',
+      'const slidesIndex = process.argv.indexOf("--slides-dir");',
+      'const outputPath = process.argv[outIndex + 1];',
+      'const slidesDir = process.argv[slidesIndex + 1];',
+      'const source = await readFile(join(slidesDir, "slide-01.mjs"), "utf8");',
+      "if (source.includes('bad-artifact-module')) process.exit(9);",
+      "await mkdir(dirname(outputPath), { recursive: true });",
+      "await writeFile(outputPath, source.includes('source-slide-image') ? 'fallback deck' : 'unexpected deck');",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const result = await buildEditablePptxReconstruction({
+    skillDir,
+    workspaceDir,
+    outputPath,
+    title: "可编辑重建测试",
+    outline: {
+      title: "可编辑重建测试",
+      slides: [{ slideNumber: 1, title: "第一页" }],
+    },
+    slides: [{ slideNumber: 1, title: "第一页", absolutePath: imagePath }],
+    baseUrl: "https://api.openai.com/v1",
+    apiKey: "sk-test",
+    fetchImpl: async () => new Response(JSON.stringify({
+      output_text: JSON.stringify({
+        slideNumber: 1,
+        moduleSource: [
+          "export async function slide01(presentation, ctx) {",
+          "  const slide = presentation.slides.add();",
+          "  ctx.addText(slide, { x: 80, y: 80, width: 640, height: 90, name: 'bad-artifact-module', text: '第一页', fontSize: 42 });",
+          "  return slide;",
+          "}",
+        ].join("\n"),
+        warnings: [],
+      }),
+    }), { status: 200 }),
+  });
+
+  assert.equal(result.ok, true);
+  const output = await readFile(outputPath, "utf8");
+  const slideModule = await readFile(join(workspaceDir, "slides", "slide-01.mjs"), "utf8");
+  assert.equal(output, "fallback deck");
+  assert.match(slideModule, /source-slide-image/);
+  assert.match(result.warnings.join("\n"), /retrying with element-level fallback/);
+});
+
+test("PPT editable reconstruction reports missing local presentations runtime without throwing", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ppt-editable-runtime-missing-"));
+  const result = await buildEditablePptxReconstruction({
+    skillDir: join(dir, "missing-skill"),
+    presentationsBaseDir: join(dir, "missing-cache"),
+    outputPath: join(dir, "editable.pptx"),
+    slides: [],
+    apiKey: "sk-test",
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.warnings.join("\n"), /runtime was not found/i);
 });
 
 test("PPT smooth transition writes a Morph transition by default", () => {
@@ -224,14 +588,21 @@ test("PPT deck store writes manifests, reads newest first, and keeps output down
     slides: [],
     pptxRelativePath: "2026-04-30/new.pptx",
     pptxFilename: "new.pptx",
+    editablePptxRelativePath: "2026-04-30/new-editable.pptx",
+    editablePptxFilename: "new-editable.pptx",
+    editablePptxWarnings: ["Slide 2 used image fallback"],
   });
 
   const decks = await store.listManifests();
   assert.deepEqual(decks.map((deck) => deck.deckId), ["deck-new", "deck-old"]);
   assert.equal(decks[0].pptxUrl, "/output/2026-04-30/new.pptx");
+  assert.equal(decks[0].editablePptxUrl, "/output/2026-04-30/new-editable.pptx");
+  assert.equal(decks[0].editablePptxFilename, "new-editable.pptx");
+  assert.deepEqual(decks[0].editablePptxWarnings, ["Slide 2 used image fallback"]);
 
   const raw = await readFile(join(outputDir, "json", "ppt-decks", "deck-new.json"), "utf8");
   assert.match(raw, /新演示/);
+  assert.match(raw, /editablePptxRelativePath/);
 });
 
 test("PPT deck store merges manifest records with PPTX files found in output folders", async () => {

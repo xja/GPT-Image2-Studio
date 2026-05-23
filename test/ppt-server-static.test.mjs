@@ -10,8 +10,10 @@ const pptExportPath = new URL("../lib/ppt-export.mjs", import.meta.url);
 test("server exposes PPT generation, completion and deck history endpoints", async () => {
   const server = await readFile(serverPath, "utf8");
 
+  assert.match(server, /async function handlePptAnalyze/);
   assert.match(server, /async function handlePptGenerate/);
   assert.match(server, /async function handlePptComplete/);
+  assert.match(server, /url\.pathname === "\/api\/ppt\/analyze"/);
   assert.match(server, /url\.pathname === "\/api\/ppt\/generate"/);
   assert.match(server, /url\.pathname === "\/api\/ppt\/complete"/);
   assert.match(server, /url\.pathname === "\/api\/ppt\/slide\/edit"/);

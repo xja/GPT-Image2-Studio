@@ -67,6 +67,8 @@ test("creation store preserves scenario image count and reference image metadata
       productName: "AeroPress Clear",
       scenario: "social-seeding",
       scenarioLabel: "社媒种草",
+      visualLanguage: "premium-studio",
+      visualLanguageLabel: "高端棚拍",
       industryTemplate: "food",
       industryTemplateLabel: "食品饮料",
       industryTemplatePath: "食品生鲜 > 休闲食品 > 坚果炒货 > 混合坚果",
@@ -88,6 +90,8 @@ test("creation store preserves scenario image count and reference image metadata
 
   assert.equal(manifest.scenario, "social-seeding");
   assert.equal(manifest.scenarioLabel, "社媒种草");
+  assert.equal(manifest.visualLanguage, "premium-studio");
+  assert.equal(manifest.visualLanguageLabel, "高端棚拍");
   assert.equal(manifest.industryTemplate, "food");
   assert.equal(manifest.industryTemplateLabel, "食品饮料");
   assert.equal(manifest.industryTemplatePath, "食品生鲜 > 休闲食品 > 坚果炒货 > 混合坚果");
@@ -103,6 +107,22 @@ test("creation store preserves scenario image count and reference image metadata
       ["package.png", "package", "包装清单"],
     ],
   );
+});
+
+test("creation store falls back legacy set manifests to classic commercial visual language", () => {
+  const manifest = normalizeCreationSetManifest(
+    {
+      setId: "creation-set-legacy",
+      productName: "Legacy product",
+      createdAt: "2026-05-05T09:00:00.000Z",
+      status: "completed",
+      items: [],
+    },
+    { publicBasePath: "/output" },
+  );
+
+  assert.equal(manifest.visualLanguage, "classic-commercial");
+  assert.equal(manifest.visualLanguageLabel, "经典商业摄影");
 });
 
 test("creation store preserves item generation telemetry", () => {

@@ -56,15 +56,24 @@ import {
   MAX_CREATION_REFERENCE_IMAGES,
   MAX_CONCURRENT_TASKS_PER_SESSION,
   MAX_PARALLEL_TASKS_PER_SESSION,
+  MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES,
+  MAX_PORTRAIT_PERSON_REFERENCE_IMAGES,
   MAX_REFERENCE_IMAGES,
   REASONING_EFFORT_OPTIONS,
 } from "./lib/studio-constants.mjs";
-import { CREATION_REFERENCE_ANALYSIS_MODE, requestPromptAgentAnalysis } from "./lib/prompt-agent.mjs";
+import {
+  CREATION_REFERENCE_ANALYSIS_MODE,
+  PORTRAIT_REFERENCE_ANALYSIS_MODE,
+  requestPromptAgentAnalysis,
+} from "./lib/prompt-agent.mjs";
 import { createPromptAgentStore } from "./lib/prompt-agent-store.mjs";
 import { generatePptDeckOutline } from "./lib/ppt-deck-workflow.mjs";
+import { analyzePptDocument } from "./lib/ppt-document-analysis.mjs";
 import { buildSlideEditPrompt, buildSlideImagePrompts } from "./lib/ppt-slide-prompts.mjs";
 import { createPptDeckStore } from "./lib/ppt-deck-store.mjs";
 import { exportPptxDeck } from "./lib/ppt-export.mjs";
+import { buildEditablePptxFilename, buildEditablePptxReconstruction } from "./lib/ppt-editable-reconstruction.mjs";
+import { isEditablePptExportMode, normalizePptExportMode } from "./lib/ppt-export-mode.mjs";
 import {
   getMissingPptSlideNumbers,
   mergePptSlides,
@@ -89,10 +98,26 @@ import {
 } from "./lib/creation-logo-batch.mjs";
 import {
   applyCreationRepairOverrides,
+  buildCreationRepairPlan,
+  hasCreationRepairPlanningOverride,
   hydrateCreationRepairSkuSubjects,
+  refreshCreationRepairItemsFromPlan,
   selectCreationRepairItems,
 } from "./lib/creation-repair.mjs";
 import { buildCreationRelativeDir, createCreationSetStore } from "./lib/creation-store.mjs";
+import {
+  applyPortraitPlanOverrides,
+  buildPortraitPlan,
+} from "./lib/portrait-planner.mjs";
+import {
+  buildPortraitItemFilename,
+  buildPortraitRelativeDir,
+  createPortraitSetStore,
+} from "./lib/portrait-store.mjs";
+import {
+  applyPortraitRepairOverrides,
+  selectPortraitRepairItems,
+} from "./lib/portrait-repair.mjs";
 import {
   buildArticleBundle,
   buildArticleImagePrompt,
@@ -115,6 +140,7 @@ const promptAgentStore = createPromptAgentStore({ rootDir: localDataRootDir });
 const generationTaskStore = createGenerationTaskStore();
 const pptDeckStore = createPptDeckStore({ outputDir, publicBasePath: "/output" });
 const creationSetStore = createCreationSetStore({ outputDir, publicBasePath: "/output" });
+const portraitSetStore = createPortraitSetStore({ outputDir, publicBasePath: "/output" });
 const articleIllustrationSetStore = createArticleIllustrationSetStore({ outputDir, publicBasePath: "/output" });
 const port = Number(process.env.PORT || 3600);
 const activeTasksBySessionScope = new Map();
@@ -131,7 +157,22 @@ const STYLE_TRANSFER_REFERENCE_IMAGE_LABELS = [
   "Reference image 2: STYLE reference. This image is the style authority for final rendering, realism level, lighting, texture, color, and material finish.",
 ];
 const STYLE_TRANSFER_SOURCE_IMAGE_LABELS = [STYLE_TRANSFER_REFERENCE_IMAGE_LABELS[0]];
-const GENERATION_MODES = new Set(["style-transfer", "reference-analysis", IMAGE_DECOMPOSITION_MODE]);
+const GENERATION_MODES = new Set(["style-transfer", "reference-analysis", IMAGE_DECOMPOSITION_MODE, "portrait"]);
+
+function buildPortraitReferenceImageLabels(personReferenceImages = [], accessoryReferenceImages = []) {
+  const personCount = personReferenceImages.length;
+  const accessoryCount = accessoryReferenceImages.length;
+  return [
+    ...personReferenceImages.map(
+      (image, index) =>
+        `Portrait person reference ${index + 1} of ${personCount}: ${image.filename || "person reference image"}. Preserve visible identity, face, body proportions, hairstyle, and non-sensitive appearance cues from this person reference.`,
+    ),
+    ...accessoryReferenceImages.map(
+      (image, index) =>
+        `Portrait clothing, prop, and accessory reference ${index + 1} of ${accessoryCount}: ${image.filename || "styling reference image"}. Use this only for outfit, fabric, prop, accessory, styling, color, and material cues; do not treat it as another person identity.`,
+    ),
+  ];
+}
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -458,6 +499,7 @@ async function handleOpenOutput(response) {
     mkdir(join(todayOutputDir, `${todayDateFolder}-image-decomposition`), { recursive: true }),
     mkdir(join(todayOutputDir, `${todayDateFolder}-ppt`), { recursive: true }),
     mkdir(join(todayOutputDir, `${todayDateFolder}-creation`), { recursive: true }),
+    mkdir(join(todayOutputDir, `${todayDateFolder}-portrait`), { recursive: true }),
     mkdir(join(todayOutputDir, `${todayDateFolder}-article`), { recursive: true }),
   ]);
   openDirectory(todayOutputDir);
@@ -807,12 +849,18 @@ async function saveCompletedPptDeck({
   config,
   reasoningEffort,
   motion = {},
+  exportMode = "flat-image",
+  onEvent,
   pptDeckRelativeDir = buildPptDeckRelativeDir({ outline, deckId, createdAt }),
 }) {
   const sortedSlides = [...slides].sort((left, right) => left.slideNumber - right.slideNumber);
+  const normalizedExportMode = normalizePptExportMode(exportMode);
   const pptxFilename = `${buildPptDeckFolderName({ outline, deckId })}.pptx`;
   const pptxRelativePath = normalizePptRelativePath(`${pptDeckRelativeDir}/${pptxFilename}`);
   const pptxAbsolutePath = resolveOutputAssetPath(pptxRelativePath);
+  let editablePptxRelativePath = "";
+  let editablePptxFilename = "";
+  let editablePptxWarnings = [];
 
   await exportPptxDeck({
     outputPath: pptxAbsolutePath,
@@ -824,6 +872,39 @@ async function saveCompletedPptDeck({
     })),
   });
 
+  if (isEditablePptExportMode(normalizedExportMode)) {
+    editablePptxFilename = buildEditablePptxFilename(pptxFilename);
+    editablePptxRelativePath = normalizePptRelativePath(`${pptDeckRelativeDir}/${editablePptxFilename}`);
+    const editableResult = await buildEditablePptxReconstruction({
+      workspaceDir: resolveOutputAssetPath(`${pptDeckRelativeDir}/editable-reconstruction-workspace`),
+      outputPath: resolveOutputAssetPath(editablePptxRelativePath),
+      title: outline.title,
+      outline,
+      slides: sortedSlides,
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      responsesModel: config.responsesModel,
+      reasoningEffort,
+      onEvent: async (type, payload) => {
+        writeSseEventPayload(onEvent, type, payload);
+      },
+    });
+    editablePptxWarnings = editableResult.warnings || [];
+    if (!editableResult.ok) {
+      writeSseEventPayload(onEvent, "editable_reconstruction_warning", {
+        message: editablePptxWarnings.join("\n") || "Editable PPT reconstruction failed.",
+      });
+      editablePptxRelativePath = "";
+      editablePptxFilename = "";
+    } else {
+      writeSseEventPayload(onEvent, "editable_deck_saved", {
+        editablePptxUrl: buildPptPublicUrl(editablePptxRelativePath),
+        editablePptxFilename,
+        editablePptxWarnings,
+      });
+    }
+  }
+
   return pptDeckStore.saveManifest({
     deckId,
     title: outline.title,
@@ -834,6 +915,10 @@ async function saveCompletedPptDeck({
     slides: sortedSlides.map(({ absolutePath: _absolutePath, ...slide }) => slide),
     pptxRelativePath,
     pptxFilename,
+    editablePptxRelativePath,
+    editablePptxFilename,
+    editablePptxWarnings,
+    exportMode: normalizedExportMode,
     responsesModel: config.responsesModel,
     imageModel: "gpt-image-2",
     reasoningEffort,
@@ -841,8 +926,55 @@ async function saveCompletedPptDeck({
   });
 }
 
+function writeSseEventPayload(onEvent, type, payload) {
+  if (typeof onEvent === "function") {
+    onEvent(type, payload);
+  }
+}
+
 async function handlePptDecksGet(response) {
   sendJson(response, 200, await pptDeckStore.listManifests());
+}
+
+async function handlePptAnalyze(request, response) {
+  try {
+    const formData = await readFormDataBody(request);
+    const sourceDocuments = await toPptSourceDocuments([
+      ...formData.getAll("sourceFiles"),
+      ...formData.getAll("sourceFiles[]"),
+    ]);
+    const sourceText = String(formData.get("sourceText") || "").trim();
+    const topic = String(formData.get("topic") || "").trim();
+    const currentPageCount = Number.parseInt(String(formData.get("pageCount") || "0"), 10);
+    const currentStylePreset = String(formData.get("stylePreset") || "").trim();
+    const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
+    const reasoningEffort = normalizeReasoningEffort(
+      formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    );
+
+    if (!config.apiKey) {
+      throw new Error("当前未保存 API Key，请先在配置中保存。");
+    }
+
+    const analysis = await analyzePptDocument({
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      responsesModel: config.responsesModel,
+      reasoningEffort,
+      sourceDocuments,
+      sourceText,
+      topic,
+      currentPageCount,
+      currentStylePreset,
+    });
+
+    sendJson(response, 200, { ok: true, analysis });
+  } catch (error) {
+    sendJson(response, 400, {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 function writePptGenerationError(response, error) {
@@ -879,6 +1011,7 @@ async function handlePptGenerate(request, response) {
     const topic = String(formData.get("topic") || "").trim();
     const pageCount = Number.parseInt(String(formData.get("pageCount") || "0"), 10);
     const stylePreset = String(formData.get("stylePreset") || "").trim();
+    const exportMode = normalizePptExportMode(formData.get("exportMode"));
     const motion = normalizePptMotionOptions({
       dynamicPreset: formData.get("dynamicPreset"),
       transitionPreset: formData.get("transitionPreset"),
@@ -944,11 +1077,14 @@ async function handlePptGenerate(request, response) {
         hasSourceText: Boolean(sourceText),
         topic,
         stylePreset,
+        exportMode,
         ...motion,
       },
       config,
       reasoningEffort,
       motion,
+      exportMode,
+      onEvent: (type, payload) => writeSseEvent(response, type, payload),
       pptDeckRelativeDir,
     });
 
@@ -972,6 +1108,7 @@ async function handlePptComplete(request, response) {
 
   try {
     const payload = await readJsonBody(request);
+    const exportMode = normalizePptExportMode(payload.exportMode || payload.sources?.exportMode);
     const motion = normalizePptMotionOptions({
       dynamicPreset: payload.dynamicPreset,
       transitionPreset: payload.transitionPreset,
@@ -1052,6 +1189,8 @@ async function handlePptComplete(request, response) {
         config,
         reasoningEffort,
         motion,
+        exportMode,
+        onEvent: (type, payload) => writeSseEvent(response, type, payload),
         pptDeckRelativeDir,
       });
       writeSseEvent(response, "deck_saved", { deck });
@@ -1087,6 +1226,7 @@ async function handlePptSlideEdit(request, response) {
     const existingSlides = JSON.parse(String(formData.get("existingSlides") || "[]"));
     const slideNumber = Number.parseInt(String(formData.get("slideNumber") || "0"), 10);
     const stylePreset = String(formData.get("stylePreset") || "").trim();
+    const exportMode = normalizePptExportMode(formData.get("exportMode"));
     const motion = normalizePptMotionOptions({
       dynamicPreset: formData.get("dynamicPreset"),
       transitionPreset: formData.get("transitionPreset"),
@@ -1163,10 +1303,12 @@ async function handlePptSlideEdit(request, response) {
         outline: completion.outline,
         slides: mergedSlides,
         createdAt,
-        sources: { editedSlideNumber: slideNumber, stylePreset, ...motion },
+        sources: { editedSlideNumber: slideNumber, stylePreset, exportMode, ...motion },
         config,
         reasoningEffort,
         motion,
+        exportMode,
+        onEvent: (type, payload) => writeSseEvent(response, type, payload),
         pptDeckRelativeDir,
       });
       writeSseEvent(response, "deck_saved", { deck });
@@ -1369,6 +1511,8 @@ function buildCreationSetManifest({
     imageCount: plan.imageCount,
     scenario: plan.scenario,
     scenarioLabel: plan.scenarioLabel,
+    visualLanguage: plan.visualLanguage,
+    visualLanguageLabel: plan.visualLanguageLabel,
     industryTemplate: plan.industryTemplate,
     industryTemplateLabel: plan.industryTemplateLabel,
     industryTemplatePath: plan.industryTemplatePath,
@@ -1403,6 +1547,128 @@ function buildCreationImageFilename({ item, createdAt, setId, format }) {
     idSource: `${setId}-${item.slotIndex || item.itemId}`,
   });
   return `${String(item.slotIndex).padStart(2, "0")}-${filenameToken}-${baseName}`;
+}
+
+function updatePortraitItems(items, itemId, patch = {}) {
+  return items.map((item) => (item.itemId === itemId ? { ...item, ...patch } : item));
+}
+
+function getPortraitSetStatus(items) {
+  if (!items.length) {
+    return "failed";
+  }
+
+  const completedCount = items.filter((item) => item.status === "completed").length;
+  const failedCount = items.filter((item) => item.status === "failed").length;
+
+  if (completedCount === items.length) {
+    return "completed";
+  }
+
+  if (failedCount === items.length) {
+    return "failed";
+  }
+
+  if (failedCount > 0) {
+    return "partial_failed";
+  }
+
+  return "generating";
+}
+
+function parseJsonObject(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizePortraitVisiblePresentation(value) {
+  const normalized = String(value || "").trim();
+  return ["masculine-presenting", "feminine-presenting", "androgynous-presenting", "unclear"].includes(normalized)
+    ? normalized
+    : "unclear";
+}
+
+function normalizePortraitReferenceAnalysis(value = {}, referenceImageNames = []) {
+  const source = value && typeof value === "object" ? value : {};
+  return {
+    summary: String(source.summary || "").trim(),
+    visiblePresentation: normalizePortraitVisiblePresentation(source.visiblePresentation),
+    heightImpression: String(source.heightImpression || "unclear").trim(),
+    bodyBuild: String(source.bodyBuild || "unclear").trim(),
+    pose: String(source.pose || "").trim(),
+    clothing: String(source.clothing || "").trim(),
+    hair: String(source.hair || "").trim(),
+    faceVisibility: String(source.faceVisibility || "").trim(),
+    distinctVisibleFeatures: Array.isArray(source.distinctVisibleFeatures)
+      ? source.distinctVisibleFeatures.map((item) => String(item || "").trim()).filter(Boolean)
+      : [],
+    referenceRoles: Array.isArray(source.referenceRoles)
+      ? source.referenceRoles.map((item) => String(item || "").trim()).filter(Boolean)
+      : referenceImageNames.map((filename, index) => `Reference ${index + 1}: ${filename}`),
+    risks: Array.isArray(source.risks) ? source.risks.map((item) => String(item || "").trim()).filter(Boolean) : [],
+    safety: String(source.safety || "Use ordinary portrait or lifestyle styling unless the user confirms a safer specific direction.").trim(),
+    confidence: String(source.confidence || "unclear").trim(),
+  };
+}
+
+function buildPortraitPlanFromFormData(formData) {
+  const analysis = parseJsonObject(formData.get("analysis") || formData.get("visibleProfile"));
+  return buildPortraitPlan({
+    subjectName: formData.get("subjectName"),
+    subjectSummary: formData.get("subjectSummary"),
+    visibleProfile: analysis,
+    imageCount: formData.get("imageCount"),
+    selectedStyles: formData.get("selectedStyles"),
+    selectedShotTypes: formData.get("selectedShotTypes"),
+    selectedActions: formData.get("selectedActions"),
+    customStyle: formData.get("customStyle"),
+    notes: formData.get("notes") || formData.get("photographyNotes"),
+    ratio: formData.get("ratio"),
+    size: formData.get("size"),
+    format: formData.get("format"),
+    promptOverrides: formData.get("promptOverrides") || formData.get("planOverrides"),
+  });
+}
+
+function buildPortraitSetManifest({
+  setId,
+  plan,
+  createdAt,
+  updatedAt,
+  status,
+  relativeDir,
+  items,
+  referenceImageNames = [],
+}) {
+  return {
+    setId,
+    subjectName: plan.subjectName,
+    subjectSummary: plan.subjectSummary,
+    analysis: plan.visibleProfile,
+    referenceImageNames,
+    selectedStyles: plan.selectedStyles,
+    selectedShotTypes: plan.selectedShotTypes,
+    selectedActions: plan.selectedActions,
+    customStyle: plan.customStyle,
+    notes: plan.notes,
+    ratio: plan.ratio,
+    size: plan.size,
+    format: plan.format,
+    imageCount: plan.imageCount,
+    createdAt,
+    updatedAt: updatedAt || createdAt,
+    status,
+    relativeDir,
+    items,
+  };
 }
 
 function parseStringArrayJson(value) {
@@ -2138,6 +2404,175 @@ async function handleCreationSetPathsGet(request, response) {
   return sendJson(response, 200, buildCreationSetPathReport(set));
 }
 
+async function handlePortraitSetsGet(response) {
+  sendJson(response, 200, await portraitSetStore.listManifests(), {
+    "Cache-Control": "no-store",
+  });
+}
+
+async function handlePortraitSetFolderOpen(request, response) {
+  const payload = await readJsonBody(request);
+  const setId = String(payload.setId || "").trim();
+  if (!setId) {
+    return sendJson(response, 400, {
+      message: "缺少写真记录 ID。",
+    });
+  }
+
+  try {
+    const set = await portraitSetStore.readManifest(setId);
+    if (!set.relativeDir) {
+      return sendJson(response, 404, {
+        message: "这组写真记录没有 portrait 文件夹路径。",
+      });
+    }
+
+    const targetDir = resolveSafeOutputSubdirectory(set.relativeDir);
+    if (!targetDir) {
+      return sendJson(response, 400, {
+        message: "写真文件夹路径无效。",
+      });
+    }
+
+    const targetStat = await stat(targetDir);
+    if (!targetStat.isDirectory()) {
+      return sendJson(response, 404, {
+        message: "写真文件夹不存在。",
+      });
+    }
+
+    openDirectory(targetDir);
+    return sendJson(response, 200, {
+      ok: true,
+      setId,
+      directory: targetDir,
+    });
+  } catch (error) {
+    if (error && typeof error === "object" && error.code === "ENOENT") {
+      return sendJson(response, 404, {
+        message: "写真文件夹不存在。",
+      });
+    }
+
+    throw error;
+  }
+}
+
+function buildPortraitSetPathReport(set) {
+  const items = (Array.isArray(set.items) ? set.items : [])
+    .map((item) => {
+      const relativePath = String(item.relativePath || "").trim();
+      const absolutePath = resolveSafeOutputPath(item.relativePath);
+      if (!relativePath || !absolutePath) {
+        return null;
+      }
+
+      return {
+        itemId: String(item.itemId || ""),
+        title: String(item.title || ""),
+        filename: String(item.filename || ""),
+        relativePath,
+        absolutePath,
+        imageUrl: String(item.imageUrl || item.thumbnailUrl || ""),
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    setId: String(set.setId || ""),
+    subjectName: String(set.subjectName || ""),
+    relativeDir: String(set.relativeDir || ""),
+    absoluteDir: set.relativeDir ? resolveSafeOutputSubdirectory(set.relativeDir) : null,
+    items,
+  };
+}
+
+async function handlePortraitSetPathsGet(request, response) {
+  const payload = await readJsonBody(request);
+  const setId = String(payload.setId || "").trim();
+  if (!setId) {
+    return sendJson(response, 400, {
+      message: "缺少写真记录 ID。",
+    });
+  }
+
+  const set = await portraitSetStore.readManifest(setId);
+  return sendJson(response, 200, buildPortraitSetPathReport(set));
+}
+
+async function handlePortraitReferenceAnalyze(request, response) {
+  const formData = await readFormDataBody(request);
+  const personReferenceImages = await toReferenceImages([
+    ...formData.getAll("portraitReferenceImages"),
+    ...formData.getAll("referenceImages"),
+    ...formData.getAll("referenceImage"),
+  ]);
+
+  if (personReferenceImages.length === 0) {
+    return sendJson(response, 400, {
+      message: "请先上传人物参考图。",
+    });
+  }
+
+  if (personReferenceImages.length > MAX_PORTRAIT_PERSON_REFERENCE_IMAGES) {
+    return sendJson(response, 400, {
+      message: `人物参考图最多支持 ${MAX_PORTRAIT_PERSON_REFERENCE_IMAGES} 张。`,
+    });
+  }
+
+  if (personReferenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+    return sendJson(response, 400, {
+      message: "仅支持图片参考文件。",
+    });
+  }
+
+  const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
+  if (!config.apiKey) {
+    return sendJson(response, 400, {
+      message: "当前未保存 API Key，请先在配置中保存。",
+    });
+  }
+
+  const reasoningEffort = normalizeReasoningEffort(
+    formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+  );
+  const json = await requestPromptAgentAnalysis({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    image: personReferenceImages[0],
+    images: personReferenceImages,
+    mode: PORTRAIT_REFERENCE_ANALYSIS_MODE,
+    responsesModel: config.responsesModel,
+    reasoningEffort,
+  });
+  const analysis = normalizePortraitReferenceAnalysis(
+    json,
+    personReferenceImages.map((image) => image.filename).filter(Boolean),
+  );
+
+  return sendJson(response, 200, {
+    ok: true,
+    analysis,
+  });
+}
+
+async function handlePortraitPlan(request, response) {
+  try {
+    const formData = await readFormDataBody(request);
+    let plan = buildPortraitPlanFromFormData(formData);
+    plan = applyPortraitPlanOverrides(plan, formData.get("planOverrides"));
+
+    return sendJson(response, 200, {
+      ok: true,
+      plan,
+    });
+  } catch (error) {
+    return sendJson(response, 400, {
+      message: compactErrorMessage(error instanceof Error ? error.message : String(error), "写真计划生成失败"),
+    });
+  }
+}
+
 async function handleCreationReferenceAnalyze(request, response) {
   const formData = await readFormDataBody(request);
   const referenceImages = await toReferenceImages([
@@ -2206,6 +2641,7 @@ async function handleCreationPlan(request, response) {
       targetLanguage: formData.get("targetLanguage"),
       imageCount: formData.get("imageCount"),
       scenario: formData.get("scenario"),
+      visualLanguage: formData.get("visualLanguage"),
       industryTemplate: formData.get("industryTemplate"),
       selectedRoles: formData.get("selectedRoles"),
       referenceImageRoles,
@@ -2223,6 +2659,310 @@ async function handleCreationPlan(request, response) {
     return sendJson(response, 400, {
       message: compactErrorMessage(error instanceof Error ? error.message : String(error), "套图计划生成失败"),
     });
+  }
+}
+
+async function handlePortraitGenerate(request, response) {
+  response.writeHead(200, {
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "Content-Type": "text/event-stream; charset=utf-8",
+  });
+
+  let setId = "";
+  let items = [];
+  let plan = null;
+  let portraitRelativeDir = "";
+  let createdAt = new Date().toISOString();
+  let referenceImages = [];
+  let referenceImageNames = [];
+
+  try {
+    const formData = await readFormDataBody(request);
+    setId = `portrait-set-${randomUUID()}`;
+    createdAt = new Date().toISOString();
+    const personReferenceImages = await toReferenceImages([
+      ...formData.getAll("portraitReferenceImages"),
+      ...formData.getAll("referenceImages"),
+      ...formData.getAll("referenceImage"),
+    ]);
+    const accessoryReferenceImages = await toReferenceImages([
+      ...formData.getAll("portraitAccessoryReferenceImages"),
+    ]);
+    if (personReferenceImages.length === 0) {
+      throw new Error("请先上传人物参考图。");
+    }
+    if (personReferenceImages.length > MAX_PORTRAIT_PERSON_REFERENCE_IMAGES) {
+      throw new Error(`人物参考图最多支持 ${MAX_PORTRAIT_PERSON_REFERENCE_IMAGES} 张。`);
+    }
+    if (accessoryReferenceImages.length > MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES) {
+      throw new Error(`服装道具配饰参考图最多支持 ${MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES} 张。`);
+    }
+    referenceImages = [...personReferenceImages, ...accessoryReferenceImages];
+    const referenceImageLabels = buildPortraitReferenceImageLabels(personReferenceImages, accessoryReferenceImages);
+    if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+      throw new Error("仅支持图片参考文件。");
+    }
+    referenceImageNames = referenceImages.map((image) => image.filename).filter(Boolean);
+    plan = buildPortraitPlanFromFormData(formData);
+    plan = applyPortraitPlanOverrides(plan, formData.get("planOverrides"));
+
+    const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
+    if (!config.apiKey) {
+      writeSseEvent(response, "error", {
+        message: "当前未保存 API Key，请先在配置中保存。",
+      });
+      return;
+    }
+
+    const clientSessionId = getClientSessionId(request, formData);
+    const generationRequestScope = "portrait";
+    const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || plan.ratio || "4:5"));
+    const requestedSizeInput = String(formData.get("size") || plan.size || "auto").trim().toLowerCase();
+    const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
+    if (requestedSize !== requestedSizeInput && requestedSizeInput !== "") {
+      throw new Error(`当前比例 ${ratioOption.value} 不支持分辨率 ${requestedSizeInput}`);
+    }
+
+    const finalSize = requestedSize === "auto" ? getDefaultGenerationSize(ratioOption.value) : requestedSize;
+    const finalQuality = config.defaults?.quality || "high";
+    const finalFormat = normalizeOutputFormat(String(formData.get("format") || plan.format || config.defaults?.format || "png"));
+    const reasoningEffort = normalizeReasoningEffort(
+      formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    );
+
+    portraitRelativeDir = buildPortraitRelativeDir({
+      createdAt,
+      subjectName: plan.subjectName || plan.subjectSummary,
+      setId,
+    });
+    items = plan.items.map((item) => ({
+      ...item,
+      status: "queued",
+      filename: "",
+      relativePath: "",
+      imageUrl: "",
+      thumbnailUrl: "",
+      error: "",
+    }));
+
+    let setManifest = await portraitSetStore.saveManifest(
+      buildPortraitSetManifest({
+        setId,
+        plan,
+        createdAt,
+        status: "generating",
+        relativeDir: portraitRelativeDir,
+        items,
+        referenceImageNames,
+      }),
+    );
+
+    writeSseEvent(response, "set_started", { set: setManifest });
+    writeSseEvent(response, "plan", { setId, items });
+
+    await runWithConcurrency(plan.items, MAX_PARALLEL_TASKS_PER_SESSION, async (item) => {
+      const taskId = `${setId}-${item.itemId}`;
+      const generationStartedAt = new Date().toISOString();
+      const generationStartedAtMs = Date.now();
+      let finalBase64 = "";
+      let slotClaimed = false;
+
+      try {
+        if (!claimSessionTaskSlot(clientSessionId, taskId, generationRequestScope)) {
+          throw new Error(`同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
+        }
+        slotClaimed = true;
+        items = updatePortraitItems(items, item.itemId, {
+          status: "generating",
+          generationStartedAt,
+        });
+        writeSseEvent(response, "item_started", { setId, itemId: item.itemId, shotType: item.shotType });
+
+        const finalPrompt = appendRatioHintToPrompt(item.prompt, ratioOption);
+        const generationResult = await requestStudioImageGeneration({
+          baseUrl: config.baseUrl,
+          apiKey: config.apiKey,
+          prompt: finalPrompt,
+          referenceImages,
+          referenceImageLabels,
+          size: finalSize,
+          quality: finalQuality,
+          format: toApiOutputFormat(finalFormat),
+          responsesModel: config.responsesModel,
+          reasoningEffort,
+          async onEvent(event) {
+            if (event.type === "status") {
+              writeSseEvent(response, "item_status", {
+                setId,
+                itemId: item.itemId,
+                stage: event.stage,
+                message: event.message,
+              });
+            }
+
+            if (event.type === "partial_image") {
+              writeSseEvent(response, "item_partial_image", {
+                setId,
+                itemId: item.itemId,
+                dataUrl: event.dataUrl,
+              });
+            }
+
+            if (event.type === "final_image") {
+              finalBase64 = event.base64;
+              writeSseEvent(response, "item_final_image", {
+                setId,
+                itemId: item.itemId,
+                dataUrl: `data:${toOutputFormatMimeType(finalFormat)};base64,${normalizeBase64(event.base64)}`,
+              });
+            }
+          },
+        });
+
+        finalBase64 = finalBase64 || generationResult.finalImageBase64;
+        if (!finalBase64) {
+          throw new Error("上游响应结束，但没有拿到最终写真图。");
+        }
+
+        const generationCompletedAt = new Date().toISOString();
+        const generationDurationMs = Math.max(0, Date.now() - generationStartedAtMs);
+        const savedSize = generationResult.effectiveSize || finalSize;
+        const filename = buildPortraitItemFilename(item, finalFormat);
+        const saved = await saveGeneratedAsset({
+          outputDir,
+          relativeDir: portraitRelativeDir,
+          filename,
+          imageBuffer: Buffer.from(normalizeBase64(finalBase64), "base64"),
+          metadata: {
+            prompt: item.prompt,
+            createdAt,
+            baseUrl: config.baseUrl,
+            responsesModel: config.responsesModel,
+            imageModel: "gpt-image-2",
+            generationMode: "portrait",
+            ratio: ratioOption.value,
+            ratioLabel: ratioOption.label,
+            size: savedSize,
+            quality: finalQuality,
+            format: finalFormat,
+            reasoningEffort,
+            generationStartedAt,
+            generationCompletedAt,
+            generationDurationMs,
+            assetKind: "portrait-image",
+            portraitSetId: setId,
+            portraitItemId: item.itemId,
+            portraitStyle: item.style,
+            portraitShotType: item.shotType,
+            portraitAction: item.action,
+            subjectName: plan.subjectName,
+            subjectSummary: plan.subjectSummary,
+            selectedStyles: plan.selectedStyles,
+            selectedActions: plan.selectedActions,
+            hasReferenceImage: referenceImages.length > 0,
+            referenceImageNames,
+            referenceImageName: referenceImageNames[0] || "",
+            galleryVisible: false,
+          },
+        });
+        const imageUrl = buildPublicAssetUrl("/output", saved.relativePath, saved.createdAt);
+
+        items = updatePortraitItems(items, item.itemId, {
+          status: "completed",
+          filename,
+          relativePath: saved.relativePath,
+          imageUrl,
+          thumbnailUrl: imageUrl,
+          generationStartedAt,
+          generationCompletedAt,
+          generationDurationMs,
+          size: savedSize,
+          format: finalFormat,
+        });
+        setManifest = await portraitSetStore.saveManifest(
+          buildPortraitSetManifest({
+            setId,
+            plan,
+            createdAt,
+            updatedAt: generationCompletedAt,
+            status: getPortraitSetStatus(items),
+            relativeDir: portraitRelativeDir,
+            items,
+            referenceImageNames,
+          }),
+        );
+
+        writeSseEvent(response, "item_saved", {
+          setId,
+          item: setManifest.items.find((entry) => entry.itemId === item.itemId),
+          set: setManifest,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        items = updatePortraitItems(items, item.itemId, {
+          status: "failed",
+          error: message,
+        });
+        setManifest = await portraitSetStore.saveManifest(
+          buildPortraitSetManifest({
+            setId,
+            plan,
+            createdAt,
+            updatedAt: new Date().toISOString(),
+            status: getPortraitSetStatus(items),
+            relativeDir: portraitRelativeDir,
+            items,
+            referenceImageNames,
+          }),
+        );
+        writeSseEvent(response, "item_failed", {
+          setId,
+          itemId: item.itemId,
+          message,
+          set: setManifest,
+        });
+      } finally {
+        if (slotClaimed) {
+          releaseSessionTaskSlot(clientSessionId, taskId, generationRequestScope);
+        }
+      }
+    });
+
+    const finalSet = await portraitSetStore.saveManifest(
+      buildPortraitSetManifest({
+        setId,
+        plan,
+        createdAt,
+        updatedAt: new Date().toISOString(),
+        status: getPortraitSetStatus(items),
+        relativeDir: portraitRelativeDir,
+        items,
+        referenceImageNames,
+      }),
+    );
+    writeSseEvent(response, "complete", { set: finalSet });
+  } catch (error) {
+    const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "写真生成失败");
+    if (setId && plan) {
+      await portraitSetStore.saveManifest(
+        buildPortraitSetManifest({
+          setId,
+          plan,
+          createdAt,
+          updatedAt: new Date().toISOString(),
+          status: items.length > 0 ? getPortraitSetStatus(items) : "failed",
+          relativeDir: portraitRelativeDir,
+          items,
+          referenceImageNames,
+        }),
+      );
+    }
+    writeSseEvent(response, "error", { message });
+  } finally {
+    if (!response.destroyed && !response.writableEnded) {
+      response.end();
+    }
   }
 }
 
@@ -2271,6 +3011,7 @@ async function handleCreationGenerate(request, response) {
       targetLanguage: formData.get("targetLanguage"),
       imageCount: formData.get("imageCount"),
       scenario: formData.get("scenario"),
+      visualLanguage: formData.get("visualLanguage"),
       industryTemplate: formData.get("industryTemplate"),
       selectedRoles: formData.get("selectedRoles"),
       referenceImageRoles,
@@ -2860,6 +3601,249 @@ async function handleCreationLogoBatchGenerate(request, response) {
   }
 }
 
+async function handlePortraitRepair(request, response) {
+  response.writeHead(200, {
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "Content-Type": "text/event-stream; charset=utf-8",
+  });
+
+  let setId = "";
+  let setManifest = null;
+  let items = [];
+  let referenceImages = [];
+  let referenceImageNames = [];
+
+  try {
+    const formData = await readFormDataBody(request);
+    setId = String(formData.get("setId") || "").trim();
+    if (!setId) {
+      throw new Error("缺少写真记录 ID。");
+    }
+
+    referenceImages = await toReferenceImages([
+      ...formData.getAll("portraitReferenceImages"),
+      ...formData.getAll("referenceImages"),
+      ...formData.getAll("referenceImage"),
+    ]);
+    if (referenceImages.length > MAX_REFERENCE_IMAGES) {
+      throw new Error(`人物参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`);
+    }
+    if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+      throw new Error("仅支持图片参考文件。");
+    }
+    referenceImageNames = referenceImages.map((image) => image.filename).filter(Boolean);
+
+    setManifest = await portraitSetStore.readManifest(setId);
+    items = Array.isArray(setManifest.items) ? setManifest.items : [];
+    const repairItems = selectPortraitRepairItems(setManifest, {
+      itemId: formData.get("itemId"),
+      scope: formData.get("scope"),
+    }).map((item) => applyPortraitRepairOverrides(item, { promptOverride: formData.get("promptOverride") }));
+    if (repairItems.length === 0) {
+      throw new Error("没有需要补图或重生成的写真项。");
+    }
+
+    const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
+    if (!config.apiKey) {
+      throw new Error("当前未保存 API Key，请先在配置中保存。");
+    }
+
+    const clientSessionId = getClientSessionId(request, formData);
+    const generationRequestScope = "portrait";
+    const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || setManifest.ratio || "4:5"));
+    const requestedSizeInput = String(formData.get("size") || setManifest.size || "auto").trim().toLowerCase();
+    const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
+    if (requestedSize !== requestedSizeInput && requestedSizeInput !== "") {
+      throw new Error(`当前比例 ${ratioOption.value} 不支持分辨率 ${requestedSizeInput}`);
+    }
+    const finalSize = requestedSize === "auto" ? getDefaultGenerationSize(ratioOption.value) : requestedSize;
+    const finalQuality = config.defaults?.quality || "high";
+    const finalFormat = normalizeOutputFormat(String(formData.get("format") || setManifest.format || config.defaults?.format || "png"));
+    const reasoningEffort = normalizeReasoningEffort(
+      formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    );
+    const createdAt = setManifest.createdAt || new Date().toISOString();
+    const portraitRelativeDir = setManifest.relativeDir || buildPortraitRelativeDir({
+      createdAt,
+      subjectName: setManifest.subjectName || setManifest.subjectSummary,
+      setId,
+    });
+
+    writeSseEvent(response, "repair_started", { setId, itemIds: repairItems.map((item) => item.itemId) });
+
+    await runWithConcurrency(repairItems, MAX_PARALLEL_TASKS_PER_SESSION, async (item) => {
+      const taskId = `${setId}-${item.itemId}-repair`;
+      const generationStartedAt = new Date().toISOString();
+      const generationStartedAtMs = Date.now();
+      let finalBase64 = "";
+      let slotClaimed = false;
+
+      try {
+        if (!claimSessionTaskSlot(clientSessionId, taskId, generationRequestScope)) {
+          throw new Error(`同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
+        }
+        slotClaimed = true;
+        items = updatePortraitItems(items, item.itemId, {
+          ...item,
+          status: "generating",
+          generationStartedAt,
+          error: "",
+        });
+        writeSseEvent(response, "item_started", { setId, itemId: item.itemId, shotType: item.shotType });
+
+        const finalPrompt = appendRatioHintToPrompt(item.prompt, ratioOption);
+        const generationResult = await requestStudioImageGeneration({
+          baseUrl: config.baseUrl,
+          apiKey: config.apiKey,
+          prompt: finalPrompt,
+          referenceImages,
+          size: finalSize,
+          quality: finalQuality,
+          format: toApiOutputFormat(finalFormat),
+          responsesModel: config.responsesModel,
+          reasoningEffort,
+          async onEvent(event) {
+            if (event.type === "status") {
+              writeSseEvent(response, "item_status", {
+                setId,
+                itemId: item.itemId,
+                stage: event.stage,
+                message: event.message,
+              });
+            }
+            if (event.type === "partial_image") {
+              writeSseEvent(response, "item_partial_image", {
+                setId,
+                itemId: item.itemId,
+                dataUrl: event.dataUrl,
+              });
+            }
+            if (event.type === "final_image") {
+              finalBase64 = event.base64;
+              writeSseEvent(response, "item_final_image", {
+                setId,
+                itemId: item.itemId,
+                dataUrl: `data:${toOutputFormatMimeType(finalFormat)};base64,${normalizeBase64(event.base64)}`,
+              });
+            }
+          },
+        });
+
+        finalBase64 = finalBase64 || generationResult.finalImageBase64;
+        if (!finalBase64) {
+          throw new Error("上游响应结束，但没有拿到最终写真图。");
+        }
+
+        const generationCompletedAt = new Date().toISOString();
+        const generationDurationMs = Math.max(0, Date.now() - generationStartedAtMs);
+        const savedSize = generationResult.effectiveSize || finalSize;
+        const filename = buildPortraitItemFilename(item, finalFormat);
+        const saved = await saveGeneratedAsset({
+          outputDir,
+          relativeDir: portraitRelativeDir,
+          filename,
+          imageBuffer: Buffer.from(normalizeBase64(finalBase64), "base64"),
+          metadata: {
+            prompt: item.prompt,
+            createdAt,
+            baseUrl: config.baseUrl,
+            responsesModel: config.responsesModel,
+            imageModel: "gpt-image-2",
+            generationMode: "portrait",
+            ratio: ratioOption.value,
+            ratioLabel: ratioOption.label,
+            size: savedSize,
+            quality: finalQuality,
+            format: finalFormat,
+            reasoningEffort,
+            generationStartedAt,
+            generationCompletedAt,
+            generationDurationMs,
+            assetKind: "portrait-image",
+            portraitSetId: setId,
+            portraitItemId: item.itemId,
+            portraitStyle: item.style,
+            portraitShotType: item.shotType,
+            portraitAction: item.action,
+            subjectName: setManifest.subjectName,
+            subjectSummary: setManifest.subjectSummary,
+            selectedStyles: setManifest.selectedStyles,
+            selectedActions: setManifest.selectedActions,
+            hasReferenceImage: referenceImages.length > 0,
+            referenceImageNames,
+            referenceImageName: referenceImageNames[0] || "",
+            galleryVisible: false,
+          },
+        });
+        const imageUrl = buildPublicAssetUrl("/output", saved.relativePath, saved.createdAt);
+        items = updatePortraitItems(items, item.itemId, {
+          ...item,
+          status: "completed",
+          filename,
+          relativePath: saved.relativePath,
+          imageUrl,
+          thumbnailUrl: imageUrl,
+          generationStartedAt,
+          generationCompletedAt,
+          generationDurationMs,
+          size: savedSize,
+          format: finalFormat,
+          error: "",
+        });
+        setManifest = await portraitSetStore.saveManifest({
+          ...setManifest,
+          status: getPortraitSetStatus(items),
+          updatedAt: generationCompletedAt,
+          relativeDir: portraitRelativeDir,
+          referenceImageNames: referenceImageNames.length > 0 ? referenceImageNames : setManifest.referenceImageNames,
+          items,
+        });
+        writeSseEvent(response, "item_saved", {
+          setId,
+          item: setManifest.items.find((entry) => entry.itemId === item.itemId),
+          set: setManifest,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        items = updatePortraitItems(items, item.itemId, {
+          ...item,
+          status: "failed",
+          error: message,
+        });
+        setManifest = await portraitSetStore.saveManifest({
+          ...setManifest,
+          status: getPortraitSetStatus(items),
+          updatedAt: new Date().toISOString(),
+          relativeDir: portraitRelativeDir,
+          items,
+        });
+        writeSseEvent(response, "item_failed", { setId, itemId: item.itemId, message, set: setManifest });
+      } finally {
+        if (slotClaimed) {
+          releaseSessionTaskSlot(clientSessionId, taskId, generationRequestScope);
+        }
+      }
+    });
+
+    const finalSet = await portraitSetStore.saveManifest({
+      ...setManifest,
+      status: getPortraitSetStatus(items),
+      updatedAt: new Date().toISOString(),
+      items,
+    });
+    writeSseEvent(response, "complete", { set: finalSet });
+  } catch (error) {
+    writeSseEvent(response, "error", {
+      message: compactErrorMessage(error instanceof Error ? error.message : String(error), "写真补图失败"),
+    });
+  } finally {
+    if (!response.destroyed && !response.writableEnded) {
+      response.end();
+    }
+  }
+}
+
 async function handleCreationRepair(request, response) {
   response.writeHead(200, {
     "Cache-Control": "no-cache, no-transform",
@@ -2920,18 +3904,27 @@ async function handleCreationRepair(request, response) {
     const repairItemId = formData.get("itemId");
     const promptOverride = formData.get("promptOverride");
     const marketingCopyOverride = formData.get("marketingCopyOverride");
-    const repairItems = hydrateCreationRepairSkuSubjects(
+    const repairPlanningOverrides = {
+      productName: formData.get("productName"),
+      productDescription: formData.get("productDescription"),
+      sellingPoints: formData.get("sellingPoints"),
+      dimensionSpecs: formData.get("dimensionSpecs"),
+      dimensionUnitMode: formData.get("dimensionUnitMode"),
+      targetLanguage: formData.get("targetLanguage"),
+      scenario: formData.get("scenario"),
+      visualLanguage: formData.get("visualLanguage"),
+      industryTemplate: formData.get("industryTemplate"),
+      selectedRoles: formData.get("selectedRoles"),
+      referenceImageRoles,
+      skuSubjects: formData.get("skuSubjects"),
+      skuBundleCount: formData.get("skuBundleCount"),
+      logoOptions: normalizedLogoOptions.enabled ? normalizedLogoOptions : existingSet.logo || null,
+    };
+    let repairItems = hydrateCreationRepairSkuSubjects(
       selectCreationRepairItems(existingSet, {
         itemId: repairItemId,
         scope: formData.get("scope"),
-      }).map((item) =>
-        repairItemId
-          ? applyCreationRepairOverrides(item, {
-              promptOverride,
-              marketingCopyOverride,
-            })
-          : item,
-      ),
+      }),
       existingSet,
     );
     if (repairItems.length === 0) {
@@ -2953,6 +3946,8 @@ async function handleCreationRepair(request, response) {
       imageCount: existingSet.imageCount,
       scenario: existingSet.scenario,
       scenarioLabel: existingSet.scenarioLabel,
+      visualLanguage: existingSet.visualLanguage || "classic-commercial",
+      visualLanguageLabel: existingSet.visualLanguageLabel || "",
       industryTemplate: existingSet.industryTemplate || "general",
       industryTemplateLabel: existingSet.industryTemplateLabel || "",
       industryTemplatePath: existingSet.industryTemplatePath || "",
@@ -2961,6 +3956,18 @@ async function handleCreationRepair(request, response) {
       skuBundleCount: existingSet.skuBundleCount || 1,
       logo: normalizedLogoOptions.enabled ? normalizedLogoOptions : existingSet.logo || null,
     };
+    if (hasCreationRepairPlanningOverride(existingSet, repairPlanningOverrides)) {
+      repairPlan = buildCreationRepairPlan(existingSet, repairPlanningOverrides);
+      repairItems = refreshCreationRepairItemsFromPlan(repairItems, repairPlan);
+    }
+    if (repairItemId) {
+      repairItems = repairItems.map((item) =>
+        applyCreationRepairOverrides(item, {
+          promptOverride,
+          marketingCopyOverride,
+        }),
+      );
+    }
 
     const clientSessionId = getClientSessionId(request, formData);
     const generationRequestScope = "creation";
@@ -3638,6 +4645,10 @@ async function routeRequest(request, response) {
     return handleCreationSetsGet(response);
   }
 
+  if (request.method === "GET" && url.pathname === "/api/portrait/sets") {
+    return handlePortraitSetsGet(response);
+  }
+
   if (request.method === "GET" && url.pathname === "/api/article-illustration/sets") {
     return handleArticleIllustrationSetsGet(response);
   }
@@ -3658,16 +4669,32 @@ async function routeRequest(request, response) {
     return handleCreationSetFolderOpen(request, response);
   }
 
+  if (request.method === "POST" && url.pathname === "/api/portrait/sets/open-folder") {
+    return handlePortraitSetFolderOpen(request, response);
+  }
+
   if (request.method === "POST" && url.pathname === "/api/creation/sets/paths") {
     return handleCreationSetPathsGet(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/portrait/sets/paths") {
+    return handlePortraitSetPathsGet(request, response);
   }
 
   if (request.method === "POST" && url.pathname === "/api/creation/reference/analyze") {
     return handleCreationReferenceAnalyze(request, response);
   }
 
+  if (request.method === "POST" && url.pathname === "/api/portrait/reference/analyze") {
+    return handlePortraitReferenceAnalyze(request, response);
+  }
+
   if (request.method === "POST" && url.pathname === "/api/creation/plan") {
     return handleCreationPlan(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/portrait/plan") {
+    return handlePortraitPlan(request, response);
   }
 
   if (request.method === "GET" && url.pathname === "/api/generation/tasks") {
@@ -3702,12 +4729,24 @@ async function routeRequest(request, response) {
     return handleCreationGenerate(request, response);
   }
 
+  if (request.method === "POST" && url.pathname === "/api/portrait/generate") {
+    return handlePortraitGenerate(request, response);
+  }
+
   if (request.method === "POST" && url.pathname === "/api/creation/logo-batch") {
     return handleCreationLogoBatchGenerate(request, response);
   }
 
   if (request.method === "POST" && url.pathname === "/api/creation/repair") {
     return handleCreationRepair(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/portrait/repair") {
+    return handlePortraitRepair(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/ppt/analyze") {
+    return handlePptAnalyze(request, response);
   }
 
   if (request.method === "POST" && url.pathname === "/api/ppt/generate") {

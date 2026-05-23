@@ -4,6 +4,8 @@ const STRING_METADATA_FIELDS = [
   "baseUrl",
   "responsesModel",
   "imageModel",
+  "generationMode",
+  "assetKind",
   "referenceImageName",
   "ratio",
   "ratioLabel",
@@ -14,6 +16,13 @@ const STRING_METADATA_FIELDS = [
   "generationStartedAt",
   "generationCompletedAt",
   "generationDurationMs",
+  "portraitSetId",
+  "portraitItemId",
+  "portraitStyle",
+  "portraitShotType",
+  "portraitAction",
+  "subjectName",
+  "subjectSummary",
 ];
 
 function normalizeString(value) {
@@ -57,6 +66,16 @@ export function buildGalleryMetadataCacheEntry(item = {}) {
     entry.hasReferenceImage = true;
   }
 
+  const selectedStyles = normalizeStringArray(item.selectedStyles);
+  if (selectedStyles.length > 0) {
+    entry.selectedStyles = selectedStyles;
+  }
+
+  const selectedActions = normalizeStringArray(item.selectedActions);
+  if (selectedActions.length > 0) {
+    entry.selectedActions = selectedActions;
+  }
+
   return entry;
 }
 
@@ -82,6 +101,12 @@ export function mergeGalleryItemWithCachedMetadata(item = {}, cachedEntry = {}) 
   merged.hasReferenceImage = Boolean(
     item.hasReferenceImage || cachedEntry.hasReferenceImage || nextReferenceNames.length > 0 || nextReferenceName,
   );
+  const currentSelectedStyles = normalizeStringArray(item.selectedStyles);
+  const cachedSelectedStyles = normalizeStringArray(cachedEntry.selectedStyles);
+  merged.selectedStyles = currentSelectedStyles.length > 0 ? currentSelectedStyles : cachedSelectedStyles;
+  const currentSelectedActions = normalizeStringArray(item.selectedActions);
+  const cachedSelectedActions = normalizeStringArray(cachedEntry.selectedActions);
+  merged.selectedActions = currentSelectedActions.length > 0 ? currentSelectedActions : cachedSelectedActions;
 
   return merged;
 }
@@ -113,6 +138,18 @@ export function collectGalleryMetadataRepairPatch(sourceItem = {}, recoveredItem
     Boolean(recoveredItem.hasReferenceImage || recoveredReferenceNames.length > 0 || recoveredReferenceName)
   ) {
     patch.hasReferenceImage = true;
+  }
+
+  const sourceSelectedStyles = normalizeStringArray(sourceItem.selectedStyles);
+  const recoveredSelectedStyles = normalizeStringArray(recoveredItem.selectedStyles);
+  if (sourceSelectedStyles.length === 0 && recoveredSelectedStyles.length > 0) {
+    patch.selectedStyles = recoveredSelectedStyles;
+  }
+
+  const sourceSelectedActions = normalizeStringArray(sourceItem.selectedActions);
+  const recoveredSelectedActions = normalizeStringArray(recoveredItem.selectedActions);
+  if (sourceSelectedActions.length === 0 && recoveredSelectedActions.length > 0) {
+    patch.selectedActions = recoveredSelectedActions;
   }
 
   return patch;

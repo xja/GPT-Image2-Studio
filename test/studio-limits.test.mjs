@@ -6,6 +6,8 @@ import {
   MAX_CREATION_REFERENCE_IMAGES,
   MAX_CONCURRENT_TASKS_PER_SESSION,
   MAX_PARALLEL_TASKS_PER_SESSION,
+  MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES,
+  MAX_PORTRAIT_PERSON_REFERENCE_IMAGES,
   MAX_REFERENCE_IMAGES,
 } from "../lib/studio-constants.mjs";
 
@@ -25,11 +27,15 @@ test("studio task limits keep 25 queued tasks and allow ten parallel tasks", asy
 test("studio reference limits keep standard references at six and creation references at nine", async () => {
   assert.equal(MAX_REFERENCE_IMAGES, 6);
   assert.equal(MAX_CREATION_REFERENCE_IMAGES, 9);
+  assert.equal(MAX_PORTRAIT_PERSON_REFERENCE_IMAGES, 3);
+  assert.equal(MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES, 9);
 
   const app = await readFile(appPath, "utf8");
 
   assert.match(app, /maxReferenceImages:\s*6/);
   assert.match(app, /maxCreationReferenceImages:\s*9/);
+  assert.match(app, /maxPortraitPersonReferenceImages:\s*3/);
+  assert.match(app, /maxPortraitAccessoryReferenceImages:\s*9/);
 });
 
 test("local server counts active generation slots per request mode", async () => {

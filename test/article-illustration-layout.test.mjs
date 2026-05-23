@@ -41,7 +41,10 @@ test("article illustration mode has independent create and assets entries", asyn
   assert.match(html, /data-article-record-column-preset="6"/);
   assert.match(html, /data-article-record-column-preset="8"/);
 
-  assert.match(styles, /\.article-illustration-workspace\s*\{[\s\S]*grid-template-columns: minmax\(300px, 380px\) minmax\(0, 1fr\);/);
+  assert.match(
+    styles,
+    /\.article-illustration-workspace\s*\{[\s\S]*grid-template-columns:\s*var\(--studio-grid-left,\s*392px\) minmax\(0, 1fr\);[\s\S]*gap:\s*var\(--studio-grid-gap,\s*14px\);/,
+  );
   assert.match(styles, /\.article-plan-panel\s*\{[\s\S]*overflow: hidden;/);
   assert.match(styles, /\.article-board-sections\s*\{[\s\S]*overflow: auto;/);
   assert.match(styles, /\.article-board-section\s*\{[\s\S]*border-top: 1px solid var\(--border\);/);

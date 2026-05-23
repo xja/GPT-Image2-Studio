@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 
 import {
   applyCreationRepairOverrides,
+  buildCreationRepairPlan,
+  hasCreationRepairPlanningOverride,
   hydrateCreationRepairSkuSubjects,
+  refreshCreationRepairItemsFromPlan,
   selectCreationRepairItems,
 } from "../lib/creation-repair.mjs";
 
@@ -117,6 +120,43 @@ test("creation repair keeps existing prompt when overrides are blank", () => {
 
   assert.equal(item.prompt, "Original prompt");
   assert.equal(item.marketingCopy, "Original copy");
+});
+
+test("creation repair rebuilds targeted prompts when current visual language differs from stored set", () => {
+  const set = {
+    productName: "Jointed fishing lure",
+    productDescription: "Segmented lifelike lure for bass fishing",
+    sellingPoints: ["realistic swim action"],
+    targetLanguage: "en",
+    imageCount: 2,
+    scenario: "standard",
+    visualLanguage: "classic-commercial",
+    industryTemplate: "general",
+    selectedRoles: ["hero", "scene"],
+    items: [
+      {
+        itemId: "2-scene",
+        slotIndex: 2,
+        role: "scene",
+        title: "Scene image",
+        prompt: "Old scene prompt with polished commercial lighting.",
+        status: "failed",
+      },
+    ],
+  };
+
+  assert.equal(hasCreationRepairPlanningOverride(set, { visualLanguage: "warm-handcrafted" }), true);
+  assert.equal(hasCreationRepairPlanningOverride(set, { visualLanguage: "classic-commercial" }), false);
+
+  const plan = buildCreationRepairPlan(set, { visualLanguage: "warm-handcrafted" });
+  const [item] = refreshCreationRepairItemsFromPlan(set.items, plan);
+
+  assert.equal(plan.visualLanguage, "warm-handcrafted");
+  assert.equal(plan.visualLanguageLabel, "手作温度");
+  assert.match(item.prompt, /VISUAL LANGUAGE LOCK/);
+  assert.match(item.prompt, /warm tactile handcrafted setting/);
+  assert.doesNotMatch(item.prompt, /Old scene prompt/);
+  assert.doesNotMatch(item.prompt, /polished commercial lighting/);
 });
 
 test("creation repair rehydrates SKU subject metadata from legacy set manifests", () => {

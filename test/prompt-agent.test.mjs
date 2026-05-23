@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import {
+  PORTRAIT_REFERENCE_ANALYSIS_JSON_SCHEMA,
+  PORTRAIT_REFERENCE_ANALYSIS_MODE,
   REFERENCE_ORCHESTRATION_JSON_SCHEMA,
   buildPromptAgentInput,
   consumePromptAgentSse,
@@ -13,6 +15,95 @@ import {
   requestPromptAgentAnalysis,
 } from "../lib/prompt-agent.mjs";
 import { createPromptAgentStore } from "../lib/prompt-agent-store.mjs";
+
+test("prompt agent request can analyze portrait person reference images safely", () => {
+  const images = [
+    {
+      filename: "person-front.png",
+      mimeType: "image/png",
+      base64: "cGVyc29u",
+    },
+  ];
+
+  const input = buildPromptAgentInput({
+    images,
+    mode: PORTRAIT_REFERENCE_ANALYSIS_MODE,
+  });
+  const requestBody = createPromptAgentRequestBody({
+    images,
+    mode: PORTRAIT_REFERENCE_ANALYSIS_MODE,
+    responsesModel: "gpt-5.4",
+    reasoningEffort: "high",
+  });
+
+  assert.match(input[0].content[0].text, /portrait person reference analysis/i);
+  assert.match(input[0].content[0].text, /visiblePresentation/);
+  assert.match(input[0].content[0].text, /Do not infer real age, race, ethnicity, nationality, religion/i);
+  assert.match(input[0].content[0].text, /adult status is unclear/i);
+  assert.deepEqual(input[0].content.slice(1), [
+    {
+      type: "input_text",
+      text: "写真人物参考图 1：person-front.png。请按此序号分析这张图的可见人物呈现、姿态、服装、发型和可用于写真生成的参考作用。",
+    },
+    {
+      type: "input_image",
+      image_url: "data:image/png;base64,cGVyc29u",
+    },
+  ]);
+  assert.equal(requestBody.text.format.name, "portrait_reference_analysis_json");
+  assert.ok(requestBody.text.format.schema.required.includes("visiblePresentation"));
+  assert.ok(requestBody.text.format.schema.required.includes("heightImpression"));
+  assert.deepEqual(
+    requestBody.text.format.schema.properties.visiblePresentation.enum,
+    ["masculine-presenting", "feminine-presenting", "androgynous-presenting", "unclear"],
+  );
+});
+
+test("prompt agent normalizes portrait analysis without requiring prompt text", () => {
+  const result = extractPromptAgentJson({
+    output: [
+      {
+        content: [
+          {
+            type: "output_text",
+            text: JSON.stringify({
+              summary: "Visible portrait draft for a person in a navy blazer.",
+              visiblePresentation: "feminine-presenting",
+              heightImpression: "unclear",
+              bodyBuild: "slim",
+              pose: "standing three-quarter pose",
+              clothing: "navy blazer",
+              hair: "short dark hair",
+              faceVisibility: "clear frontal face",
+              distinctVisibleFeatures: ["round glasses"],
+              referenceRoles: ["primary person identity reference"],
+              risks: ["adult status not confirmed"],
+              safety: "Use neutral portrait styling.",
+              confidence: "medium",
+            }),
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(result.visiblePresentation, "feminine-presenting");
+  assert.equal(result.heightImpression, "unclear");
+  assert.equal(result.bodyBuild, "slim");
+  assert.equal(result.clothing, "navy blazer");
+  assert.deepEqual(result.distinctVisibleFeatures, ["round glasses"]);
+  assert.deepEqual(result.referenceRoles, ["primary person identity reference"]);
+  assert.equal(result.safety, "Use neutral portrait styling.");
+});
+
+test("portrait reference analysis schema only asks for visible low-risk fields", () => {
+  const schemaText = JSON.stringify(PORTRAIT_REFERENCE_ANALYSIS_JSON_SCHEMA);
+
+  assert.match(schemaText, /visiblePresentation/);
+  assert.match(schemaText, /heightImpression/);
+  assert.match(schemaText, /bodyBuild/);
+  assert.doesNotMatch(schemaText, /real age|race|ethnicity|nationality|religion|pregnancy|sexual orientation/i);
+});
 
 test("prompt agent request analyzes an uploaded image without invoking image generation", () => {
   const image = {

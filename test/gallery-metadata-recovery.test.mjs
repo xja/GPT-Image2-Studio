@@ -151,3 +151,38 @@ test("gallery metadata recovery prunes cache entries that no longer exist in the
     "keep-c.jpeg": { prompt: "C" },
   });
 });
+
+test("gallery metadata recovery preserves portrait metadata", () => {
+  const entry = buildGalleryMetadataCacheEntry({
+    filename: "001-close-up.png",
+    prompt: "portrait prompt",
+    generationMode: "portrait",
+    assetKind: "portrait-image",
+    portraitSetId: "portrait-set-1",
+    portraitItemId: "001-close-up",
+    portraitStyle: "business-profile",
+    portraitShotType: "close-up",
+    subjectName: "Studio Model",
+    subjectSummary: "Visible subject summary",
+    selectedStyles: ["business-profile", "retro-film", "business-profile"],
+  });
+
+  assert.equal(entry.generationMode, "portrait");
+  assert.equal(entry.assetKind, "portrait-image");
+  assert.equal(entry.portraitSetId, "portrait-set-1");
+  assert.equal(entry.portraitItemId, "001-close-up");
+  assert.equal(entry.portraitStyle, "business-profile");
+  assert.equal(entry.portraitShotType, "close-up");
+  assert.equal(entry.subjectName, "Studio Model");
+  assert.equal(entry.subjectSummary, "Visible subject summary");
+  assert.deepEqual(entry.selectedStyles, ["business-profile", "retro-film"]);
+
+  const patch = collectGalleryMetadataRepairPatch(
+    {
+      filename: "001-close-up.png",
+      selectedStyles: [],
+    },
+    entry,
+  );
+  assert.deepEqual(patch.selectedStyles, ["business-profile", "retro-film"]);
+});

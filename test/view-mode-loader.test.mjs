@@ -17,6 +17,8 @@ const viewModuleCases = [
   ["article-record", "articleRecord", "../lib/views/article-record-view.mjs"],
   ["creation", "creation", "../lib/views/creation-view.mjs"],
   ["creation-record", "creationRecord", "../lib/views/creation-record-view.mjs"],
+  ["portrait", "portrait", "../lib/views/portrait-view.mjs"],
+  ["portrait-record", "portraitRecord", "../lib/views/portrait-record-view.mjs"],
   ["ppt", "ppt", "../lib/views/ppt-view.mjs"],
   ["ppt-record", "pptRecord", "../lib/views/ppt-record-view.mjs"],
   ["gallery", "gallery", "../lib/views/gallery-view.mjs"],

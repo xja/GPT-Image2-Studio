@@ -186,13 +186,15 @@ test("creation generation passes SKU subjects through local and worker planning"
   const server = await readFile(serverPath, "utf8");
   const worker = await readFile(cloudflareWorkerPath, "utf8");
 
+  assert.match(server, /formData\.get\("visualLanguage"\)/);
+  assert.match(worker, /formData\.get\("visualLanguage"\)/);
   assert.match(server, /formData\.get\("skuSubjects"\)/);
   assert.match(worker, /formData\.get\("skuSubjects"\)/);
   assert.match(server, /formData\.get\("skuBundleCount"\)/);
   assert.match(worker, /formData\.get\("skuBundleCount"\)/);
   assert.match(
     server,
-    /buildCreationPlan\(\{[\s\S]*skuSubjects:\s*formData\.get\("skuSubjects"\),\s*\n\s*skuBundleCount:\s*formData\.get\("skuBundleCount"\)[\s\S]*logoOptions:/,
+    /handleCreationGenerate[\s\S]*buildCreationPlan\(\{[\s\S]*visualLanguage:\s*formData\.get\("visualLanguage"\),[\s\S]*skuSubjects:\s*formData\.get\("skuSubjects"\),\s*\n\s*skuBundleCount:\s*formData\.get\("skuBundleCount"\)[\s\S]*logoOptions:/,
   );
   assert.match(
     worker,
@@ -202,6 +204,10 @@ test("creation generation passes SKU subjects through local and worker planning"
   assert.match(worker, /skuSubjects:\s*plan\.skuSubjects/);
   assert.match(server, /skuBundleCount:\s*plan\.skuBundleCount/);
   assert.match(worker, /skuBundleCount:\s*plan\.skuBundleCount/);
+  assert.match(server, /visualLanguage:\s*plan\.visualLanguage/);
+  assert.match(worker, /visualLanguage:\s*plan\.visualLanguage/);
+  assert.match(server, /visualLanguageLabel:\s*plan\.visualLanguageLabel/);
+  assert.match(worker, /visualLanguageLabel:\s*plan\.visualLanguageLabel/);
 });
 
 test("creation reference uploads use the dedicated nine-image limit", async () => {
@@ -276,7 +282,7 @@ test("local creation generation accepts selected creation roles", async () => {
 test("local creation plan preview exposes an independent route and shared overrides", async () => {
   const server = await readFile(serverPath, "utf8");
   const previewHandler =
-    server.match(/async function handleCreationPlan[\s\S]*?\r?\n}\r?\n\r?\nasync function handleCreationGenerate/)?.[0] || "";
+    server.match(/async function handleCreationPlan[\s\S]*?\r?\n}\r?\n\r?\nasync function handle(?:PortraitGenerate|CreationGenerate)/)?.[0] || "";
   const generateHandler =
     server.match(/async function handleCreationGenerate[\s\S]*?\r?\n}\r?\n\r?\nasync function handleCreationRepair/)?.[0] || "";
 
@@ -299,6 +305,7 @@ test("local creation plan preview exposes an independent route and shared overri
 
 test("creation repair route regenerates selected set items", async () => {
   const server = await readFile(serverPath, "utf8");
+  const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
 
   assert.match(server, /selectCreationRepairItems/);
   assert.match(server, /async function handleCreationRepair/);
@@ -309,7 +316,7 @@ test("creation repair route regenerates selected set items", async () => {
   assert.match(server, /formData\.get\("promptOverride"\)/);
   assert.match(server, /formData\.get\("marketingCopyOverride"\)/);
   assert.match(server, /hydrateCreationRepairSkuSubjects/);
-  assert.match(server, /const repairItems = hydrateCreationRepairSkuSubjects\(\s*selectCreationRepairItems/);
+  assert.match(server, /(const|let) repairItems = hydrateCreationRepairSkuSubjects\(\s*selectCreationRepairItems/);
   assert.match(server, /dimensionSpecs:\s*existingSet\.dimensionSpecs/);
   assert.match(server, /industryTemplatePath:\s*existingSet\.industryTemplatePath/);
   assert.match(server, /applyCreationRepairOverrides/);
@@ -317,5 +324,10 @@ test("creation repair route regenerates selected set items", async () => {
   assert.match(server, /prompt:\s*repairItem\.prompt/);
   assert.match(server, /buildCreationItemReferenceImages\(repairItem,\s*referenceImages,\s*referenceImageRoles\)/);
   assert.match(server, /buildCreationReferenceImageLabels\(itemReferenceImages,\s*referenceImageRoles\)/);
+  assert.match(app, /function buildCreationPlanPreviewFormData[\s\S]*formData\.set\("visualLanguage"/);
+  assert.match(app, /function buildCreationRepairFormData[\s\S]*buildCreationPlanPreviewFormData\(\)\.entries\(\)/);
+  assert.match(server, /handleCreationRepair[\s\S]*visualLanguage:\s*formData\.get\("visualLanguage"\)/);
+  assert.match(server, /hasCreationRepairPlanningOverride/);
+  assert.match(server, /refreshCreationRepairItemsFromPlan/);
   assert.match(server, /writeSseEvent\(response, "repair_started"/);
 });
