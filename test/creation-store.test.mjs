@@ -190,7 +190,7 @@ test("creation store preserves optional logo metadata for creation set detail di
   assert.deepEqual(JSON.parse(raw).logo, logo);
 });
 
-test("creation store preserves listing drafts on manifests", async () => {
+test("creation store preserves listing drafts on manifest updates", async () => {
   const rootDir = await mkdtemp(join(tmpdir(), "creation-listing-store-"));
   const store = createCreationSetStore({ outputDir: rootDir });
 
@@ -217,6 +217,37 @@ test("creation store preserves listing drafts on manifests", async () => {
 
   const read = await store.readManifest("creation-set-listing");
   assert.equal(read.listingDrafts[0].title, "2 Pack 3.5 in Blue Fishing Lures for Bass");
+
+  await store.saveManifest({
+    setId: "creation-set-listing",
+    productName: "Updated Fishing Lure",
+    status: "completed",
+    items: [
+      {
+        itemId: "1-hero",
+        slotIndex: 1,
+        role: "hero",
+        title: "Hero image",
+        relativePath: "2026-05/05-05/2026-05-05-creation/listing/01-hero.png",
+      },
+    ],
+  });
+
+  const updated = await store.readManifest("creation-set-listing");
+  assert.equal(updated.productName, "Updated Fishing Lure");
+  assert.equal(updated.status, "completed");
+  assert.equal(updated.items.length, 1);
+  assert.equal(updated.listingDrafts.length, 1);
+  assert.equal(updated.listingDrafts[0].id, "listing-blue");
+
+  await store.saveManifest({
+    setId: "creation-set-listing",
+    productName: "Updated Fishing Lure",
+    listingDrafts: [],
+  });
+
+  const cleared = await store.readManifest("creation-set-listing");
+  assert.equal(cleared.listingDrafts.length, 0);
 
   await rm(rootDir, { recursive: true, force: true });
 });
