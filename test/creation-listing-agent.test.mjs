@@ -180,6 +180,41 @@ test("listing agent returns failed conservative mock after two invalid responses
   assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 in" }).ok, true);
 });
 
+test("listing agent accepts compound dimensions after quantity", async () => {
+  let callCount = 0;
+  const fetchImpl = async () => {
+    callCount += 1;
+    return new Response(JSON.stringify({
+      output_text: JSON.stringify(makeValidDraft({
+        title: "2 Pack 3.5 x 2 in Desk Organizer Tray for Office Storage",
+        fiveBullets: [
+          "2 Pack 3.5 x 2 in size keeps quantity and dimensions visible.",
+          "Compact tray profile supports office storage and desk organization.",
+          "SKU-specific copy is based on provided product information.",
+          "Conservative listing language avoids unsupported product claims.",
+          "Keyword-focused copy keeps each bullet within the limit.",
+        ],
+      })),
+    }), { status: 200 });
+  };
+
+  const draft = await requestCreationListingDraft({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    responsesModel: "gpt-5.4",
+    source: {
+      ...standardSource,
+      productName: "Desk Organizer Tray",
+      skuTitle: "Desk Organizer Tray",
+      dimensionSpecs: "3.5 x 2 in",
+    },
+    fetchImpl,
+  });
+
+  assert.equal(callCount, 1);
+  assert.match(draft.title, /^2 Pack 3\.5 x 2 in/);
+});
+
 test("generateCreationListingDrafts creates one draft per source and mock mode skips network", async () => {
   const drafts = await generateCreationListingDrafts({
     set: {
@@ -219,4 +254,41 @@ test("mock listing drafts avoid unsupported claims and competitor brand terms", 
   assert.equal(validation.ok, true);
   assert.doesNotMatch(visibleDraftText(draft), /\b(?:amazon|walmart|temu|ebay|etsy|target)\b/i);
   assert.doesNotMatch(visibleDraftText(draft), /\b(?:FDA Certified|medical grade|guaranteed|best|warranty)\b/i);
+});
+
+test("mock and fallback drafts keep long SKU fields under 500 characters", async () => {
+  const longSkuName = `Desk Organizer ${"storage ".repeat(90)}`;
+  const source = {
+    ...standardSource,
+    productName: longSkuName,
+    skuTitle: longSkuName,
+    dimensionSpecs: "3.5 x 2 in",
+  };
+  const mockDraft = makeMockCreationListingDraft(source);
+  const failedDraft = await requestCreationListingDraft({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    responsesModel: "gpt-5.4",
+    source,
+    fetchImpl: async () => new Response(JSON.stringify({
+      output_text: JSON.stringify(makeValidDraft({ title: "Bad title without quantity" })),
+    }), { status: 200 }),
+  });
+
+  for (const draft of [mockDraft, failedDraft]) {
+    const fields = [
+      draft.title,
+      draft.description,
+      draft.backendSearchTerms,
+      ...draft.sellingPoints,
+      ...draft.painPoints,
+      ...draft.fiveBullets,
+      ...Object.values(draft.keywordBuckets).flat(),
+    ];
+    assert.equal(fields.every((value) => value.length <= 500), true);
+    assert.equal(
+      validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 x 2 in" }).ok,
+      true,
+    );
+  }
 });
