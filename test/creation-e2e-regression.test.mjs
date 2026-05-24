@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createServer as createHttpServer } from "node:http";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer as createTcpServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -39,6 +40,15 @@ async function stopServer(server) {
       }
     }),
   ]);
+}
+
+async function stopHttpServer(server) {
+  if (!server?.listening) {
+    return;
+  }
+  await new Promise((resolveClose, reject) => {
+    server.close((error) => (error ? reject(error) : resolveClose()));
+  });
 }
 
 function collectDiagnostics(server) {
@@ -508,6 +518,124 @@ test("creation listing endpoint degrades to input-only when images failed", asyn
   const persistedManifest = JSON.parse(await readFile(join(manifestsDir, "creation-set-failed.json"), "utf8"));
   assert.equal(persistedManifest.listingDrafts.length, 1);
   assert.equal(persistedManifest.listingDrafts[0].evidenceMode, "input-only");
+});
+
+test("creation listing endpoint merges drafts into latest manifest after upstream delay", async (t) => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "creation-listing-merge-"));
+  const outputDir = join(tempRoot, "output");
+  const localDataRootDir = join(tempRoot, "local-data");
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const appServer = spawn(process.execPath, ["server.mjs"], {
+    cwd: rootDir,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      VERCEL: "1",
+      TMP: tempRoot,
+      TEMP: tempRoot,
+      IMAGE_STUDIO_OUTPUT_DIR: outputDir,
+      IMAGE_STUDIO_LOCAL_DATA_DIR: localDataRootDir,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const diagnostics = collectDiagnostics(appServer);
+  let upstreamServer = null;
+
+  t.after(async () => {
+    await stopHttpServer(upstreamServer);
+    await stopServer(appServer);
+    await rm(tempRoot, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl, appServer, diagnostics);
+
+  const manifestsDir = join(outputDir, "json", "creation-sets");
+  const manifestPath = join(manifestsDir, "creation-set-merge.json");
+  const originalManifest = {
+    setId: "creation-set-merge",
+    productName: "Original Fishing Lure",
+    productDescription: "Compact lure for freshwater fishing.",
+    dimensionSpecs: "3.5 in",
+    skuBundleCount: 1,
+    status: "completed",
+    items: [{ itemId: "1-hero", role: "hero", status: "completed", prompt: "old prompt", relativePath: "x/hero.png" }],
+  };
+  await mkdir(manifestsDir, { recursive: true });
+  await writeFile(manifestPath, `${JSON.stringify(originalManifest, null, 2)}\n`, "utf8");
+
+  upstreamServer = createHttpServer(async (request, response) => {
+    if (request.method !== "POST" || request.url !== "/v1/responses") {
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end(JSON.stringify({ message: "not found" }));
+      return;
+    }
+
+    for await (const _chunk of request) {
+      // Drain the request body so the client can finish cleanly.
+    }
+
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify({
+        ...originalManifest,
+        productName: "Updated Fishing Lure",
+        status: "partial_failed",
+        items: [{ ...originalManifest.items[0], status: "failed", prompt: "new prompt", error: "repair changed item" }],
+      }, null, 2)}\n`,
+      "utf8",
+    );
+    await delay(50);
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({
+      output_text: JSON.stringify({
+        title: "1 Pack 3.5 in Blue Fishing Lure for Bass",
+        sellingPoints: ["Blue profile helps organize fishing lure variants."],
+        painPoints: ["Reduces guesswork when selecting a compact lure color."],
+        fiveBullets: [
+          "1 Pack 3.5 in size keeps quantity and dimensions visible.",
+          "Blue lure profile supports clear SKU identification.",
+          "Compact design works for bass fishing presentations.",
+          "Product details are based on provided inputs and SKU metadata.",
+          "Keyword-focused copy keeps listing language concise.",
+        ],
+        description: "Blue fishing lure listing draft for US marketplace review.",
+        backendSearchTerms: "blue fishing lure bass bait compact lure",
+        keywordBuckets: {
+          exact: ["blue fishing lure"],
+          longTail: ["3.5 in bass lure"],
+          traffic: ["freshwater bait"],
+          descriptive: ["compact blue lure"],
+        },
+        missingInfo: [],
+        warnings: [],
+      }),
+    }));
+  });
+  await new Promise((resolveListen, reject) => {
+    upstreamServer.once("error", reject);
+    upstreamServer.listen(0, "127.0.0.1", resolveListen);
+  });
+  const upstreamAddress = upstreamServer.address();
+
+  const listingResponse = await postJson(baseUrl, "/api/creation/listings", {
+    setId: "creation-set-merge",
+    baseUrl: `http://127.0.0.1:${upstreamAddress.port}/v1`,
+    apiKey: "test-key",
+    responsesModel: "gpt-5.4",
+    reasoningEffort: "low",
+  });
+  assert.equal(listingResponse.response.status, 200);
+  assert.equal(listingResponse.body.set.productName, "Updated Fishing Lure");
+  assert.equal(listingResponse.body.set.items[0].prompt, "new prompt");
+  assert.equal(listingResponse.body.set.items[0].status, "failed");
+  assert.equal(listingResponse.body.set.listingDrafts.length, 1);
+
+  const persistedManifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  assert.equal(persistedManifest.productName, "Updated Fishing Lure");
+  assert.equal(persistedManifest.items[0].prompt, "new prompt");
+  assert.equal(persistedManifest.items[0].status, "failed");
+  assert.equal(persistedManifest.listingDrafts.length, 1);
 });
 
 test("creation listing endpoint returns JSON error when API key is missing outside mock mode", async (t) => {

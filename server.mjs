@@ -2464,8 +2464,9 @@ async function handleCreationListingsGenerate(request, response) {
       },
       mock,
     });
+    const latestSet = await creationSetStore.readManifest(setId);
     const nextSet = await creationSetStore.saveManifest({
-      ...set,
+      ...latestSet,
       listingDrafts,
       updatedAt: new Date().toISOString(),
     });
