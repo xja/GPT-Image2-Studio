@@ -155,3 +155,19 @@ test("keyword normalization removes unsupported claims from backend terms and bu
   });
   assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "2 Pack" }).ok, true);
 });
+
+test("backend search term normalization removes space-separated competitor brand tokens", () => {
+  const draft = normalizeCreationListingDraft({
+    id: "listing-backend-competitors",
+    title: "2 Pack 3.5 in Blue Fishing Lures",
+    sellingPoints: ["Bright blue profile"],
+    painPoints: ["Low visibility in stained water"],
+    fiveBullets: ["Designed for visible lure presentation."],
+    description: "A compact lure for freshwater fishing.",
+    backendSearchTerms: "bass lure Amazon long tail bait",
+  });
+
+  assert.equal(draft.backendSearchTerms, "bass lure long tail bait");
+  assert.doesNotMatch(draft.backendSearchTerms, /\bAmazon\b/i);
+  assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "2 Pack" }).ok, true);
+});
