@@ -2283,6 +2283,18 @@ test("creation mode exposes listing agent controls and record listing drafts", a
   assert.match(styles, /\.creation-listing-card[\s\S]*overflow-wrap:\s*anywhere;/);
 });
 
+test("creation listing agent can run automatically after full creation generation completes", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /function shouldAutoGenerateCreationListings\(\) \{/);
+  assert.match(app, /refs\.creationListingAgentEnabledInput\?\.checked/);
+  assert.match(app, /state\.creation\.generationScope === "full"/);
+  assert.match(
+    app,
+    /if \(eventName === "complete"\) \{[\s\S]*upsertCreationSet\(payload\.set\);[\s\S]*shouldAutoGenerateCreationListings\(\)[\s\S]*generateCreationRecordListings\(\)\.catch\(/,
+  );
+});
+
 test("waterfall gallery paginates history unless keyword search is active", async () => {
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");

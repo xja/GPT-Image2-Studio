@@ -9718,6 +9718,10 @@ function exportCreationRecordManifest() {
   setCreationRecordFeedback("已导出当前套图清单。", "success");
 }
 
+function shouldAutoGenerateCreationListings() {
+  return Boolean(refs.creationListingAgentEnabledInput?.checked) && state.creation.generationScope === "full";
+}
+
 async function generateCreationRecordListings() {
   const selectedSet = getCreationRecordSelectedSet();
   if (!selectedSet?.setId) {
@@ -11229,6 +11233,12 @@ function handleCreationStreamEvent(eventName, payload = {}) {
   if (eventName === "complete") {
     if (payload.set) {
       upsertCreationSet(payload.set);
+      if (shouldAutoGenerateCreationListings() && payload.set?.setId) {
+        state.creation.recordSetId = payload.set.setId;
+        generateCreationRecordListings().catch((error) => {
+          setCreationFeedback(compactErrorMessage(error instanceof Error ? error.message : String(error), "Listing 自动生成失败"), "error");
+        });
+      }
     }
     setCreationFeedback("套图生成完成。", "success");
     renderCreationView();
