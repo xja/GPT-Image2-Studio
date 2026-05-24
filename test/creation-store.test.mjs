@@ -252,6 +252,85 @@ test("creation store preserves listing drafts on manifest updates", async () => 
   await rm(rootDir, { recursive: true, force: true });
 });
 
+test("creation store does not resurrect listing drafts after concurrent clear", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "creation-listing-clear-store-"));
+  const store = createCreationSetStore({ outputDir: rootDir });
+
+  await store.saveManifest({
+    setId: "creation-set-listing-clear",
+    productName: "Fishing Lure",
+    listingDrafts: [
+      {
+        id: "listing-blue",
+        title: "2 Pack 3.5 in Blue Fishing Lures for Bass",
+      },
+    ],
+  });
+
+  const staleUpdate = store.saveManifest({
+    setId: "creation-set-listing-clear",
+    productName: "Updated without drafts",
+  });
+  const explicitClear = store.saveManifest({
+    setId: "creation-set-listing-clear",
+    productName: "Cleared",
+    listingDrafts: [],
+  });
+  await Promise.all([staleUpdate, explicitClear]);
+
+  const read = await store.readManifest("creation-set-listing-clear");
+  assert.equal(read.listingDrafts.length, 0);
+
+  await rm(rootDir, { recursive: true, force: true });
+});
+
+test("creation store preserves concurrent explicit listing draft replacements", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "creation-listing-replace-store-"));
+  const store = createCreationSetStore({ outputDir: rootDir });
+
+  async function runConcurrentUpdate(setId, firstOperation) {
+    await store.saveManifest({
+      setId,
+      productName: "Original Fishing Lure",
+      listingDrafts: [
+        {
+          id: "listing-original",
+          title: "2 Pack Original Fishing Lures",
+        },
+      ],
+    });
+
+    const explicitSave = () => store.saveManifest({
+      setId,
+      productName: "New Draft",
+      listingDrafts: [
+        {
+          id: "listing-new",
+          title: "2 Pack New Fishing Lures",
+        },
+      ],
+    });
+    const omittedUpdate = () => store.saveManifest({
+      setId,
+      productName: "Updated without drafts",
+      status: "completed",
+    });
+
+    const first = firstOperation === "explicit" ? explicitSave() : omittedUpdate();
+    const second = firstOperation === "explicit" ? omittedUpdate() : explicitSave();
+    await Promise.all([first, second]);
+
+    const read = await store.readManifest(setId);
+    assert.equal(read.listingDrafts.length, 1);
+    assert.equal(read.listingDrafts[0].id, "listing-new");
+  }
+
+  await runConcurrentUpdate("creation-set-listing-replace-explicit-first", "explicit");
+  await runConcurrentUpdate("creation-set-listing-replace-omitted-first", "omitted");
+
+  await rm(rootDir, { recursive: true, force: true });
+});
+
 test("creation store preserves SKU subject metadata for repair reference binding", () => {
   const manifest = normalizeCreationSetManifest(
     {
