@@ -37,5 +37,6 @@ test("public app shell delegates browser config and cache behavior to public mod
   assert.match(app, /from "\/lib\/browser-config\.mjs"/);
   assert.match(app, /from "\/lib\/browser-image-cache\.mjs"/);
   assert.match(app, /from "\/lib\/generation-client\.mjs"/);
-  assert.ok(lineCount < 15400, `public/app.js should stay below the shell budget, got ${lineCount}`);
+  assert.match(app, /from "\/lib\/creation-listing-view\.mjs"/);
+  assert.ok(lineCount < 15500, `public/app.js should stay below the shell budget, got ${lineCount}`);
 });

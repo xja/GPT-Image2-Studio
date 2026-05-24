@@ -9,6 +9,7 @@ const serverPath = new URL("../server.mjs", import.meta.url);
 const workerPath = new URL("../cloudflare-pages-worker.mjs", import.meta.url);
 const browserConfigPath = new URL("../lib/browser-config.mjs", import.meta.url);
 const browserImageCachePath = new URL("../lib/browser-image-cache.mjs", import.meta.url);
+const creationListingViewPath = new URL("../lib/creation-listing-view.mjs", import.meta.url);
 const generationClientPath = new URL("../lib/generation-client.mjs", import.meta.url);
 const pptAnalysisClientPath = new URL("../lib/ppt-analysis-client.mjs", import.meta.url);
 const assetVersion = "20260523-portrait-cosplay-color-assets-1";
@@ -2256,6 +2257,7 @@ test("creation mode exposes listing agent controls and record listing drafts", a
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
+  const listingView = await readFile(creationListingViewPath, "utf8");
 
   assert.match(html, /id="creationListingAgentEnabledInput"/);
   assert.match(html, /id="creationRecordGenerateListingsButton"/);
@@ -2268,16 +2270,21 @@ test("creation mode exposes listing agent controls and record listing drafts", a
   assert.match(app, /creationRecordGenerateListingsButton: document\.querySelector\("#creationRecordGenerateListingsButton"\)/);
   assert.match(app, /creationRecordExportListingsButton: document\.querySelector\("#creationRecordExportListingsButton"\)/);
   assert.match(app, /creationRecordCopyListingsButton: document\.querySelector\("#creationRecordCopyListingsButton"\)/);
-  assert.match(app, /function renderCreationListingDrafts\(set\) \{/);
-  assert.match(app, /async function generateCreationRecordListings\(setId = ""\) \{/);
-  assert.match(app, /const requestedSetId = String\(setId \|\| ""\)\.trim\(\);/);
-  assert.match(app, /fetch\("\/api\/creation\/listings"/);
-  assert.match(app, /function exportCreationRecordListings\(\) \{/);
-  assert.match(app, /async function copyCreationRecordListings\(\) \{/);
-  assert.match(app, /function buildCreationListingDraftText\(draft, index = 0\) \{/);
-  assert.match(app, /title[\s\S]*sellingPoints[\s\S]*painPoints[\s\S]*fiveBullets[\s\S]*description[\s\S]*backendSearchTerms[\s\S]*keywordBuckets/);
-  assert.match(app, /evidenceMode[\s\S]*status[\s\S]*warnings[\s\S]*missingInfo/);
-  assert.match(app, /setId: selectedSet\.setId,[\s\S]*productName: selectedSet\.productName,[\s\S]*listingDrafts: drafts/);
+  assert.match(app, /from "\/lib\/creation-listing-view\.mjs"/);
+  assert.match(app, /createCreationListingController\(\{/);
+  assert.match(app, /fetchImpl: \(\.\.\.args\) => fetch\(\.\.\.args\),/);
+  assert.match(app, /creationListingController\.syncRecordControls\(selectedSet\);/);
+  assert.match(app, /creationListingController\.bindEvents\(\);/);
+  assert.match(listingView, /export function renderCreationListingDrafts\(\{ refs, state, set \} = \{\}\) \{/);
+  assert.match(listingView, /async function generate\(setId = ""\) \{/);
+  assert.match(listingView, /const requestedSetId = cleanCreationListingText\(setId\);/);
+  assert.match(listingView, /fetchImpl\("\/api\/creation\/listings",/);
+  assert.match(listingView, /function exportListings\(\) \{/);
+  assert.match(listingView, /async function copy\(\) \{/);
+  assert.match(listingView, /export function buildCreationListingDraftText\(draft, index = 0\) \{/);
+  assert.match(listingView, /title[\s\S]*sellingPoints[\s\S]*painPoints[\s\S]*fiveBullets[\s\S]*description[\s\S]*backendSearchTerms[\s\S]*keywordBuckets/);
+  assert.match(listingView, /evidenceMode[\s\S]*status[\s\S]*warnings[\s\S]*missingInfo/);
+  assert.match(listingView, /setId: selectedSet\.setId,[\s\S]*productName: selectedSet\.productName,[\s\S]*listingDrafts: drafts/);
 
   assert.match(styles, /\.creation-listing-drafts\s*\{/);
   assert.match(styles, /\.creation-listing-card\s*\{/);
@@ -2292,7 +2299,7 @@ test("creation listing agent can run automatically after full creation generatio
   assert.match(app, /state\.creation\.generationScope === "full"/);
   assert.match(
     app,
-    /if \(eventName === "complete"\) \{[\s\S]*upsertCreationSet\(payload\.set\);[\s\S]*shouldAutoGenerateCreationListings\(\)[\s\S]*generateCreationRecordListings\(payload\.set\.setId\)\.catch\(/,
+    /if \(eventName === "complete"\) \{[\s\S]*upsertCreationSet\(payload\.set\);[\s\S]*shouldAutoGenerateCreationListings\(\)[\s\S]*creationListingController\.generate\(payload\.set\.setId\)\.catch\(/,
   );
 });
 
