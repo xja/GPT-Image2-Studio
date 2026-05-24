@@ -9722,8 +9722,11 @@ function shouldAutoGenerateCreationListings() {
   return Boolean(refs.creationListingAgentEnabledInput?.checked) && state.creation.generationScope === "full";
 }
 
-async function generateCreationRecordListings() {
-  const selectedSet = getCreationRecordSelectedSet();
+async function generateCreationRecordListings(setId = "") {
+  const requestedSetId = String(setId || "").trim();
+  const selectedSet = requestedSetId
+    ? state.creation.sets.find((set) => set.setId === requestedSetId) || normalizeCreationSetForView({ setId: requestedSetId })
+    : getCreationRecordSelectedSet();
   if (!selectedSet?.setId) {
     setCreationRecordFeedback("请先选择一套记录。", "error");
     return null;
@@ -11235,7 +11238,7 @@ function handleCreationStreamEvent(eventName, payload = {}) {
       upsertCreationSet(payload.set);
       if (shouldAutoGenerateCreationListings() && payload.set?.setId) {
         state.creation.recordSetId = payload.set.setId;
-        generateCreationRecordListings().catch((error) => {
+        generateCreationRecordListings(payload.set.setId).catch((error) => {
           setCreationFeedback(compactErrorMessage(error instanceof Error ? error.message : String(error), "Listing 自动生成失败"), "error");
         });
       }

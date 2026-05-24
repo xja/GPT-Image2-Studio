@@ -2269,7 +2269,8 @@ test("creation mode exposes listing agent controls and record listing drafts", a
   assert.match(app, /creationRecordExportListingsButton: document\.querySelector\("#creationRecordExportListingsButton"\)/);
   assert.match(app, /creationRecordCopyListingsButton: document\.querySelector\("#creationRecordCopyListingsButton"\)/);
   assert.match(app, /function renderCreationListingDrafts\(set\) \{/);
-  assert.match(app, /async function generateCreationRecordListings\(\) \{/);
+  assert.match(app, /async function generateCreationRecordListings\(setId = ""\) \{/);
+  assert.match(app, /const requestedSetId = String\(setId \|\| ""\)\.trim\(\);/);
   assert.match(app, /fetch\("\/api\/creation\/listings"/);
   assert.match(app, /function exportCreationRecordListings\(\) \{/);
   assert.match(app, /async function copyCreationRecordListings\(\) \{/);
@@ -2291,7 +2292,7 @@ test("creation listing agent can run automatically after full creation generatio
   assert.match(app, /state\.creation\.generationScope === "full"/);
   assert.match(
     app,
-    /if \(eventName === "complete"\) \{[\s\S]*upsertCreationSet\(payload\.set\);[\s\S]*shouldAutoGenerateCreationListings\(\)[\s\S]*generateCreationRecordListings\(\)\.catch\(/,
+    /if \(eventName === "complete"\) \{[\s\S]*upsertCreationSet\(payload\.set\);[\s\S]*shouldAutoGenerateCreationListings\(\)[\s\S]*generateCreationRecordListings\(payload\.set\.setId\)\.catch\(/,
   );
 });
 
