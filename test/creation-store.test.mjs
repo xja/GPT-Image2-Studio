@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -188,6 +188,37 @@ test("creation store preserves optional logo metadata for creation set detail di
 
   assert.deepEqual(saved.logo, logo);
   assert.deepEqual(JSON.parse(raw).logo, logo);
+});
+
+test("creation store preserves listing drafts on manifests", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "creation-listing-store-"));
+  const store = createCreationSetStore({ outputDir: rootDir });
+
+  const saved = await store.saveManifest({
+    setId: "creation-set-listing",
+    productName: "Fishing Lure",
+    listingDrafts: [
+      {
+        id: "listing-blue",
+        skuSubjectId: "blue",
+        evidenceMode: "input-only",
+        title: "2 Pack 3.5 in Blue Fishing Lures for Bass",
+        sellingPoints: ["Bright color for visibility"],
+        painPoints: ["Hard to track bait in stained water"],
+        fiveBullets: ["2 Pack 3.5 in profile for compact tackle boxes."],
+        description: "Blue fishing lure listing draft.",
+        backendSearchTerms: "blue fishing lure bass bait",
+      },
+    ],
+  });
+
+  assert.equal(saved.listingDrafts.length, 1);
+  assert.equal(saved.listingDrafts[0].marketplace, "amazon-us");
+
+  const read = await store.readManifest("creation-set-listing");
+  assert.equal(read.listingDrafts[0].title, "2 Pack 3.5 in Blue Fishing Lures for Bass");
+
+  await rm(rootDir, { recursive: true, force: true });
 });
 
 test("creation store preserves SKU subject metadata for repair reference binding", () => {
