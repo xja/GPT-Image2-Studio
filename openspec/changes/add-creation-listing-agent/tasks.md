@@ -33,4 +33,4 @@
 
 - [x] 6.1 Align Cloudflare Worker contracts where possible, with explicit input-only fallback when local images are inaccessible.
 - [x] 6.2 Update README and relevant Creation Mode docs.
-- [ ] 6.3 Run targeted tests, full tests, Pages build, and Chinese text encoding checks.
+- [x] 6.3 Run targeted tests, full tests, Pages build, and Chinese text encoding checks.
