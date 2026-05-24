@@ -1033,6 +1033,11 @@
                     </select>
                   </label>
 
+                  <label class="creation-listing-toggle" data-creation-set-only>
+                    <input id="creationListingAgentEnabledInput" type="checkbox" />
+                    <span>生成后自动撰写 Amazon Listing</span>
+                  </label>
+
                   <section class="creation-industry-browser" id="creationIndustryTemplateBrowser" aria-label="行业模板" data-creation-set-only>
                     <input id="creationIndustryTemplateInput" name="industryTemplate" type="hidden" value="general" />
                     <div class="creation-industry-browser-head">
@@ -1731,6 +1736,9 @@
                   <button class="toolbar-button" id="creationRecordCopyPromptsButton" type="button" disabled>复制提示词</button>
                   <button class="toolbar-button" id="creationRecordExportPromptsButton" type="button" disabled>导出提示词</button>
                   <button class="toolbar-button" id="creationRecordExportManifestButton" type="button" disabled>导出清单</button>
+                  <button class="toolbar-button" id="creationRecordGenerateListingsButton" type="button" disabled>生成 Listing</button>
+                  <button class="toolbar-button" id="creationRecordCopyListingsButton" type="button" disabled>复制 Listing</button>
+                  <button class="toolbar-button" id="creationRecordExportListingsButton" type="button" disabled>导出 Listing</button>
                 </div>
                 <button class="toolbar-button" id="creationRecordReuseButton" type="button" disabled>复用到当前套图</button>
                 <button class="toolbar-button" id="creationRecordRefreshButton" type="button">刷新记录</button>
@@ -1741,6 +1749,13 @@
               <div class="creation-set-list creation-record-list" id="creationRecordSetList"></div>
               <article class="creation-record-archive" aria-live="polite" tabindex="-1">
                 <div class="creation-record-detail" id="creationRecordArchiveDetail"></div>
+                <section class="creation-listing-panel hidden" aria-label="Amazon Listing 草稿">
+                  <div class="panel-title between">
+                    <h3>Amazon Listing</h3>
+                    <span class="count-pill small" id="creationRecordListingStatus">未生成</span>
+                  </div>
+                  <div class="creation-listing-drafts" id="creationRecordListingDrafts"></div>
+                </section>
                 <div class="creation-result-grid creation-record-result-grid" id="creationRecordResultGrid"></div>
               </article>
             </div>

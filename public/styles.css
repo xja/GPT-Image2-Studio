@@ -1017,6 +1017,34 @@ html:not([data-ui-layout="tablet"]):not([data-ui-layout="mobile"]) .view-tab.act
   gap: 10px;
 }
 
+.creation-listing-toggle {
+  min-width: 0;
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
+  font-size: var(--type-subtitle-size);
+  font-weight: 650;
+}
+
+.creation-listing-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.creation-listing-toggle span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .creation-branch-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2151,7 +2179,7 @@ html:not([data-ui-layout="tablet"]):not([data-ui-layout="mobile"]) .view-tab.act
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 12px;
   overflow: hidden;
   outline: none;
@@ -2159,6 +2187,89 @@ html:not([data-ui-layout="tablet"]):not([data-ui-layout="mobile"]) .view-tab.act
 
 .creation-record-archive.is-empty {
   place-items: center;
+}
+
+.creation-listing-panel {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.creation-listing-panel .panel-title {
+  margin-bottom: 0;
+}
+
+.creation-listing-drafts {
+  min-width: 0;
+  max-height: min(34svh, 360px);
+  display: grid;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.creation-listing-empty {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
+  font-size: var(--type-body-size);
+}
+
+.creation-listing-card {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  overflow-wrap: anywhere;
+}
+
+.creation-listing-card-head {
+  display: grid;
+  gap: 4px;
+}
+
+.creation-listing-card h4,
+.creation-listing-card p,
+.creation-listing-card ul {
+  margin: 0;
+}
+
+.creation-listing-card h4 {
+  color: var(--text);
+  font-size: var(--type-small-title-size);
+}
+
+.creation-listing-card-head p,
+.creation-listing-field p,
+.creation-listing-field li {
+  color: var(--muted);
+  font-size: var(--type-body-size);
+  line-height: 1.5;
+}
+
+.creation-listing-field {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.creation-listing-field strong {
+  color: var(--text);
+  font-size: var(--type-subtitle-size);
+}
+
+.creation-listing-field ul {
+  padding-left: 18px;
+}
+
+.creation-listing-buckets {
+  gap: 5px;
 }
 
 .creation-record-result-grid {

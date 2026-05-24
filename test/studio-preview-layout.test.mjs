@@ -2252,6 +2252,37 @@ test("creation records expose prompt exports and lightbox path actions", async (
   assert.match(app, /refs\.creationRecordExportManifestButton\.addEventListener\("click",/);
 });
 
+test("creation mode exposes listing agent controls and record listing drafts", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /id="creationListingAgentEnabledInput"/);
+  assert.match(html, /id="creationRecordGenerateListingsButton"/);
+  assert.match(html, /id="creationRecordExportListingsButton"/);
+  assert.match(html, /id="creationRecordCopyListingsButton"/);
+  assert.match(html, /id="creationRecordListingStatus"/);
+  assert.match(html, /id="creationRecordListingDrafts"/);
+
+  assert.match(app, /creationListingAgentEnabledInput: document\.querySelector\("#creationListingAgentEnabledInput"\)/);
+  assert.match(app, /creationRecordGenerateListingsButton: document\.querySelector\("#creationRecordGenerateListingsButton"\)/);
+  assert.match(app, /creationRecordExportListingsButton: document\.querySelector\("#creationRecordExportListingsButton"\)/);
+  assert.match(app, /creationRecordCopyListingsButton: document\.querySelector\("#creationRecordCopyListingsButton"\)/);
+  assert.match(app, /function renderCreationListingDrafts\(set\) \{/);
+  assert.match(app, /async function generateCreationRecordListings\(\) \{/);
+  assert.match(app, /fetch\("\/api\/creation\/listings"/);
+  assert.match(app, /function exportCreationRecordListings\(\) \{/);
+  assert.match(app, /async function copyCreationRecordListings\(\) \{/);
+  assert.match(app, /function buildCreationListingDraftText\(draft, index = 0\) \{/);
+  assert.match(app, /title[\s\S]*sellingPoints[\s\S]*painPoints[\s\S]*fiveBullets[\s\S]*description[\s\S]*backendSearchTerms[\s\S]*keywordBuckets/);
+  assert.match(app, /evidenceMode[\s\S]*status[\s\S]*warnings[\s\S]*missingInfo/);
+  assert.match(app, /setId: selectedSet\.setId,[\s\S]*productName: selectedSet\.productName,[\s\S]*listingDrafts: drafts/);
+
+  assert.match(styles, /\.creation-listing-drafts\s*\{/);
+  assert.match(styles, /\.creation-listing-card\s*\{/);
+  assert.match(styles, /\.creation-listing-card[\s\S]*overflow-wrap:\s*anywhere;/);
+});
+
 test("waterfall gallery paginates history unless keyword search is active", async () => {
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
