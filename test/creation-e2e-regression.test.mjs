@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer as createTcpServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -281,6 +281,7 @@ test("creation workflow reuses history, reuploads references, tweaks prompts, re
       TMP: tempRoot,
       TEMP: tempRoot,
       IMAGE_STUDIO_MOCK_IMAGE_GENERATION: "1",
+      IMAGE_STUDIO_MOCK_LISTING_AGENT: "1",
       IMAGE_STUDIO_OUTPUT_DIR: outputDir,
       IMAGE_STUDIO_LOCAL_DATA_DIR: localDataRootDir,
     },
@@ -350,6 +351,24 @@ test("creation workflow reuses history, reuploads references, tweaks prompts, re
   const sets = await listResponse.json();
   assert.ok(sets.some((set) => set.setId === generatedSet.setId), "generated set should appear in records");
 
+  const listingResponse = await postJson(baseUrl, "/api/creation/listings", { setId: generatedSet.setId });
+  assert.equal(listingResponse.response.status, 200);
+  assert.equal(listingResponse.body.ok, true);
+  assert.equal(listingResponse.body.set.setId, generatedSet.setId);
+  assert.equal(listingResponse.body.set.listingDrafts.length, 1);
+  assert.equal(listingResponse.body.set.listingDrafts[0].evidenceMode, "image-backed");
+
+  const listedAfterListingsResponse = await fetch(`${baseUrl}/api/creation/sets`);
+  assert.equal(listedAfterListingsResponse.status, 200);
+  const listedAfterListings = await listedAfterListingsResponse.json();
+  const listedSet = listedAfterListings.find((set) => set.setId === generatedSet.setId);
+  assert.equal(listedSet.listingDrafts.length, 1);
+
+  const manifestPath = await findCreationManifestPath(outputDir, generatedSet.setId);
+  const persistedListingManifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  assert.equal(persistedListingManifest.listingDrafts.length, 1);
+  assert.equal(persistedListingManifest.listingDrafts[0].evidenceMode, "image-backed");
+
   const initialPathReport = await postJson(baseUrl, "/api/creation/sets/paths", { setId: generatedSet.setId });
   assert.equal(initialPathReport.response.status, 200);
   assert.ok(
@@ -357,7 +376,6 @@ test("creation workflow reuses history, reuploads references, tweaks prompts, re
     `expected ${initialPathReport.body.absoluteDir} to stay under ${outputDir}`,
   );
 
-  const manifestPath = await findCreationManifestPath(outputDir, generatedSet.setId);
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   manifest.items[1] = {
     ...manifest.items[1],
@@ -430,4 +448,110 @@ test("creation workflow reuses history, reuploads references, tweaks prompts, re
   assert.equal(pathReport.body.items.length, 4);
   assert.ok(pathReport.body.absoluteDir.startsWith(outputDir));
   assert.ok(pathReport.body.items.every((item) => item.absolutePath.startsWith(outputDir)));
+
+  const postRepairManifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  assert.equal(postRepairManifest.listingDrafts.length, 1);
+  assert.equal(postRepairManifest.listingDrafts[0].id, listingResponse.body.set.listingDrafts[0].id);
+});
+
+test("creation listing endpoint degrades to input-only when images failed", async (t) => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "creation-listing-e2e-"));
+  const outputDir = join(tempRoot, "output");
+  const localDataRootDir = join(tempRoot, "local-data");
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const server = spawn(process.execPath, ["server.mjs"], {
+    cwd: rootDir,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      VERCEL: "1",
+      TMP: tempRoot,
+      TEMP: tempRoot,
+      IMAGE_STUDIO_MOCK_LISTING_AGENT: "1",
+      IMAGE_STUDIO_OUTPUT_DIR: outputDir,
+      IMAGE_STUDIO_LOCAL_DATA_DIR: localDataRootDir,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const diagnostics = collectDiagnostics(server);
+
+  t.after(async () => {
+    await stopServer(server);
+    await rm(tempRoot, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl, server, diagnostics);
+
+  const manifestsDir = join(outputDir, "json", "creation-sets");
+  await mkdir(manifestsDir, { recursive: true });
+  await writeFile(
+    join(manifestsDir, "creation-set-failed.json"),
+    `${JSON.stringify({
+      setId: "creation-set-failed",
+      productName: "Blue Fishing Lure",
+      productDescription: "Compact lure for freshwater fishing.",
+      dimensionSpecs: "3.5 in",
+      skuBundleCount: 2,
+      status: "failed",
+      items: [{ itemId: "1-hero", role: "hero", status: "failed", error: "upstream failed" }],
+    }, null, 2)}\n`,
+    "utf8",
+  );
+
+  const listingResponse = await postJson(baseUrl, "/api/creation/listings", { setId: "creation-set-failed" });
+  assert.equal(listingResponse.response.status, 200);
+  assert.equal(listingResponse.body.set.listingDrafts.length, 1);
+  assert.equal(listingResponse.body.set.listingDrafts[0].evidenceMode, "input-only");
+  assert.match(listingResponse.body.set.listingDrafts[0].warnings.join("\n"), /Generated images were unavailable/);
+
+  const persistedManifest = JSON.parse(await readFile(join(manifestsDir, "creation-set-failed.json"), "utf8"));
+  assert.equal(persistedManifest.listingDrafts.length, 1);
+  assert.equal(persistedManifest.listingDrafts[0].evidenceMode, "input-only");
+});
+
+test("creation listing endpoint returns JSON error when API key is missing outside mock mode", async (t) => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "creation-listing-missing-key-"));
+  const outputDir = join(tempRoot, "output");
+  const localDataRootDir = join(tempRoot, "local-data");
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const server = spawn(process.execPath, ["server.mjs"], {
+    cwd: rootDir,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      VERCEL: "1",
+      TMP: tempRoot,
+      TEMP: tempRoot,
+      IMAGE_STUDIO_OUTPUT_DIR: outputDir,
+      IMAGE_STUDIO_LOCAL_DATA_DIR: localDataRootDir,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const diagnostics = collectDiagnostics(server);
+
+  t.after(async () => {
+    await stopServer(server);
+    await rm(tempRoot, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl, server, diagnostics);
+
+  const manifestsDir = join(outputDir, "json", "creation-sets");
+  await mkdir(manifestsDir, { recursive: true });
+  await writeFile(
+    join(manifestsDir, "creation-set-needs-key.json"),
+    `${JSON.stringify({
+      setId: "creation-set-needs-key",
+      productName: "Blue Fishing Lure",
+      status: "completed",
+      items: [{ itemId: "1-hero", role: "hero", status: "completed", relativePath: "x/hero.png" }],
+    }, null, 2)}\n`,
+    "utf8",
+  );
+
+  const listingResponse = await postJson(baseUrl, "/api/creation/listings", { setId: "creation-set-needs-key" });
+  assert.equal(listingResponse.response.status, 400);
+  assert.match(listingResponse.body.message, /API key/i);
 });

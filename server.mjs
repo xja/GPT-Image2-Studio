@@ -105,6 +105,7 @@ import {
   selectCreationRepairItems,
 } from "./lib/creation-repair.mjs";
 import { buildCreationRelativeDir, createCreationSetStore } from "./lib/creation-store.mjs";
+import { generateCreationListingDrafts } from "./lib/creation-listing-agent.mjs";
 import {
   applyPortraitPlanOverrides,
   buildPortraitPlan,
@@ -2402,6 +2403,82 @@ async function handleCreationSetPathsGet(request, response) {
 
   const set = await creationSetStore.readManifest(setId);
   return sendJson(response, 200, buildCreationSetPathReport(set));
+}
+
+async function handleCreationListingsGenerate(request, response) {
+  let payload = {};
+  try {
+    payload = await readJsonBody(request);
+  } catch {
+    return sendJson(response, 400, {
+      message: "Invalid JSON body.",
+    });
+  }
+
+  const setId = String(payload?.setId || "").trim();
+  if (!setId) {
+    return sendJson(response, 400, {
+      message: "Missing Creation set ID.",
+    });
+  }
+
+  let set = null;
+  try {
+    set = await creationSetStore.readManifest(setId);
+  } catch (error) {
+    if (error && typeof error === "object" && error.code === "ENOENT") {
+      return sendJson(response, 404, {
+        message: "Creation set manifest was not found.",
+      });
+    }
+    throw error;
+  }
+
+  const mock = process.env.IMAGE_STUDIO_MOCK_LISTING_AGENT === "1";
+  const config = mergeRequestPrivateConfig(payload, await configStore.readPrivateConfig());
+  if (!mock && !config.apiKey) {
+    return sendJson(response, 400, {
+      message: "Missing API key. Save API configuration before generating listings.",
+    });
+  }
+
+  let reasoningEffort = DEFAULT_REASONING_EFFORT;
+  try {
+    reasoningEffort = normalizeReasoningEffort(
+      payload?.reasoningEffort || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    );
+  } catch (error) {
+    return sendJson(response, 400, {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  try {
+    const listingDrafts = await generateCreationListingDrafts({
+      set,
+      config: {
+        baseUrl: config.baseUrl,
+        apiKey: config.apiKey,
+        responsesModel: config.responsesModel,
+        reasoningEffort,
+      },
+      mock,
+    });
+    const nextSet = await creationSetStore.saveManifest({
+      ...set,
+      listingDrafts,
+      updatedAt: new Date().toISOString(),
+    });
+    return sendJson(response, 200, {
+      ok: true,
+      set: nextSet,
+      listingDrafts: nextSet.listingDrafts,
+    });
+  } catch (error) {
+    return sendJson(response, 502, {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 async function handlePortraitSetsGet(response) {
@@ -4723,6 +4800,10 @@ async function routeRequest(request, response) {
 
   if (request.method === "POST" && url.pathname === "/api/generate") {
     return handleGenerate(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/creation/listings") {
+    return handleCreationListingsGenerate(request, response);
   }
 
   if (request.method === "POST" && url.pathname === "/api/creation/generate") {
