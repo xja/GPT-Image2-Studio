@@ -9408,6 +9408,7 @@ const creationListingController = createCreationListingController({
   compactErrorMessage,
   downloadTextFile: downloadCreationRecordTextFile,
   fetchImpl: (...args) => fetch(...args),
+  getRequestConfig: getBrowserPrivateConfigRequestPayload,
   getSelectedSet: getCreationRecordSelectedSet,
   normalizeSet: normalizeCreationSetForView,
   nowIso,

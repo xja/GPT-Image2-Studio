@@ -2273,12 +2273,14 @@ test("creation mode exposes listing agent controls and record listing drafts", a
   assert.match(app, /from "\/lib\/creation-listing-view\.mjs"/);
   assert.match(app, /createCreationListingController\(\{/);
   assert.match(app, /fetchImpl: \(\.\.\.args\) => fetch\(\.\.\.args\),/);
+  assert.match(app, /getRequestConfig: getBrowserPrivateConfigRequestPayload,/);
   assert.match(app, /creationListingController\.syncRecordControls\(selectedSet\);/);
   assert.match(app, /creationListingController\.bindEvents\(\);/);
   assert.match(listingView, /export function renderCreationListingDrafts\(\{ refs, state, set \} = \{\}\) \{/);
   assert.match(listingView, /async function generate\(setId = ""\) \{/);
   assert.match(listingView, /const requestedSetId = cleanCreationListingText\(setId\);/);
   assert.match(listingView, /fetchImpl\("\/api\/creation\/listings",/);
+  assert.match(listingView, /\.\.\.\(context\.getRequestConfig\?\.\(\) \|\| \{\}\),[\s\S]*setId: selectedSet\.setId,/);
   assert.match(listingView, /function exportListings\(\) \{/);
   assert.match(listingView, /async function copy\(\) \{/);
   assert.match(listingView, /export function buildCreationListingDraftText\(draft, index = 0\) \{/);

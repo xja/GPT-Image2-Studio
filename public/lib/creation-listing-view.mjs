@@ -261,7 +261,10 @@ export function createCreationListingController(context = {}) {
       const response = await context.fetchImpl("/api/creation/listings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ setId: selectedSet.setId }),
+        body: JSON.stringify({
+          ...(context.getRequestConfig?.() || {}),
+          setId: selectedSet.setId,
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {

@@ -7,6 +7,7 @@ import {
   normalizeBrowserPrivateConfig,
   toPublicBrowserConfig,
 } from "../public/lib/browser-config.mjs";
+import { createCreationListingController } from "../public/lib/creation-listing-view.mjs";
 
 test("browser config module normalizes private config without requiring window globals", () => {
   const normalized = normalizeBrowserPrivateConfig({
@@ -39,4 +40,69 @@ test("public app shell delegates browser config and cache behavior to public mod
   assert.match(app, /from "\/lib\/generation-client\.mjs"/);
   assert.match(app, /from "\/lib\/creation-listing-view\.mjs"/);
   assert.ok(lineCount < 15500, `public/app.js should stay below the shell budget, got ${lineCount}`);
+});
+
+test("creation listing controller sends browser-private request config", async () => {
+  let capturedRequest = null;
+  const selectedSet = {
+    setId: "creation-set-api-key",
+    productName: "Listing Probe",
+  };
+  const state = {
+    creation: {
+      listingGeneratingSetId: "",
+      recordSetId: "",
+      sets: [selectedSet],
+    },
+  };
+  const controller = createCreationListingController({
+    compactErrorMessage: (message) => message,
+    fetchImpl: async (url, options) => {
+      capturedRequest = {
+        url,
+        body: JSON.parse(options.body),
+      };
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          set: {
+            ...selectedSet,
+            listingDrafts: [{ title: "1 Pack Listing Probe" }],
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    },
+    getRequestConfig: () => ({
+      baseUrl: "https://api.example.test/v1",
+      apiKey: "sk-browser-secret",
+      responsesModel: "gpt-5.5",
+    }),
+    getSelectedSet: () => selectedSet,
+    nowIso: () => "2026-05-24T00:00:00.000Z",
+    refs: {},
+    renderRecordView: () => {},
+    setFeedback: () => {},
+    state,
+    upsertSet: (set) => {
+      state.creation.sets = [set];
+      return set;
+    },
+  });
+
+  const nextSet = await controller.generate();
+
+  assert.equal(capturedRequest.url, "/api/creation/listings");
+  assert.deepEqual(capturedRequest.body, {
+    baseUrl: "https://api.example.test/v1",
+    apiKey: "sk-browser-secret",
+    responsesModel: "gpt-5.5",
+    setId: selectedSet.setId,
+  });
+  assert.equal(nextSet.listingDrafts.length, 1);
+  assert.equal(state.creation.listingGeneratingSetId, "");
+  assert.equal(state.creation.recordSetId, selectedSet.setId);
 });
