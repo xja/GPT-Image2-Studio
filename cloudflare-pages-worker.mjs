@@ -40,6 +40,7 @@ import {
   CREATION_LOGO_BATCH_REFERENCE_LABELS,
   buildCreationLogoBatchPlan,
 } from "./lib/creation-logo-batch.mjs";
+import { generateCreationListingDrafts } from "./lib/creation-listing-agent.mjs";
 import { generatePptDeckOutline } from "./lib/ppt-deck-workflow.mjs";
 import { analyzePptDocument } from "./lib/ppt-document-analysis.mjs";
 import { buildSlideEditPrompt, buildSlideImagePrompts } from "./lib/ppt-slide-prompts.mjs";
@@ -725,6 +726,59 @@ function normalizePrivateConfigPayload(payload = {}) {
       return payload?.[name];
     },
   });
+}
+
+function firstConfigString(values, fallback = "") {
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return fallback;
+}
+
+function buildCloudCreationListingConfig(payload = {}, env = {}) {
+  const nestedConfig = payload.config && typeof payload.config === "object" ? payload.config : {};
+  return {
+    baseUrl: firstConfigString(
+      [
+        payload.baseUrl,
+        nestedConfig.baseUrl,
+        env.baseUrl,
+        env.OPENAI_BASE_URL,
+        env.IMAGE_STUDIO_BASE_URL,
+      ],
+      DEFAULT_CONFIG.baseUrl,
+    ),
+    apiKey: firstConfigString([
+      payload.apiKey,
+      nestedConfig.apiKey,
+      env.apiKey,
+      env.OPENAI_API_KEY,
+      env.IMAGE_STUDIO_API_KEY,
+    ]),
+    responsesModel: firstConfigString(
+      [
+        payload.responsesModel,
+        nestedConfig.responsesModel,
+        env.responsesModel,
+        env.RESPONSES_MODEL,
+        env.IMAGE_STUDIO_RESPONSES_MODEL,
+      ],
+      DEFAULT_CONFIG.responsesModel,
+    ),
+    reasoningEffort: normalizeReasoningEffort(firstConfigString(
+      [
+        payload.reasoningEffort,
+        nestedConfig.reasoningEffort,
+        env.reasoningEffort,
+        env.REASONING_EFFORT,
+        env.IMAGE_STUDIO_REASONING_EFFORT,
+      ],
+      DEFAULT_REASONING_EFFORT,
+    )),
+  };
 }
 
 function getFileExtension(filename) {
@@ -2762,6 +2816,48 @@ function streamPptRequest(request, fetchImpl, runner) {
   });
 }
 
+async function handleCloudCreationListings(request, { env = {}, fetchImpl = fetch } = {}) {
+  const payload = await request.json().catch(() => ({}));
+  const set = payload.set && typeof payload.set === "object" ? payload.set : null;
+  const setId = String(set?.setId || "").trim();
+  if (!setId) {
+    return jsonResponse({ ok: false, message: "Missing Creation set metadata." }, 400);
+  }
+
+  const mock = env.IMAGE_STUDIO_MOCK_LISTING_AGENT === "1" || payload.mock === true;
+  let config;
+  try {
+    config = buildCloudCreationListingConfig(payload, env);
+  } catch (error) {
+    return jsonResponse({
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    }, 400);
+  }
+
+  if (!mock && !config.apiKey) {
+    return jsonResponse({
+      ok: false,
+      message: "Missing API key. Provide apiKey in the request payload or Worker env.",
+    }, 400);
+  }
+
+  try {
+    const listingDrafts = await generateCreationListingDrafts({
+      set,
+      config,
+      fetchImpl,
+      mock,
+    });
+    return jsonResponse({ ok: true, set: { ...set, listingDrafts }, listingDrafts });
+  } catch (error) {
+    return jsonResponse({
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    }, 502);
+  }
+}
+
 function unsupportedFeature(request, message) {
   const url = new URL(request.url);
   return jsonResponse(buildUnsupportedRuntimeCapabilityPayload("cloudflare", request.method, url.pathname, message), 400);
@@ -2809,9 +2905,10 @@ async function handleServerImageRequest(request, imageBucket) {
 
 export async function handleApiRequest(request, options = {}) {
   const url = new URL(request.url);
+  const env = options.env || {};
   const fetchImpl = options.fetchImpl || fetch;
-  const imageBucket = options.imageBucket || options.env?.IMAGE_BUCKET;
-  const generationQueue = options.generationQueue || options.env?.GENERATION_QUEUE;
+  const imageBucket = options.imageBucket || env.IMAGE_BUCKET;
+  const generationQueue = options.generationQueue || env.GENERATION_QUEUE;
 
   if (request.method === "GET" && url.pathname === "/api/config") {
     return jsonResponse(buildPublicConfig());
@@ -2846,6 +2943,10 @@ export async function handleApiRequest(request, options = {}) {
 
   if (request.method === "POST" && url.pathname === "/api/creation/generate") {
     return streamCreationGenerate(request, { fetchImpl, imageBucket });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/creation/listings") {
+    return handleCloudCreationListings(request, { env, fetchImpl });
   }
 
   if (request.method === "POST" && url.pathname === "/api/portrait/generate") {
@@ -2931,6 +3032,7 @@ export default {
       fetchImpl: fetch,
       imageBucket: env.IMAGE_BUCKET,
       generationQueue: env.GENERATION_QUEUE,
+      env,
     });
   },
   queue(batch, env) {

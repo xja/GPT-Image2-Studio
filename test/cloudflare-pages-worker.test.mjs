@@ -87,6 +87,167 @@ function makeGenerationQueue() {
   };
 }
 
+function makeListingDraft(overrides = {}) {
+  return {
+    title: "1 Pack 12 oz Blue Travel Bottle for Daily Hydration",
+    sellingPoints: ["Compact bottle details are written from provided product metadata."],
+    painPoints: ["Helps shoppers compare a blue bottle variant without extra guessing."],
+    fiveBullets: [
+      "1 Pack 12 oz format keeps quantity and size easy to review.",
+      "Blue bottle copy uses SKU-specific product information.",
+      "Conservative wording avoids unsupported visual claims.",
+      "Keyword structure supports US marketplace review.",
+      "Each bullet stays within the configured character limit.",
+    ],
+    description: "Blue travel bottle listing draft for US marketplace review.",
+    backendSearchTerms: "blue travel bottle daily hydration",
+    keywordBuckets: {
+      exact: ["blue travel bottle"],
+      longTail: ["12 oz travel bottle"],
+      traffic: ["daily hydration bottle"],
+      descriptive: ["compact blue bottle"],
+    },
+    missingInfo: [],
+    warnings: [],
+    ...overrides,
+  };
+}
+
+test("Cloudflare creation listing route accepts explicit set metadata and returns input-only drafts", async () => {
+  const request = new Request("https://studio.example/api/creation/listings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      set: {
+        setId: "worker-set",
+        productName: "Travel Bottle",
+        dimensionSpecs: "12 oz",
+        skuSubjects: [{ id: "blue", title: "Blue Bottle", bundleCount: 1 }],
+        items: [{ itemId: "1-hero", role: "hero", status: "failed" }],
+      },
+    }),
+  });
+
+  const response = await handleApiRequest(request, {
+    env: { IMAGE_STUDIO_MOCK_LISTING_AGENT: "1" },
+    fetchImpl() {
+      throw new Error("mock listing route should not call upstream fetch");
+    },
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(body.set.setId, "worker-set");
+  assert.equal(body.set.listingDrafts.length, 1);
+  assert.equal(body.listingDrafts.length, 1);
+  assert.equal(body.listingDrafts[0].evidenceMode, "input-only");
+});
+
+test("Cloudflare creation listing route requires explicit set metadata with setId", async () => {
+  for (const payload of [{}, { set: { productName: "Travel Bottle" } }, { set: { setId: " " } }]) {
+    const response = await handleApiRequest(new Request("https://studio.example/api/creation/listings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }), {
+      env: { IMAGE_STUDIO_MOCK_LISTING_AGENT: "1" },
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.match(body.message, /set/i);
+  }
+});
+
+test("Cloudflare creation listing route uses payload API settings outside mock mode", async () => {
+  const seenRequests = [];
+  const response = await handleApiRequest(new Request("https://studio.example/api/creation/listings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      baseUrl: "https://payload.example/v1",
+      apiKey: "payload-key",
+      responsesModel: "gpt-payload",
+      reasoningEffort: "high",
+      set: {
+        setId: "worker-set-upstream",
+        productName: "Travel Bottle",
+        dimensionSpecs: "12 oz",
+        skuSubjects: [{ id: "blue", title: "Blue Bottle", bundleCount: 1 }],
+        items: [{ itemId: "1-hero", role: "hero", status: "failed" }],
+      },
+    }),
+  }), {
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+        body: JSON.parse(init.body),
+      });
+      return new Response(JSON.stringify({ output_text: JSON.stringify(makeListingDraft()) }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(seenRequests[0].url, "https://payload.example/v1/responses");
+  assert.equal(seenRequests[0].auth, "Bearer payload-key");
+  assert.equal(seenRequests[0].body.model, "gpt-payload");
+  assert.equal(seenRequests[0].body.reasoning.effort, "high");
+  assert.equal(body.listingDrafts[0].title, "1 Pack 12 oz Blue Travel Bottle for Daily Hydration");
+  assert.doesNotMatch(JSON.stringify(body), /payload-key/);
+});
+
+test("Cloudflare creation listing route uses env API settings outside mock mode", async () => {
+  const seenRequests = [];
+  const response = await handleApiRequest(new Request("https://studio.example/api/creation/listings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      set: {
+        setId: "worker-set-env",
+        productName: "Travel Bottle",
+        dimensionSpecs: "12 oz",
+        skuSubjects: [{ id: "blue", title: "Blue Bottle", bundleCount: 1 }],
+        items: [{ itemId: "1-hero", role: "hero", status: "failed" }],
+      },
+    }),
+  }), {
+    env: {
+      OPENAI_BASE_URL: "https://env.example/v1",
+      OPENAI_API_KEY: "env-key",
+      RESPONSES_MODEL: "gpt-env",
+      REASONING_EFFORT: "low",
+    },
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+        body: JSON.parse(init.body),
+      });
+      return new Response(JSON.stringify({ output_text: JSON.stringify(makeListingDraft()) }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(seenRequests[0].url, "https://env.example/v1/responses");
+  assert.equal(seenRequests[0].auth, "Bearer env-key");
+  assert.equal(seenRequests[0].body.model, "gpt-env");
+  assert.equal(seenRequests[0].body.reasoning.effort, "low");
+  assert.equal(body.listingDrafts[0].skuSubjectId, "blue");
+  assert.doesNotMatch(JSON.stringify(body), /env-key/);
+});
+
 test("Cloudflare generation uses browser-provided API settings without echoing the key", async () => {
   const seenRequests = [];
   const imageBucket = makeImageBucket();
