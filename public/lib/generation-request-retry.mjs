@@ -1,4 +1,5 @@
 export const GENERATION_REQUEST_MAX_RETRIES = 2;
+export const GENERATION_REQUEST_RETRY_DELAY_MS = 5000;
 
 const RETRYABLE_PORT_ERROR_PATTERNS = [
   /failed to fetch/i,

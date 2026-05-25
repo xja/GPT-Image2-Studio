@@ -10,8 +10,15 @@ import {
 } from "../lib/creation-listing-draft.mjs";
 
 const longText = "a".repeat(CREATION_LISTING_FIELD_MAX_CHARS + 1);
+const validBullets = [
+  "2 Pack 3.5 in size keeps quantity and dimensions clear.",
+  "Compact profile supports clear product selection.",
+  "Provided product facts keep the listing grounded.",
+  "Search-focused wording supports US marketplace discovery.",
+  "Concise copy keeps feature and outcome easy to scan.",
+];
 
-test("listing sources follow skuSubjects and use image-backed evidence when images exist", () => {
+test("listing sources combine skuSubjects into one parent listing source", () => {
   const sources = buildCreationListingSources({
     setId: "set-1",
     productName: "Fishing Lure",
@@ -28,10 +35,12 @@ test("listing sources follow skuSubjects and use image-backed evidence when imag
     ],
   });
 
-  assert.equal(sources.length, 2);
-  assert.equal(sources[0].skuSubjectId, "blue");
+  assert.equal(sources.length, 1);
+  assert.equal(sources[0].skuSubjectId, "");
+  assert.equal(sources[0].skuVariantCount, 2);
+  assert.deepEqual(sources[0].skuSubjects.map((sku) => sku.id), ["blue", "green"]);
   assert.equal(sources[0].evidenceMode, "image-backed");
-  assert.deepEqual(sources[0].imageItems.map((item) => item.relativePath), ["a/blue.png"]);
+  assert.deepEqual(sources[0].imageItems.map((item) => item.relativePath), ["a/blue.png", "a/green.png"]);
 });
 
 test("listing sources fall back to one input-only product package when no SKU and no image exists", () => {
@@ -48,7 +57,7 @@ test("listing sources fall back to one input-only product package when no SKU an
   assert.match(sources[0].warnings.join("\n"), /Generated images were unavailable/);
 });
 
-test("listing sources collapse duplicate skuSubjects by id and fallback identity", () => {
+test("listing sources collapse duplicate skuSubjects before parent listing generation", () => {
   const sources = buildCreationListingSources({
     setId: "set-duplicates",
     productName: "Fishing Lure",
@@ -64,9 +73,10 @@ test("listing sources collapse duplicate skuSubjects by id and fallback identity
     ],
   });
 
-  assert.equal(sources.length, 2);
-  assert.deepEqual(sources.map((source) => source.skuSubjectId), ["blue", ""]);
-  assert.deepEqual(sources.map((source) => source.skuTitle), ["Blue Lure", "Green Lure"]);
+  assert.equal(sources.length, 1);
+  assert.equal(sources[0].skuSubjectId, "");
+  assert.equal(sources[0].skuVariantCount, 2);
+  assert.deepEqual(sources[0].skuSubjects.map((sku) => sku.title), ["Blue Lure", "Green Lure"]);
 });
 
 test("listing draft validation rejects fields and bullets over 500 characters", () => {
@@ -91,7 +101,7 @@ test("listing draft validation requires quantity first and size second when dime
     title: "Blue Fishing Lure 2 Pack 3.5 in",
     sellingPoints: ["Bright blue profile"],
     painPoints: ["Low visibility in stained water"],
-    fiveBullets: ["Designed for visible lure presentation."],
+    fiveBullets: validBullets,
     description: "A compact lure for freshwater fishing.",
     backendSearchTerms: "blue fishing lure freshwater bait",
   });
@@ -100,6 +110,126 @@ test("listing draft validation requires quantity first and size second when dime
   assert.equal(validation.ok, false);
   assert.match(validation.errors.join("\n"), /title must start with quantity/);
   assert.match(validation.errors.join("\n"), /title must place size immediately after quantity/);
+});
+
+test("listing draft validation requires exactly five bullets", () => {
+  const draft = normalizeCreationListingDraft({
+    id: "listing-five-bullets",
+    title: "2 Pack 3.5 in Blue Fishing Lures",
+    sellingPoints: ["Bright blue profile"],
+    painPoints: ["Low visibility in stained water"],
+    fiveBullets: validBullets.slice(0, 4),
+    description: "A compact lure for freshwater fishing.",
+    backendSearchTerms: "blue fishing lure freshwater bait",
+  });
+
+  const validation = validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 in" });
+
+  assert.equal(validation.ok, false);
+  assert.match(validation.errors.join("\n"), /fiveBullets must include exactly 5 items/);
+});
+
+test("listing draft validation requires metric and imperial units when both are expected", () => {
+  const draft = normalizeCreationListingDraft({
+    id: "listing-dual-units",
+    title: "2 Pack 3.5 in Blue Fishing Lures",
+    sellingPoints: ["Bright blue profile"],
+    painPoints: ["Low visibility in stained water"],
+    fiveBullets: validBullets,
+    description: "A compact lure for freshwater fishing.",
+    backendSearchTerms: "blue fishing lure freshwater bait",
+  });
+
+  const validation = validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 in / 9 cm" });
+
+  assert.equal(validation.ok, false);
+  assert.match(validation.errors.join("\n"), /title must include all expected size units/);
+});
+
+test("listing draft validation accepts metric and imperial units from parenthetical dimensions", () => {
+  const draft = normalizeCreationListingDraft({
+    id: "listing-dual-units-valid",
+    title: "2 Pack 3.5 in / 9 cm Blue Fishing Lures",
+    sellingPoints: ["Bright blue profile"],
+    painPoints: ["Low visibility in stained water"],
+    fiveBullets: validBullets,
+    description: "A compact lure for freshwater fishing.",
+    backendSearchTerms: "blue fishing lure freshwater bait",
+  });
+
+  const validation = validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 in / 9 cm" });
+
+  assert.equal(validation.ok, true);
+});
+
+test("listing draft validation rejects Chinese in public English fields", () => {
+  const draft = normalizeCreationListingDraft({
+    id: "listing-cn",
+    title: "2 Pack 3.5 in 路亚硬饵 Product Listing Draft",
+    sellingPoints: ["Built from product inputs."],
+    painPoints: ["Helps shoppers compare product variants."],
+    fiveBullets: [
+      "2 Pack 3.5 in size keeps quantity visible.",
+      "路亚硬饵 draft uses saved SKU information.",
+      "Copy stays conservative.",
+      "Keyword structure supports US marketplace review.",
+      "Each bullet is kept under the configured limit.",
+    ],
+    description: "路亚硬饵 listing draft for US marketplace review.",
+    backendSearchTerms: "路亚硬饵 product listing",
+    language: "en-US",
+  });
+
+  const validation = validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 in" });
+
+  assert.equal(validation.ok, false);
+  assert.match(validation.errors.join("\n"), /public listing fields must be English only/);
+});
+
+test("listing draft preserves Chinese display text without treating it as public copy", () => {
+  const draft = normalizeCreationListingDraft({
+    id: "listing-zh-display",
+    title: "2 Pack 3.5 in Blue Fishing Lures",
+    sellingPoints: ["Bright blue profile"],
+    painPoints: ["Low visibility in stained water"],
+    fiveBullets: [
+      "2 Pack 3.5 in size keeps quantity visible.",
+      "Blue lure profile supports clear SKU identification.",
+      "Compact design works for bass fishing presentations.",
+      "Product details are based on provided inputs and SKU metadata.",
+      "Keyword-focused copy keeps listing language concise.",
+    ],
+    description: "A compact lure for freshwater fishing.",
+    backendSearchTerms: "blue fishing lure bass bait",
+    zhDisplay: {
+      title: "2 件 3.5 英寸蓝色路亚鱼饵",
+      sellingPoints: ["亮蓝色外观便于区分颜色变体。"],
+      fiveBullets: ["2 件 3.5 英寸规格让数量和尺寸更清晰。"],
+    },
+    language: "en-US",
+  });
+
+  assert.equal(draft.zhDisplay.title, "2 件 3.5 英寸蓝色路亚鱼饵");
+  assert.deepEqual(draft.zhDisplay.sellingPoints, ["亮蓝色外观便于区分颜色变体。"]);
+  assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 in" }).ok, true);
+});
+
+test("listing draft validation rejects non-US marketplace signals", () => {
+  const draft = normalizeCreationListingDraft({
+    id: "listing-non-us",
+    title: "2 Pack 3.5 in Fishing Lure for Amazon UK",
+    sellingPoints: ["Built for UK marketplace review."],
+    painPoints: ["Helps shoppers compare product variants."],
+    fiveBullets: validBullets,
+    description: "Fishing lure listing draft for Amazon UK marketplace review.",
+    backendSearchTerms: "fishing lure uk marketplace",
+    language: "en-US",
+  });
+
+  const validation = validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 in" });
+
+  assert.equal(validation.ok, false);
+  assert.match(validation.errors.join("\n"), /public listing fields must target Amazon US/);
 });
 
 test("listing draft validation rejects unsupported claims in customer-facing copy", () => {
@@ -135,7 +265,7 @@ test("keyword normalization removes unsupported claims from backend terms and bu
     title: "2 Pack 3.5 in Blue Fishing Lures",
     sellingPoints: ["Bright blue profile"],
     painPoints: ["Low visibility in stained water"],
-    fiveBullets: ["Designed for visible lure presentation."],
+    fiveBullets: validBullets,
     description: "A compact lure for freshwater fishing.",
     backendSearchTerms: "bass lure; FDA Certified; medical grade bait; long tail bait; warranty",
     keywordBuckets: {
@@ -162,7 +292,7 @@ test("backend search term normalization removes space-separated competitor brand
     title: "2 Pack 3.5 in Blue Fishing Lures",
     sellingPoints: ["Bright blue profile"],
     painPoints: ["Low visibility in stained water"],
-    fiveBullets: ["Designed for visible lure presentation."],
+    fiveBullets: validBullets,
     description: "A compact lure for freshwater fishing.",
     backendSearchTerms: "bass lure Amazon long tail bait",
   });

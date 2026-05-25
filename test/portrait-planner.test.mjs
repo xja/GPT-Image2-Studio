@@ -159,6 +159,20 @@ test("portrait action normalization keeps selected presets and defaults to the f
   );
 });
 
+test("portrait prompts describe action references as pose-only guidance", () => {
+  const plan = buildPortraitPlan({
+    subjectSummary: "adult subject in a tailored black suit",
+    imageCount: 1,
+    selectedActions: ["turning-motion"],
+  });
+
+  assert.match(plan.items[0].prompt, /optional action and pose reference image\(s\)/);
+  assert.match(
+    plan.items[0].prompt,
+    /Use action and pose reference image\(s\) only for pose, gesture, body movement, limb placement, action rhythm, and composition cues/,
+  );
+});
+
 test("portrait planner uses only selected shot types when provided", () => {
   const plan = buildPortraitPlan({
     subjectSummary: "adult subject in a white shirt",

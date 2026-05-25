@@ -28,6 +28,7 @@ import {
   buildFinalImageChunkPayloads,
 } from "./lib/generation-stream-protocol.mjs";
 import {
+  applyCreationPlanOverrides,
   buildCreationPlan,
   normalizeCreationLogoOptions,
   normalizeCreationReferenceRoles,
@@ -60,15 +61,18 @@ import {
 } from "./lib/prompt-agent.mjs";
 import { writeWorkerSseEvent } from "./lib/sse-writer.mjs";
 import {
+  appendCreationStyleReferences,
+  buildCreationGenerationReferenceImageLabels,
   buildCreationItemReferenceImages,
-  buildCreationReferenceImageLabels,
 } from "./lib/creation-reference-labels.mjs";
 import {
   DEFAULT_BASE_URL,
   DEFAULT_REASONING_EFFORT,
   MAX_CREATION_REFERENCE_IMAGES,
+  MAX_CREATION_STYLE_REFERENCE_IMAGES,
   MAX_CONCURRENT_TASKS_PER_SESSION,
   MAX_PARALLEL_TASKS_PER_SESSION,
+  MAX_PORTRAIT_ACTION_REFERENCE_IMAGES,
   MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES,
   MAX_PORTRAIT_PERSON_REFERENCE_IMAGES,
   MAX_REFERENCE_IMAGES,
@@ -93,13 +97,18 @@ const STYLE_TRANSFER_REFERENCE_IMAGE_LABELS = [
 ];
 const STYLE_TRANSFER_SOURCE_IMAGE_LABELS = [STYLE_TRANSFER_REFERENCE_IMAGE_LABELS[0]];
 
-function buildPortraitReferenceImageLabels(personReferenceImages = [], accessoryReferenceImages = []) {
+function buildPortraitReferenceImageLabels(personReferenceImages = [], actionReferenceImages = [], accessoryReferenceImages = []) {
   const personCount = personReferenceImages.length;
+  const actionCount = actionReferenceImages.length;
   const accessoryCount = accessoryReferenceImages.length;
   return [
     ...personReferenceImages.map(
       (image, index) =>
         `Portrait person reference ${index + 1} of ${personCount}: ${image.filename || "person reference image"}. Preserve visible identity, face, body proportions, hairstyle, and non-sensitive appearance cues from this person reference.`,
+    ),
+    ...actionReferenceImages.map(
+      (image, index) =>
+        `Portrait action and pose reference ${index + 1} of ${actionCount}: ${image.filename || "action reference image"}. Use this only for pose, gesture, body movement, limb placement, and action rhythm; do not treat it as another person identity, outfit, or prop source.`,
     ),
     ...accessoryReferenceImages.map(
       (image, index) =>
@@ -160,7 +169,9 @@ function buildPublicConfig() {
       maxParallelTasksPerSession: MAX_PARALLEL_TASKS_PER_SESSION,
       maxReferenceImages: MAX_REFERENCE_IMAGES,
       maxCreationReferenceImages: MAX_CREATION_REFERENCE_IMAGES,
+      maxCreationStyleReferenceImages: MAX_CREATION_STYLE_REFERENCE_IMAGES,
       maxPortraitPersonReferenceImages: MAX_PORTRAIT_PERSON_REFERENCE_IMAGES,
+      maxPortraitActionReferenceImages: MAX_PORTRAIT_ACTION_REFERENCE_IMAGES,
       maxPortraitAccessoryReferenceImages: MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES,
     },
     reasoningEfforts: [...REASONING_EFFORT_OPTIONS],
@@ -1509,6 +1520,76 @@ function buildPortraitPlanFromFormData(formData) {
   });
 }
 
+function buildCreationPlanFromFormData(formData) {
+  const referenceImageRoles = normalizeCreationReferenceRoles(formData.get("referenceImageRoles"));
+  let plan = buildCreationPlan({
+    productName: formData.get("productName"),
+    productDescription: formData.get("productDescription"),
+    sellingPoints: formData.get("sellingPoints"),
+    dimensionSpecs: formData.get("dimensionSpecs"),
+    dimensionUnitMode: formData.get("dimensionUnitMode"),
+    targetLanguage: formData.get("targetLanguage"),
+    imageCount: formData.get("imageCount"),
+    scenario: formData.get("scenario"),
+    visualLanguage: formData.get("visualLanguage"),
+    industryTemplate: formData.get("industryTemplate"),
+    selectedRoles: formData.get("selectedRoles"),
+    referenceImageRoles,
+    skuSubjects: formData.get("skuSubjects"),
+    skuBundleCount: formData.get("skuBundleCount"),
+    logoOptions: buildCreationLogoOptionsFromFormData(formData),
+  });
+  plan = applyCreationPlanOverrides(plan, formData.get("planOverrides"));
+  return plan;
+}
+
+async function handleCreationReferenceAnalyze(request, fetchImpl) {
+  const formData = await request.formData();
+  const referenceImages = await toReferenceImages([
+    ...formData.getAll("referenceImages"),
+    ...formData.getAll("referenceImage"),
+  ]);
+
+  if (referenceImages.length === 0) {
+    return jsonResponse({ message: "请先上传套图参考图。" }, 400);
+  }
+  if (referenceImages.length > MAX_CREATION_REFERENCE_IMAGES) {
+    return jsonResponse({ message: `参考图最多支持 ${MAX_CREATION_REFERENCE_IMAGES} 张。` }, 400);
+  }
+  if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+    return jsonResponse({ message: "仅支持图片参考文件。" }, 400);
+  }
+
+  const config = normalizePrivateConfig(formData);
+  const reasoningEffort = normalizeReasoningEffort(
+    formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+  );
+  const analysis = await requestPromptAgentAnalysis({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    image: referenceImages[0],
+    images: referenceImages,
+    mode: CREATION_REFERENCE_ANALYSIS_MODE,
+    responsesModel: config.responsesModel,
+    reasoningEffort,
+    fetchImpl,
+  });
+
+  return jsonResponse({ ok: true, analysis });
+}
+
+async function handleCreationPlan(request) {
+  try {
+    const formData = await request.formData();
+    return jsonResponse({
+      ok: true,
+      plan: buildCreationPlanFromFormData(formData),
+    });
+  } catch (error) {
+    return jsonResponse({ message: error instanceof Error ? error.message : String(error) }, 400);
+  }
+}
+
 async function handlePortraitReferenceAnalyze(request, fetchImpl) {
   const formData = await request.formData();
   const personReferenceImages = await toReferenceImages([
@@ -1603,12 +1684,22 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
     ...formData.getAll("referenceImages"),
     ...formData.getAll("referenceImage"),
   ]);
+  const styleReferenceImages = await toReferenceImages([
+    ...formData.getAll("styleReferenceImages"),
+    ...formData.getAll("styleReferenceImage"),
+  ]);
   const logoImage = await readCreationLogoImage(formData);
   if (referenceImages.length > MAX_CREATION_REFERENCE_IMAGES) {
     throw new Error(`参考图最多支持 ${MAX_CREATION_REFERENCE_IMAGES} 张。`);
   }
   if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
     throw new Error("仅支持图片参考文件。");
+  }
+  if (styleReferenceImages.length > MAX_CREATION_STYLE_REFERENCE_IMAGES) {
+    throw new Error(`参考风格图最多支持 ${MAX_CREATION_STYLE_REFERENCE_IMAGES} 张。`);
+  }
+  if (styleReferenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+    throw new Error("仅支持图片参考风格文件。");
   }
   const referenceImageNames = referenceImages.map((image) => image.filename).filter(Boolean);
   const referenceImageRoles = normalizeCreationReferenceRoles(formData.get("referenceImageRoles"));
@@ -1676,13 +1767,18 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
       await writeSseEvent(writer, "item_started", { setId, itemId: item.itemId, role: item.role });
 
       const itemReferenceImages = buildCreationItemReferenceImages(item, referenceImages, plan.referenceImageRoles);
-      const itemGenerationReferenceImages = appendCreationLogoReference(itemReferenceImages, logoImage);
+      const itemGenerationReferenceImages = appendCreationStyleReferences(itemReferenceImages, styleReferenceImages);
+      const itemGenerationReferenceImagesWithLogo = appendCreationLogoReference(itemGenerationReferenceImages, logoImage);
       const generationResult = await requestImageGeneration({
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
         prompt: appendRatioHintToPrompt(item.prompt, ratioOption),
-        referenceImages: itemGenerationReferenceImages,
-        referenceImageLabels: buildCreationReferenceImageLabels(itemReferenceImages, plan.referenceImageRoles),
+        referenceImages: itemGenerationReferenceImagesWithLogo,
+        referenceImageLabels: buildCreationGenerationReferenceImageLabels(
+          itemReferenceImages,
+          plan.referenceImageRoles,
+          styleReferenceImages,
+        ),
         size: finalSize,
         quality: finalQuality,
         format: toApiOutputFormat(finalFormat),
@@ -1823,6 +1919,9 @@ async function runPortraitGenerate(request, writer, { fetchImpl, imageBucket } =
   const accessoryReferenceImages = await toReferenceImages([
     ...formData.getAll("portraitAccessoryReferenceImages"),
   ]);
+  const actionReferenceImages = await toReferenceImages([
+    ...formData.getAll("portraitActionReferenceImages"),
+  ]);
   if (personReferenceImages.length === 0) {
     throw new Error("请先上传人物参考图。");
   }
@@ -1832,8 +1931,11 @@ async function runPortraitGenerate(request, writer, { fetchImpl, imageBucket } =
   if (accessoryReferenceImages.length > MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES) {
     throw new Error(`服装道具配饰参考图最多支持 ${MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES} 张。`);
   }
-  const referenceImages = [...personReferenceImages, ...accessoryReferenceImages];
-  const referenceImageLabels = buildPortraitReferenceImageLabels(personReferenceImages, accessoryReferenceImages);
+  if (actionReferenceImages.length > MAX_PORTRAIT_ACTION_REFERENCE_IMAGES) {
+    throw new Error(`动作参考图最多支持 ${MAX_PORTRAIT_ACTION_REFERENCE_IMAGES} 张。`);
+  }
+  const referenceImages = [...personReferenceImages, ...actionReferenceImages, ...accessoryReferenceImages];
+  const referenceImageLabels = buildPortraitReferenceImageLabels(personReferenceImages, actionReferenceImages, accessoryReferenceImages);
   if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
     throw new Error("仅支持图片参考文件。");
   }
@@ -2955,6 +3057,14 @@ export async function handleApiRequest(request, options = {}) {
 
   if (request.method === "POST" && url.pathname === "/api/creation/logo-batch") {
     return streamCreationLogoBatchGenerate(request, { fetchImpl, imageBucket });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/creation/reference/analyze") {
+    return handleCreationReferenceAnalyze(request, fetchImpl);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/creation/plan") {
+    return handleCreationPlan(request);
   }
 
   if (request.method === "POST" && url.pathname === "/api/portrait/reference/analyze") {

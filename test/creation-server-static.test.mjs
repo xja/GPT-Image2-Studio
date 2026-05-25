@@ -168,18 +168,44 @@ test("creation generation labels uploaded reference image count and file order",
 
   assert.match(server, /buildCreationItemReferenceImages/);
   assert.match(worker, /buildCreationItemReferenceImages/);
-  assert.match(server, /buildCreationReferenceImageLabels/);
-  assert.match(worker, /buildCreationReferenceImageLabels/);
+  assert.match(server, /buildCreationGenerationReferenceImageLabels/);
+  assert.match(worker, /buildCreationGenerationReferenceImageLabels/);
   assert.match(
     server,
-    /const itemReferenceImages = buildCreationItemReferenceImages\(item,\s*referenceImages,\s*referenceImageRoles\);[\s\S]*referenceImageLabels:\s*buildCreationReferenceImageLabels\(itemReferenceImages,\s*referenceImageRoles\)/,
+    /const itemReferenceImages = buildCreationItemReferenceImages\(item,\s*referenceImages,\s*referenceImageRoles\);[\s\S]*referenceImageLabels:\s*buildCreationGenerationReferenceImageLabels\(\s*itemReferenceImages,\s*referenceImageRoles,/,
   );
   assert.match(
     worker,
-    /const itemReferenceImages = buildCreationItemReferenceImages\(item,\s*referenceImages,\s*plan\.referenceImageRoles\);[\s\S]*referenceImageLabels:\s*buildCreationReferenceImageLabels\(itemReferenceImages,\s*plan\.referenceImageRoles\)/,
+    /const itemReferenceImages = buildCreationItemReferenceImages\(item,\s*referenceImages,\s*plan\.referenceImageRoles\);[\s\S]*referenceImageLabels:\s*buildCreationGenerationReferenceImageLabels\(\s*itemReferenceImages,\s*plan\.referenceImageRoles,/,
   );
   assert.match(worker, /normalizeCreationReferenceRoles\(formData\.get\("referenceImageRoles"\)\)/);
   assert.match(worker, /referenceImageRoles,\s*\n\s*skuSubjects:\s*formData\.get\("skuSubjects"\),\s*\n\s*skuBundleCount:\s*formData\.get\("skuBundleCount"\),\s*\n\s*logoOptions:/);
+});
+
+test("creation generation keeps style references separate from subject references", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+  const generateHandler =
+    server.match(/async function handleCreationGenerate[\s\S]*?\r?\n}\r?\n\r?\nasync function handleCreationRepair/)?.[0] || "";
+  const repairHandler =
+    server.match(/async function handleCreationRepair[\s\S]*?\r?\n}\r?\n\r?\nasync function handleGenerate/)?.[0] || "";
+  const workerGenerateHandler =
+    worker.match(/async function runCreationGenerate[\s\S]*?\r?\n}\r?\n\r?\nfunction streamCreationGenerate/)?.[0] || "";
+
+  assert.match(server, /MAX_CREATION_STYLE_REFERENCE_IMAGES/);
+  assert.match(worker, /MAX_CREATION_STYLE_REFERENCE_IMAGES/);
+  assert.match(generateHandler, /formData\.getAll\("styleReferenceImages"\)/);
+  assert.match(repairHandler, /formData\.getAll\("styleReferenceImages"\)/);
+  assert.match(workerGenerateHandler, /formData\.getAll\("styleReferenceImages"\)/);
+  assert.match(generateHandler, /styleReferenceImages\.length > MAX_CREATION_STYLE_REFERENCE_IMAGES/);
+  assert.match(repairHandler, /styleReferenceImages\.length > MAX_CREATION_STYLE_REFERENCE_IMAGES/);
+  assert.match(workerGenerateHandler, /styleReferenceImages\.length > MAX_CREATION_STYLE_REFERENCE_IMAGES/);
+  assert.match(generateHandler, /const itemGenerationReferenceImages = appendCreationStyleReferences\(/);
+  assert.match(repairHandler, /const itemGenerationReferenceImages = appendCreationStyleReferences\(/);
+  assert.match(workerGenerateHandler, /const itemGenerationReferenceImages = appendCreationStyleReferences\(/);
+  assert.match(generateHandler, /referenceImageLabels:\s*buildCreationGenerationReferenceImageLabels\(/);
+  assert.match(repairHandler, /referenceImageLabels:\s*buildCreationGenerationReferenceImageLabels\(/);
+  assert.match(workerGenerateHandler, /referenceImageLabels:\s*buildCreationGenerationReferenceImageLabels\(/);
 });
 
 test("creation generation passes SKU subjects through local and worker planning", async () => {
@@ -247,6 +273,18 @@ test("creation batch generation runs items with the configured parallel limit", 
   assert.match(generateHandler, /await runWithConcurrency\(\s*plan\.items,\s*MAX_PARALLEL_TASKS_PER_SESSION,/);
   assert.match(repairHandler, /await runWithConcurrency\(\s*repairItems,\s*MAX_PARALLEL_TASKS_PER_SESSION,/);
   assert.match(workerGenerateHandler, /await runWithConcurrency\(\s*plan\.items,\s*MAX_PARALLEL_TASKS_PER_SESSION,/);
+});
+
+test("local generation requests wait for a session slot instead of failing at the parallel cap", async () => {
+  const server = await readFile(serverPath, "utf8");
+
+  assert.match(server, /const SESSION_TASK_SLOT_RETRY_DELAY_MS = \d+;/);
+  assert.match(server, /createSessionTaskSlotLimiter\(/);
+  assert.match(server, /async function waitForSessionTaskSlot\(sessionId, taskId, requestScope, options = \{\}\) \{/);
+  assert.match(server, /async function waitForResponseSessionTaskSlot\(sessionId, taskId, requestScope, response\) \{/);
+  assert.match(server, /isActive: \(\) => isResponseWritable\(response\)/);
+  assert.match(server, /await waitForResponseSessionTaskSlot\(clientSessionId, taskId, generationRequestScope, response\);/);
+  assert.doesNotMatch(server, /if \(!claimSessionTaskSlot\(clientSessionId, taskId, generationRequestScope\)\) \{\s*throw new Error/);
 });
 
 test("local creation generation accepts reference role metadata", async () => {
@@ -323,7 +361,7 @@ test("creation repair route regenerates selected set items", async () => {
   assert.match(server, /filename:\s*item\.filename \|\| buildCreationImageFilename/);
   assert.match(server, /prompt:\s*repairItem\.prompt/);
   assert.match(server, /buildCreationItemReferenceImages\(repairItem,\s*referenceImages,\s*referenceImageRoles\)/);
-  assert.match(server, /buildCreationReferenceImageLabels\(itemReferenceImages,\s*referenceImageRoles\)/);
+  assert.match(server, /buildCreationGenerationReferenceImageLabels\(\s*itemReferenceImages,\s*referenceImageRoles,/);
   assert.match(app, /function buildCreationPlanPreviewFormData[\s\S]*formData\.set\("visualLanguage"/);
   assert.match(app, /function buildCreationRepairFormData[\s\S]*buildCreationPlanPreviewFormData\(\)\.entries\(\)/);
   assert.match(server, /handleCreationRepair[\s\S]*visualLanguage:\s*formData\.get\("visualLanguage"\)/);

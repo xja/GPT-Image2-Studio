@@ -50,12 +50,15 @@ import {
 import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
 import { mergeRequestPrivateConfig } from "./lib/request-private-config.mjs";
 import { createGenerationTaskStore } from "./lib/generation-task-store.mjs";
+import { createSessionTaskSlotLimiter } from "./lib/generation-task-slots.mjs";
 import { runWithConcurrency } from "./lib/limited-concurrency.mjs";
 import {
   DEFAULT_REASONING_EFFORT,
   MAX_CREATION_REFERENCE_IMAGES,
+  MAX_CREATION_STYLE_REFERENCE_IMAGES,
   MAX_CONCURRENT_TASKS_PER_SESSION,
   MAX_PARALLEL_TASKS_PER_SESSION,
+  MAX_PORTRAIT_ACTION_REFERENCE_IMAGES,
   MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES,
   MAX_PORTRAIT_PERSON_REFERENCE_IMAGES,
   MAX_REFERENCE_IMAGES,
@@ -82,8 +85,9 @@ import {
 import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
 import { migrateOutputDirectoryMonths } from "./lib/output-directory-migration.mjs";
 import {
+  appendCreationStyleReferences,
+  buildCreationGenerationReferenceImageLabels,
   buildCreationItemReferenceImages,
-  buildCreationReferenceImageLabels,
 } from "./lib/creation-reference-labels.mjs";
 import {
   applyCreationPlanOverrides,
@@ -144,7 +148,11 @@ const creationSetStore = createCreationSetStore({ outputDir, publicBasePath: "/o
 const portraitSetStore = createPortraitSetStore({ outputDir, publicBasePath: "/output" });
 const articleIllustrationSetStore = createArticleIllustrationSetStore({ outputDir, publicBasePath: "/output" });
 const port = Number(process.env.PORT || 3600);
-const activeTasksBySessionScope = new Map();
+const SESSION_TASK_SLOT_RETRY_DELAY_MS = 250;
+const sessionTaskSlotLimiter = createSessionTaskSlotLimiter({
+  maxParallelTasks: MAX_PARALLEL_TASKS_PER_SESSION,
+  retryDelayMs: SESSION_TASK_SLOT_RETRY_DELAY_MS,
+});
 const PPT_SOURCE_EXTENSIONS = new Set([".pdf", ".docx", ".pptx", ".txt", ".md", ".csv"]);
 const ARTICLE_SOURCE_EXTENSIONS = new Set([".txt", ".md", ".csv", ".json"]);
 const PPT_SLIDE_SIZE = "2048x1152";
@@ -160,13 +168,18 @@ const STYLE_TRANSFER_REFERENCE_IMAGE_LABELS = [
 const STYLE_TRANSFER_SOURCE_IMAGE_LABELS = [STYLE_TRANSFER_REFERENCE_IMAGE_LABELS[0]];
 const GENERATION_MODES = new Set(["style-transfer", "reference-analysis", IMAGE_DECOMPOSITION_MODE, "portrait"]);
 
-function buildPortraitReferenceImageLabels(personReferenceImages = [], accessoryReferenceImages = []) {
+function buildPortraitReferenceImageLabels(personReferenceImages = [], actionReferenceImages = [], accessoryReferenceImages = []) {
   const personCount = personReferenceImages.length;
+  const actionCount = actionReferenceImages.length;
   const accessoryCount = accessoryReferenceImages.length;
   return [
     ...personReferenceImages.map(
       (image, index) =>
         `Portrait person reference ${index + 1} of ${personCount}: ${image.filename || "person reference image"}. Preserve visible identity, face, body proportions, hairstyle, and non-sensitive appearance cues from this person reference.`,
+    ),
+    ...actionReferenceImages.map(
+      (image, index) =>
+        `Portrait action and pose reference ${index + 1} of ${actionCount}: ${image.filename || "action reference image"}. Use this only for pose, gesture, body movement, limb placement, and action rhythm; do not treat it as another person identity, outfit, or prop source.`,
     ),
     ...accessoryReferenceImages.map(
       (image, index) =>
@@ -223,8 +236,7 @@ function getStudioGenerationRequestScope(generationMode) {
 }
 
 function getGenerationTaskSlotScopeKey(sessionId, requestScope) {
-  const scope = String(requestScope || "prompt").trim() || "prompt";
-  return `${sessionId}\n${scope}`;
+  return sessionTaskSlotLimiter.getScopeKey(sessionId, requestScope);
 }
 
 function sendJson(response, statusCode, payload, headers = {}) {
@@ -269,7 +281,14 @@ async function requestStudioImageGeneration(options) {
   };
 }
 
+function isResponseWritable(response) {
+  return Boolean(response) && !response.destroyed && !response.writableEnded;
+}
+
 function writeSseEvent(response, type, payload) {
+  if (!isResponseWritable(response)) {
+    return false;
+  }
   return writeNodeSseEvent(response, type, payload);
 }
 
@@ -410,28 +429,21 @@ function getClientSessionIdFromRequest(request, url) {
 }
 
 function claimSessionTaskSlot(sessionId, taskId, requestScope) {
-  const scopeKey = getGenerationTaskSlotScopeKey(sessionId, requestScope);
-  const activeTasks = activeTasksBySessionScope.get(scopeKey) || new Set();
-  if (activeTasks.size >= MAX_PARALLEL_TASKS_PER_SESSION) {
-    return false;
-  }
+  return sessionTaskSlotLimiter.claimSessionTaskSlot(sessionId, taskId, requestScope);
+}
 
-  activeTasks.add(taskId);
-  activeTasksBySessionScope.set(scopeKey, activeTasks);
-  return true;
+async function waitForSessionTaskSlot(sessionId, taskId, requestScope, options = {}) {
+  return sessionTaskSlotLimiter.waitForSessionTaskSlot(sessionId, taskId, requestScope, options);
+}
+
+async function waitForResponseSessionTaskSlot(sessionId, taskId, requestScope, response) {
+  return waitForSessionTaskSlot(sessionId, taskId, requestScope, {
+    isActive: () => isResponseWritable(response),
+  });
 }
 
 function releaseSessionTaskSlot(sessionId, taskId, requestScope) {
-  const scopeKey = getGenerationTaskSlotScopeKey(sessionId, requestScope);
-  const activeTasks = activeTasksBySessionScope.get(scopeKey);
-  if (!activeTasks) {
-    return;
-  }
-
-  activeTasks.delete(taskId);
-  if (activeTasks.size === 0) {
-    activeTasksBySessionScope.delete(scopeKey);
-  }
+  sessionTaskSlotLimiter.releaseSessionTaskSlot(sessionId, taskId, requestScope);
 }
 
 function normalizeReasoningEffort(value, fallback = DEFAULT_REASONING_EFFORT) {
@@ -2079,9 +2091,7 @@ async function handleArticleIllustrationGenerate(request, response, { referenceO
       let slotClaimed = false;
 
       try {
-        if (!claimSessionTaskSlot(clientSessionId, taskId, generationRequestScope)) {
-          throw new Error(`同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
-        }
+        await waitForResponseSessionTaskSlot(clientSessionId, taskId, generationRequestScope, response);
         slotClaimed = true;
         items = updateArticleItems(items, item.itemId, {
           status: "generating",
@@ -2767,6 +2777,9 @@ async function handlePortraitGenerate(request, response) {
     const accessoryReferenceImages = await toReferenceImages([
       ...formData.getAll("portraitAccessoryReferenceImages"),
     ]);
+    const actionReferenceImages = await toReferenceImages([
+      ...formData.getAll("portraitActionReferenceImages"),
+    ]);
     if (personReferenceImages.length === 0) {
       throw new Error("请先上传人物参考图。");
     }
@@ -2776,8 +2789,11 @@ async function handlePortraitGenerate(request, response) {
     if (accessoryReferenceImages.length > MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES) {
       throw new Error(`服装道具配饰参考图最多支持 ${MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES} 张。`);
     }
-    referenceImages = [...personReferenceImages, ...accessoryReferenceImages];
-    const referenceImageLabels = buildPortraitReferenceImageLabels(personReferenceImages, accessoryReferenceImages);
+    if (actionReferenceImages.length > MAX_PORTRAIT_ACTION_REFERENCE_IMAGES) {
+      throw new Error(`动作参考图最多支持 ${MAX_PORTRAIT_ACTION_REFERENCE_IMAGES} 张。`);
+    }
+    referenceImages = [...personReferenceImages, ...actionReferenceImages, ...accessoryReferenceImages];
+    const referenceImageLabels = buildPortraitReferenceImageLabels(personReferenceImages, actionReferenceImages, accessoryReferenceImages);
     if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
       throw new Error("仅支持图片参考文件。");
     }
@@ -2847,9 +2863,7 @@ async function handlePortraitGenerate(request, response) {
       let slotClaimed = false;
 
       try {
-        if (!claimSessionTaskSlot(clientSessionId, taskId, generationRequestScope)) {
-          throw new Error(`同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
-        }
+        await waitForResponseSessionTaskSlot(clientSessionId, taskId, generationRequestScope, response);
         slotClaimed = true;
         items = updatePortraitItems(items, item.itemId, {
           status: "generating",
@@ -3057,6 +3071,7 @@ async function handleCreationGenerate(request, response) {
   let creationRelativeDir = "";
   let createdAt = new Date().toISOString();
   let referenceImages = [];
+  let styleReferenceImages = [];
   let generationReferenceImages = [];
   let logoImage = null;
   let referenceImageNames = [];
@@ -3070,12 +3085,22 @@ async function handleCreationGenerate(request, response) {
       ...formData.getAll("referenceImages"),
       ...formData.getAll("referenceImage"),
     ]);
+    styleReferenceImages = await toReferenceImages([
+      ...formData.getAll("styleReferenceImages"),
+      ...formData.getAll("styleReferenceImage"),
+    ]);
     logoImage = await readCreationLogoImage(formData);
     if (referenceImages.length > MAX_CREATION_REFERENCE_IMAGES) {
       throw new Error(`参考图最多支持 ${MAX_CREATION_REFERENCE_IMAGES} 张。`);
     }
     if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
       throw new Error("仅支持图片参考文件。");
+    }
+    if (styleReferenceImages.length > MAX_CREATION_STYLE_REFERENCE_IMAGES) {
+      throw new Error(`参考风格图最多支持 ${MAX_CREATION_STYLE_REFERENCE_IMAGES} 张。`);
+    }
+    if (styleReferenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+      throw new Error("仅支持图片参考风格文件。");
     }
     generationReferenceImages = appendCreationLogoReference(referenceImages, logoImage);
     referenceImageNames = referenceImages.map((image) => image.filename).filter(Boolean);
@@ -3161,9 +3186,7 @@ async function handleCreationGenerate(request, response) {
       let slotClaimed = false;
 
       try {
-        if (!claimSessionTaskSlot(clientSessionId, taskId, generationRequestScope)) {
-          throw new Error(`同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
-        }
+        await waitForResponseSessionTaskSlot(clientSessionId, taskId, generationRequestScope, response);
         slotClaimed = true;
         items = updateCreationItems(items, item.itemId, {
           status: "generating",
@@ -3173,13 +3196,18 @@ async function handleCreationGenerate(request, response) {
 
         const finalPrompt = appendRatioHintToPrompt(item.prompt, ratioOption);
         const itemReferenceImages = buildCreationItemReferenceImages(item, referenceImages, referenceImageRoles);
-        const itemGenerationReferenceImages = appendCreationLogoReference(itemReferenceImages, logoImage);
+        const itemGenerationReferenceImages = appendCreationStyleReferences(itemReferenceImages, styleReferenceImages);
+        const itemGenerationReferenceImagesWithLogo = appendCreationLogoReference(itemGenerationReferenceImages, logoImage);
         const generationResult = await requestStudioImageGeneration({
           baseUrl: config.baseUrl,
           apiKey: config.apiKey,
           prompt: finalPrompt,
-          referenceImages: itemGenerationReferenceImages,
-          referenceImageLabels: buildCreationReferenceImageLabels(itemReferenceImages, referenceImageRoles),
+          referenceImages: itemGenerationReferenceImagesWithLogo,
+          referenceImageLabels: buildCreationGenerationReferenceImageLabels(
+            itemReferenceImages,
+            referenceImageRoles,
+            styleReferenceImages,
+          ),
           size: finalSize,
           quality: finalQuality,
           format: toApiOutputFormat(finalFormat),
@@ -3476,9 +3504,7 @@ async function handleCreationLogoBatchGenerate(request, response) {
         if (!sourceImage) {
           throw new Error("找不到对应的上传源图。");
         }
-        if (!claimSessionTaskSlot(clientSessionId, taskId, generationRequestScope)) {
-          throw new Error(`同一会话最大同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
-        }
+        await waitForResponseSessionTaskSlot(clientSessionId, taskId, generationRequestScope, response);
         slotClaimed = true;
         items = updateCreationItems(items, item.itemId, {
           status: "generating",
@@ -3758,9 +3784,7 @@ async function handlePortraitRepair(request, response) {
       let slotClaimed = false;
 
       try {
-        if (!claimSessionTaskSlot(clientSessionId, taskId, generationRequestScope)) {
-          throw new Error(`同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
-        }
+        await waitForResponseSessionTaskSlot(clientSessionId, taskId, generationRequestScope, response);
         slotClaimed = true;
         items = updatePortraitItems(items, item.itemId, {
           ...item,
@@ -3949,12 +3973,22 @@ async function handleCreationRepair(request, response) {
       ...formData.getAll("referenceImages"),
       ...formData.getAll("referenceImage"),
     ]);
+    const styleReferenceImages = await toReferenceImages([
+      ...formData.getAll("styleReferenceImages"),
+      ...formData.getAll("styleReferenceImage"),
+    ]);
     const logoImage = await readCreationLogoImage(formData);
     if (referenceImages.length > MAX_CREATION_REFERENCE_IMAGES) {
       throw new Error(`参考图最多支持 ${MAX_CREATION_REFERENCE_IMAGES} 张。`);
     }
     if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
       throw new Error("仅支持图片参考文件。");
+    }
+    if (styleReferenceImages.length > MAX_CREATION_STYLE_REFERENCE_IMAGES) {
+      throw new Error(`参考风格图最多支持 ${MAX_CREATION_STYLE_REFERENCE_IMAGES} 张。`);
+    }
+    if (styleReferenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+      throw new Error("仅支持图片参考风格文件。");
     }
     referenceImageNames =
       referenceImages.length > 0
@@ -4107,9 +4141,7 @@ async function handleCreationRepair(request, response) {
       let slotClaimed = false;
 
       try {
-        if (!claimSessionTaskSlot(clientSessionId, taskId, generationRequestScope)) {
-          throw new Error(`同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`);
-        }
+        await waitForResponseSessionTaskSlot(clientSessionId, taskId, generationRequestScope, response);
         slotClaimed = true;
         items = updateCreationItems(items, item.itemId, {
           prompt: repairItem.prompt,
@@ -4122,13 +4154,18 @@ async function handleCreationRepair(request, response) {
 
         const finalPrompt = appendRatioHintToPrompt(repairItem.prompt, ratioOption);
         const itemReferenceImages = buildCreationItemReferenceImages(repairItem, referenceImages, referenceImageRoles);
-        const itemGenerationReferenceImages = appendCreationLogoReference(itemReferenceImages, logoImage);
+        const itemGenerationReferenceImages = appendCreationStyleReferences(itemReferenceImages, styleReferenceImages);
+        const itemGenerationReferenceImagesWithLogo = appendCreationLogoReference(itemGenerationReferenceImages, logoImage);
         const generationResult = await requestStudioImageGeneration({
           baseUrl: config.baseUrl,
           apiKey: config.apiKey,
           prompt: finalPrompt,
-          referenceImages: itemGenerationReferenceImages,
-          referenceImageLabels: buildCreationReferenceImageLabels(itemReferenceImages, referenceImageRoles),
+          referenceImages: itemGenerationReferenceImagesWithLogo,
+          referenceImageLabels: buildCreationGenerationReferenceImageLabels(
+            itemReferenceImages,
+            referenceImageRoles,
+            styleReferenceImages,
+          ),
           size: finalSize,
           quality: finalQuality,
           format: toApiOutputFormat(finalFormat),
@@ -4473,15 +4510,7 @@ async function handleGenerate(request, response) {
       formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
     );
 
-    if (!claimSessionTaskSlot(clientSessionId, taskId, generationRequestScope)) {
-      generationTaskStore.failTask(clientSessionId, taskId, {
-        errorMessage: `同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`,
-      });
-      writeSseEvent(response, "error", {
-        message: `同一会话最多同时并发 ${MAX_PARALLEL_TASKS_PER_SESSION} 个生成任务。`,
-      });
-      return;
-    }
+    await waitForResponseSessionTaskSlot(clientSessionId, taskId, generationRequestScope, response);
     slotClaimed = true;
 
     const ratioOption = resolveAspectRatioOption(ratio);

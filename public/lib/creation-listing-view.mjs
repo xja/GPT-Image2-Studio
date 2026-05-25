@@ -5,8 +5,54 @@ const CREATION_LISTING_BUCKET_LABELS = {
   descriptive: "描述词",
 };
 
+const CREATION_LISTING_BUCKET_COPY_LABELS = {
+  exact: "Exact keywords",
+  longTail: "Long-tail keywords",
+  traffic: "Traffic keywords",
+  descriptive: "Descriptive keywords",
+};
+
+const CJK_TEXT_GLOBAL_PATTERN = /[\u3400-\u9fff]+/gu;
+const NON_ASCII_TEXT_PATTERN = /[^\x20-\x7E]+/g;
+const listingFieldCopyTimers = new WeakMap();
+
 export function cleanCreationListingText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function isEnglishCreationListingLanguage(language) {
+  return /^en(?:-|$)/i.test(cleanCreationListingText(language));
+}
+
+function isEnglishCreationListingDraft(draft = {}) {
+  return isEnglishCreationListingLanguage(draft.language);
+}
+
+function cleanEnglishVisibleListingText(value, fallback = "") {
+  const cleaned = cleanCreationListingText(value);
+  if (!cleaned) {
+    return fallback;
+  }
+  const ascii = cleanCreationListingText(cleaned
+    .replace(CJK_TEXT_GLOBAL_PATTERN, " ")
+    .replace(NON_ASCII_TEXT_PATTERN, " ")
+    .replace(/:\s*(?:[,;]\s*)+\./g, ".")
+    .replace(/:\s*(?:[,;]\s*)+(?=\s|$)/g, "")
+    .replace(/,\s*(?=[,.;])/g, "")
+    .replace(/\s+([,.;:])/g, "$1"));
+  return /[A-Za-z0-9]/.test(ascii) ? ascii : fallback;
+}
+
+function formatCreationListingVisibleText(draft = {}, value, fallback = "") {
+  return isEnglishCreationListingDraft(draft)
+    ? cleanEnglishVisibleListingText(value, fallback)
+    : cleanCreationListingText(value) || fallback;
+}
+
+function formatCreationListingPublicText(value, language, fallback = "") {
+  return isEnglishCreationListingLanguage(language)
+    ? cleanEnglishVisibleListingText(value, fallback)
+    : cleanCreationListingText(value) || fallback;
 }
 
 function cleanCreationListingArray(value, { split = false } = {}) {
@@ -20,6 +66,17 @@ function cleanCreationListingArray(value, { split = false } = {}) {
   return source.map(cleanCreationListingText).filter(Boolean);
 }
 
+function cleanCreationListingPublicArray(value, { split = false, language = "" } = {}) {
+  const source = Array.isArray(value)
+    ? value
+    : split
+      ? String(value || "").split(/[,\n;]+/)
+      : value
+        ? [value]
+        : [];
+  return source.map((item) => formatCreationListingPublicText(item, language)).filter(Boolean);
+}
+
 function normalizeCreationListingKeywordBuckets(value = {}) {
   const source = value && typeof value === "object" ? value : {};
   return {
@@ -30,33 +87,81 @@ function normalizeCreationListingKeywordBuckets(value = {}) {
   };
 }
 
+function normalizeCreationListingPublicKeywordBuckets(value = {}, language = "") {
+  const source = value && typeof value === "object" ? value : {};
+  return {
+    exact: cleanCreationListingPublicArray(source.exact || source.precise, { split: true, language }),
+    longTail: cleanCreationListingPublicArray(source.longTail || source.long_tail || source.longtail, { split: true, language }),
+    traffic: cleanCreationListingPublicArray(source.traffic, { split: true, language }),
+    descriptive: cleanCreationListingPublicArray(source.descriptive || source.description || source.descriptors, { split: true, language }),
+  };
+}
+
+function normalizeCreationListingDisplayForView(value = {}) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  return {
+    title: cleanCreationListingText(value.title),
+    sellingPoints: cleanCreationListingArray(value.sellingPoints || value.selling_points),
+    painPoints: cleanCreationListingArray(value.painPoints || value.pain_points),
+    fiveBullets: cleanCreationListingArray(value.fiveBullets || value.five_bullets),
+    description: cleanCreationListingText(value.description),
+    backendSearchTerms: cleanCreationListingText(value.backendSearchTerms || value.backend_search_terms),
+    keywordBuckets: normalizeCreationListingKeywordBuckets(value.keywordBuckets || value.keyword_buckets),
+  };
+}
+
 export function normalizeCreationListingDraftForView(draft = {}, fallbackIndex = 0) {
-  const keywordBuckets = normalizeCreationListingKeywordBuckets(draft.keywordBuckets || draft.keyword_buckets);
+  const language = cleanCreationListingText(draft.language) || "en-US";
+  const keywordBuckets = normalizeCreationListingPublicKeywordBuckets(draft.keywordBuckets || draft.keyword_buckets, language);
+  const zhDisplay = normalizeCreationListingDisplayForView(draft.zhDisplay || draft.zh_display);
   return {
     id: cleanCreationListingText(draft.id) || `listing-${fallbackIndex + 1}`,
     marketplace: cleanCreationListingText(draft.marketplace) || "amazon-us",
-    language: cleanCreationListingText(draft.language) || "en-US",
+    language,
     skuSubjectId: cleanCreationListingText(draft.skuSubjectId || draft.sku_subject_id),
     skuTitle: cleanCreationListingText(draft.skuTitle || draft.sku_title),
     evidenceMode: cleanCreationListingText(draft.evidenceMode || draft.evidence_mode) || "input-only",
     status: cleanCreationListingText(draft.status) || "completed",
-    title: cleanCreationListingText(draft.title),
-    sellingPoints: cleanCreationListingArray(draft.sellingPoints || draft.selling_points),
-    painPoints: cleanCreationListingArray(draft.painPoints || draft.pain_points),
-    fiveBullets: cleanCreationListingArray(draft.fiveBullets || draft.five_bullets),
-    description: cleanCreationListingText(draft.description),
-    backendSearchTerms: cleanCreationListingText(draft.backendSearchTerms || draft.backend_search_terms),
+    title: formatCreationListingPublicText(draft.title, language, `Listing ${fallbackIndex + 1}`),
+    sellingPoints: cleanCreationListingPublicArray(draft.sellingPoints || draft.selling_points, { language }),
+    painPoints: cleanCreationListingPublicArray(draft.painPoints || draft.pain_points, { language }),
+    fiveBullets: cleanCreationListingPublicArray(draft.fiveBullets || draft.five_bullets, { language }),
+    description: formatCreationListingPublicText(draft.description, language),
+    backendSearchTerms: formatCreationListingPublicText(draft.backendSearchTerms || draft.backend_search_terms, language),
     keywordBuckets,
     evidence: cleanCreationListingArray(draft.evidence),
     missingInfo: cleanCreationListingArray(draft.missingInfo || draft.missing_info),
     warnings: cleanCreationListingArray(draft.warnings),
     createdAt: cleanCreationListingText(draft.createdAt || draft.created_at),
     updatedAt: cleanCreationListingText(draft.updatedAt || draft.updated_at),
+    ...(zhDisplay ? { zhDisplay } : {}),
   };
 }
 
 export function getCreationListingDrafts(set) {
   return Array.isArray(set?.listingDrafts) ? set.listingDrafts : [];
+}
+
+export function getCreationRecordListingMetaLabel(set) {
+  return getCreationListingDrafts(set).length > 0 ? "Listing" : "";
+}
+
+export function formatCreationListingDraftHeader(draft = {}, index = 0) {
+  const title = formatCreationListingVisibleText(draft, draft.title, `Listing ${index + 1}`);
+  const skuMeta = formatCreationListingVisibleText(draft, draft.skuTitle || draft.skuSubjectId, "");
+  const meta = [
+    skuMeta,
+    draft.marketplace,
+    draft.language,
+    draft.evidenceMode,
+    draft.status,
+  ]
+    .map(cleanCreationListingText)
+    .filter(Boolean)
+    .join(" · ");
+  return { title, meta };
 }
 
 export function getCreationListingSearchValues(set = {}) {
@@ -87,29 +192,97 @@ function formatCreationListingList(value) {
   return items.length > 0 ? items : ["无"];
 }
 
-function createCreationListingField(label, value, { list = false } = {}) {
+export function buildCreationListingFieldCopyText(value, { list = false } = {}) {
+  return list ? formatCreationListingList(value).join("\n") : cleanCreationListingText(value) || "无";
+}
+
+export function buildCreationListingFieldRows(value, localizedValue, { list = false } = {}) {
+  const rows = list ? formatCreationListingList(value) : [cleanCreationListingText(value) || "无"];
+  const localizedRows = list ? cleanCreationListingArray(localizedValue) : [cleanCreationListingText(localizedValue)].filter(Boolean);
+  return rows.map((text, index) => ({
+    text,
+    localizedText: localizedRows[index] || "",
+  }));
+}
+
+export function buildCreationListingBucketCopyLines(keywordBuckets = {}) {
+  return getCreationListingBucketEntries(keywordBuckets).flatMap((entry) => {
+    const values = cleanCreationListingArray(entry.values)
+      .map((value) => cleanEnglishVisibleListingText(value, ""))
+      .filter(Boolean);
+    return values.length > 0 ? [`${CREATION_LISTING_BUCKET_COPY_LABELS[entry.key]}: ${values.join(", ")}`] : [];
+  });
+}
+
+function appendLocalizedText(parent, localizedText) {
+  if (!localizedText) {
+    return;
+  }
+  const localized = document.createElement("small");
+  localized.className = "creation-listing-localized";
+  localized.textContent = localizedText;
+  parent.appendChild(localized);
+}
+
+function createCreationListingField(label, value, { list = false, localizedValue, copyValue } = {}) {
   const field = document.createElement("div");
   field.className = "creation-listing-field";
+  const copySource = copyValue ?? value;
+  const copyList = Array.isArray(copySource) ? true : list;
 
-  const title = document.createElement("strong");
-  title.textContent = label;
-  field.appendChild(title);
+  const copyButton = document.createElement("button");
+  copyButton.className = "creation-listing-field-copy";
+  copyButton.type = "button";
+  copyButton.textContent = label;
+  copyButton.title = `点击复制${label}`;
+  copyButton.setAttribute("aria-label", `复制${label}`);
+  copyButton.dataset.creationListingCopyLabel = label;
+  copyButton.dataset.creationListingCopyText = buildCreationListingFieldCopyText(copySource, { list: copyList });
+  field.appendChild(copyButton);
 
   if (list) {
     const listNode = document.createElement("ul");
-    formatCreationListingList(value).forEach((item) => {
+    buildCreationListingFieldRows(value, localizedValue, { list }).forEach((item) => {
       const row = document.createElement("li");
-      row.textContent = item;
+      row.textContent = item.text;
+      appendLocalizedText(row, item.localizedText);
       listNode.appendChild(row);
     });
     field.appendChild(listNode);
     return field;
   }
 
+  const [row] = buildCreationListingFieldRows(value, localizedValue, { list });
   const copy = document.createElement("p");
-  copy.textContent = cleanCreationListingText(value) || "无";
+  copy.textContent = row.text;
+  appendLocalizedText(copy, row.localizedText);
   field.appendChild(copy);
   return field;
+}
+
+async function copyCreationListingFieldButton(copyButton, context = {}) {
+  const label = cleanCreationListingText(copyButton?.dataset?.creationListingCopyLabel) || "字段";
+  const text = String(copyButton?.dataset?.creationListingCopyText || "").trim();
+  if (!text) {
+    context.setFeedback?.(`${label}没有可复制内容。`, "error");
+    return;
+  }
+
+  await context.writeTextToClipboard?.(text, `当前浏览器不支持复制${label}。`);
+  context.setFeedback?.(`已复制${label}。`, "success");
+  copyButton.dataset.copied = "true";
+  copyButton.setAttribute("aria-label", `已复制${label}`);
+
+  const existingTimer = listingFieldCopyTimers.get(copyButton);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+  const timer = setTimeout(() => {
+    copyButton.dataset.copied = "false";
+    copyButton.setAttribute("aria-label", `复制${label}`);
+    listingFieldCopyTimers.delete(copyButton);
+  }, 1200);
+  listingFieldCopyTimers.set(copyButton, timer);
 }
 
 export function buildCreationListingDraftText(draft, index = 0) {
@@ -148,7 +321,7 @@ export function buildCreationListingDraftText(draft, index = 0) {
 }
 
 export function buildCreationRecordListingText(set) {
-  const drafts = getCreationListingDrafts(set);
+  const drafts = getCreationListingDrafts(set).map((draft, index) => normalizeCreationListingDraftForView(draft, index));
   if (!set || drafts.length === 0) {
     return "";
   }
@@ -170,7 +343,7 @@ export function renderCreationListingDrafts({ refs, state, set } = {}) {
   }
 
   const panel = refs.creationRecordListingDrafts.closest(".creation-listing-panel");
-  const drafts = getCreationListingDrafts(set);
+  const drafts = getCreationListingDrafts(set).map((draft, index) => normalizeCreationListingDraftForView(draft, index));
   const isGenerating = Boolean(set?.setId && state?.creation?.listingGeneratingSetId === set.setId);
   panel?.classList.toggle("hidden", !set);
   refs.creationRecordListingDrafts.replaceChildren();
@@ -201,35 +374,50 @@ export function renderCreationListingDrafts({ refs, state, set } = {}) {
 
     const header = document.createElement("div");
     header.className = "creation-listing-card-head";
+    const headerContent = formatCreationListingDraftHeader(draft, index);
     const title = document.createElement("h4");
-    title.textContent = draft.title || `Listing ${index + 1}`;
+    title.textContent = headerContent.title;
     const meta = document.createElement("p");
-    meta.textContent = [draft.skuTitle || draft.skuSubjectId, draft.marketplace, draft.language, draft.evidenceMode, draft.status]
-      .filter(Boolean)
-      .join(" · ");
+    meta.textContent = headerContent.meta;
     header.append(title, meta);
     card.appendChild(header);
 
-    card.appendChild(createCreationListingField("卖点", draft.sellingPoints, { list: true }));
-    card.appendChild(createCreationListingField("痛点", draft.painPoints, { list: true }));
-    card.appendChild(createCreationListingField("五点描述", draft.fiveBullets, { list: true }));
-    card.appendChild(createCreationListingField("描述", draft.description));
-    card.appendChild(createCreationListingField("后台搜索词", draft.backendSearchTerms));
+    const contentFrame = document.createElement("div");
+    contentFrame.className = "creation-listing-content-frame";
+    contentFrame.appendChild(createCreationListingField("标题", draft.title, { localizedValue: draft.zhDisplay?.title }));
+    contentFrame.appendChild(createCreationListingField("卖点", draft.sellingPoints, { list: true, localizedValue: draft.zhDisplay?.sellingPoints }));
+    contentFrame.appendChild(createCreationListingField("痛点", draft.painPoints, { list: true, localizedValue: draft.zhDisplay?.painPoints }));
+    contentFrame.appendChild(createCreationListingField("五点描述", draft.fiveBullets, { list: true, localizedValue: draft.zhDisplay?.fiveBullets }));
+    contentFrame.appendChild(createCreationListingField("描述", draft.description, { localizedValue: draft.zhDisplay?.description }));
+    contentFrame.appendChild(createCreationListingField("后台搜索词", draft.backendSearchTerms, { localizedValue: draft.zhDisplay?.backendSearchTerms }));
 
-    const buckets = document.createElement("div");
-    buckets.className = "creation-listing-field creation-listing-buckets";
-    const bucketTitle = document.createElement("strong");
-    bucketTitle.textContent = "关键词分组";
-    buckets.appendChild(bucketTitle);
-    getCreationListingBucketEntries(draft.keywordBuckets).forEach((entry) => {
-      const row = document.createElement("p");
-      row.textContent = `${entry.label}: ${formatCreationListingList(entry.values).join("、")}`;
-      buckets.appendChild(row);
+    const bucketLines = getCreationListingBucketEntries(draft.keywordBuckets).map(
+      (entry) => `${entry.label}: ${formatCreationListingList(entry.values).join("、")}`,
+    );
+    const localizedBucketLines = draft.zhDisplay?.keywordBuckets
+      ? getCreationListingBucketEntries(draft.zhDisplay.keywordBuckets).map(
+        (entry) => `${entry.label}: ${formatCreationListingList(entry.values).join("、")}`,
+      )
+      : [];
+    const buckets = createCreationListingField("关键词分组", bucketLines, {
+      list: true,
+      localizedValue: localizedBucketLines,
+      copyValue: buildCreationListingBucketCopyLines(draft.keywordBuckets),
     });
-    card.appendChild(buckets);
+    buckets.classList.add("creation-listing-buckets");
+    contentFrame.appendChild(buckets);
 
-    card.appendChild(createCreationListingField("警告", draft.warnings, { list: true }));
-    card.appendChild(createCreationListingField("缺失信息", draft.missingInfo, { list: true }));
+    const warningCopy = cleanCreationListingPublicArray(draft.warnings, { language: draft.language });
+    const missingInfoCopy = cleanCreationListingPublicArray(draft.missingInfo, { language: draft.language });
+    contentFrame.appendChild(createCreationListingField("警告", draft.warnings, {
+      list: true,
+      copyValue: warningCopy.length > 0 ? warningCopy : ["None"],
+    }));
+    contentFrame.appendChild(createCreationListingField("缺失信息", draft.missingInfo, {
+      list: true,
+      copyValue: missingInfoCopy.length > 0 ? missingInfoCopy : ["None"],
+    }));
+    card.appendChild(contentFrame);
 
     refs.creationRecordListingDrafts.appendChild(card);
   });
@@ -350,6 +538,15 @@ export function createCreationListingController(context = {}) {
       copy().catch((error) => context.setFeedback?.(error.message, "error"));
     });
     context.refs.creationRecordExportListingsButton?.addEventListener("click", exportListings);
+    context.refs.creationRecordListingDrafts?.addEventListener("click", (event) => {
+      const copyButton = event.target?.closest?.("[data-creation-listing-copy-text]");
+      if (!copyButton || !context.refs.creationRecordListingDrafts.contains(copyButton)) {
+        return;
+      }
+      copyCreationListingFieldButton(copyButton, context).catch((error) => {
+        context.setFeedback?.(error.message, "error");
+      });
+    });
   }
 
   return {

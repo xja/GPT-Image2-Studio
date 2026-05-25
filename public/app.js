@@ -48,7 +48,12 @@ import { consumeSse, requestGenerationStream } from "/lib/generation-client.mjs"
 import { createPptAnalysisController } from "/lib/ppt-analysis-client.mjs";
 import { appendPptDeckDownloadLinks } from "/lib/ppt-record-links.mjs";
 import { buildCreationSkuSubjectsForPayload, normalizeCreationSkuBundleCountForPayload, normalizeCreationSkuSubjectForPayload } from "/lib/creation-sku-subjects.mjs";
-import { createCreationListingController, getCreationListingSearchValues, normalizeCreationListingDraftForView } from "/lib/creation-listing-view.mjs";
+import {
+  createCreationListingController,
+  getCreationRecordListingMetaLabel,
+  getCreationListingSearchValues,
+  normalizeCreationListingDraftForView,
+} from "/lib/creation-listing-view.mjs";
 import { DEFAULT_PORTRAIT_ACCESSORY_ASSETS, PORTRAIT_ACCESSORY_ASSET_CATEGORIES, getPortraitAccessoryAssetFileDescriptor } from "/lib/portrait-accessory-assets.mjs?v=20260523-portrait-cosplay-color-assets-1";
 const SURPRISE_PROMPTS = [
   {
@@ -111,7 +116,9 @@ const DEFAULT_LIMITS = {
   maxParallelTasksPerSession: 10,
   maxReferenceImages: 6,
   maxCreationReferenceImages: 9,
+  maxCreationStyleReferenceImages: 3,
   maxPortraitPersonReferenceImages: 3,
+  maxPortraitActionReferenceImages: 3,
   maxPortraitAccessoryReferenceImages: 9,
 };
 const DEFAULT_PROMPT_ENHANCE_TEXT = ",sharp focus, macro details, rich textures, crisp edges, photorealistic texture, visible grain, detailed surface material, cinematic lighting"; function buildPromptModePrompt() { const prompt = refs.promptInput.value.trim(); if (!state.promptEnhanceEnabled) { return prompt; } const enhanceText = String(refs.promptEnhanceInput?.value || "").trim(); return enhanceText ? `${prompt}${enhanceText.startsWith(",") ? "" : "\n\n"}${enhanceText}` : prompt; } function syncPromptEnhanceMode() { refs.promptEnhanceToggle.classList.toggle("is-active", state.promptEnhanceEnabled); refs.promptEnhanceToggle.setAttribute("aria-checked", String(state.promptEnhanceEnabled)); refs.promptEnhanceToggle.querySelector("small").textContent = state.promptEnhanceEnabled ? "开启" : "关闭"; refs.promptEnhanceField.classList.toggle("hidden", !state.promptEnhanceEnabled); } function togglePromptEnhanceMode() { state.promptEnhanceEnabled = !state.promptEnhanceEnabled; syncPromptEnhanceMode(); if (state.promptEnhanceEnabled) { refs.promptEnhanceInput.focus(); } }
@@ -323,6 +330,11 @@ const STYLE_TRANSFER_PRESETS = [
 const GALLERY_METADATA_CACHE_KEY = "image-studio-gallery-metadata-cache-v2";
 const GENERATION_ACTIVITY_STORAGE_KEY = "image-studio-generation-activity-v1";
 const THEME_STORAGE_KEY = "image-studio-ui-theme-v1";
+const UI_LANGUAGE_STORAGE_KEY = "image-studio-ui-language-v1";
+const UI_LANGUAGE_TEXT = {
+  "zh-CN": { themeLight: "白色主题", themeDark: "深色主题", themeToLight: "切换到白色主题", themeToDark: "切换到深色主题", themeMenu: "主题颜色" },
+  en: { themeLight: "Light theme", themeDark: "Dark theme", themeToLight: "Switch to light theme", themeToDark: "Switch to dark theme", themeMenu: "Theme color" },
+};
 const CONNECTION_STATUS_ENTRY_LABEL = "API、LOG";
 const CONNECTION_STATUS_EMPTY_LABEL = "待填写API、LOG";
 const PROMPT_ANALYSIS_IMAGE_MAX_EDGE = 1024;
@@ -332,21 +344,9 @@ const GENERATION_REFERENCE_IMAGE_MAX_EDGE = 1024;
 const GENERATION_REFERENCE_IMAGE_COMPRESS_THRESHOLD_BYTES = 900 * 1024;
 const GENERATION_REFERENCE_IMAGE_JPEG_QUALITY = 0.82;
 const GENERATION_TASK_POLL_INTERVAL_MS = 2500;
-const GENERATION_TASK_STATUS_LABELS = {
-  running: "生成中",
-  completed: "生成完成",
-  error: "错误",
-};
-const GENERATION_TASK_TIMELINE_STATUS = {
-  running: "active",
-  completed: "done",
-  error: "error",
-};
-const GALLERY_WINDOW_LABELS = {
-  today: "今天",
-  recent: "近 7 天",
-  older: "更早",
-};
+const GENERATION_TASK_STATUS_LABELS = { running: "生成中", completed: "生成完成", error: "错误" };
+const GENERATION_TASK_TIMELINE_STATUS = { running: "active", completed: "done", error: "error" };
+const GALLERY_WINDOW_LABELS = { today: "今天", recent: "近 7 天", older: "更早" };
 const GALLERY_REFERENCE_LABELS = {
   "with-reference": "带参考图",
   "without-reference": "无参考图",
@@ -357,16 +357,7 @@ const TOPBAR_REVEAL_CLASS = "topbar-reveal";
 const TOPBAR_REVEAL_EDGE_PX = 16;
 const WORKSPACE_BOTTOM_GAP_PX = 2;
 const PPT_SOURCE_MODES = new Set(["upload", "text", "topic"]);
-const CREATE_VIEW_IDS = new Set([
-  "studio",
-  "style-transfer",
-  "reference-analysis",
-  "image-decomposition",
-  "creation",
-  "portrait",
-  "article-illustration",
-  "ppt",
-]);
+const CREATE_VIEW_IDS = new Set(["studio", "style-transfer", "reference-analysis", "image-decomposition", "image-compress", "creation", "portrait", "article-illustration", "ppt"]);
 const ASSET_VIEW_IDS = new Set(["gallery", "article-record", "ppt-record", "creation-record", "portrait-record"]);
 
 let studioHeightSyncFrame = 0;
@@ -433,6 +424,7 @@ const state = {
     currentSet: null,
     feedback: "",
     accessoryFiles: [],
+    actionFiles: [],
     files: [],
     generating: false,
     planning: false,
@@ -443,6 +435,7 @@ const state = {
   creationBranch: "set",
   creationLogoBatchFiles: [],
   creationReferenceFiles: [],
+  creationStyleReferenceFiles: [],
   creationLogo: {
     background: "transparent",
     file: null,
@@ -455,6 +448,7 @@ const state = {
   creationReferenceRestoreQueue: [],
   creationReferenceAnalysis: {
     applied: false,
+    collapsed: false,
     dirty: false,
     result: null,
     running: false,
@@ -554,6 +548,7 @@ const state = {
   timelineSignatures: new Map(),
   timelineUnreadCount: 0,
   uiTheme: "dark",
+  uiLanguage: "zh-CN",
   zoom: 1,
 };
 
@@ -643,6 +638,7 @@ const refs = {
   creationReferenceAnalysisMeta: document.querySelector("#creationReferenceAnalysisMeta"),
   creationReferenceAnalysisPanel: document.querySelector("#creationReferenceAnalysisPanel"),
   creationReferenceAnalysisSummary: document.querySelector("#creationReferenceAnalysisSummary"),
+  creationReferenceAnalysisToggleButton: document.querySelector("#creationReferenceAnalysisToggleButton"),
   creationReferenceAnalyzeButton: document.querySelector("#creationReferenceAnalyzeButton"),
   creationReferenceApplyAnalysisButton: document.querySelector("#creationReferenceApplyAnalysisButton"),
   creationReferenceCount: document.querySelector("#creationReferenceCount"),
@@ -650,6 +646,10 @@ const refs = {
   creationReferenceGrid: document.querySelector("#creationReferenceGrid"),
   creationReferenceInput: document.querySelector("#creationReferenceInput"),
   creationReferenceRestoreList: document.querySelector("#creationReferenceRestoreList"),
+  creationStyleReferenceCount: document.querySelector("#creationStyleReferenceCount"),
+  creationStyleReferenceDropzone: document.querySelector("#creationStyleReferenceDropzone"),
+  creationStyleReferenceGrid: document.querySelector("#creationStyleReferenceGrid"),
+  creationStyleReferenceInput: document.querySelector("#creationStyleReferenceInput"),
   portraitAnalysisPanel: document.querySelector("#portraitAnalysisPanel"),
   portraitAnalysisSummary: document.querySelector("#portraitAnalysisSummary"),
   portraitAnalysisToggleButton: document.querySelector("#portraitAnalysisToggleButton"),
@@ -688,6 +688,10 @@ const refs = {
   portraitAccessoryReferenceDropzone: document.querySelector("#portraitAccessoryReferenceDropzone"),
   portraitAccessoryReferenceGrid: document.querySelector("#portraitAccessoryReferenceGrid"),
   portraitAccessoryReferenceInput: document.querySelector("#portraitAccessoryReferenceInput"),
+  portraitActionReferenceCount: document.querySelector("#portraitActionReferenceCount"),
+  portraitActionReferenceDropzone: document.querySelector("#portraitActionReferenceDropzone"),
+  portraitActionReferenceGrid: document.querySelector("#portraitActionReferenceGrid"),
+  portraitActionReferenceInput: document.querySelector("#portraitActionReferenceInput"),
   portraitActionInputs: [...document.querySelectorAll("[name=\"portraitActions\"]")],
   portraitReferenceAnalyzeButton: document.querySelector("#portraitReferenceAnalyzeButton"),
   portraitReferenceCount: document.querySelector("#portraitReferenceCount"),
@@ -958,6 +962,7 @@ const refs = {
   styleTransferStyleGrid: document.querySelector("#styleTransferStyleGrid"),
   styleTransferStyleInput: document.querySelector("#styleTransferStyleInput"),
   styleTransferUploadGrid: document.querySelector("#styleTransferUploadGrid"),
+  themeNavAction: document.querySelector("#themeNavAction"),
   themeToggleButton: document.querySelector("#themeToggleButton"),
   themeToggleLabel: document.querySelector("#themeToggleLabel"),
   topbar: document.querySelector(".topbar"),
@@ -967,6 +972,7 @@ const refs = {
   viewPanels: [...document.querySelectorAll("[data-view-panel]")],
   viewTabs: [...document.querySelectorAll("[data-view-tab]")],
   viewRoot: document.querySelector(".view-root"),
+  uiLanguageInput: document.querySelector("#uiLanguageInput"),
   previewPanel: document.querySelector(".preview-panel"),
   zoomInButton: document.querySelector("#zoomInButton"),
   zoomLabel: document.querySelector("#zoomLabel"),
@@ -1567,6 +1573,12 @@ function readUiTheme() {
   }
 }
 
+function normalizeUiLanguage(language) { return language === "en" ? "en" : "zh-CN"; }
+function readUiLanguage() { try { return normalizeUiLanguage(window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY) || document.documentElement.lang); } catch { return normalizeUiLanguage(document.documentElement.lang); } }
+function getUiLanguageText(key) { return UI_LANGUAGE_TEXT[state.uiLanguage]?.[key] || UI_LANGUAGE_TEXT["zh-CN"][key] || ""; }
+function syncUiLanguage() { const normalized = normalizeUiLanguage(state.uiLanguage); state.uiLanguage = normalized; document.documentElement.lang = normalized; document.documentElement.dataset.uiLanguage = normalized; if (refs.uiLanguageInput) refs.uiLanguageInput.value = normalized; if (refs.themeNavAction) refs.themeNavAction.textContent = getUiLanguageText("themeMenu"); syncThemeToggle(); }
+function setUiLanguage(language) { state.uiLanguage = normalizeUiLanguage(language); try { window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, state.uiLanguage); } catch {} syncUiLanguage(); }
+
 function syncThemeToggle() {
   if (!refs.themeToggleButton || !refs.themeToggleLabel) {
     return;
@@ -1574,8 +1586,8 @@ function syncThemeToggle() {
 
   const isLight = state.uiTheme === "light";
   refs.themeToggleButton.setAttribute("aria-pressed", String(isLight));
-  refs.themeToggleButton.title = isLight ? "切换到深色主题" : "切换到白色主题";
-  refs.themeToggleLabel.textContent = isLight ? "深色主题" : "白色主题";
+  refs.themeToggleButton.title = getUiLanguageText(isLight ? "themeToDark" : "themeToLight");
+  refs.themeToggleLabel.textContent = getUiLanguageText(isLight ? "themeDark" : "themeLight");
 }
 
 function setUiTheme(theme) {
@@ -1603,6 +1615,9 @@ function getViewFromHash() {
   }
   if (window.location.hash === "#image-decomposition") {
     return "image-decomposition";
+  }
+  if (window.location.hash === "#image-compress") {
+    return "image-compress";
   }
   if (window.location.hash === "#creation") {
     return "creation";
@@ -1642,6 +1657,8 @@ function syncHash(view) {
           ? "#reference-analysis"
           : view === "image-decomposition"
             ? "#image-decomposition"
+          : view === "image-compress"
+            ? "#image-compress"
           : view === "article-illustration"
             ? "#article-illustration"
           : view === "gallery"
@@ -1685,6 +1702,8 @@ async function ensureActiveViewModule(view) {
     await ensureLazyViewModule(view, {
       context: {
         renderers: VIEW_RENDERERS,
+        showError,
+        syncReferenceDropzoneCompact,
       },
     });
     return true;
@@ -2032,6 +2051,10 @@ function getMaxParallelJobCount() {
 
 function getCreationMaxReferenceImageCount() { return state.limits.maxCreationReferenceImages || DEFAULT_LIMITS.maxCreationReferenceImages || state.limits.maxReferenceImages || DEFAULT_LIMITS.maxReferenceImages; }
 
+function getCreationMaxStyleReferenceImageCount() {
+  return state.limits.maxCreationStyleReferenceImages || DEFAULT_LIMITS.maxCreationStyleReferenceImages || 3;
+}
+
 function getPortraitPersonMaxReferenceImageCount() {
   return (
     state.limits.maxPortraitPersonReferenceImages ||
@@ -2046,6 +2069,14 @@ function getPortraitAccessoryMaxReferenceImageCount() {
     state.limits.maxPortraitAccessoryReferenceImages ||
     DEFAULT_LIMITS.maxPortraitAccessoryReferenceImages ||
     getCreationMaxReferenceImageCount()
+  );
+}
+
+function getPortraitActionMaxReferenceImageCount() {
+  return (
+    state.limits.maxPortraitActionReferenceImages ||
+    DEFAULT_LIMITS.maxPortraitActionReferenceImages ||
+    getPortraitPersonMaxReferenceImageCount()
   );
 }
 
@@ -2326,7 +2357,10 @@ function hasPendingReferenceGenerationFiles() {
 }
 
 function hasPendingCreationReferenceGenerationFiles() {
-  return state.creationReferenceFiles.some((item) => item.generationFilePromise);
+  return (
+    state.creationReferenceFiles.some((item) => item.generationFilePromise) ||
+    state.creationStyleReferenceFiles.some((item) => item.generationFilePromise)
+  );
 }
 
 function hasPendingCreationLogoGenerationFile() {
@@ -2592,6 +2626,7 @@ async function ensureReferenceGenerationFilesReady() {
 async function ensureCreationReferenceGenerationFilesReady() {
   const pending = [
     ...state.creationReferenceFiles.map((item) => item.generationFilePromise),
+    ...state.creationStyleReferenceFiles.map((item) => item.generationFilePromise),
     state.creationLogo?.generationFilePromise,
   ].filter(Boolean);
   if (pending.length === 0) {
@@ -4745,6 +4780,10 @@ function syncConfigUi(config) {
       "maxPortraitPersonReferenceImages" in configLimits
         ? configLimits.maxPortraitPersonReferenceImages || DEFAULT_LIMITS.maxPortraitPersonReferenceImages
         : DEFAULT_LIMITS.maxPortraitPersonReferenceImages,
+    maxPortraitActionReferenceImages:
+      "maxPortraitActionReferenceImages" in configLimits
+        ? configLimits.maxPortraitActionReferenceImages || DEFAULT_LIMITS.maxPortraitActionReferenceImages
+        : DEFAULT_LIMITS.maxPortraitActionReferenceImages,
     maxPortraitAccessoryReferenceImages:
       "maxPortraitAccessoryReferenceImages" in configLimits
         ? configLimits.maxPortraitAccessoryReferenceImages || DEFAULT_LIMITS.maxPortraitAccessoryReferenceImages
@@ -6838,7 +6877,7 @@ const CREATION_PREVIEW_SLOTS = [
 ];
 
 const CREATION_SCENARIO_LABELS = { standard: "标准电商", "detail-page": "详情页转化", "social-seeding": "社媒种草", launch: "新品发布", promotion: "活动促销", livestream: "直播电商", "gift-guide": "礼品推荐", "marketplace-search": "平台搜索", "brand-story": "品牌故事" };
-const CREATION_VISUAL_LANGUAGE_LABELS = { "classic-commercial": "经典商业摄影", "premium-studio": "高端棚拍", "clean-marketplace": "平台清爽白底", "lifestyle-editorial": "生活方式杂志", "social-ugc": "社媒实拍", "detail-infographic": "详情页信息图", "macro-material": "微距材质", "outdoor-context": "户外场景", "minimal-luxury": "极简奢华", "bold-campaign": "活动海报", "warm-handcrafted": "手作温度" };
+const CREATION_VISUAL_LANGUAGE_LABELS = { "classic-commercial": "经典商业摄影", "premium-studio": "高端棚拍", "reference-style": "参考模式", "clean-marketplace": "平台清爽白底", "lifestyle-editorial": "生活方式杂志", "social-ugc": "社媒实拍", "detail-infographic": "详情页信息图", "macro-material": "微距材质", "outdoor-context": "户外场景", "minimal-luxury": "极简奢华", "bold-campaign": "活动海报", "warm-handcrafted": "手作温度" };
 const CREATION_DIMENSION_UNIT_MODE_LABELS = { metric: "公制", imperial: "英制", both: "公制和英制" };
 
 const CREATION_CATEGORY_TEMPLATE_MODULE_URL = "/lib/creation-category-templates.mjs?v=20260509-category-search-2";
@@ -6927,6 +6966,7 @@ function getCreationSelectedImageCount() {
 function createEmptyCreationReferenceAnalysisState() {
   return {
     applied: false,
+    collapsed: false,
     dirty: false,
     result: null,
     running: false,
@@ -8607,6 +8647,9 @@ function renderArticleRecordView() {
 function normalizeCreationItemForView(item = {}, fallbackIndex = 0) {
   const imageUrl = String(item.imageUrl || item.thumbnailUrl || item.previewUrl || "");
   const status = String(item.status || (imageUrl ? "completed" : "queued"));
+  const skuSubject = item.skuSubject && typeof item.skuSubject === "object" ? item.skuSubject : item.sku_subject;
+  const skuSubjectId = String(item.skuSubjectId || item.sku_subject_id || skuSubject?.id || "");
+  const skuTitle = String(item.skuTitle || item.sku_title || skuSubject?.title || "");
   return {
     itemId: String(item.itemId || `slot-${fallbackIndex + 1}`),
     slotIndex: Number(item.slotIndex) || fallbackIndex + 1,
@@ -8624,6 +8667,9 @@ function normalizeCreationItemForView(item = {}, fallbackIndex = 0) {
     generationStartedAt: String(item.generationStartedAt || ""),
     generationCompletedAt: String(item.generationCompletedAt || ""),
     generationDurationMs: String(item.generationDurationMs || ""),
+    skuSubjectId,
+    skuTitle,
+    skuSubject: skuSubject ? { ...skuSubject } : null,
   };
 }
 
@@ -8897,6 +8943,15 @@ function resetCreationReferenceFilesForRecordReuse(normalized = null) {
   renderCreationReferenceAnalysis();
 }
 
+function resetCreationStyleReferenceFiles() {
+  state.creationStyleReferenceFiles.forEach((item) => revokeReferencePreview(item));
+  state.creationStyleReferenceFiles = [];
+  if (refs.creationStyleReferenceInput) {
+    refs.creationStyleReferenceInput.value = "";
+  }
+  renderCreationStyleReferenceGrid();
+}
+
 function resetCreationLogoForRecordReuse(normalized = null) {
   const logo = normalizeCreationLogoPayload(normalized?.logo || null);
   revokeReferencePreview(state.creationLogo);
@@ -8936,6 +8991,7 @@ function applyCreationSetToForm(set) {
   state.creationSelectedRoles = normalizedRoles.length > 0 ? normalizedRoles : getCreationRoleIdsForCount(normalized.imageCount);
   setCreationImageCountValue(state.creationSelectedRoles.length || normalized.imageCount);
   resetCreationReferenceFilesForRecordReuse(normalized);
+  resetCreationStyleReferenceFiles();
   resetCreationLogoForRecordReuse(normalized);
   renderCreationRolePicker();
   renderCreationReferenceGrid();
@@ -9128,7 +9184,8 @@ function shouldHideCreationCardDetails(showRecordActions = false) {
   return !showRecordActions && state.creation.generating;
 }
 
-function createCreationCardLoading() {
+function createCreationCardLoading(status = "generating") {
+  const isQueued = status === "queued";
   const loading = document.createElement("div");
   loading.className = "creation-card-loading";
 
@@ -9140,11 +9197,11 @@ function createCreationCardLoading() {
   }
 
   const label = document.createElement("strong");
-  label.textContent = "生成中";
+  label.textContent = isQueued ? "排队中" : "生成中";
 
   const detail = document.createElement("span");
   detail.className = "creation-card-loading-detail";
-  detail.textContent = "正在生成套图图片";
+  detail.textContent = isQueued ? "等待并发槽位，超过 10 张会自动接续" : "正在生成套图图片";
 
   loading.append(motion, label, detail);
   return loading;
@@ -9170,7 +9227,7 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
 
   const status = document.createElement("span");
   status.className = "creation-card-status";
-  status.textContent = isLoadingCard ? "生成中" : getCreationStatusLabel(item.status);
+  status.textContent = getCreationStatusLabel(item.status);
   head.appendChild(status);
 
   card.appendChild(head);
@@ -9188,7 +9245,7 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
   if (isLoadingCard) {
     media.classList.add("is-loading");
     media.setAttribute("aria-busy", "true");
-    media.appendChild(createCreationCardLoading());
+    media.appendChild(createCreationCardLoading(item.status));
   } else if (imageUrl) {
     const image = document.createElement("img");
     image.loading = "lazy";
@@ -9612,7 +9669,10 @@ function renderCreationRecordSetList() {
     meta.className = "creation-record-meta";
     const progress = getCreationProgressSummary(set);
     const languageLabel = set.targetLanguageLabel || set.targetLanguage || "English";
-    meta.textContent = `${languageLabel} · ${progress.completed}/${progress.total} · ${formatClock(set.createdAt)}`;
+    const listingLabel = getCreationRecordListingMetaLabel(set);
+    meta.textContent = [languageLabel, listingLabel, `${progress.completed}/${progress.total}`, formatClock(set.createdAt)]
+      .filter(Boolean)
+      .join(" · ");
     button.appendChild(meta);
 
     refs.creationRecordSetList.appendChild(button);
@@ -9805,6 +9865,18 @@ function openCreationReferencePreview(referenceId) {
   refs.referencePreviewViewer.setAttribute("aria-hidden", "false");
 }
 
+function openCreationStyleReferencePreview(referenceId) {
+  const item = state.creationStyleReferenceFiles.find((entry) => entry.id === referenceId);
+  if (!item?.previewUrl) {
+    return;
+  }
+
+  state.creationReferencePreviewItem = item;
+  refs.referencePreviewImage.src = item.previewUrl;
+  refs.referencePreviewViewer.classList.add("open");
+  refs.referencePreviewViewer.setAttribute("aria-hidden", "false");
+}
+
 function removeCreationReferenceFile(referenceId) {
   const target = state.creationReferenceFiles.find((item) => item.id === referenceId);
   if (state.creationReferencePreviewItem?.id === referenceId) {
@@ -9815,6 +9887,20 @@ function removeCreationReferenceFile(referenceId) {
   markCreationReferenceRestoreEntryMissing(target?.restoreEntryId);
   markCreationReferenceAnalysisDirty();
   renderCreationReferenceGrid();
+}
+
+function removeCreationStyleReferenceFile(referenceId) {
+  const target = state.creationStyleReferenceFiles.find((item) => item.id === referenceId);
+  if (state.creationReferencePreviewItem?.id === referenceId) {
+    closeReferencePreview();
+  }
+  revokeReferencePreview(target);
+  state.creationStyleReferenceFiles = state.creationStyleReferenceFiles.filter((item) => item.id !== referenceId);
+  if (refs.creationStyleReferenceInput) {
+    refs.creationStyleReferenceInput.value = "";
+  }
+  renderCreationStyleReferenceGrid();
+  renderCreationView();
 }
 
 function updateCreationReferenceRole(referenceId, role) {
@@ -10095,6 +10181,9 @@ function applyCreationReferenceFiles(fileList) {
   state.creationReferenceFiles = next;
   state.creationReferenceRestoreQueue = restoreQueue;
   markCreationReferenceAnalysisDirty();
+  if (state.creationReferenceFiles.length > 0) {
+    setCreationSelectValue(refs.creationVisualLanguageInput, "reference-style", "classic-commercial");
+  }
   if (refs.creationReferenceInput) {
     refs.creationReferenceInput.value = "";
   }
@@ -10103,6 +10192,59 @@ function applyCreationReferenceFiles(fileList) {
 
   if (overflowed) {
     showError(`套图参考图最多支持 ${maxReferenceImages} 张。`);
+  }
+}
+
+function applyCreationStyleReferenceFiles(fileList) {
+  const incomingFiles = [...(fileList || [])].filter((file) => file.type.startsWith("image/"));
+  if (incomingFiles.length === 0) {
+    return;
+  }
+
+  const maxReferenceImages = getCreationMaxStyleReferenceImageCount();
+  const next = [...state.creationStyleReferenceFiles];
+  const fingerprints = new Set(next.map((item) => item.fingerprint));
+  let added = false;
+  let overflowed = false;
+
+  for (const file of incomingFiles) {
+    if (next.length >= maxReferenceImages) {
+      overflowed = true;
+      break;
+    }
+
+    const fingerprint = buildReferenceFingerprint(file);
+    if (fingerprints.has(fingerprint)) {
+      continue;
+    }
+
+    const referenceItem = {
+      id: `creation-style-ref-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      fingerprint,
+      file,
+      generationFile: file,
+      generationFilePromise: null,
+      generationCompressed: false,
+      previewUrl: URL.createObjectURL(file),
+    };
+    startCreationReferenceGenerationCompression(referenceItem);
+    next.push(referenceItem);
+    fingerprints.add(fingerprint);
+    added = true;
+  }
+
+  state.creationStyleReferenceFiles = next;
+  if (added) {
+    setCreationSelectValue(refs.creationVisualLanguageInput, "reference-style", "classic-commercial");
+  }
+  if (refs.creationStyleReferenceInput) {
+    refs.creationStyleReferenceInput.value = "";
+  }
+  renderCreationStyleReferenceGrid();
+  renderCreationView();
+
+  if (overflowed) {
+    showError(`参考风格图最多支持 ${maxReferenceImages} 张。`);
   }
 }
 
@@ -10228,6 +10370,62 @@ function renderCreationReferenceGrid() {
   }
   renderCreationReferenceRestoreList();
   renderCreationReferenceAnalysis();
+}
+
+function renderCreationStyleReferenceGrid() {
+  if (!refs.creationStyleReferenceGrid) {
+    return;
+  }
+
+  refs.creationStyleReferenceGrid.innerHTML = "";
+  const maxReferenceImages = getCreationMaxStyleReferenceImageCount();
+  if (refs.creationStyleReferenceCount) {
+    refs.creationStyleReferenceCount.textContent = `${state.creationStyleReferenceFiles.length} / ${maxReferenceImages}`;
+  }
+  syncReferenceDropzoneCompact(refs.creationStyleReferenceDropzone, state.creationStyleReferenceFiles.length > 0);
+  refs.creationStyleReferenceGrid.classList.toggle("hidden", state.creationStyleReferenceFiles.length === 0);
+
+  state.creationStyleReferenceFiles.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "reference-card";
+
+    const previewButton = document.createElement("button");
+    previewButton.type = "button";
+    previewButton.className = "reference-preview-button";
+    previewButton.setAttribute("aria-label", "放大查看参考风格图");
+
+    const image = document.createElement("img");
+    image.src = item.previewUrl;
+    image.alt = "参考风格图预览";
+    previewButton.appendChild(image);
+    previewButton.addEventListener("click", () => openCreationStyleReferencePreview(item.id));
+    card.appendChild(previewButton);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "reference-remove";
+    remove.textContent = "x";
+    remove.setAttribute("aria-label", "移除参考风格图");
+    remove.addEventListener("click", () => removeCreationStyleReferenceFile(item.id));
+    card.appendChild(remove);
+
+    const name = document.createElement("span");
+    name.className = "creation-reference-note";
+    name.textContent = item.file?.name || "参考风格图";
+    card.appendChild(name);
+
+    refs.creationStyleReferenceGrid.appendChild(card);
+  });
+
+  if (state.creationStyleReferenceFiles.length > 0 && state.creationStyleReferenceFiles.length < maxReferenceImages) {
+    refs.creationStyleReferenceGrid.appendChild(
+      createReferenceAddCard({
+        input: refs.creationStyleReferenceInput,
+        label: "继续上传参考风格图",
+        onFiles: applyCreationStyleReferenceFiles,
+      }),
+    );
+  }
 }
 
 function buildCreationReferenceRolePayload() {
@@ -10389,6 +10587,7 @@ async function applyCreationReferenceAnalysis(analysis) {
   const normalized = normalizeCreationReferenceAnalysisPayload(analysis);
   state.creationReferenceAnalysis.result = normalized;
   state.creationReferenceAnalysis.applied = false;
+  state.creationReferenceAnalysis.collapsed = false;
   state.creationReferenceAnalysis.dirty = false;
   const matchedTemplate = await applyCreationReferenceAnalysisCategoryMatch(normalized);
   renderCreationReferenceAnalysis();
@@ -10421,6 +10620,15 @@ function applyCreationReferenceAnalysisProductNameSuggestion(analysis = {}) {
   return true;
 }
 
+function toggleCreationReferenceAnalysisPanel() {
+  if (!state.creationReferenceAnalysis.result) {
+    return;
+  }
+
+  state.creationReferenceAnalysis.collapsed = !state.creationReferenceAnalysis.collapsed;
+  renderCreationReferenceAnalysis();
+}
+
 function applyCreationReferenceAnalysisRecommendations() {
   const analysis = state.creationReferenceAnalysis.result;
   if (!analysis || state.creationReferenceAnalysis.dirty) {
@@ -10441,6 +10649,7 @@ function applyCreationReferenceAnalysisRecommendations() {
   });
   const productNameApplied = applyCreationReferenceAnalysisProductNameSuggestion(analysis);
   state.creationReferenceAnalysis.applied = true;
+  state.creationReferenceAnalysis.collapsed = true;
   setCreationReferenceAnalysisFeedback(
     productNameApplied
       ? `已应用 ${analysis.recommendations.length} 张参考图用途建议，商品名称已填入四级类目。`
@@ -10448,6 +10657,7 @@ function applyCreationReferenceAnalysisRecommendations() {
     "success",
   );
   renderCreationReferenceGrid();
+  renderCreationReferenceAnalysis();
 }
 
 function renderCreationReferenceAnalysis() {
@@ -10476,8 +10686,17 @@ function renderCreationReferenceAnalysis() {
   refs.creationReferenceAnalysisList.replaceChildren();
 
   if (!analysis) {
+    state.creationReferenceAnalysis.collapsed = false;
+    refs.creationReferenceAnalysisPanel.classList.remove("is-collapsed");
     refs.creationReferenceAnalysisSummary.textContent = "--";
+    refs.creationReferenceAnalysisSummary.classList.remove("hidden");
     refs.creationReferenceAnalysisMeta.textContent = "--";
+    refs.creationReferenceAnalysisMeta.classList.remove("hidden");
+    refs.creationReferenceAnalysisToggleButton.classList.add("hidden");
+    refs.creationReferenceAnalysisToggleButton.disabled = true;
+    refs.creationReferenceAnalysisToggleButton.setAttribute("aria-expanded", "false");
+    refs.creationReferenceAnalysisToggleButton.textContent = "折叠建议";
+    refs.creationReferenceAnalysisList.classList.remove("hidden");
     return;
   }
 
@@ -10492,6 +10711,14 @@ function renderCreationReferenceAnalysis() {
   ]
     .filter(Boolean)
     .join(" · ");
+  refs.creationReferenceAnalysisToggleButton.classList.remove("hidden");
+  refs.creationReferenceAnalysisToggleButton.disabled = false;
+  refs.creationReferenceAnalysisToggleButton.setAttribute("aria-expanded", String(!state.creationReferenceAnalysis.collapsed));
+  refs.creationReferenceAnalysisToggleButton.textContent = state.creationReferenceAnalysis.collapsed ? "展开建议" : "折叠建议";
+  refs.creationReferenceAnalysisPanel.classList.toggle("is-collapsed", state.creationReferenceAnalysis.collapsed);
+  refs.creationReferenceAnalysisSummary.classList.toggle("hidden", state.creationReferenceAnalysis.collapsed);
+  refs.creationReferenceAnalysisMeta.classList.toggle("hidden", state.creationReferenceAnalysis.collapsed);
+  refs.creationReferenceAnalysisList.classList.toggle("hidden", state.creationReferenceAnalysis.collapsed);
 
   analysis.recommendations.forEach((entry) => {
     const item = document.createElement("article");
@@ -10659,6 +10886,7 @@ function renderCreationView() {
   refs.creationProgressText.textContent = `${progress.completed} / ${progress.total}`;
   renderCreationRolePicker();
   renderCreationReferenceGrid();
+  renderCreationStyleReferenceGrid();
   renderCreationLogoBatchSourceGrid();
   renderCreationLogo();
   const currentIndustryLabel = currentSet?.industryTemplateLabel || CREATION_INDUSTRY_TEMPLATE_LABELS[currentSet?.industryTemplate] || "通用电商";
@@ -10741,6 +10969,12 @@ function buildCreationFormData() {
       formData.append("referenceImages", file);
     }
   });
+  state.creationStyleReferenceFiles.forEach((item) => {
+    const file = getCreationReferenceGenerationFile(item);
+    if (file) {
+      formData.append("styleReferenceImages", file);
+    }
+  });
   const logoFile = getCreationLogoGenerationFile();
   if (logoFile) {
     formData.append("logoImage", logoFile);
@@ -10801,6 +11035,12 @@ function buildCreationRepairFormData({ itemId = "", scope = "incomplete" } = {})
     const file = getCreationReferenceGenerationFile(item);
     if (file) {
       formData.append("referenceImages", file);
+    }
+  });
+  state.creationStyleReferenceFiles.forEach((item) => {
+    const file = getCreationReferenceGenerationFile(item);
+    if (file) {
+      formData.append("styleReferenceImages", file);
     }
   });
   formData.set("logoOptions", JSON.stringify(getCreationLogoPayload()));
@@ -11544,7 +11784,7 @@ function applyPortraitAnalysis() {
 }
 
 function revokePortraitReferenceFiles() {
-  [...state.portrait.files, ...state.portrait.accessoryFiles].forEach((item) => {
+  [...state.portrait.files, ...state.portrait.actionFiles, ...state.portrait.accessoryFiles].forEach((item) => {
     if (item.previewUrl) {
       URL.revokeObjectURL(item.previewUrl);
     }
@@ -11552,6 +11792,24 @@ function revokePortraitReferenceFiles() {
 }
 
 function getPortraitReferenceBucketConfig(bucket = "person") {
+  if (bucket === "action") {
+    return {
+      filesKey: "actionFiles",
+      input: refs.portraitActionReferenceInput,
+      count: refs.portraitActionReferenceCount,
+      dropzone: refs.portraitActionReferenceDropzone,
+      grid: refs.portraitActionReferenceGrid,
+      maxCount: getPortraitActionMaxReferenceImageCount(),
+      idPrefix: "portrait-action-reference",
+      removeDatasetKey: "portraitActionReferenceRemoveId",
+      removeAttribute: "data-portrait-action-reference-remove-id",
+      title: "动作参考图",
+      addLabel: "继续上传动作参考图",
+      overflowMessage: "动作参考图最多支持",
+      clearsAnalysis: false,
+    };
+  }
+
   if (bucket === "accessory") {
     return {
       filesKey: "accessoryFiles",
@@ -11647,6 +11905,10 @@ function applyPortraitReferenceFiles(fileList, bucket = "person", options = {}) 
 
 function applyPortraitAccessoryReferenceFiles(fileList, options = {}) {
   applyPortraitReferenceFiles(fileList, "accessory", options);
+}
+
+function applyPortraitActionReferenceFiles(fileList, options = {}) {
+  applyPortraitReferenceFiles(fileList, "action", options);
 }
 
 function getPortraitAccessoryPromptSummary() {
@@ -11797,6 +12059,10 @@ function removePortraitAccessoryReferenceFile(referenceId) {
   removePortraitReferenceFileFromBucket(referenceId, "accessory");
 }
 
+function removePortraitActionReferenceFile(referenceId) {
+  removePortraitReferenceFileFromBucket(referenceId, "action");
+}
+
 function removePortraitReferenceFileFromBucket(referenceId, bucket = "person") {
   const config = getPortraitReferenceBucketConfig(bucket);
   const target = state.portrait[config.filesKey].find((item) => item.id === referenceId);
@@ -11816,6 +12082,7 @@ function removePortraitReferenceFileFromBucket(referenceId, bucket = "person") {
 
 function renderPortraitReferenceGrid() {
   renderPortraitReferenceGridForBucket("person");
+  renderPortraitReferenceGridForBucket("action");
   renderPortraitReferenceGridForBucket("accessory");
 }
 
@@ -11872,7 +12139,7 @@ function renderPortraitReferenceGridForBucket(bucket = "person") {
   }
 }
 
-function buildPortraitFormData({ includeFiles = true, repair = false, includeAccessoryFiles = true } = {}) {
+function buildPortraitFormData({ includeFiles = true, repair = false, includeActionFiles = true, includeAccessoryFiles = true } = {}) {
   const formData = new FormData();
   const currentSet = getPortraitCurrentSet();
   formData.set("subjectName", refs.portraitSubjectNameInput?.value.trim() || "");
@@ -11899,6 +12166,13 @@ function buildPortraitFormData({ includeFiles = true, repair = false, includeAcc
         formData.append("portraitReferenceImages", item.file);
       }
     });
+    if (includeActionFiles) {
+      state.portrait.actionFiles.forEach((item) => {
+        if (item.file) {
+          formData.append("portraitActionReferenceImages", item.file);
+        }
+      });
+    }
     if (includeAccessoryFiles) {
       state.portrait.accessoryFiles.forEach((item) => {
         if (item.file) {
@@ -11912,7 +12186,7 @@ function buildPortraitFormData({ includeFiles = true, repair = false, includeAcc
 }
 
 function getPortraitReferenceFileNames() {
-  return [...state.portrait.files, ...state.portrait.accessoryFiles]
+  return [...state.portrait.files, ...state.portrait.actionFiles, ...state.portrait.accessoryFiles]
     .map((item) => item.file?.name || "")
     .filter(Boolean);
 }
@@ -12110,7 +12384,7 @@ async function analyzePortraitReference() {
   state.portrait.analyzing = true;
   renderPortraitView();
   try {
-    const formData = buildPortraitFormData({ includeFiles: true, includeAccessoryFiles: false });
+    const formData = buildPortraitFormData({ includeFiles: true, includeActionFiles: false, includeAccessoryFiles: false });
     const response = await fetch("/api/portrait/reference/analyze", {
       method: "POST",
       body: formData,
@@ -12586,11 +12860,15 @@ function reusePortraitRecordSet() {
   });
   revokePortraitReferenceFiles();
   state.portrait.files = [];
+  state.portrait.actionFiles = [];
   state.portrait.accessoryFiles = [];
   state.portrait.analysis = selectedSet.analysis || null;
   state.portrait.currentSet = normalizePortraitSetForView(selectedSet);
   if (refs.portraitReferenceInput) {
     refs.portraitReferenceInput.value = "";
+  }
+  if (refs.portraitActionReferenceInput) {
+    refs.portraitActionReferenceInput.value = "";
   }
   if (refs.portraitAccessoryReferenceInput) {
     refs.portraitAccessoryReferenceInput.value = "";
@@ -14314,6 +14592,7 @@ function bindEvents() {
   refs.openConfigButton.addEventListener("click", () => setDrawerOpen(true));
   refs.closeConfigButton.addEventListener("click", () => setDrawerOpen(false));
   refs.closeConfigBackdrop.addEventListener("click", () => setDrawerOpen(false));
+  refs.uiLanguageInput.addEventListener("change", (event) => { setUiLanguage(event.target.value); });
   refs.openPromptAgentButton.addEventListener("click", () => setPromptAgentOpen(true));
   refs.promptAgentCloseButton.addEventListener("click", () => setPromptAgentOpen(false));
   refs.promptAgentBackdrop.addEventListener("click", () => setPromptAgentOpen(false));
@@ -14541,6 +14820,9 @@ function bindEvents() {
   refs.portraitReferenceInput.addEventListener("change", (event) => {
     applyPortraitReferenceFiles(event.target.files);
   });
+  refs.portraitActionReferenceInput.addEventListener("change", (event) => {
+    applyPortraitActionReferenceFiles(event.target.files);
+  });
   refs.portraitAccessoryReferenceInput.addEventListener("change", (event) => {
     applyPortraitAccessoryReferenceFiles(event.target.files);
   });
@@ -14555,6 +14837,18 @@ function bindEvents() {
     event.preventDefault();
     refs.portraitReferenceDropzone.classList.remove("dragover");
     applyPortraitReferenceFiles(event.dataTransfer?.files);
+  });
+  refs.portraitActionReferenceDropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    refs.portraitActionReferenceDropzone.classList.add("dragover");
+  });
+  refs.portraitActionReferenceDropzone.addEventListener("dragleave", () => {
+    refs.portraitActionReferenceDropzone.classList.remove("dragover");
+  });
+  refs.portraitActionReferenceDropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    refs.portraitActionReferenceDropzone.classList.remove("dragover");
+    applyPortraitActionReferenceFiles(event.dataTransfer?.files);
   });
   refs.portraitAccessoryReferenceDropzone.addEventListener("dragover", (event) => {
     event.preventDefault();
@@ -14572,6 +14866,12 @@ function bindEvents() {
     const removeButton = event.target.closest("[data-portrait-reference-remove-id]");
     if (removeButton) {
       removePortraitReferenceFile(removeButton.dataset.portraitReferenceRemoveId);
+    }
+  });
+  refs.portraitActionReferenceGrid.addEventListener("click", (event) => {
+    const removeButton = event.target.closest("[data-portrait-action-reference-remove-id]");
+    if (removeButton) {
+      removePortraitActionReferenceFile(removeButton.dataset.portraitActionReferenceRemoveId);
     }
   });
   refs.portraitAccessoryReferenceGrid.addEventListener("click", (event) => {
@@ -14777,6 +15077,7 @@ function bindEvents() {
     });
   });
   refs.creationReferenceInput.addEventListener("change", (event) => applyCreationReferenceFiles(event.target.files));
+  refs.creationStyleReferenceInput.addEventListener("change", (event) => applyCreationStyleReferenceFiles(event.target.files));
   refs.creationLogoBatchSourceInput.addEventListener("change", (event) => applyCreationLogoBatchSourceFiles(event.target.files));
   refs.creationLogoInput.addEventListener("change", (event) => applyCreationLogoFile(event.target.files));
   refs.creationLogoPlacementInput.addEventListener("change", () => { state.creationLogo.placement = normalizeCreationLogoPlacement(refs.creationLogoPlacementInput.value); renderCreationView(); });
@@ -14790,6 +15091,7 @@ function bindEvents() {
     });
   });
   refs.creationReferenceApplyAnalysisButton.addEventListener("click", applyCreationReferenceAnalysisRecommendations);
+  refs.creationReferenceAnalysisToggleButton.addEventListener("click", toggleCreationReferenceAnalysisPanel);
   refs.creationReferenceGrid.addEventListener("click", (event) => {
     const target = event.target.closest("[data-creation-reference-preview-id]");
     if (!target) {
@@ -14823,6 +15125,18 @@ function bindEvents() {
     event.preventDefault();
     refs.creationReferenceDropzone.classList.remove("dragover");
     applyCreationReferenceFiles(event.dataTransfer?.files);
+  });
+  refs.creationStyleReferenceDropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    refs.creationStyleReferenceDropzone.classList.add("dragover");
+  });
+  refs.creationStyleReferenceDropzone.addEventListener("dragleave", () => {
+    refs.creationStyleReferenceDropzone.classList.remove("dragover");
+  });
+  refs.creationStyleReferenceDropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    refs.creationStyleReferenceDropzone.classList.remove("dragover");
+    applyCreationStyleReferenceFiles(event.dataTransfer?.files);
   });
   refs.creationLogoBatchSourceDropzone.addEventListener("dragover", (event) => {
     event.preventDefault();
@@ -15391,6 +15705,8 @@ function bindEvents() {
 
 async function bootstrap() {
   state.clientSessionId = getOrCreateClientSessionId();
+  state.uiLanguage = readUiLanguage();
+  syncUiLanguage();
   state.uiTheme = readUiTheme();
   setUiTheme(state.uiTheme);
   state.activityFeed = readGenerationActivityFeed();

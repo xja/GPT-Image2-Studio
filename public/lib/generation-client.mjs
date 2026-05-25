@@ -1,4 +1,7 @@
-import { getGenerationRequestRetryPlan } from "./generation-request-retry.mjs";
+import {
+  GENERATION_REQUEST_RETRY_DELAY_MS,
+  getGenerationRequestRetryPlan,
+} from "./generation-request-retry.mjs";
 
 export function parseSseChunk(chunk) {
   const lines = String(chunk || "")
@@ -129,7 +132,7 @@ export async function requestGenerationStream(endpointOrOptions = {}, directOpti
         statusStage: "connecting",
         statusText: plan.message,
       });
-      await waitMs(900);
+      await waitMs(GENERATION_REQUEST_RETRY_DELAY_MS);
     }
   }
 }

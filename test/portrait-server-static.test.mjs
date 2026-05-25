@@ -40,19 +40,27 @@ test("portrait runtime keeps person references separate from styling accessory r
     worker.match(/async function runPortraitGenerate[\s\S]*?\r?\n}\r?\n\r?\nasync function runCreationLogoBatchGenerate/)?.[0] || "";
 
   assert.match(server, /MAX_PORTRAIT_PERSON_REFERENCE_IMAGES/);
+  assert.match(server, /MAX_PORTRAIT_ACTION_REFERENCE_IMAGES/);
   assert.match(server, /MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES/);
   assert.match(worker, /MAX_PORTRAIT_PERSON_REFERENCE_IMAGES/);
+  assert.match(worker, /MAX_PORTRAIT_ACTION_REFERENCE_IMAGES/);
   assert.match(worker, /MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES/);
   assert.match(analyzeHandler, /personReferenceImages\.length > MAX_PORTRAIT_PERSON_REFERENCE_IMAGES/);
   assert.doesNotMatch(analyzeHandler, /portraitAccessoryReferenceImages/);
+  assert.doesNotMatch(analyzeHandler, /portraitActionReferenceImages/);
+  assert.match(generateHandler, /formData\.getAll\("portraitActionReferenceImages"\)/);
   assert.match(generateHandler, /formData\.getAll\("portraitAccessoryReferenceImages"\)/);
+  assert.match(generateHandler, /actionReferenceImages\.length > MAX_PORTRAIT_ACTION_REFERENCE_IMAGES/);
   assert.match(generateHandler, /accessoryReferenceImages\.length > MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES/);
-  assert.match(generateHandler, /(?:const\s+)?referenceImages = \[\.\.\.personReferenceImages, \.\.\.accessoryReferenceImages\]/);
+  assert.match(generateHandler, /(?:const\s+)?referenceImages = \[\.\.\.personReferenceImages, \.\.\.actionReferenceImages, \.\.\.accessoryReferenceImages\]/);
   assert.match(workerAnalyzeHandler, /personReferenceImages\.length > MAX_PORTRAIT_PERSON_REFERENCE_IMAGES/);
   assert.doesNotMatch(workerAnalyzeHandler, /portraitAccessoryReferenceImages/);
+  assert.doesNotMatch(workerAnalyzeHandler, /portraitActionReferenceImages/);
+  assert.match(workerGenerateHandler, /formData\.getAll\("portraitActionReferenceImages"\)/);
   assert.match(workerGenerateHandler, /formData\.getAll\("portraitAccessoryReferenceImages"\)/);
+  assert.match(workerGenerateHandler, /actionReferenceImages\.length > MAX_PORTRAIT_ACTION_REFERENCE_IMAGES/);
   assert.match(workerGenerateHandler, /accessoryReferenceImages\.length > MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES/);
-  assert.match(workerGenerateHandler, /(?:const\s+)?referenceImages = \[\.\.\.personReferenceImages, \.\.\.accessoryReferenceImages\]/);
+  assert.match(workerGenerateHandler, /(?:const\s+)?referenceImages = \[\.\.\.personReferenceImages, \.\.\.actionReferenceImages, \.\.\.accessoryReferenceImages\]/);
 });
 
 test("portrait record list responses are not cacheable", async () => {

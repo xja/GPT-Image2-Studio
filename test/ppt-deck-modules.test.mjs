@@ -190,7 +190,7 @@ test("PPT artifact module prompt asks for artifact-tool editable slide modules",
   assert.match(prompt, /Do not import modules/);
 });
 
-test("PPT artifact module normalization accepts safe modules and blocks local code access", () => {
+test("PPT artifact module normalization rejects model-supplied code", () => {
   const moduleSource = [
     "export async function slide02(presentation, ctx) {",
     "  const slide = presentation.slides.add();",
@@ -200,27 +200,39 @@ test("PPT artifact module normalization accepts safe modules and blocks local co
     "",
   ].join("\n");
 
-  const normalized = normalizePptArtifactSlideModule({
-    slideNumber: 2,
-    moduleSource,
-    warnings: ["Chart approximated with editable shapes"],
-  });
-
-  assert.equal(normalized.slideNumber, 2);
-  assert.match(normalized.moduleSource, /slide02/);
-  assert.match(normalized.moduleSource, /createArtifactCompatCtx/);
-  assert.deepEqual(normalized.warnings, ["Chart approximated with editable shapes"]);
+  assert.throws(
+    () => normalizePptArtifactSlideModule({
+      slideNumber: 2,
+      moduleSource,
+      warnings: ["Chart approximated with editable shapes"],
+    }),
+    /disabled/i,
+  );
   assert.throws(
     () => normalizePptArtifactSlideModule({
       slideNumber: 2,
       moduleSource: "import fs from 'node:fs';\nexport async function slide02(presentation, ctx) { const slide = presentation.slides.add(); return slide; }",
     }),
-    /blocked construct/i,
+    /disabled/i,
+  );
+  assert.throws(
+    () => normalizePptArtifactSlideModule({
+      slideNumber: 2,
+      moduleSource: [
+        "export async function slide02(presentation, ctx) {",
+        "  const slide = presentation.slides.add();",
+        "  const run = ({}).constructor.constructor('return 7');",
+        "  ctx.addText(slide, String(run()), { x: 0, y: 0, w: 1, h: 1 });",
+        "  return slide;",
+        "}",
+      ].join("\n"),
+    }),
+    /disabled/i,
   );
 });
 
-test("PPT artifact module normalization adapts pptxgen-style helper options", () => {
-  const normalized = normalizePptArtifactSlideModule({
+test("PPT artifact module normalization does not allow helper-style executable modules", () => {
+  assert.throws(() => normalizePptArtifactSlideModule({
     slideNumber: 1,
     moduleSource: [
       "export async function slide01(presentation, ctx) {",
@@ -230,12 +242,8 @@ test("PPT artifact module normalization adapts pptxgen-style helper options", ()
       "  return slide;",
       "}",
     ].join("\n"),
-  });
+  }), /disabled/i);
 
-  assert.match(normalized.moduleSource, /normalizeColor/);
-  assert.match(normalized.moduleSource, /geometry: options\.geometry \|\| options\.type/);
-  assert.match(normalized.moduleSource, /typeface: options\.typeface \|\| options\.fontFace/);
-  assert.match(normalized.moduleSource, /insets: normalizeInsets/);
 });
 
 test("PPT presentations runtime discovery supports explicit and environment skill directories", async () => {
@@ -263,7 +271,7 @@ test("PPT presentations runtime discovery supports explicit and environment skil
   assert.match(missing.message, /runtime was not found/i);
 });
 
-test("PPT editable reconstruction wrapper writes artifact modules and reports slide fallback warnings", async () => {
+test("PPT editable reconstruction wrapper writes local slide modules and reports fallback warnings", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ppt-editable-wrapper-"));
   const skillDir = join(dir, "presentations");
   const workspaceDir = join(dir, "workspace");
@@ -316,7 +324,6 @@ test("PPT editable reconstruction wrapper writes artifact modules and reports sl
       "editable_reconstruction_started",
       "editable_reconstruction_slide_started",
       "editable_reconstruction_warning",
-      "editable_reconstruction_warning",
     ],
   );
 
@@ -327,7 +334,7 @@ test("PPT editable reconstruction wrapper writes artifact modules and reports sl
   assert.match(manifestJson, /Used full-slide image fallback/);
 });
 
-test("PPT editable reconstruction wrapper prefers artifact slide modules", async () => {
+test("PPT editable reconstruction wrapper uses local manifest rendering", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ppt-editable-artifact-module-"));
   const skillDir = join(dir, "presentations");
   const workspaceDir = join(dir, "workspace");
@@ -346,7 +353,7 @@ test("PPT editable reconstruction wrapper prefers artifact slide modules", async
       'const slidesDir = process.argv[slidesIndex + 1];',
       'const source = await readFile(join(slidesDir, "slide-01.mjs"), "utf8");',
       "await mkdir(dirname(outputPath), { recursive: true });",
-      "await writeFile(outputPath, source.includes('artifact-module-title') ? 'artifact module deck' : 'fallback deck');",
+      "await writeFile(outputPath, source.includes('manifest-rendered-title') ? 'manifest deck' : 'fallback deck');",
       "",
     ].join("\n"),
     "utf8",
@@ -367,6 +374,16 @@ test("PPT editable reconstruction wrapper prefers artifact slide modules", async
     fetchImpl: async () => new Response(JSON.stringify({
       output_text: JSON.stringify({
         slideNumber: 1,
+        canvas: { width: 2048, height: 1152 },
+        elements: [
+          {
+            type: "text",
+            editable: "text",
+            bbox: [120, 120, 640, 100],
+            text: "manifest-rendered-title",
+            confidence: 0.95,
+          },
+        ],
         moduleSource: [
           "export async function slide01(presentation, ctx) {",
           "  const slide = presentation.slides.add();",
@@ -382,11 +399,11 @@ test("PPT editable reconstruction wrapper prefers artifact slide modules", async
   assert.equal(result.ok, true);
   const slideModule = await readFile(join(workspaceDir, "slides", "slide-01.mjs"), "utf8");
   const output = await readFile(outputPath, "utf8");
-  assert.match(slideModule, /artifact-module-title/);
-  assert.equal(output, "artifact module deck");
+  assert.match(slideModule, /manifest-rendered-title/);
+  assert.equal(output, "manifest deck");
 });
 
-test("PPT editable reconstruction retries element fallback when artifact module build fails", async () => {
+test("PPT editable reconstruction ignores artifact module responses and uses fallback rendering", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ppt-editable-artifact-retry-"));
   const skillDir = join(dir, "presentations");
   const workspaceDir = join(dir, "workspace");
@@ -444,7 +461,7 @@ test("PPT editable reconstruction retries element fallback when artifact module 
   const slideModule = await readFile(join(workspaceDir, "slides", "slide-01.mjs"), "utf8");
   assert.equal(output, "fallback deck");
   assert.match(slideModule, /source-slide-image/);
-  assert.match(result.warnings.join("\n"), /retrying with element-level fallback/);
+  assert.doesNotMatch(result.warnings.join("\n"), /retrying with element-level fallback/);
 });
 
 test("PPT editable reconstruction reports missing local presentations runtime without throwing", async () => {

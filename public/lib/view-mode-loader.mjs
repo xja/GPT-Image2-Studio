@@ -2,6 +2,7 @@ export const VIEW_MODULE_URLS = Object.freeze({
   "style-transfer": "/lib/views/style-transfer-view.mjs",
   "reference-analysis": "/lib/views/reference-analysis-view.mjs",
   "image-decomposition": "/lib/views/image-decomposition-view.mjs",
+  "image-compress": "/lib/views/image-compress-view.mjs",
   "article-illustration": "/lib/views/article-illustration-view.mjs",
   "creation": "/lib/views/creation-view.mjs",
   ppt: "/lib/views/ppt-view.mjs",

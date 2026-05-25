@@ -85,9 +85,26 @@ test("creation planner defaults to the existing visual language without changing
 
   assert.equal(plan.visualLanguage, "classic-commercial");
   assert.equal(plan.visualLanguageLabel, "经典商业摄影");
-  assert.equal(CREATION_VISUAL_LANGUAGE_OPTIONS.length, 11);
+  assert.equal(CREATION_VISUAL_LANGUAGE_OPTIONS.length, 12);
   assert.equal(normalizeCreationVisualLanguage("unknown").value, "classic-commercial");
   assert.ok(plan.items.every((item) => !item.prompt.includes("Shared visual language:")));
+});
+
+test("creation planner supports reference-style visual language for uploaded style references", () => {
+  const plan = buildCreationPlan({
+    productName: "AeroPress Clear",
+    productDescription: "Transparent portable coffee brewer",
+    sellingPoints: "lightweight, easy to clean, stable taste",
+    targetLanguage: "en",
+    visualLanguage: "reference-style",
+    selectedRoles: ["hero", "scene"],
+  });
+
+  assert.equal(plan.visualLanguage, "reference-style");
+  assert.equal(plan.visualLanguageLabel, "参考模式");
+  assert.ok(plan.items.every((item) => item.prompt.includes("Shared visual language: 参考模式")));
+  assert.ok(plan.items.every((item) => item.prompt.includes("uploaded style reference images")));
+  assert.ok(plan.items.every((item) => item.prompt.includes("Do not copy the style reference subject")));
 });
 
 test("creation planner applies one selected visual language consistently across the whole set", () => {

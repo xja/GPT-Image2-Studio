@@ -12,7 +12,7 @@ const browserImageCachePath = new URL("../lib/browser-image-cache.mjs", import.m
 const creationListingViewPath = new URL("../lib/creation-listing-view.mjs", import.meta.url);
 const generationClientPath = new URL("../lib/generation-client.mjs", import.meta.url);
 const pptAnalysisClientPath = new URL("../lib/ppt-analysis-client.mjs", import.meta.url);
-const assetVersion = "20260523-portrait-cosplay-color-assets-1";
+const assetVersion = "20260524-listing-layout-1";
 
 test("static assets use the current cache-busting version", async () => {
   const html = await readFile(indexPath, "utf8");
@@ -864,6 +864,27 @@ test("theme toggle persists dark and white themes", async () => {
   assert.match(app, /refs\.themeToggleButton\.addEventListener\("click",\s*\(\) => \{/);
 });
 
+test("theme language switch supports English from the config drawer", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /const languageKey = "image-studio-ui-language-v1";/);
+  assert.match(
+    html,
+    /<label class="field ui-language-field">[\s\S]*<span>界面语言<\/span>[\s\S]*<select id="uiLanguageInput" name="uiLanguage">[\s\S]*<option value="zh-CN" selected>简体中文<\/option>[\s\S]*<option value="en">English<\/option>/,
+  );
+  assert.match(html, /<button class="mega-menu-action" id="themeNavAction" type="button" data-nav-action="theme">主题颜色<\/button>/);
+  assert.match(app, /const UI_LANGUAGE_STORAGE_KEY = "image-studio-ui-language-v1";/);
+  assert.match(app, /function normalizeUiLanguage\(language\) \{[\s\S]*return language === "en" \? "en" : "zh-CN";/);
+  assert.match(app, /document\.documentElement\.lang = normalized;/);
+  assert.match(app, /refs\.themeNavAction\.textContent = getUiLanguageText\("themeMenu"\);/);
+  assert.match(
+    app,
+    /refs\.themeToggleLabel\.textContent = getUiLanguageText\(isLight \? "themeDark" : "themeLight"\);/,
+  );
+  assert.match(app, /refs\.uiLanguageInput\.addEventListener\("change",\s*\(event\) => \{/);
+});
+
 test("floating dialogs and popovers use theme-aware overlay surface tokens", async () => {
   const styles = await readFile(stylesPath, "utf8");
 
@@ -1624,10 +1645,19 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(html, /id="creationReferenceCount">0 \/ 9/);
   assert.match(html, /id="creationReferenceInput"[\s\S]*name="creationReferenceImages"/);
   assert.match(html, /id="creationReferenceGrid"/);
+  assert.match(html, /id="creationStyleReferenceDropzone"/);
+  assert.match(html, /id="creationStyleReferenceCount">0 \/ 3/);
+  assert.match(html, /id="creationStyleReferenceInput"[\s\S]*name="creationStyleReferenceImages"/);
+  assert.match(html, /id="creationStyleReferenceGrid"/);
   assert.match(html, /id="creationReferenceAnalyzeButton"[\s\S]*智能识别/);
   assert.match(html, /id="creationReferenceApplyAnalysisButton"[\s\S]*应用建议/);
   assert.match(html, /id="creationReferenceAnalysisFeedback"/);
   assert.match(html, /id="creationReferenceAnalysisPanel"/);
+  assert.match(html, /class="creation-reference-analysis-head-copy"[\s\S]*id="creationReferenceAnalysisSummary"/);
+  assert.match(html, /id="creationReferenceAnalysisToggleButton"[\s\S]*aria-controls="creationReferenceAnalysisList"/);
+  const creationReferenceAnalysisHeadActions = html.match(/<div class="creation-reference-analysis-head-actions">[\s\S]*?<\/div>/)?.[0] || "";
+  assert.doesNotMatch(creationReferenceAnalysisHeadActions, /creationReferenceAnalysisMeta/);
+  assert.match(html, /class="creation-reference-analysis-meta" id="creationReferenceAnalysisMeta"/);
   assert.match(html, /id="creationReferenceAnalysisList"/);
   assert.doesNotMatch(app, /识别中\.\.\./);
   assert.doesNotMatch(app, /正在识别参考图用途\.\.\./);
@@ -1684,6 +1714,8 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(styles, /#creationProductDescriptionInput,\s*#creationSellingPointsInput,\s*#creationDimensionSpecsInput\s*\{[\s\S]*overflow-y:\s*hidden;[\s\S]*resize:\s*vertical;/);
   assert.doesNotMatch(styles, /#creationSellingPointsInput,\s*#creationDimensionSpecsInput\s*\{[^}]*resize:\s*none;/);
   assert.match(styles, /\.creation-reference-analysis-panel\s*\{/);
+  assert.match(styles, /\.creation-reference-analysis-panel \.reference-analysis-head\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto;/);
+  assert.match(styles, /\.creation-reference-analysis-panel\.is-collapsed #creationReferenceAnalysisSummary,\s*\.creation-reference-analysis-panel\.is-collapsed #creationReferenceAnalysisMeta\s*\{[\s\S]*display:\s*none;/);
   assert.match(styles, /\.creation-reference-analysis-actions\s*\{[\s\S]*border:\s*1px solid color-mix\(in srgb, var\(--accent\) 18%, var\(--border\)\);[\s\S]*background:[\s\S]*linear-gradient\(135deg, color-mix\(in srgb, var\(--accent\) 10%, transparent\), color-mix\(in srgb, var\(--success\) 8%, transparent\)\)/);
   assert.match(styles, /\.creation-reference-analysis-actions \.reference-analysis-button\s*\{[\s\S]*background:[\s\S]*color-mix\(in srgb, var\(--accent\) 18%, var\(--control-bg\)\)/);
   assert.match(styles, /\.creation-reference-analysis-actions \.prompt-agent-feedback:empty\s*\{[\s\S]*display:\s*none;/);
@@ -1710,13 +1742,16 @@ test("creation mode has independent references count and scenario controls", asy
   assert.doesNotMatch(styles, /\.creation-card-brief\s*\{/);
 
   assert.match(app, /creationReferenceFiles:\s*\[\]/);
+  assert.match(app, /creationStyleReferenceFiles:\s*\[\]/);
   assert.match(app, /function getCreationMaxReferenceImageCount\(\) \{/);
+  assert.match(app, /function getCreationMaxStyleReferenceImageCount\(\) \{/);
   assert.match(app, /creationIndustryTemplateBrowser:\s*\{/);
   assert.match(app, /creationReferenceAnalysis:\s*\{/);
   assert.match(app, /creationReferenceAnalyzeButton: document\.querySelector\("#creationReferenceAnalyzeButton"\)/);
   assert.match(app, /creationReferenceApplyAnalysisButton: document\.querySelector\("#creationReferenceApplyAnalysisButton"\)/);
   assert.match(app, /creationReferenceAnalysisList: document\.querySelector\("#creationReferenceAnalysisList"\)/);
   assert.match(app, /creationReferenceAnalysisPanel: document\.querySelector\("#creationReferenceAnalysisPanel"\)/);
+  assert.match(app, /creationReferenceAnalysisToggleButton: document\.querySelector\("#creationReferenceAnalysisToggleButton"\)/);
   assert.match(app, /creationSkuBundleCountInput: document\.querySelector\("#creationSkuBundleCountInput"\)/);
   assert.match(app, /creationVisualLanguageInput: document\.querySelector\("#creationVisualLanguageInput"\)/);
   assert.match(app, /creationDimensionSpecsInput: document\.querySelector\("#creationDimensionSpecsInput"\)/);
@@ -1736,6 +1771,10 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /import\(CREATION_CATEGORY_TEMPLATE_MODULE_URL\)/);
   assert.doesNotMatch(app, /from "\/lib\/creation-category-templates\.mjs\?v=20260509-category-search-2"/);
   assert.match(app, /creationReferenceInput: document\.querySelector\("#creationReferenceInput"\)/);
+  assert.match(app, /creationStyleReferenceInput: document\.querySelector\("#creationStyleReferenceInput"\)/);
+  assert.match(app, /creationStyleReferenceGrid: document\.querySelector\("#creationStyleReferenceGrid"\)/);
+  assert.match(app, /creationStyleReferenceDropzone: document\.querySelector\("#creationStyleReferenceDropzone"\)/);
+  assert.match(app, /creationStyleReferenceCount: document\.querySelector\("#creationStyleReferenceCount"\)/);
   assert.match(app, /creationRoleGrid: document\.querySelector\("#creationRoleGrid"\)/);
   assert.match(app, /creationRoleCount: document\.querySelector\("#creationRoleCount"\)/);
   assert.doesNotMatch(app, /creationScenarioHint: document\.querySelector\("#creationScenarioHint"\)/);
@@ -1744,6 +1783,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /const CREATION_REFERENCE_ROLE_OPTIONS = \[/);
   assert.match(app, /const CREATION_SCENARIO_ROLE_PRESETS = \{/);
   assert.match(app, /const CREATION_VISUAL_LANGUAGE_LABELS = \{/);
+  assert.match(app, /"reference-style": "参考模式"/);
   assert.match(app, /const visualLanguage = normalizeCreationVisualLanguage\(set\.visualLanguage\)/);
   assert.match(app, /visualLanguage,\s*[\r\n]+\s*visualLanguageLabel:\s*String\(set\.visualLanguageLabel \|\| formatCreationVisualLanguageLabel\(visualLanguage\)\)/);
   assert.match(app, /\["视觉语言", set\.visualLanguageLabel \|\| formatCreationVisualLanguageLabel\(set\.visualLanguage\)\]/);
@@ -1760,6 +1800,8 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function renderCreationSizeOptions\(\) \{/);
   assert.match(app, /function renderCreationRolePicker\(\) \{/);
   assert.match(app, /function applyCreationReferenceFiles\(fileList\) \{/);
+  assert.match(app, /function applyCreationStyleReferenceFiles\(fileList\) \{/);
+  assert.match(app, /setCreationSelectValue\(refs\.creationVisualLanguageInput,\s*"reference-style",\s*"classic-commercial"\)/);
   assert.match(app, /function buildCreationReferenceAnalysisFormData\(\) \{/);
   assert.match(app, /function analyzeCreationReferenceImages\(\) \{/);
   assert.match(app, /async function applyCreationReferenceAnalysis\(analysis\) \{/);
@@ -1768,7 +1810,14 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function applyCreationReferenceAnalysisRecommendations\(\) \{/);
   assert.match(app, /state\.creationReferenceAnalysis\.applied = false;/);
   assert.match(app, /state\.creationReferenceAnalysis\.applied = true;/);
+  assert.match(app, /function toggleCreationReferenceAnalysisPanel\(\) \{/);
+  assert.match(app, /state\.creationReferenceAnalysis\.collapsed = !state\.creationReferenceAnalysis\.collapsed;/);
   assert.match(app, /function renderCreationReferenceAnalysis\(\) \{/);
+  assert.match(app, /refs\.creationReferenceAnalysisPanel\.classList\.toggle\("is-collapsed", state\.creationReferenceAnalysis\.collapsed\);/);
+  assert.match(app, /refs\.creationReferenceAnalysisSummary\.classList\.toggle\("hidden", state\.creationReferenceAnalysis\.collapsed\);/);
+  assert.match(app, /refs\.creationReferenceAnalysisMeta\.classList\.toggle\("hidden", state\.creationReferenceAnalysis\.collapsed\);/);
+  assert.match(app, /refs\.creationReferenceAnalysisList\.classList\.toggle\("hidden", state\.creationReferenceAnalysis\.collapsed\);/);
+  assert.match(app, /refs\.creationReferenceAnalysisToggleButton\.setAttribute\("aria-expanded", String\(!state\.creationReferenceAnalysis\.collapsed\)\);/);
   assert.match(app, /function updateCreationReferenceRole\(referenceId, role\) \{/);
   assert.match(app, /function buildCreationReferenceRolePayload\(\) \{/);
   assert.match(app, /function buildCreationSkuSubjectPayload\(\) \{/);
@@ -1815,6 +1864,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /fetch\("\/api\/creation\/plan"/);
   assert.match(app, /formData\.set\("selectedRoles", JSON\.stringify\(getCreationSelectedRoles\(\)\)\)/);
   assert.match(app, /roleSelect\.dataset\.creationReferenceRoleId = item\.id;/);
+  assert.match(app, /refs\.creationStyleReferenceGrid\.appendChild\(\s*createReferenceAddCard\(\{[\s\S]*input:\s*refs\.creationStyleReferenceInput,[\s\S]*onFiles:\s*applyCreationStyleReferenceFiles/);
   assert.match(app, /formData\.set\("imageCount", String\(selectedRoles\.length \|\| getCreationSelectedImageCount\(\)\)\)/);
   assert.match(app, /formData\.set\("scenario", refs\.creationScenarioInput\.value\)/);
   assert.match(app, /formData\.set\("industryTemplate", refs\.creationIndustryTemplateInput\.value\)/);
@@ -1835,8 +1885,14 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /setCreationSelectValue\(refs\.creationVisualLanguageInput, normalized\.visualLanguage, "classic-commercial"\)/);
   assert.match(app, /refs\.creationPlanButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceGrid\.addEventListener\("change",[\s\S]*creationReferenceRoleId/);
+  assert.match(app, /refs\.creationStyleReferenceInput\.addEventListener\("change",[\s\S]*applyCreationStyleReferenceFiles/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
+  assert.match(app, /refs\.creationReferenceAnalysisToggleButton\.addEventListener\("click", toggleCreationReferenceAnalysisPanel\)/);
+  const creationApplyAnalysisBody = app.match(/function applyCreationReferenceAnalysisRecommendations\(\) \{[\s\S]*?\r?\n\}\r?\n\r?\nfunction renderCreationReferenceAnalysis/)?.[0] || "";
+  assert.match(creationApplyAnalysisBody, /state\.creationReferenceAnalysis\.applied = true;/);
+  assert.match(creationApplyAnalysisBody, /state\.creationReferenceAnalysis\.collapsed = true;/);
+  assert.match(creationApplyAnalysisBody, /renderCreationReferenceAnalysis\(\);/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
   assert.doesNotMatch(app, /state\.creationReferenceFiles = state\.referenceFiles/);
@@ -1988,10 +2044,12 @@ test("creation generation cards replace plan details with loading animation", as
   assert.match(app, /if \(getImageUrl\(item\)\) \{\s*return false;\s*\}/);
   assert.doesNotMatch(app, /state\.creation\.generationScope === "full"[\s\S]*return status !== "failed";/);
   assert.match(app, /function shouldHideCreationCardDetails\(showRecordActions = false\) \{/);
-  assert.match(app, /function createCreationCardLoading\(\) \{/);
+  assert.match(app, /function createCreationCardLoading\(status = "generating"\) \{/);
+  assert.match(app, /const isQueued = status === "queued";/);
+  assert.match(app, /label\.textContent = isQueued \? "排队中" : "生成中";/);
   assert.match(app, /card\.classList\.toggle\("is-generating", isLoadingCard\);/);
-  assert.match(app, /status\.textContent = isLoadingCard \? "生成中" : getCreationStatusLabel\(item\.status\);/);
-  assert.match(app, /media\.classList\.add\("is-loading"\);[\s\S]*media\.appendChild\(createCreationCardLoading\(\)\);/);
+  assert.match(app, /status\.textContent = getCreationStatusLabel\(item\.status\);/);
+  assert.match(app, /media\.classList\.add\("is-loading"\);[\s\S]*media\.appendChild\(createCreationCardLoading\(item\.status\)\);/);
   assert.match(app, /const shouldRenderPath = !imageUrl && !showRecordActions && !hideGenerationDetails;/);
   assert.match(app, /if \(shouldRenderPath\) \{/);
   assert.match(app, /if \(showActions && !hideGenerationDetails\) \{/);
@@ -2074,6 +2132,10 @@ test("creation mode uploads prepared reference images for generation and repair"
   assert.match(
     app,
     /state\.creationReferenceFiles\.forEach\(\(item\) => \{\s*const file = getCreationReferenceGenerationFile\(item\);\s*if \(file\) \{\s*formData\.append\("referenceImages", file\);\s*\}\s*\}\);/,
+  );
+  assert.match(
+    app,
+    /state\.creationStyleReferenceFiles\.forEach\(\(item\) => \{\s*const file = getCreationReferenceGenerationFile\(item\);\s*if \(file\) \{\s*formData\.append\("styleReferenceImages", file\);\s*\}\s*\}\);/,
   );
   assert.doesNotMatch(app, /formData\.append\("referenceImages", item\.file\)/);
 });
@@ -2265,6 +2327,7 @@ test("creation mode exposes listing agent controls and record listing drafts", a
   assert.match(html, /id="creationRecordCopyListingsButton"/);
   assert.match(html, /id="creationRecordListingStatus"/);
   assert.match(html, /id="creationRecordListingDrafts"/);
+  assert.match(html, /id="creationRecordResultGrid"[\s\S]*id="creationRecordListingDrafts"/);
 
   assert.match(app, /creationListingAgentEnabledInput: document\.querySelector\("#creationListingAgentEnabledInput"\)/);
   assert.match(app, /creationRecordGenerateListingsButton: document\.querySelector\("#creationRecordGenerateListingsButton"\)/);
@@ -2272,10 +2335,13 @@ test("creation mode exposes listing agent controls and record listing drafts", a
   assert.match(app, /creationRecordCopyListingsButton: document\.querySelector\("#creationRecordCopyListingsButton"\)/);
   assert.match(app, /from "\/lib\/creation-listing-view\.mjs"/);
   assert.match(app, /createCreationListingController\(\{/);
+  assert.match(app, /getCreationRecordListingMetaLabel\(set\)/);
   assert.match(app, /fetchImpl: \(\.\.\.args\) => fetch\(\.\.\.args\),/);
   assert.match(app, /getRequestConfig: getBrowserPrivateConfigRequestPayload,/);
   assert.match(app, /creationListingController\.syncRecordControls\(selectedSet\);/);
   assert.match(app, /creationListingController\.bindEvents\(\);/);
+  assert.doesNotMatch(app, /createCreationSkuListingDraftsElement/);
+  assert.doesNotMatch(app, /has-listing-draft/);
   assert.match(listingView, /export function renderCreationListingDrafts\(\{ refs, state, set \} = \{\}\) \{/);
   assert.match(listingView, /async function generate\(setId = ""\) \{/);
   assert.match(listingView, /const requestedSetId = cleanCreationListingText\(setId\);/);
@@ -2284,13 +2350,37 @@ test("creation mode exposes listing agent controls and record listing drafts", a
   assert.match(listingView, /function exportListings\(\) \{/);
   assert.match(listingView, /async function copy\(\) \{/);
   assert.match(listingView, /export function buildCreationListingDraftText\(draft, index = 0\) \{/);
+  assert.match(listingView, /export function buildCreationListingFieldCopyText\(value, \{ list = false \} = \{\}\) \{/);
+  assert.match(listingView, /export function buildCreationListingFieldRows\(value, localizedValue, \{ list = false \} = \{\}\) \{/);
   assert.match(listingView, /title[\s\S]*sellingPoints[\s\S]*painPoints[\s\S]*fiveBullets[\s\S]*description[\s\S]*backendSearchTerms[\s\S]*keywordBuckets/);
   assert.match(listingView, /evidenceMode[\s\S]*status[\s\S]*warnings[\s\S]*missingInfo/);
+  assert.match(listingView, /contentFrame\.appendChild\(createCreationListingField\("标题", draft\.title, \{ localizedValue: draft\.zhDisplay\?\.title \}\)\);/);
+  assert.match(listingView, /createCreationListingField\("卖点", draft\.sellingPoints, \{ list: true, localizedValue: draft\.zhDisplay\?\.sellingPoints \}\)/);
+  assert.match(listingView, /copyButton\.className = "creation-listing-field-copy";/);
+  assert.match(listingView, /const copySource = copyValue \?\? value;/);
+  assert.match(listingView, /copyButton\.dataset\.creationListingCopyText = buildCreationListingFieldCopyText\(copySource, \{ list: copyList \}\);/);
+  assert.match(listingView, /const CREATION_LISTING_BUCKET_COPY_LABELS = \{/);
+  assert.match(listingView, /copyValue: buildCreationListingBucketCopyLines\(draft\.keywordBuckets\),/);
+  assert.match(listingView, /localized\.className = "creation-listing-localized";/);
+  assert.match(listingView, /creationRecordListingDrafts\?\.addEventListener\("click",[\s\S]*closest\?\.\("\[data-creation-listing-copy-text\]"\)[\s\S]*copyCreationListingFieldButton/);
   assert.match(listingView, /setId: selectedSet\.setId,[\s\S]*productName: selectedSet\.productName,[\s\S]*listingDrafts: drafts/);
 
   assert.match(styles, /\.creation-listing-drafts\s*\{/);
   assert.match(styles, /\.creation-listing-card\s*\{/);
   assert.match(styles, /\.creation-listing-card[\s\S]*overflow-wrap:\s*anywhere;/);
+  assert.match(styles, /\.creation-listing-content-frame\s*\{/);
+  assert.match(readCssRule(styles, ".creation-listing-content-frame"), /border:\s*1px solid/);
+  assert.match(readCssRule(styles, ".creation-listing-field"), /border:\s*1px solid/);
+  assert.match(styles, /\.creation-listing-field-copy\s*\{/);
+  assert.match(styles, /\.creation-listing-field-copy:hover\s*\{/);
+  assert.match(styles, /\.creation-listing-localized\s*\{/);
+  assert.match(styles, /\.creation-listing-localized::before\s*\{/);
+  assert.match(styles, /\.creation-record-results\s*\{/);
+  assert.match(readCssRule(styles, ".creation-record-results"), /display:\s*block;/);
+  assert.doesNotMatch(readCssRule(styles, ".creation-record-results"), /display:\s*grid;/);
+  assert.match(styles, /\.creation-record-result-grid\s*\{[\s\S]*min-height:\s*max-content;[\s\S]*overflow:\s*visible;/);
+  assert.match(styles, /\.creation-record-result-grid \+ \.creation-listing-panel:not\(\.hidden\)\s*\{[\s\S]*margin-top:\s*12px;/);
+  assert.doesNotMatch(styles, /creation-card-listing-draft/);
 });
 
 test("creation listing agent can run automatically after full creation generation completes", async () => {

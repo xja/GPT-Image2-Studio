@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { handleApiRequest, handleGenerationQueue } from "../cloudflare-pages-worker.mjs";
+import { MAX_CREATION_REFERENCE_IMAGES } from "../lib/studio-constants.mjs";
 
 function makeSseResponse(base64 = "ZmluYWw=") {
   return new Response(
@@ -244,7 +245,7 @@ test("Cloudflare creation listing route uses env API settings outside mock mode"
   assert.equal(seenRequests[0].auth, "Bearer env-key");
   assert.equal(seenRequests[0].body.model, "gpt-env");
   assert.equal(seenRequests[0].body.reasoning.effort, "low");
-  assert.equal(body.listingDrafts[0].skuSubjectId, "blue");
+  assert.equal(body.listingDrafts[0].skuSubjectId, "");
   assert.doesNotMatch(JSON.stringify(body), /env-key/);
 });
 
@@ -342,6 +343,147 @@ test("Cloudflare creation filenames use Chinese image type names", async () => {
   assert.equal(imageBucket.objects.size, 2);
 });
 
+test("Cloudflare creation plan route returns the shared preview plan", async () => {
+  const formData = new FormData();
+  formData.set("productName", "Jointed fishing lure");
+  formData.set("productDescription", "Segmented lifelike lure for bass fishing");
+  formData.set("sellingPoints", "realistic swim action");
+  formData.set("targetLanguage", "en");
+  formData.set("imageCount", "4");
+  formData.set("scenario", "standard");
+  formData.set("industryTemplate", "general");
+  formData.set("selectedRoles", JSON.stringify(["hero", "scene"]));
+  formData.set("visualLanguage", "lifestyle-editorial");
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/creation/plan", {
+    method: "POST",
+    body: formData,
+  }));
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.plan.productName, "Jointed fishing lure");
+  assert.equal(payload.plan.visualLanguage, "lifestyle-editorial");
+  assert.deepEqual(payload.plan.selectedRoles, ["hero", "scene"]);
+});
+
+test("Cloudflare creation reference analysis route uses browser API settings", async () => {
+  const seenRequests = [];
+  const formData = new FormData();
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.set("reasoningEffort", "high");
+  formData.append("referenceImages", new File(["lure"], "lure.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(
+    new Request("https://studio.example/api/creation/reference/analyze", {
+      method: "POST",
+      body: formData,
+    }),
+    {
+      async fetchImpl(url, init) {
+        seenRequests.push({
+          url,
+          auth: init.headers.Authorization,
+          body: JSON.parse(init.body),
+        });
+        return new Response(
+          [
+            "event: response.output_text.done",
+            `data: {"type":"response.output_text.done","text":${JSON.stringify(
+              JSON.stringify({
+                summary: "Fishing lure reference",
+                category_hint: "Fishing Lures",
+                category_path: "Sports > Fishing > Fishing Lures",
+                reference_roles: [
+                  {
+                    index: 1,
+                    filename: "lure.png",
+                    role: "product",
+                    note: "Use this image to preserve the lure body and finish.",
+                  },
+                ],
+                sku_subjects: [],
+                risks: [],
+              }),
+            )}}`,
+            "",
+            "",
+            "data: [DONE]",
+            "",
+            "",
+          ].join("\n"),
+          {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          },
+        );
+      },
+    },
+  );
+  const payload = await response.json();
+  const inputImages = seenRequests[0]?.body.input[0].content.filter((item) => item.type === "input_image") || [];
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(seenRequests[0].url, "https://example.test/v1/responses");
+  assert.equal(seenRequests[0].auth, "Bearer test-browser-key");
+  assert.equal(seenRequests[0].body.text.format.name, "creation_reference_analysis_json");
+  assert.equal(inputImages.length, 1);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.analysis.reference_roles[0].role, "product");
+  assert.doesNotMatch(JSON.stringify(payload), /test-browser-key/);
+});
+
+test("Cloudflare creation reference analysis route rejects missing reference images with readable Chinese", async () => {
+  const response = await handleApiRequest(
+    new Request("https://studio.example/api/creation/reference/analyze", {
+      method: "POST",
+      body: new FormData(),
+    }),
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.equal(payload.message, "请先上传套图参考图。");
+});
+
+test("Cloudflare creation reference analysis route rejects too many reference images with readable Chinese", async () => {
+  const formData = new FormData();
+  for (let index = 0; index < MAX_CREATION_REFERENCE_IMAGES + 1; index += 1) {
+    formData.append("referenceImages", new File(["lure"], `lure-${index + 1}.png`, { type: "image/png" }));
+  }
+
+  const response = await handleApiRequest(
+    new Request("https://studio.example/api/creation/reference/analyze", {
+      method: "POST",
+      body: formData,
+    }),
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.equal(payload.message, `参考图最多支持 ${MAX_CREATION_REFERENCE_IMAGES} 张。`);
+});
+
+test("Cloudflare creation reference analysis route rejects non-image reference files with readable Chinese", async () => {
+  const formData = new FormData();
+  formData.append("referenceImages", new File(["not an image"], "notes.txt", { type: "text/plain" }));
+
+  const response = await handleApiRequest(
+    new Request("https://studio.example/api/creation/reference/analyze", {
+      method: "POST",
+      body: formData,
+    }),
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.equal(payload.message, "仅支持图片参考文件。");
+});
+
 test("Cloudflare portrait generation uses browser settings, split references and three digit filenames", async () => {
   const seenRequests = [];
   const imageBucket = makeImageBucket();
@@ -364,6 +506,7 @@ test("Cloudflare portrait generation uses browser settings, split references and
   formData.set("apiKey", "test-browser-key");
   formData.set("responsesModel", "gpt-5.5");
   formData.append("portraitReferenceImages", new File(["person"], "person.png", { type: "image/png" }));
+  formData.append("portraitActionReferenceImages", new File(["pose"], "pose.png", { type: "image/png" }));
   formData.append("portraitAccessoryReferenceImages", new File(["jacket"], "jacket.png", { type: "image/png" }));
 
   const response = await handleApiRequest(new Request("https://studio.example/api/portrait/generate", {
@@ -392,14 +535,16 @@ test("Cloudflare portrait generation uses browser settings, split references and
   assert.equal(seenRequests.length, 2);
   assert.equal(seenRequests[0].url, "https://example.test/v1/responses");
   assert.equal(seenRequests[0].auth, "Bearer test-browser-key");
-  assert.equal(inputImages.length, 2);
+  assert.equal(inputImages.length, 3);
   assert.match(requestText, /Portrait person reference 1 of 1/);
+  assert.match(requestText, /Portrait action and pose reference 1 of 1/);
+  assert.match(requestText, /pose, gesture, body movement, limb placement, and action rhythm/);
   assert.match(requestText, /Portrait clothing, prop, and accessory reference 1 of 1/);
   assert.match(requestText, /do not treat it as another person identity/);
   assert.match(filenames[0], /^001-long-shot-cloudflare-/);
   assert.match(filenames[1], /^002-full-body-cloudflare-/);
   assert.equal(complete.payload.set.subjectSummary, "adult subject in a navy blazer");
-  assert.deepEqual(complete.payload.set.referenceImageNames, ["person.png", "jacket.png"]);
+  assert.deepEqual(complete.payload.set.referenceImageNames, ["person.png", "pose.png", "jacket.png"]);
   assert.equal(imageBucket.objects.size, 2);
   assert.doesNotMatch(text, /test-browser-key/);
 });
@@ -550,6 +695,77 @@ test("Cloudflare creation generation labels reference count order roles and excl
   assert.match(inputText, /Role: visual style reference\./);
   assert.match(inputText, /Note: silver black finish\./);
   assert.doesNotMatch(inputText, /Uploaded reference files:[^\n]*brand-mark\.png/);
+});
+
+test("Cloudflare creation style references are style-only generation inputs", async () => {
+  const seenRequests = [];
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("productName", "Jointed fishing lure");
+  formData.set("productDescription", "Segmented lifelike lure");
+  formData.set("sellingPoints", "realistic swim action");
+  formData.set("targetLanguage", "en");
+  formData.set("imageCount", "4");
+  formData.set("scenario", "standard");
+  formData.set("visualLanguage", "reference-style");
+  formData.set("industryTemplate", "general");
+  formData.set("selectedRoles", JSON.stringify(["hero"]));
+  formData.set(
+    "referenceImageRoles",
+    JSON.stringify([
+      {
+        filename: "product.png",
+        role: "product",
+        note: "main product body",
+      },
+    ]),
+  );
+  formData.set("ratio", "1:1");
+  formData.set("size", "1024x1024");
+  formData.set("format", "png");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("referenceImages", new File(["product"], "product.png", { type: "image/png" }));
+  formData.append("styleReferenceImages", new File(["warm"], "warm-lighting.png", { type: "image/png" }));
+  formData.append("styleReferenceImages", new File(["paper"], "paper-texture.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/creation/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+        body: JSON.parse(init.body),
+      });
+      return makeSseResponse();
+    },
+  });
+
+  const text = await response.text();
+  const complete = parseSseEvents(text).find((event) => event.eventName === "complete");
+  const content = seenRequests[0]?.body.input[0].content || [];
+  const inputImages = content.filter((item) => item.type === "input_image");
+  const inputText = content
+    .filter((item) => item.type === "input_text")
+    .map((item) => item.text)
+    .join("\n");
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(complete?.payload?.set?.visualLanguage, "reference-style");
+  assert.equal(complete?.payload?.set?.visualLanguageLabel, "参考模式");
+  assert.deepEqual(complete?.payload?.set?.referenceImageNames, ["product.png"]);
+  assert.equal(inputImages.length, 3);
+  assert.match(inputText, /Creation reference image 1 of 1: product\.png\./);
+  assert.match(inputText, /Creation style reference image 1 of 2: warm-lighting\.png\./);
+  assert.match(inputText, /Creation style reference image 2 of 2: paper-texture\.png\./);
+  assert.match(inputText, /Use this image only for style, lighting, color grading/);
+  assert.match(inputText, /Do not copy the style reference subject/);
+  assert.doesNotMatch(inputText, /Uploaded reference files:[^\n]*warm-lighting\.png/);
 });
 
 test("Cloudflare creation SKU bundle generation only sends the selected SKU subject reference", async () => {

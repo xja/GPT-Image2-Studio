@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 
+import { PUBLIC_LIB_SYNC_TARGETS } from "../scripts/sync-public-lib.mjs";
+
 const syncedModules = [
   "api-contract.mjs",
   "generation-stream-protocol.mjs",
@@ -10,8 +12,13 @@ const syncedModules = [
   "gallery-organizer.mjs",
   "generation-size-options.mjs",
   "creation-category-templates.mjs",
+  "creation-listing-view.mjs",
   "creation-sku-subjects.mjs",
 ];
+
+function getPublicAppTopLevelLibImports(source) {
+  return [...source.matchAll(/from\s+["']\/lib\/([^"'?/]+\.mjs)(?:\?[^"']*)?["']/g)].map((match) => match[1]);
+}
 
 async function sha256(path) {
   const bytes = await readFile(new URL(path, import.meta.url));
@@ -26,6 +33,18 @@ test("public browser modules are synchronized from lib sources", async () => {
       await sha256(`../public/lib/${filename}`),
       await sha256(`../lib/${filename}`),
       `${filename} must be synced from lib/ to public/lib/`,
+    );
+  }
+});
+
+test("public app top-level browser imports are covered by the sync target list", async () => {
+  const appSource = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
+  const importedModules = getPublicAppTopLevelLibImports(appSource);
+
+  for (const filename of importedModules) {
+    assert.ok(
+      PUBLIC_LIB_SYNC_TARGETS.includes(filename),
+      `${filename} is imported by public/app.js and must be checked by sync-public-lib`,
     );
   }
 });

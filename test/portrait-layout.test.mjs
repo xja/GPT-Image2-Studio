@@ -142,12 +142,17 @@ test("portrait reference uploads split person and styling accessory limits", asy
 
   assert.match(html, /id="portraitReferenceCount">0 \/ 3/);
   assert.match(html, /id="portraitAccessoryReferenceCount">0 \/ 9/);
+  assert.match(html, /id="portraitActionReferenceCount">0 \/ 3/);
+  assert.match(html, /id="portraitActionReferenceInput" name="portraitActionReferenceImages"/);
   assert.match(html, /id="portraitAccessoryReferenceInput" name="portraitAccessoryReferenceImages"/);
   assert.match(html, /服装道具配饰参考图/);
   assert.doesNotMatch(html, /服装参考图/);
 
   assert.match(app, /maxPortraitPersonReferenceImages:\s*3/);
+  assert.match(app, /maxPortraitActionReferenceImages:\s*3/);
   assert.match(app, /maxPortraitAccessoryReferenceImages:\s*9/);
+  assert.match(app, /portraitActionReferenceInput:\s*document\.querySelector\("#portraitActionReferenceInput"\)/);
+  assert.match(app, /formData\.append\("portraitActionReferenceImages", item\.file\)/);
   assert.match(app, /portraitAccessoryReferenceInput:\s*document\.querySelector\("#portraitAccessoryReferenceInput"\)/);
   assert.match(app, /formData\.append\("portraitAccessoryReferenceImages", item\.file\)/);
 });

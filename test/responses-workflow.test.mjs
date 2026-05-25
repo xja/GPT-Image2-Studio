@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  DEFAULT_TRANSIENT_HTTP_RETRY_DELAY_MS,
   buildResponsesInput,
   consumeResponsesSse,
   createResponsesRequestBody,
@@ -661,6 +662,73 @@ test("requestImageGeneration retries transient upstream HTTP errors before surfa
       "上游服务短暂异常（HTTP 524），正在重试 2/2",
     ],
   );
+});
+
+test("requestImageGeneration retries upstream failed events with error codes", async () => {
+  const requests = [];
+  const events = [];
+
+  const result = await requestImageGeneration({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    prompt: "Create a small red icon.",
+    size: "1024x1024",
+    quality: "high",
+    responsesModel: "gpt-5.4",
+    transientHttpRetryDelayMs: 0,
+    async fetchImpl(_url, init) {
+      const body = JSON.parse(init.body);
+      requests.push({ stream: body.stream, size: body.tools[0].size });
+
+      if (requests.length < 3) {
+        return new Response(
+          [
+            "event: response.failed",
+            'data: {"type":"response.failed","response":{"error":{"code":"rate_limit_exceeded","message":"Too many image requests"}}}',
+            "",
+            "data: [DONE]",
+            "",
+          ].join("\n"),
+          {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          },
+        );
+      }
+
+      return new Response(
+        [
+          "event: response.output_item.done",
+          'data: {"item":{"type":"image_generation_call","result":"cmV0cmllZC1hZnRlci1mYWlsZWQ="}}',
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"),
+        {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        },
+      );
+    },
+    onEvent(event) {
+      events.push(event);
+    },
+  });
+
+  assert.deepEqual(requests, [
+    { stream: true, size: "1024x1024" },
+    { stream: true, size: "1024x1024" },
+    { stream: true, size: "1024x1024" },
+  ]);
+  assert.equal(result.finalImageBase64, "cmV0cmllZC1hZnRlci1mYWlsZWQ=");
+  assert.equal(
+    events.filter((event) => event.type === "status" && event.stage === "retrying_upstream").length,
+    2,
+  );
+});
+
+test("requestImageGeneration default retry delay is five seconds", () => {
+  assert.equal(DEFAULT_TRANSIENT_HTTP_RETRY_DELAY_MS, 5000);
 });
 
 test("requestImageGeneration retries invalid custom image sizes with a compatible size", async () => {

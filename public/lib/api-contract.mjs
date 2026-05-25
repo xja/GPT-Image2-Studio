@@ -59,6 +59,18 @@ export const API_RUNTIME_CAPABILITIES = Object.freeze([
   },
   {
     method: "POST",
+    path: "/api/creation/reference/analyze",
+    local: API_RUNTIME_STATUS.SUPPORTED,
+    cloudflare: API_RUNTIME_STATUS.SUPPORTED,
+  },
+  {
+    method: "POST",
+    path: "/api/creation/plan",
+    local: API_RUNTIME_STATUS.SUPPORTED,
+    cloudflare: API_RUNTIME_STATUS.SUPPORTED,
+  },
+  {
+    method: "POST",
     path: "/api/portrait/reference/analyze",
     local: API_RUNTIME_STATUS.SUPPORTED,
     cloudflare: API_RUNTIME_STATUS.SUPPORTED,

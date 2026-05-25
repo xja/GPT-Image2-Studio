@@ -47,6 +47,18 @@ function visibleDraftText(draft) {
   ].join("\n");
 }
 
+function visibleChineseDisplayText(draft) {
+  return [
+    draft.zhDisplay?.title,
+    ...(draft.zhDisplay?.sellingPoints || []),
+    ...(draft.zhDisplay?.painPoints || []),
+    ...(draft.zhDisplay?.fiveBullets || []),
+    draft.zhDisplay?.description,
+    draft.zhDisplay?.backendSearchTerms,
+    ...Object.values(draft.zhDisplay?.keywordBuckets || {}).flat(),
+  ].join("\n");
+}
+
 const standardSource = {
   setId: "set-1",
   productName: "Fishing Lure",
@@ -69,6 +81,43 @@ function collectSchemaKeys(value, keys = []) {
 
 test("strict listing schema leaves character limits to prompt and validation", () => {
   assert.equal(collectSchemaKeys(CREATION_LISTING_JSON_SCHEMA).includes("maxLength"), false);
+});
+
+test("strict listing schema marks every top-level property as required", () => {
+  assert.deepEqual(
+    [...CREATION_LISTING_JSON_SCHEMA.required].sort(),
+    Object.keys(CREATION_LISTING_JSON_SCHEMA.properties).sort(),
+  );
+});
+
+test("listing agent prompt uses dedicated SEO five-point constraints", async () => {
+  const calls = [];
+  const fetchImpl = async (_url, init) => {
+    calls.push({ body: JSON.parse(init.body) });
+    return new Response(JSON.stringify({ output_text: JSON.stringify(makeValidDraft()) }), { status: 200 });
+  };
+
+  await requestCreationListingDraft({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    responsesModel: "gpt-5.4",
+    source: {
+      ...standardSource,
+      productDescription: "Blue lure with metric and imperial size notes.",
+      dimensionSpecs: "3.5 in / 9 cm",
+      sellingPoints: ["Reflective finish", "Compact shape"],
+    },
+    fetchImpl,
+  });
+
+  const prompt = calls[0].body.input;
+  assert.match(prompt, /Listing SEO Agent/);
+  assert.match(prompt, /Five-point listing quality constraints/);
+  assert.match(prompt, /high-search Amazon SEO/);
+  assert.match(prompt, /metric and imperial units/);
+  assert.match(prompt, /feature \+ buyer outcome/);
+  assert.match(prompt, /pain point \+ solution/);
+  assert.match(prompt, /exactly five bullets/);
 });
 
 test("listing agent sends a strict JSON schema request with prompt guardrails", async () => {
@@ -98,11 +147,56 @@ test("listing agent sends a strict JSON schema request with prompt guardrails", 
   assert.equal(calls[0].body.text.format.name, "creation_listing_draft_json");
   assert.equal(calls[0].body.text.format.strict, true);
   assert.deepEqual(calls[0].body.text.format.schema.required, CREATION_LISTING_JSON_SCHEMA.required);
+  assert.ok(calls[0].body.text.format.schema.required.includes("zhDisplay"));
   assert.match(calls[0].body.input, /Amazon US English listing writer/);
   assert.match(calls[0].body.input, /Every field and every bullet must be 500 characters or fewer/);
   assert.match(calls[0].body.input, /Title rule: start with 2 Pack/);
   assert.match(calls[0].body.input, /place it immediately after quantity/);
+  assert.match(calls[0].body.input, /Public listing fields must be English only/);
+  assert.match(calls[0].body.input, /zhDisplay/);
+  assert.ok(calls[0].body.text.format.schema.properties.zhDisplay);
+  assert.match(calls[0].body.input, /Do not use the phrase "Listing Draft"/);
+  assert.match(calls[0].body.input, /Rufus-friendly/);
   assert.match(calls[0].body.input, /Do not invent material, warranty, certification, compatibility, medical, safety, or performance claims/);
+});
+
+test("listing agent accepts UI-only Chinese display text alongside English public copy", async () => {
+  const fetchImpl = async () => new Response(JSON.stringify({
+    output_text: JSON.stringify(makeValidDraft({
+      zhDisplay: {
+        title: "2 件 3.5 英寸蓝色路亚鱼饵",
+        sellingPoints: ["亮蓝色外观便于区分颜色变体。"],
+        painPoints: ["减少挑选紧凑型鱼饵颜色时的判断成本。"],
+        fiveBullets: [
+          "2 件 3.5 英寸规格适合常见淡水钓具收纳。",
+          "蓝色鱼饵外观便于识别 SKU。",
+          "紧凑设计适用于鲈鱼钓法展示。",
+          "商品细节基于已提供信息和 SKU 元数据。",
+          "关键词导向文案保持简洁。",
+        ],
+        description: "蓝色路亚鱼饵的美国站 Listing 中文对照。",
+        backendSearchTerms: "蓝色 路亚 鱼饵 鲈鱼",
+        keywordBuckets: {
+          exact: ["蓝色路亚鱼饵"],
+          longTail: ["3.5 英寸鲈鱼鱼饵"],
+          traffic: ["淡水鱼饵"],
+          descriptive: ["紧凑蓝色鱼饵"],
+        },
+      },
+    })),
+  }), { status: 200 });
+
+  const draft = await requestCreationListingDraft({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    responsesModel: "gpt-5.4",
+    source: standardSource,
+    fetchImpl,
+  });
+
+  assert.doesNotMatch(visibleDraftText(draft), /[\u3400-\u9fff]/u);
+  assert.match(visibleChineseDisplayText(draft), /蓝色路亚鱼饵/u);
+  assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 in" }).ok, true);
 });
 
 test("listing agent extracts Responses output content text", async () => {
@@ -149,6 +243,46 @@ test("listing agent retries once after validation failure", async () => {
   assert.equal(callCount, 2);
   assert.match(prompts[1], /Fix these validation errors: title must start with quantity/);
   assert.match(draft.title, /^2 Pack 3\.5 in/);
+});
+
+test("listing agent retries when public listing fields contain Chinese", async () => {
+  const prompts = [];
+  let callCount = 0;
+  const fetchImpl = async (_url, init) => {
+    callCount += 1;
+    prompts.push(JSON.parse(init.body).input);
+    const draft = callCount === 1
+      ? makeValidDraft({
+        title: "2 Pack 3.5 in 路亚硬饵 Product Listing Draft",
+        fiveBullets: [
+          "2 Pack 3.5 in format keeps quantity and size visible.",
+          "路亚硬饵 draft uses saved product and SKU information.",
+          "Copy stays conservative when generated images are unavailable.",
+          "Keyword structure supports US marketplace review.",
+          "Each bullet is kept under the configured character limit.",
+        ],
+        backendSearchTerms: "路亚硬饵 product listing",
+      })
+      : makeValidDraft({
+        title: "2 Pack 3.5 in Electric Fishing Lure for Bass",
+        backendSearchTerms: "electric fishing lure bass bait",
+      });
+    return new Response(JSON.stringify({ output_text: JSON.stringify(draft) }), { status: 200 });
+  };
+
+  const draft = await requestCreationListingDraft({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    responsesModel: "gpt-5.4",
+    reasoningEffort: "medium",
+    source: standardSource,
+    fetchImpl,
+  });
+
+  assert.equal(callCount, 2);
+  assert.match(prompts[1], /public listing fields must be English/i);
+  assert.equal(draft.title, "2 Pack 3.5 in Electric Fishing Lure for Bass");
+  assert.doesNotMatch(visibleDraftText(draft), /[\u3400-\u9fff]/u);
 });
 
 test("listing agent returns failed conservative mock after two invalid responses", async () => {
@@ -215,7 +349,53 @@ test("listing agent accepts compound dimensions after quantity", async () => {
   assert.match(draft.title, /^2 Pack 3\.5 x 2 in/);
 });
 
-test("generateCreationListingDrafts creates one draft per source and mock mode skips network", async () => {
+test("listing agent retries when a metric plus imperial source title omits one unit", async () => {
+  const prompts = [];
+  let callCount = 0;
+  const fetchImpl = async (_url, init) => {
+    callCount += 1;
+    prompts.push(JSON.parse(init.body).input);
+    const draft = callCount === 1
+      ? makeValidDraft({
+        title: "2 Pack 3.5 in Blue Fishing Lures for Bass",
+        fiveBullets: [
+          "2 Pack 3.5 in size fits common freshwater tackle storage.",
+          "Blue lure profile supports clear SKU identification.",
+          "Compact design works for bass fishing presentations.",
+          "Product details are based on provided inputs and SKU metadata.",
+          "Keyword-focused copy keeps listing language concise.",
+        ],
+      })
+      : makeValidDraft({
+        title: "2 Pack 3.5 in / 9 cm Blue Fishing Lures for Bass",
+        fiveBullets: [
+          "2 Pack 3.5 in / 9 cm size fits common freshwater tackle storage.",
+          "Blue lure profile supports clear SKU identification.",
+          "Compact design works for bass fishing presentations.",
+          "Product details are based on provided inputs and SKU metadata.",
+          "Keyword-focused copy keeps listing language concise.",
+        ],
+      });
+    return new Response(JSON.stringify({ output_text: JSON.stringify(draft) }), { status: 200 });
+  };
+
+  const draft = await requestCreationListingDraft({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    responsesModel: "gpt-5.4",
+    source: {
+      ...standardSource,
+      dimensionSpecs: "3.5 in (9 cm)",
+    },
+    fetchImpl,
+  });
+
+  assert.equal(callCount, 2);
+  assert.match(prompts[1], /title must include all expected size units/);
+  assert.match(draft.title, /^2 Pack 3\.5 in \/ 9 cm/);
+});
+
+test("generateCreationListingDrafts creates one parent draft for all SKU variants", async () => {
   const drafts = await generateCreationListingDrafts({
     set: {
       setId: "set-1",
@@ -233,9 +413,12 @@ test("generateCreationListingDrafts creates one draft per source and mock mode s
     mock: true,
   });
 
-  assert.equal(drafts.length, 2);
+  assert.equal(drafts.length, 1);
   assert.equal(drafts[0].status, "completed");
   assert.match(drafts[0].title, /^2 Pack 3\.5 in/);
+  assert.equal(drafts[0].skuSubjectId, "");
+  assert.match(drafts[0].fiveBullets.join("\n"), /2 selectable SKU variants/);
+  assert.match(visibleChineseDisplayText(drafts[0]), /SKU 变体/u);
   assert.equal(validateCreationListingDraft(drafts[0], { expectedQuantity: "2 Pack", expectedSize: "3.5 in" }).ok, true);
 });
 
@@ -254,6 +437,42 @@ test("mock listing drafts avoid unsupported claims and competitor brand terms", 
   assert.equal(validation.ok, true);
   assert.doesNotMatch(visibleDraftText(draft), /\b(?:amazon|walmart|temu|ebay|etsy|target)\b/i);
   assert.doesNotMatch(visibleDraftText(draft), /\b(?:FDA Certified|medical grade|guaranteed|best|warranty)\b/i);
+});
+
+test("mock and failed fallback drafts use English Amazon-style titles for Chinese source inputs", async () => {
+  const source = {
+    setId: "set-cn",
+    productName: "路亚硬饵",
+    skuTitle: "银蓝鳞纹橙红尾电动仿生鱼饵",
+    skuBundleCount: 1,
+    dimensionSpecs: "13cm/42g",
+    industryTemplatePath: "Sports & Outdoors > Fishing > Lures",
+    evidenceMode: "image-backed",
+    skuSubjects: [
+      { id: "silver-blue", title: "银蓝鳞纹橙红尾电动仿生鱼饵", bundleCount: 1 },
+      { id: "black-gold", title: "黑金鳞纹电动仿生鱼饵", bundleCount: 1 },
+    ],
+  };
+  const fetchImpl = async () => new Response(JSON.stringify({
+    output_text: JSON.stringify(makeValidDraft({ title: "Bad title without quantity" })),
+  }), { status: 200 });
+
+  const mockDraft = makeMockCreationListingDraft(source);
+  const failedDraft = await requestCreationListingDraft({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    responsesModel: "gpt-5.4",
+    source,
+    fetchImpl,
+  });
+
+  for (const draft of [mockDraft, failedDraft]) {
+    assert.match(draft.title, /^1 Pack 13cm\/42g Electric Fishing Lure\b/);
+    assert.equal(draft.title.includes("Listing Draft"), false);
+    assert.equal(draft.title.length <= 200, true);
+    assert.doesNotMatch(visibleDraftText(draft), /[\u3400-\u9fff]/u);
+    assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "1 Pack", expectedSize: "13cm/42g" }).ok, true);
+  }
 });
 
 test("mock and fallback drafts keep long SKU fields under 500 characters", async () => {

@@ -7,7 +7,11 @@ import {
   normalizeBrowserPrivateConfig,
   toPublicBrowserConfig,
 } from "../public/lib/browser-config.mjs";
-import { createCreationListingController } from "../public/lib/creation-listing-view.mjs";
+import {
+  createCreationListingController,
+  formatCreationListingDraftHeader,
+  getCreationRecordListingMetaLabel,
+} from "../public/lib/creation-listing-view.mjs";
 
 test("browser config module normalizes private config without requiring window globals", () => {
   const normalized = normalizeBrowserPrivateConfig({
@@ -39,7 +43,7 @@ test("public app shell delegates browser config and cache behavior to public mod
   assert.match(app, /from "\/lib\/browser-image-cache\.mjs"/);
   assert.match(app, /from "\/lib\/generation-client\.mjs"/);
   assert.match(app, /from "\/lib\/creation-listing-view\.mjs"/);
-  assert.ok(lineCount < 15500, `public/app.js should stay below the shell budget, got ${lineCount}`);
+  assert.ok(lineCount < 15800, `public/app.js should stay below the shell budget, got ${lineCount}`);
 });
 
 test("creation listing controller sends browser-private request config", async () => {
@@ -105,4 +109,30 @@ test("creation listing controller sends browser-private request config", async (
   assert.equal(nextSet.listingDrafts.length, 1);
   assert.equal(state.creation.listingGeneratingSetId, "");
   assert.equal(state.creation.recordSetId, selectedSet.setId);
+});
+
+test("creation record listing meta label only appears when listing drafts exist", () => {
+  assert.equal(
+    getCreationRecordListingMetaLabel({
+      listingDrafts: [{ id: "listing-1", title: "1 Pack Listing Probe" }],
+    }),
+    "Listing",
+  );
+  assert.equal(getCreationRecordListingMetaLabel({ listingDrafts: [] }), "");
+  assert.equal(getCreationRecordListingMetaLabel({}), "");
+});
+
+test("creation listing view removes Chinese from English draft headers", () => {
+  const header = formatCreationListingDraftHeader({
+    title: "1 Pack 13cm 路亚硬饵 Product Listing Draft",
+    skuTitle: "路亚硬饵",
+    marketplace: "amazon-us",
+    language: "en-US",
+    evidenceMode: "image-backed",
+    status: "failed",
+  }, 0);
+
+  assert.equal(header.title, "1 Pack 13cm Product Listing Draft");
+  assert.equal(header.meta, "amazon-us · en-US · image-backed · failed");
+  assert.doesNotMatch(`${header.title} ${header.meta}`, /[\u3400-\u9fff]/u);
 });

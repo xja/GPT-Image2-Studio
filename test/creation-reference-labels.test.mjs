@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildCreationItemReferenceImages,
   buildCreationReferenceImageLabels,
+  buildCreationStyleReferenceImageLabels,
 } from "../lib/creation-reference-labels.mjs";
 
 test("creation reference labels state uploaded count, file list, image order, and roles", () => {
@@ -42,6 +43,23 @@ test("creation reference labels state uploaded count, file list, image order, an
 
 test("creation reference labels are empty when no images are attached", () => {
   assert.deepEqual(buildCreationReferenceImageLabels([], []), []);
+});
+
+test("creation style reference labels mark uploaded images as style-only", () => {
+  const labels = buildCreationStyleReferenceImageLabels([
+    { filename: "warm-lighting.png" },
+    { filename: "paper-texture.png" },
+  ]);
+
+  assert.equal(labels.length, 2);
+  assert.match(labels[0], /Creation style reference image 1 of 2: warm-lighting\.png\./);
+  assert.match(labels[0], /Style reference files: 1\. warm-lighting\.png; 2\. paper-texture\.png\./);
+  assert.match(labels[0], /Use this image only for style, lighting, color grading, background mood, material treatment, composition language, and overall atmosphere\./);
+  assert.match(labels[0], /Do not copy the style reference subject, product identity, logo, text, packaging, or exact layout\./);
+});
+
+test("creation style reference labels are empty when no style references are attached", () => {
+  assert.deepEqual(buildCreationStyleReferenceImageLabels([]), []);
 });
 
 test("creation SKU item reference images only include the matching subject files", () => {
