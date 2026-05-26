@@ -71,6 +71,25 @@ function makeFakeElement(tagName) {
   return element;
 }
 
+function collectFakeElements(root, predicate) {
+  const matches = [];
+  const visit = (node) => {
+    if (predicate(node)) {
+      matches.push(node);
+    }
+    node.children?.forEach(visit);
+  };
+  visit(root);
+  return matches;
+}
+
+function getFakeTextContent(node) {
+  return [
+    node.textContent || "",
+    ...(node.children || []).map((child) => getFakeTextContent(child)),
+  ].join("");
+}
+
 test("listing field copy text returns only the selected section content", () => {
   assert.equal(buildCreationListingFieldCopyText("  Product title  "), "Product title");
   assert.equal(buildCreationListingFieldCopyText(["First point", "Second point"], { list: true }), "First point\nSecond point");
@@ -157,6 +176,121 @@ test("English listing view strips legacy Chinese from public copy fields", () =>
   assert.equal(buildCreationListingFieldCopyText(draft.title), "1 Pack 13cm Product Listing Draft");
   assert.equal(draft.zhDisplay.title, "路亚硬饵");
   assert.doesNotMatch(buildCreationRecordListingText({ listingDrafts: [draft] }), /路亚|银蓝|黄绿|硬饵/u);
+});
+
+test("rendered listing header title is a direct copy target", () => {
+  const previousDocument = globalThis.document;
+  const root = makeFakeElement("div");
+  globalThis.document = {
+    createElement: makeFakeElement,
+  };
+
+  try {
+    renderCreationListingDrafts({
+      refs: { creationRecordListingDrafts: root },
+      state: {},
+      set: {
+        setId: "set-listing-title-copy",
+        listingDrafts: [{
+          language: "en-US",
+          title: "1 Pack Travel Bottle",
+        }],
+      },
+    });
+  } finally {
+    globalThis.document = previousDocument;
+  }
+
+  const titleCopyTargets = collectFakeElements(root, (node) => (
+    String(node.className || "").split(/\s+/).includes("creation-listing-title-copy")
+  ));
+
+  assert.equal(titleCopyTargets.length, 1);
+  assert.equal(titleCopyTargets[0].tagName, "button");
+  assert.equal(titleCopyTargets[0].type, "button");
+  assert.equal(titleCopyTargets[0].textContent, "1 Pack Travel Bottle");
+  assert.equal(titleCopyTargets[0].dataset.creationListingCopyText, "1 Pack Travel Bottle");
+});
+
+test("rendered listing panel recognizes concurrent generating set ids", () => {
+  const previousDocument = globalThis.document;
+  const root = makeFakeElement("div");
+  const status = makeFakeElement("span");
+  globalThis.document = {
+    createElement: makeFakeElement,
+  };
+
+  try {
+    renderCreationListingDrafts({
+      refs: {
+        creationRecordListingDrafts: root,
+        creationRecordListingStatus: status,
+      },
+      state: {
+        creation: {
+          listingGeneratingSetId: "set-a",
+          listingGeneratingSetIds: ["set-a", "set-b"],
+        },
+      },
+      set: {
+        setId: "set-b",
+        listingDrafts: [],
+      },
+    });
+  } finally {
+    globalThis.document = previousDocument;
+  }
+
+  assert.equal(status.textContent, "生成中");
+  assert.equal(root.children[0].textContent, "正在生成 Listing 草稿...");
+});
+
+test("rendered listing fields show separate English and Chinese character counts", () => {
+  const previousDocument = globalThis.document;
+  const root = makeFakeElement("div");
+  globalThis.document = {
+    createElement: makeFakeElement,
+  };
+
+  try {
+    renderCreationListingDrafts({
+      refs: { creationRecordListingDrafts: root },
+      state: {},
+      set: {
+        setId: "set-listing-counts",
+        listingDrafts: [{
+          language: "en-US",
+          title: "Mini Rod",
+          sellingPoints: ["Casts far"],
+          zhDisplay: {
+            title: "迷你鱼竿",
+            sellingPoints: ["抛投更远"],
+          },
+        }],
+      },
+    });
+  } finally {
+    globalThis.document = previousDocument;
+  }
+
+  const countNodes = collectFakeElements(root, (node) => (
+    String(node.className || "").split(/\s+/).includes("creation-listing-character-counts")
+  ));
+  const countTexts = countNodes.map((node) => getFakeTextContent(node));
+
+  assert.ok(countTexts.includes("英文字符 8中文字符 4"));
+  assert.ok(countTexts.includes("英文字符 9中文字符 4"));
+  assert.ok(countNodes.some((node) => node.children?.[0]?.className === "creation-listing-character-count english"));
+  assert.ok(countNodes.some((node) => node.children?.[1]?.className === "creation-listing-character-count chinese"));
+
+  const [bucketField] = collectFakeElements(root, (node) => (
+    String(node.className || "").split(/\s+/).includes("creation-listing-buckets")
+  ));
+  const [bucketCounts] = collectFakeElements(bucketField, (node) => (
+    String(node.className || "").split(/\s+/).includes("creation-listing-character-counts")
+  ));
+
+  assert.equal(getFakeTextContent(bucketCounts), "英文字符 0中文字符 0");
 });
 
 test("rendered listing field copy data excludes zhDisplay and Chinese labels", () => {

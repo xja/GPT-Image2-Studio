@@ -9,10 +9,14 @@ const serverPath = new URL("../server.mjs", import.meta.url);
 const workerPath = new URL("../cloudflare-pages-worker.mjs", import.meta.url);
 const browserConfigPath = new URL("../lib/browser-config.mjs", import.meta.url);
 const browserImageCachePath = new URL("../lib/browser-image-cache.mjs", import.meta.url);
+const configModelPickerPath = new URL("../lib/config-model-picker.mjs", import.meta.url);
 const creationListingViewPath = new URL("../lib/creation-listing-view.mjs", import.meta.url);
+const creationReferenceAnalysisViewPath = new URL("../lib/creation-reference-analysis-view.mjs", import.meta.url);
+const publicConfigModelPickerPath = new URL("../public/lib/config-model-picker.mjs", import.meta.url);
+const publicCreationListingViewPath = new URL("../public/lib/creation-listing-view.mjs", import.meta.url);
 const generationClientPath = new URL("../lib/generation-client.mjs", import.meta.url);
 const pptAnalysisClientPath = new URL("../lib/ppt-analysis-client.mjs", import.meta.url);
-const assetVersion = "20260524-listing-layout-1";
+const assetVersion = "20260526-portrait-retry-1";
 
 test("static assets use the current cache-busting version", async () => {
   const html = await readFile(indexPath, "utf8");
@@ -33,12 +37,179 @@ function readCssRuleContaining(styles, selector, text) {
   return matches.find((match) => match[1].includes(text))?.[1] || "";
 }
 
+function createTestClassList() {
+  const values = new Set();
+  return {
+    add(...names) {
+      names.filter(Boolean).forEach((name) => values.add(name));
+    },
+    remove(...names) {
+      names.forEach((name) => values.delete(name));
+    },
+    toggle(name, force) {
+      const shouldAdd = force === undefined ? !values.has(name) : Boolean(force);
+      if (shouldAdd) {
+        values.add(name);
+      } else {
+        values.delete(name);
+      }
+      return shouldAdd;
+    },
+    contains(name) {
+      return values.has(name);
+    },
+    toString() {
+      return [...values].join(" ");
+    },
+  };
+}
+
+function testElementMatchesSelector(element, selector) {
+  if (selector === "[data-creation-listing-copy-text]") {
+    return Object.hasOwn(element.dataset, "creationListingCopyText");
+  }
+  if (selector === "[data-model-id]") {
+    return Object.hasOwn(element.dataset, "modelId");
+  }
+  return false;
+}
+
+function createTestElement(tagName = "div", ownerDocument = null) {
+  const listeners = new Map();
+  const element = {
+    tagName: String(tagName).toUpperCase(),
+    ownerDocument,
+    parentElement: null,
+    children: [],
+    dataset: {},
+    attributes: new Map(),
+    classList: createTestClassList(),
+    className: "",
+    disabled: false,
+    hidden: false,
+    textContent: "",
+    type: "",
+    value: "",
+    addEventListener(type, handler) {
+      const handlers = listeners.get(type) || [];
+      handlers.push(handler);
+      listeners.set(type, handlers);
+    },
+    appendChild(child) {
+      child.parentElement = element;
+      element.children.push(child);
+      return child;
+    },
+    append(...nodes) {
+      nodes.forEach((node) => element.appendChild(node));
+    },
+    replaceChildren(...nodes) {
+      element.children.forEach((child) => {
+        child.parentElement = null;
+      });
+      element.children = [];
+      nodes.forEach((node) => element.appendChild(node));
+    },
+    setAttribute(name, value) {
+      element.attributes.set(name, String(value));
+    },
+    getAttribute(name) {
+      return element.attributes.get(name) || "";
+    },
+    contains(node) {
+      for (let current = node; current; current = current.parentElement) {
+        if (current === element) {
+          return true;
+        }
+      }
+      return false;
+    },
+    closest(selector) {
+      for (let current = element; current; current = current.parentElement) {
+        if (testElementMatchesSelector(current, selector)) {
+          return current;
+        }
+      }
+      return null;
+    },
+    dispatchEvent(event) {
+      event.target ||= element;
+      event.currentTarget = element;
+      for (const handler of listeners.get(event.type) || []) {
+        handler(event);
+      }
+      if (event.bubbles && !event.cancelBubble && element.parentElement) {
+        element.parentElement.dispatchEvent(event);
+      }
+      return !event.defaultPrevented;
+    },
+  };
+  let innerHTML = "";
+  Object.defineProperty(element, "innerHTML", {
+    get() {
+      return innerHTML;
+    },
+    set(value) {
+      innerHTML = String(value || "");
+      if (!innerHTML) {
+        element.replaceChildren();
+      }
+    },
+  });
+  return element;
+}
+
+function createTestDocument() {
+  const documentRef = createTestElement("#document");
+  documentRef.createElement = (tagName) => createTestElement(tagName, documentRef);
+  documentRef.ownerDocument = documentRef;
+  return documentRef;
+}
+
+function createModelPickerHarness() {
+  const documentRef = createTestDocument();
+  const refs = {
+    apiKeyInput: createTestElement("input", documentRef),
+    baseUrlInput: createTestElement("input", documentRef),
+    configFeedback: createTestElement("p", documentRef),
+    fetchModelsButton: createTestElement("button", documentRef),
+    modelOptionsList: createTestElement("div", documentRef),
+    modelPickerToggle: createTestElement("button", documentRef),
+    responsesModelInput: createTestElement("input", documentRef),
+    testConnectionButton: createTestElement("button", documentRef),
+  };
+  refs.apiKeyInput.value = "test-key";
+  refs.baseUrlInput.value = "https://api.example.test/v1";
+  refs.responsesModelInput.value = "gpt-5.5";
+  return { documentRef, refs };
+}
+
+class TestFormData {
+  values = new Map();
+
+  set(name, value) {
+    this.values.set(name, value);
+  }
+}
+
+async function waitForAsyncHandlers() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function createListingCopyButton(ownerDocument, label, text) {
+  const button = createTestElement("button", ownerDocument);
+  button.dataset.creationListingCopyLabel = label;
+  button.dataset.creationListingCopyText = text;
+  return button;
+}
+
 test("browser-imported lib modules are copied into public for Vercel static serving", async () => {
   const app = await readFile(appPath, "utf8");
   const imports = [...app.matchAll(/from "\/lib\/([^"?]+)\.mjs(?:\?[^"]*)?"/g)].map((match) => match[1]);
 
   assert.ok(imports.length > 0);
   assert.equal(new Set(imports).size, imports.length);
+  assert.match(app, new RegExp(`from "/lib/ppt-analysis-client\\.mjs\\?v=${assetVersion}"`));
 
   for (const moduleName of imports) {
     const moduleSource = await readFile(new URL(`../public/lib/${moduleName}.mjs`, import.meta.url), "utf8");
@@ -49,6 +220,38 @@ test("browser-imported lib modules are copied into public for Vercel static serv
 
   const sizeOptionsModule = await readFile(new URL("../public/lib/generation-size-options.mjs", import.meta.url), "utf8");
   assert.match(sizeOptionsModule, /export function getGenerationSizeOptions/);
+});
+
+test("creation saved logo library opens as a compact right-side popover", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+  const logoLibrary = await readFile(new URL("../lib/creation-logo-library.mjs", import.meta.url), "utf8");
+
+  const panelRule = readCssRule(styles, ".creation-logo-library-panel");
+  const savedGridRule = readCssRule(styles, ".creation-saved-logo-grid");
+  const savedImageRule = readCssRule(styles, ".creation-saved-logo-select img");
+
+  assert.match(panelRule, /position:\s*fixed;/);
+  assert.match(panelRule, /left:\s*var\(--creation-logo-library-left,\s*auto\);/);
+  assert.match(panelRule, /right:\s*auto;/);
+  assert.match(savedGridRule, /grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(76px,\s*92px\)\);/);
+  assert.match(savedGridRule, /justify-content:\s*start;/);
+  assert.match(savedImageRule, /width:\s*76px;/);
+  assert.match(savedImageRule, /height:\s*76px;/);
+  assert.match(logoLibrary, /function mountCreationLogoLibraryPanel\(\)/);
+  assert.match(logoLibrary, /document\.body\.appendChild\(panel\)/);
+  assert.match(logoLibrary, /function positionCreationLogoLibraryPanel\(\)/);
+  assert.match(logoLibrary, /--creation-logo-library-left/);
+  assert.match(logoLibrary, /--creation-logo-library-top/);
+  assert.match(logoLibrary, /window\.addEventListener\("resize",\s*positionCreationLogoLibraryPanel\)/);
+  assert.doesNotMatch(html, /id="creationLogoFilename"/);
+  assert.doesNotMatch(app, /creationLogoFilename/);
+  assert.match(app, /creationLogoLibrary\.saveFiles\(\[file\],\s*\{\s*applySaved:\s*false\s*\}\)/);
+  assert.doesNotMatch(logoLibrary, /name\.textContent = item\.filename/);
+  assert.match(logoLibrary, /saveFiles\(fileList,\s*\{\s*applySaved = true\s*\} = \{\}\)/);
+  assert.match(logoLibrary, /applyLogoFile\?\.\(\[selectedFile\],\s*\{\s*persist:\s*false\s*\}\)/);
+  assert.match(logoLibrary, /applyLogoFile\?\.\(\[file\],\s*\{\s*persist:\s*false\s*\}\)/);
 });
 
 test("preview image uses contain sizing to fill the available canvas without clipping", async () => {
@@ -164,6 +367,19 @@ test("filmstrip rendering reuses keyed thumbnail nodes instead of clearing the r
   assert.match(app, /refs\.filmstrip\.replaceChildren\(fragment\);/);
   assert.match(app, /if \(image\.getAttribute\("src"\) !== imageUrl\) \{[\s\S]*image\.src = imageUrl;[\s\S]*\}/);
   assert.doesNotMatch(app, /refs\.filmstrip\.innerHTML = "";/);
+});
+
+test("studio keeps the initial preview idle until a job or thumbnail is selected", async () => {
+  const app = await readFile(appPath, "utf8");
+  const ensureStart = app.indexOf("function ensureSelectedPreview()");
+  const ensureEnd = app.indexOf("function setSelectedPreviewKey(", ensureStart);
+  const ensureSelectedPreview = app.slice(ensureStart, ensureEnd);
+
+  assert.ok(ensureStart >= 0 && ensureEnd > ensureStart);
+  assert.match(ensureSelectedPreview, /state\.selectedPreviewKey = makeJobPreviewKey\(latestJob\.id\);/);
+  assert.doesNotMatch(ensureSelectedPreview, /sortGalleryItemsByCreatedAtDesc\(state\.gallery\)/);
+  assert.doesNotMatch(ensureSelectedPreview, /preferredGalleryItem|makeGalleryPreviewKey\(preferredGalleryItem\.filename\)/);
+  assert.match(app, /button\.addEventListener\("click", \(\) => \{\s*setSelectedPreviewKey\(key\);\s*\}\);/);
 });
 
 test("generation activity moves into settings while studio workspace reflows to two columns", async () => {
@@ -730,7 +946,8 @@ test("prompt agent opens from global navigation without adding another view tab"
   const app = await readFile(appPath, "utf8");
 
   assert.match(html, /data-nav-action="prompt-agent"[\s\S]*图片转提示词/);
-  assert.match(html, /<div class="topbar-ghost-actions" aria-hidden="true">[\s\S]*id="openPromptAgentButton"/);
+  assert.match(html, /<div class="topbar-ghost-actions">[\s\S]*id="openPromptAgentButton"/);
+  assert.doesNotMatch(html, /<div class="topbar-ghost-actions"[^>]*aria-hidden="true"/);
   assert.match(styles, /\.topbar-ghost-actions\s*\{[\s\S]*display:\s*none;/);
   assert.match(html, /<aside class="prompt-agent-modal hidden" id="promptAgentModal"/);
   assert.match(html, /id="promptAgentHistoryList"/);
@@ -777,14 +994,18 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.doesNotMatch(settingsMenu, /data-view-tab=/);
   assert.doesNotMatch(html, /<div class="topbar-actions" aria-label="状态与工具">/);
   assert.match(html, /<div class="topbar-api-check" aria-label="API、LOG">[\s\S]*<button class="header-pill status-ready" id="connectionStatus" data-state="idle" type="button" aria-label="待填写API、LOG，打开 API、LOG">[\s\S]*<span id="connectionLabel">待填写API、LOG<\/span>/);
-  assert.match(html, /<div class="topbar-ghost-actions" aria-hidden="true">[\s\S]*id="configStatus"[\s\S]*id="themeToggleButton"[\s\S]*id="openOutputButton"[\s\S]*id="openPromptAgentButton"[\s\S]*id="openConfigButton"/);
+  assert.match(html, /<div class="topbar-ghost-actions">[\s\S]*id="configStatus"[\s\S]*id="themeToggleButton"[\s\S]*id="openOutputButton"[\s\S]*id="openPromptAgentButton"[\s\S]*id="openConfigButton"/);
+  assert.doesNotMatch(html, /topbar-ghost-actions[^>]*aria-hidden/);
   assert.doesNotMatch(html, /nav-switch-panel|nav-switch-list|nav-switch-link|小区 · 界面切换/);
   assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.topbar\s*\{[\s\S]*position:\s*fixed;[\s\S]*top:\s*0;[\s\S]*left:\s*50%;[\s\S]*transform:\s*translate\(-50%,\s*calc\(-100% \+ var\(--topbar-trigger-height,\s*10px\)\)\);/);
   assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.topbar:hover,[\s\S]*\.topbar:focus-within,[\s\S]*\.topbar-reveal \.topbar,[\s\S]*\.topbar:has\(\.nav-item\.is-nav-open\)\s*\{[\s\S]*transform:\s*translate\(-50%,\s*0\);/);
   assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.brand-cluster,[\s\S]*\.topbar-api-check,[\s\S]*\.topbar-ghost-actions,[\s\S]*\.nav-tab-note\s*\{[\s\S]*display:\s*none;/);
   assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.global-nav\s*\{[\s\S]*position:\s*static;[\s\S]*width:\s*auto;[\s\S]*transform:\s*none;/);
   assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.view-tabs\s*\{[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;/);
-  assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.view-tab\s*\{[\s\S]*border:\s*0;[\s\S]*border-radius:\s*0;[\s\S]*background:\s*transparent;/);
+  assert.match(styles, /--nav-tab-bg:\s*rgba\(15,\s*23,\s*42,\s*0\.84\);[\s\S]*--nav-tab-active:\s*#34c759;/);
+  assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.view-tab\s*\{[\s\S]*border:\s*1px solid var\(--nav-tab-border\);[\s\S]*border-radius:\s*8px;[\s\S]*background:\s*var\(--nav-tab-bg\);/);
+  assert.match(styles, /\.view-tab\.active\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--nav-tab-active\)\s*14%,\s*var\(--nav-tab-bg\)\);[\s\S]*color:\s*var\(--nav-tab-active\);/);
+  assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.view-tab\.active::after\s*\{[\s\S]*background:\s*var\(--nav-tab-active\);/);
   assert.match(styles, /--flyout-bg:\s*rgba\(8,\s*13,\s*26,\s*0\.96\);[\s\S]*--flyout-text:\s*var\(--text\);/);
   assert.match(styles, /html\[data-theme="light"\]\s*\{[\s\S]*--flyout-bg:\s*rgba\(251,\s*251,\s*253,\s*0\.96\);[\s\S]*--flyout-text:\s*var\(--text\);/);
   assert.match(styles, /\.nav-flyout\.mega-menu\s*\{[\s\S]*width:\s*min\(680px,\s*calc\(100vw - 32px\)\);[\s\S]*padding:\s*24px;/);
@@ -817,6 +1038,18 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.match(app, /button\.addEventListener\("focus",\s*\(\) => setActiveGlobalNavItem\(item\)\);/);
   assert.match(app, /button\.addEventListener\("click",\s*\(event\) => \{[\s\S]*event\.preventDefault\(\);[\s\S]*setActiveGlobalNavItem\(item\);[\s\S]*\}\);/);
   assert.match(app, /document\.querySelectorAll\("\[data-nav-action\]"\)\.forEach/);
+});
+
+test("interactive workbench controls stay in the accessibility tree", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /<div class="topbar-ghost-actions">[\s\S]*<button class="theme-toggle header-button" id="themeToggleButton"/);
+  assert.doesNotMatch(html, /<div class="topbar-ghost-actions"[^>]*aria-hidden="true"/);
+  assert.match(html, /<div class="gallery-scrollbar" id="galleryScrollbar" data-disabled="true" aria-label="瀑布画廊滚动控制">/);
+  assert.doesNotMatch(html, /<div class="gallery-scrollbar"[^>]*aria-hidden="true"/);
+  assert.match(app, /refs\.galleryScrollbar\.setAttribute\("aria-disabled", String\(metrics\.disabled\)\);/);
+  assert.match(app, /refs\.galleryScrollThumb\.disabled = metrics\.disabled;/);
 });
 
 test("global navigation closes flyouts after links and actions", async () => {
@@ -1186,7 +1419,7 @@ test("reference orchestration analysis is a separate studio mode outside prompt 
   assert.match(referenceApplyBody, /renderReferenceAnalysis\(\);/);
   assert.doesNotMatch(referenceApplyBody, /refs\.promptInput\.value|setActiveView\("studio"\)|refs\.promptInput\.focus/);
   assert.match(app, /refs\.referenceAnalyzeButton\.disabled = state\.referenceAnalysis\.running;/);
-  assert.match(app, /refs\.referenceAnalyzeButton\.textContent = state\.referenceAnalysis\.running \? "分析中\.\.\." : "融图分析";/);
+  assert.match(app, /renderInlineBusyButton\(refs\.referenceAnalyzeButton,[\s\S]*busy:\s*state\.referenceAnalysis\.running/);
   assert.match(app, /refs\.referenceAnalysisToggleButton\.addEventListener\("click", toggleReferenceAnalysisPanel\);/);
   assert.match(app, /refs\.referenceAnalysisAutoCollapseButton\.addEventListener\("click", toggleReferenceAnalysisAutoCollapse\);/);
   assert.match(app, /refs\.referenceAnalysisGenerateButton\.addEventListener\("click", \(\) => \{[\s\S]*startReferenceAnalysisGeneration\(\)\.catch/);
@@ -1210,13 +1443,36 @@ test("direct prompt applications keep reference analysis independent", async () 
 });
 
 test("studio error surfaces compact long upstream HTTP failures before rendering", async () => {
+  const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
+  assert.match(html, /<div class="error-banner hidden" id="errorBanner" role="alert" aria-live="assertive"><\/div>/);
   assert.match(app, /function compactErrorMessage\(message, fallbackLabel = "请求失败"\)/);
+  assert.match(
+    app,
+    /function showError\(message\) \{\s*refs\.errorBanner\.classList\.remove\("hidden"\);\s*refs\.errorBanner\.textContent = compactErrorMessage\(message\);/,
+  );
   assert.match(app, /refs\.errorBanner\.textContent = compactErrorMessage\(message\);/);
   assert.match(app, /compactErrorMessage\(message, "生成请求失败"\)/);
   assert.match(app, /compactErrorMessage\(message, "图片分析请求失败"\)/);
   assert.match(app, /"error_code"\\s\*:\\s\*"\?\(\[A-Za-z0-9_\.-\]\+\)"\?/);
+});
+
+test("floating workbench surfaces capture and restore focus", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /const overlayFocusTriggers = new Map\(\);/);
+  assert.match(app, /function captureOverlayTrigger\(name\) \{/);
+  assert.match(app, /function focusOverlayTarget\(target\) \{/);
+  assert.match(app, /function restoreOverlayTriggerFocus\(name\) \{/);
+  assert.match(app, /function setPromptAgentOpen\(open, \{ restoreFocus = true \} = \{\}\) \{/);
+  assert.match(app, /if \(open\) \{[\s\S]*captureOverlayTrigger\("config"\);[\s\S]*focusOverlayTarget\(refs\.closeConfigButton\);/);
+  assert.match(app, /else \{[\s\S]*restoreOverlayTriggerFocus\("config"\);[\s\S]*\}/);
+  assert.match(app, /if \(open\) \{[\s\S]*captureOverlayTrigger\("prompt-agent"\);[\s\S]*focusOverlayTarget\(refs\.promptAgentCloseButton\);/);
+  assert.match(app, /else if \(restoreFocus\) \{[\s\S]*restoreOverlayTriggerFocus\("prompt-agent"\);[\s\S]*\}/);
+  assert.match(app, /setPromptAgentOpen\(false, \{ restoreFocus: false \}\);[\s\S]*refs\.promptInput\.focus\(\);/);
+  assert.match(app, /captureOverlayTrigger\("lightbox"\);[\s\S]*setLightboxOpen\(true\);[\s\S]*focusOverlayTarget\(refs\.lightboxClose\);/);
+  assert.match(app, /setLightboxOpen\(false\);[\s\S]*restoreOverlayTriggerFocus\("lightbox"\);/);
 });
 
 test("studio layout consumes density variables for wide-screen adaptation without changing structure", async () => {
@@ -1377,6 +1633,68 @@ test("studio stores API settings in the browser and sends them with cloud genera
   assert.match(browserConfig, /formData\.set\("responsesModel", browserConfig\.responsesModel\);/);
   assert.match(app, /function buildPptFormData\(\) \{[\s\S]*appendBrowserConfigToFormData\(formData\);[\s\S]*return formData;/);
   assert.match(app, /function buildPptCompletionRequest\(slideNumbers\) \{[\s\S]*\.\.\.getBrowserPrivateConfigRequestPayload\(\),/);
+});
+
+test("config drawer can test the connection and reveal fetched models in a picker", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const configModelPicker = await readFile(configModelPickerPath, "utf8");
+
+  assert.match(html, /id="testConnectionButton"[\s\S]*测试连接/);
+  assert.match(html, /id="fetchModelsButton"[\s\S]*获取模型列表/);
+  assert.match(html, /id="modelPickerToggle"[\s\S]*aria-label="展开可用模型列表"/);
+  assert.match(html, /id="modelOptionsList"[\s\S]*role="listbox"/);
+  assert.match(app, /testConnectionButton:\s*document\.querySelector\("#testConnectionButton"\),/);
+  assert.match(app, /fetchModelsButton:\s*document\.querySelector\("#fetchModelsButton"\),/);
+  assert.match(app, /modelPickerToggle:\s*document\.querySelector\("#modelPickerToggle"\),/);
+  assert.match(app, /modelOptionsList:\s*document\.querySelector\("#modelOptionsList"\),/);
+  assert.match(app, /from "\/lib\/config-model-picker\.mjs";/);
+  assert.match(app, /const configModelPicker = createConfigModelPickerController\(/);
+  assert.match(app, /configModelPicker\.bindEvents\(\);/);
+  assert.match(configModelPicker, /async function fetchConfigModels\(/);
+  assert.match(configModelPicker, /await fetchImpl\("\/api\/models"/);
+  assert.match(configModelPicker, /getBrowserPrivateConfigRequestPayload\(\)/);
+  assert.match(configModelPicker, /function render\(\)/);
+  assert.match(configModelPicker, /refs\.modelPickerToggle\.hidden = state\.configModels\.items\.length === 0;/);
+  assert.match(configModelPicker, /fetchConfigModels\(\{ openAfterFetch: true, mode: "models" \}\);/);
+  assert.match(configModelPicker, /refs\.modelPickerToggle\.addEventListener\("click", toggleModelPicker\);/);
+  assert.match(styles, /\.config-actions-row\s*\{/);
+  assert.match(styles, /\.model-picker-control\s*\{/);
+  assert.match(styles, /\.model-picker-toggle\s*\{/);
+  assert.match(styles, /\.model-options-list\s*\{/);
+  assert.match(styles, /\.model-options-list\s*\{[\s\S]*background:\s*var\(--bg-soft\);/);
+  assert.doesNotMatch(styles, /\.model-options-list\s*\{[\s\S]*--panel-strong/);
+});
+
+test("fetch models button opens fetched model options while silent fetches stay collapsed", async () => {
+  const { createConfigModelPickerController } = await import(publicConfigModelPickerPath);
+  const { refs } = createModelPickerHarness();
+  const state = { config: {}, configModels: { items: [], loading: false, loadingMode: "", open: false } };
+  const fetchImpl = async () => ({
+    ok: true,
+    json: async () => ({ ok: true, models: ["gpt-image-2", "gpt-5.5"] }),
+  });
+  const controller = createConfigModelPickerController({
+    refs,
+    state,
+    FormDataCtor: TestFormData,
+    fetchImpl,
+    getBrowserPrivateConfigRequestPayload: () => ({}),
+  });
+
+  controller.bindEvents();
+  refs.fetchModelsButton.dispatchEvent({ type: "click" });
+  await waitForAsyncHandlers();
+
+  assert.equal(state.configModels.open, true);
+  assert.equal(refs.modelOptionsList.hidden, false);
+  assert.deepEqual(refs.modelOptionsList.children.map((child) => child.textContent), ["gpt-image-2", "gpt-5.5"]);
+
+  await controller.fetchConfigModels({ openAfterFetch: false, mode: "models" });
+
+  assert.equal(state.configModels.open, false);
+  assert.equal(refs.modelOptionsList.hidden, true);
 });
 
 test("studio caches generated browser images for persistent preview and download", async () => {
@@ -1640,6 +1958,7 @@ test("creation mode has independent references count and scenario controls", asy
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
+  const creationReferenceAnalysisView = await readFile(creationReferenceAnalysisViewPath, "utf8");
 
   assert.match(html, /id="creationReferenceDropzone"/);
   assert.match(html, /id="creationReferenceCount">0 \/ 9/);
@@ -1655,6 +1974,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(html, /id="creationReferenceAnalysisPanel"/);
   assert.match(html, /class="creation-reference-analysis-head-copy"[\s\S]*id="creationReferenceAnalysisSummary"/);
   assert.match(html, /id="creationReferenceAnalysisToggleButton"[\s\S]*aria-controls="creationReferenceAnalysisList"/);
+  assert.match(html, /id="creationReferenceApplyVisualLanguageButton"[\s\S]*应用视觉语言/);
   const creationReferenceAnalysisHeadActions = html.match(/<div class="creation-reference-analysis-head-actions">[\s\S]*?<\/div>/)?.[0] || "";
   assert.doesNotMatch(creationReferenceAnalysisHeadActions, /creationReferenceAnalysisMeta/);
   assert.match(html, /class="creation-reference-analysis-meta" id="creationReferenceAnalysisMeta"/);
@@ -1752,6 +2072,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /creationReferenceAnalysisList: document\.querySelector\("#creationReferenceAnalysisList"\)/);
   assert.match(app, /creationReferenceAnalysisPanel: document\.querySelector\("#creationReferenceAnalysisPanel"\)/);
   assert.match(app, /creationReferenceAnalysisToggleButton: document\.querySelector\("#creationReferenceAnalysisToggleButton"\)/);
+  assert.match(app, /creationReferenceApplyVisualLanguageButton: document\.querySelector\("#creationReferenceApplyVisualLanguageButton"\)/);
   assert.match(app, /creationSkuBundleCountInput: document\.querySelector\("#creationSkuBundleCountInput"\)/);
   assert.match(app, /creationVisualLanguageInput: document\.querySelector\("#creationVisualLanguageInput"\)/);
   assert.match(app, /creationDimensionSpecsInput: document\.querySelector\("#creationDimensionSpecsInput"\)/);
@@ -1781,6 +2102,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.doesNotMatch(app, /creationRoleHint: document\.querySelector\("#creationRoleHint"\)/);
   assert.match(app, /creationSelectedRoles:\s*\[\]/);
   assert.match(app, /const CREATION_REFERENCE_ROLE_OPTIONS = \[/);
+  assert.match(app, /\{ value: "dimensions", label: "尺寸规格" \}/);
   assert.match(app, /const CREATION_SCENARIO_ROLE_PRESETS = \{/);
   assert.match(app, /const CREATION_VISUAL_LANGUAGE_LABELS = \{/);
   assert.match(app, /"reference-style": "参考模式"/);
@@ -1801,13 +2123,38 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function renderCreationRolePicker\(\) \{/);
   assert.match(app, /function applyCreationReferenceFiles\(fileList\) \{/);
   assert.match(app, /function applyCreationStyleReferenceFiles\(fileList\) \{/);
-  assert.match(app, /setCreationSelectValue\(refs\.creationVisualLanguageInput,\s*"reference-style",\s*"classic-commercial"\)/);
+  const creationReferenceUploadHandler =
+    app.match(/function applyCreationReferenceFiles\(fileList\) \{[\s\S]*?\r?\n}\r?\n\r?\nfunction applyCreationStyleReferenceFiles/)?.[0] || "";
+  const creationStyleReferenceUploadHandler =
+    app.match(/function applyCreationStyleReferenceFiles\(fileList\) \{[\s\S]*?\r?\n}\r?\n\r?\nfunction renderCreationLogo/)?.[0] || "";
+  assert.doesNotMatch(
+    creationReferenceUploadHandler,
+    /setCreationSelectValue\(refs\.creationVisualLanguageInput,\s*"reference-style",\s*"classic-commercial"\)/,
+  );
+  assert.match(
+    creationStyleReferenceUploadHandler,
+    /setCreationSelectValue\(refs\.creationVisualLanguageInput,\s*"reference-style",\s*"classic-commercial"\)/,
+  );
   assert.match(app, /function buildCreationReferenceAnalysisFormData\(\) \{/);
   assert.match(app, /function analyzeCreationReferenceImages\(\) \{/);
   assert.match(app, /async function applyCreationReferenceAnalysis\(analysis\) \{/);
   assert.match(app, /function applyCreationReferenceAnalysisCategoryMatch\(analysis\) \{/);
   assert.match(app, /findCreationIndustryTemplateMatch/);
   assert.match(app, /function applyCreationReferenceAnalysisRecommendations\(\) \{/);
+  assert.match(app, /function applyCreationReferenceAnalysisVisualLanguage\(\) \{/);
+  assert.match(app, /from "\/lib\/creation-reference-analysis-view\.mjs"/);
+  assert.match(app, /visualLanguage:\s*normalizeCreationVisualLanguage\(/);
+  assert.match(app, /visualLanguageLabel:\s*formatCreationVisualLanguageLabel\(/);
+  assert.match(app, /visualLanguageReason:/);
+  assert.match(app, /setCreationSelectValue\(refs\.creationVisualLanguageInput,\s*analysis\.visualLanguage,\s*"classic-commercial"\)/);
+  assert.match(creationReferenceAnalysisView, /export function syncCreationReferenceVisualLanguageButton/);
+  assert.match(creationReferenceAnalysisView, /button\.textContent = alreadyUsingSuggestion \? "已是建议视觉语言" : "应用视觉语言"/);
+  assert.match(creationReferenceAnalysisView, /视觉语言建议/);
+  assert.match(app, /analysis\.visualLanguageLabel \|\| formatCreationVisualLanguageLabel\(analysis\.visualLanguage\)/);
+  assert.match(
+    app,
+    /appendCreationVisualLanguageSuggestionCard\(\s*refs\.creationReferenceAnalysisList,\s*analysis,\s*\{\s*formatVisualLanguageLabel:\s*formatCreationVisualLanguageLabel,?\s*\}\s*\)/,
+  );
   assert.match(app, /state\.creationReferenceAnalysis\.applied = false;/);
   assert.match(app, /state\.creationReferenceAnalysis\.applied = true;/);
   assert.match(app, /function toggleCreationReferenceAnalysisPanel\(\) \{/);
@@ -1821,6 +2168,11 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function updateCreationReferenceRole\(referenceId, role\) \{/);
   assert.match(app, /function buildCreationReferenceRolePayload\(\) \{/);
   assert.match(app, /function buildCreationSkuSubjectPayload\(\) \{/);
+  assert.match(app, /function inferCreationReferenceAnalysisRole\(entry = \{\}\) \{/);
+  assert.match(app, /explicitRole === "other"/);
+  assert.match(app, /hasCreationReferenceDimensionSignal\(text\)/);
+  assert.match(app, /spec\(ification\)\?\\s\*\(table\|chart\|card\|sheet\|info\|information\|feel\|reference\|focus\|value\|values\)/);
+  assert.match(app, /规格感\|尺寸感/);
   assert.match(app, /function buildCreationPlanPreviewFormData\(\) \{/);
   assert.match(app, /creationIndustryTemplateInput: document\.querySelector\("#creationIndustryTemplateInput"\)/);
   assert.doesNotMatch(app, /const CREATION_SCENARIO_HINTS = \{/);
@@ -1888,10 +2240,13 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /refs\.creationStyleReferenceInput\.addEventListener\("change",[\s\S]*applyCreationStyleReferenceFiles/);
   assert.match(app, /refs\.creationReferenceAnalyzeButton\.addEventListener\("click"/);
   assert.match(app, /refs\.creationReferenceApplyAnalysisButton\.addEventListener\("click", applyCreationReferenceAnalysisRecommendations\)/);
+  assert.match(app, /refs\.creationReferenceApplyVisualLanguageButton\.addEventListener\("click", applyCreationReferenceAnalysisVisualLanguage\)/);
   assert.match(app, /refs\.creationReferenceAnalysisToggleButton\.addEventListener\("click", toggleCreationReferenceAnalysisPanel\)/);
   const creationApplyAnalysisBody = app.match(/function applyCreationReferenceAnalysisRecommendations\(\) \{[\s\S]*?\r?\n\}\r?\n\r?\nfunction renderCreationReferenceAnalysis/)?.[0] || "";
+  assert.match(creationApplyAnalysisBody, /const previousVisualLanguage = refs\.creationVisualLanguageInput\?\.value \|\| "classic-commercial";/);
   assert.match(creationApplyAnalysisBody, /state\.creationReferenceAnalysis\.applied = true;/);
   assert.match(creationApplyAnalysisBody, /state\.creationReferenceAnalysis\.collapsed = true;/);
+  assert.match(creationApplyAnalysisBody, /setCreationSelectValue\(refs\.creationVisualLanguageInput,\s*previousVisualLanguage,\s*"classic-commercial"\);/);
   assert.match(creationApplyAnalysisBody, /renderCreationReferenceAnalysis\(\);/);
   assert.doesNotMatch(app, /state\.creationReferenceAnalysis = state\.referenceAnalysis/);
   assert.doesNotMatch(app, /state\.creation\.creationReferenceFiles/);
@@ -1903,20 +2258,40 @@ test("creation mode exposes optional logo upload placement and background contro
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
 
+  assert.match(html, /id="creationLogoLibraryButton"[\s\S]*aria-controls="creationLogoLibraryPanel"/);
+  assert.match(html, /id="creationLogoLibraryPanel"[\s\S]*id="creationLogoLibraryInput"[\s\S]*accept="image\/\*"[\s\S]*multiple[\s\S]*id="creationSavedLogoGrid"/);
   assert.match(html, /id="creationLogoInput"[\s\S]*name="logoImage"[\s\S]*accept="image\/\*"/);
   assert.match(html, /id="creationLogoPreview"/);
   assert.match(html, /id="creationLogoPlacementInput"[\s\S]*value="top-left" selected[\s\S]*value="top-right"[\s\S]*value="bottom-left"[\s\S]*value="bottom-right"/);
   assert.match(html, /id="creationLogoBackgroundInput"[\s\S]*value="transparent"[\s\S]*value="remove-background"/);
 
   assert.match(styles, /\.creation-logo-block\s*\{/);
+  assert.match(styles, /\.creation-logo-library-button\s*\{/);
+  const logoBlockRule = readCssRule(styles, ".creation-logo-block");
+  const logoPanelRule = readCssRule(styles, ".creation-logo-library-panel");
+  const logoPanelHiddenRule = readCssRule(styles, ".creation-logo-library-panel.hidden");
+  assert.match(logoBlockRule, /position:\s*relative;/);
+  assert.match(logoPanelRule, /position:\s*fixed;/);
+  assert.match(logoPanelRule, /left:\s*var\(--creation-logo-library-left,\s*auto\);/);
+  assert.match(logoPanelRule, /z-index:\s*\d+;/);
+  assert.match(logoPanelRule, /box-shadow:/);
+  assert.match(logoPanelHiddenRule, /display:\s*none !important;/);
+  assert.match(styles, /\.creation-saved-logo-grid\s*\{/);
   assert.match(styles, /\.creation-logo-controls\s*\{/);
   assert.match(styles, /html\[data-ui-layout="mobile"\] \.creation-logo-controls\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\);/);
 
+  assert.match(app, /createCreationLogoLibraryController/);
   assert.match(app, /creationLogo:\s*\{/);
+  assert.match(app, /creationLogoLibraryButton: document\.querySelector\("#creationLogoLibraryButton"\)/);
+  assert.match(app, /creationLogoLibraryInput: document\.querySelector\("#creationLogoLibraryInput"\)/);
+  assert.match(app, /creationSavedLogoGrid: document\.querySelector\("#creationSavedLogoGrid"\)/);
+  assert.match(app, /const creationLogoLibrary = createCreationLogoLibraryController\(/);
+  assert.match(app, /creationLogoLibrary\.bind\(\)/);
+  assert.match(app, /creationLogoLibrary\.load\(\)/);
   assert.match(app, /creationLogoInput: document\.querySelector\("#creationLogoInput"\)/);
   assert.match(app, /creationLogoPlacementInput: document\.querySelector\("#creationLogoPlacementInput"\)/);
   assert.match(app, /creationLogoBackgroundInput: document\.querySelector\("#creationLogoBackgroundInput"\)/);
-  assert.match(app, /function applyCreationLogoFile\(fileList\) \{/);
+  assert.match(app, /function applyCreationLogoFile\(fileList,\s*\{\s*persist = true\s*\} = \{\}\) \{/);
   assert.match(app, /function getCreationLogoPayload\(\) \{/);
   assert.match(app, /formData\.set\("logoOptions", JSON\.stringify\(getCreationLogoPayload\(\)\)\);/);
   assert.match(app, /formData\.append\("logoImage", logoFile\);/);
@@ -2068,6 +2443,33 @@ test("creation generation cards replace plan details with loading animation", as
   assert.match(styles, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.creation-card-loading-motion span[\s\S]*animation:\s*none;/);
 });
 
+test("recognition and analysis busy states expose motion hooks", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+  const pptAnalysisClient = await readFile(pptAnalysisClientPath, "utf8");
+
+  assert.match(app, /function createInlineBusyMotion\(/);
+  assert.match(app, /function renderInlineBusyButton\(/);
+  assert.match(app, /button\.style\.minWidth = button\.dataset\.busyMinWidth;/);
+  assert.match(app, /button\.style\.minWidth = "";/);
+  assert.match(app, /renderInlineBusyButton\(refs\.promptAgentAnalyzeButton,[\s\S]*busy:\s*state\.promptAgent\.running/);
+  assert.match(app, /renderInlineBusyButton\(refs\.referenceAnalyzeButton,[\s\S]*busy:\s*state\.referenceAnalysis\.running/);
+  assert.match(app, /media\.classList\.add\("is-waiting"\);/);
+  assert.match(pptAnalysisClient, /function createPptAnalyzeMotion\(/);
+  assert.match(pptAnalysisClient, /refs\.analyzeButton\.classList\.toggle\("is-loading", model\.analyzing\);/);
+  assert.match(pptAnalysisClient, /refs\.analyzeButton\.style\.minWidth = refs\.analyzeButton\.dataset\.busyMinWidth;/);
+
+  assert.match(styles, /\.inline-busy-motion\s*\{/);
+  assert.match(styles, /\.inline-busy-motion span\s*\{[\s\S]*animation:\s*inline-busy-pulse/);
+  assert.match(styles, /\.generate-button\.is-loading,\s*\.creation-record-actions \.toolbar-button\.is-loading,\s*\.reference-analysis-button\.is-loading,\s*#pptAnalyzeButton\.is-loading/);
+  assert.match(styles, /\.creation-record-actions \.toolbar-button\.is-loading::before/);
+  assert.match(styles, /\.creation-card-media\.is-waiting::before\s*\{/);
+  assert.match(styles, /@keyframes creation-card-waiting-pulse/);
+  assert.doesNotMatch(styles, /\.creation-card-media\.is-waiting::after/);
+  assert.doesNotMatch(styles, /creation-card-waiting-sweep/);
+  assert.match(styles, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.inline-busy-motion span,[\s\S]*\.creation-card-media\.is-waiting::before[\s\S]*animation:\s*none;/);
+});
+
 test("creation prompt editor uses a top-level layer so cards do not intercept save clicks", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
@@ -2128,7 +2530,8 @@ test("creation mode uploads prepared reference images for generation and repair"
   assert.match(app, /function getCreationReferenceGenerationFile\(item\) \{/);
   assert.match(app, /async function ensureCreationReferenceGenerationFilesReady\(\) \{/);
   assert.match(app, /startCreationGeneration[\s\S]*await ensureCreationReferenceGenerationFilesReady\(\);[\s\S]*const generationFormData = buildCreationFormData\(\);/);
-  assert.match(app, /repairCreationItems[\s\S]*await ensureCreationReferenceGenerationFilesReady\(\);[\s\S]*body: buildCreationRepairFormData/);
+  assert.match(app, /async function runCreationRepairRequest[\s\S]*await ensureCreationReferenceGenerationFilesReady\(\);[\s\S]*body: buildCreationRepairFormData/);
+  assert.match(app, /repairCreationItems[\s\S]*await runCreationRepairRequest\(\{ itemId, scope \}\);/);
   assert.match(
     app,
     /state\.creationReferenceFiles\.forEach\(\(item\) => \{\s*const file = getCreationReferenceGenerationFile\(item\);\s*if \(file\) \{\s*formData\.append\("referenceImages", file\);\s*\}\s*\}\);/,
@@ -2138,6 +2541,18 @@ test("creation mode uploads prepared reference images for generation and repair"
     /state\.creationStyleReferenceFiles\.forEach\(\(item\) => \{\s*const file = getCreationReferenceGenerationFile\(item\);\s*if \(file\) \{\s*formData\.append\("styleReferenceImages", file\);\s*\}\s*\}\);/,
   );
   assert.doesNotMatch(app, /formData\.append\("referenceImages", item\.file\)/);
+});
+
+test("creation mode auto-repairs incomplete first-pass sets once through the repair route", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /from "\/lib\/creation-auto-repair\.mjs"/);
+  assert.match(app, /autoRepairAttemptCount:\s*0/);
+  assert.match(app, /async function runCreationRepairRequest\(\{ itemId = "", scope = "incomplete" \} = \{\}\) \{/);
+  assert.match(app, /repairCreationItems[\s\S]*await runCreationRepairRequest\(\{ itemId, scope \}\);/);
+  assert.match(app, /await runCreationAutoRepairIfNeeded\(payload\.set\)/);
+  assert.match(app, /getCreationAutoRepairNotice/);
+  assert.doesNotMatch(app, /repairCreationItems[\s\S]*fetch\("\/api\/creation\/repair"/);
 });
 
 test("asset record views include PPT records and Creation set records", async () => {
@@ -2315,6 +2730,33 @@ test("creation records expose prompt exports and lightbox path actions", async (
   assert.match(app, /refs\.creationRecordExportManifestButton\.addEventListener\("click",/);
 });
 
+test("creation record toolbar stays compact without visible scrollbar or wrapped title", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+
+  const panelTitleRule = readCssRule(styles, ".creation-record-panel > .panel-title");
+  const panelTitleHeadingRule = readCssRule(styles, ".creation-record-panel > .panel-title h2");
+  const recordActionsRule = readCssRule(styles, ".creation-record-actions");
+  const exportActionsRule = readCssRule(styles, ".creation-record-export-actions");
+  const recordButtonRule = readCssRule(styles, ".creation-record-actions .toolbar-button");
+  const recordSearchRule = readCssRule(styles, ".creation-record-search");
+
+  assert.match(panelTitleRule, /flex-wrap:\s*nowrap;/);
+  assert.match(panelTitleRule, /overflow:\s*hidden;/);
+  assert.match(panelTitleHeadingRule, /white-space:\s*nowrap;/);
+  assert.match(recordActionsRule, /flex-wrap:\s*nowrap;/);
+  assert.match(recordActionsRule, /justify-content:\s*flex-start;/);
+  assert.match(recordActionsRule, /overflow-x:\s*auto;/);
+  assert.match(recordActionsRule, /scrollbar-width:\s*none;/);
+  assert.match(recordActionsRule, /font-size:\s*13px;/);
+  assert.match(recordActionsRule, /--header-control-padding-x:\s*10px;/);
+  assert.match(recordButtonRule, /font-size:\s*13px;/);
+  assert.match(recordSearchRule, /white-space:\s*nowrap;/);
+  assert.match(recordSearchRule, /grid-template-columns:\s*auto minmax\(118px,\s*156px\);/);
+  assert.match(exportActionsRule, /flex-wrap:\s*nowrap;/);
+  assert.match(exportActionsRule, /flex:\s*0 0 auto;/);
+  assert.match(styles, /\.creation-record-actions::-webkit-scrollbar\s*\{[\s\S]*display:\s*none;/);
+});
+
 test("creation mode exposes listing agent controls and record listing drafts", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
@@ -2325,28 +2767,35 @@ test("creation mode exposes listing agent controls and record listing drafts", a
   assert.match(html, /id="creationRecordGenerateListingsButton"/);
   assert.match(html, /id="creationRecordExportListingsButton"/);
   assert.match(html, /id="creationRecordCopyListingsButton"/);
+  assert.match(html, /id="creationResultGrid"[\s\S]*id="creationInlineListingStatus"[\s\S]*id="creationInlineListingDrafts"/);
   assert.match(html, /id="creationRecordListingStatus"/);
   assert.match(html, /id="creationRecordListingDrafts"/);
   assert.match(html, /id="creationRecordResultGrid"[\s\S]*id="creationRecordListingDrafts"/);
 
   assert.match(app, /creationListingAgentEnabledInput: document\.querySelector\("#creationListingAgentEnabledInput"\)/);
+  assert.match(app, /creationInlineListingDrafts: document\.querySelector\("#creationInlineListingDrafts"\)/);
+  assert.match(app, /creationInlineListingStatus: document\.querySelector\("#creationInlineListingStatus"\)/);
   assert.match(app, /creationRecordGenerateListingsButton: document\.querySelector\("#creationRecordGenerateListingsButton"\)/);
   assert.match(app, /creationRecordExportListingsButton: document\.querySelector\("#creationRecordExportListingsButton"\)/);
   assert.match(app, /creationRecordCopyListingsButton: document\.querySelector\("#creationRecordCopyListingsButton"\)/);
   assert.match(app, /from "\/lib\/creation-listing-view\.mjs"/);
+  assert.match(app, /function getCreationInlineListingRefs\(\) \{/);
   assert.match(app, /createCreationListingController\(\{/);
+  assert.match(app, /renderCurrentView: renderCreationView,/);
   assert.match(app, /getCreationRecordListingMetaLabel\(set\)/);
+  assert.match(app, /metaRow\.className = "creation-record-meta-row";/);
+  assert.match(app, /listingBadge\.className = "creation-record-listing-badge";/);
+  assert.match(app, /button\.appendChild\(metaRow\);/);
   assert.match(app, /fetchImpl: \(\.\.\.args\) => fetch\(\.\.\.args\),/);
   assert.match(app, /getRequestConfig: getBrowserPrivateConfigRequestPayload,/);
   assert.match(app, /creationListingController\.syncRecordControls\(selectedSet\);/);
   assert.match(app, /creationListingController\.bindEvents\(\);/);
-  assert.doesNotMatch(app, /createCreationSkuListingDraftsElement/);
-  assert.doesNotMatch(app, /has-listing-draft/);
+  assert.match(app, /renderCreationListingDrafts\(\{[\s\S]*refs:\s*getCreationInlineListingRefs\(\),[\s\S]*set:\s*currentSet/);
   assert.match(listingView, /export function renderCreationListingDrafts\(\{ refs, state, set \} = \{\}\) \{/);
   assert.match(listingView, /async function generate\(setId = ""\) \{/);
   assert.match(listingView, /const requestedSetId = cleanCreationListingText\(setId\);/);
   assert.match(listingView, /fetchImpl\("\/api\/creation\/listings",/);
-  assert.match(listingView, /\.\.\.\(context\.getRequestConfig\?\.\(\) \|\| \{\}\),[\s\S]*setId: selectedSet\.setId,/);
+  assert.match(listingView, /\.\.\.\(context\.getRequestConfig\?\.\(\) \|\| \{\}\),[\s\S]*setId: selectedSet\.setId,[\s\S]*set: selectedSet,/);
   assert.match(listingView, /function exportListings\(\) \{/);
   assert.match(listingView, /async function copy\(\) \{/);
   assert.match(listingView, /export function buildCreationListingDraftText\(draft, index = 0\) \{/);
@@ -2358,29 +2807,99 @@ test("creation mode exposes listing agent controls and record listing drafts", a
   assert.match(listingView, /createCreationListingField\("卖点", draft\.sellingPoints, \{ list: true, localizedValue: draft\.zhDisplay\?\.sellingPoints \}\)/);
   assert.match(listingView, /copyButton\.className = "creation-listing-field-copy";/);
   assert.match(listingView, /const copySource = copyValue \?\? value;/);
-  assert.match(listingView, /copyButton\.dataset\.creationListingCopyText = buildCreationListingFieldCopyText\(copySource, \{ list: copyList \}\);/);
+  assert.match(listingView, /function applyCreationListingCopyData\(target, label, value, \{ list = false \} = \{\}\) \{/);
+  assert.match(listingView, /applyCreationListingCopyData\(copyButton, label, copySource, \{ list: copyList \}\);/);
+  assert.match(listingView, /titleCopy\.className = "creation-listing-title-copy";/);
+  assert.match(listingView, /applyCreationListingCopyData\(titleCopy, "标题", headerContent\.title\);/);
   assert.match(listingView, /const CREATION_LISTING_BUCKET_COPY_LABELS = \{/);
   assert.match(listingView, /copyValue: buildCreationListingBucketCopyLines\(draft\.keywordBuckets\),/);
   assert.match(listingView, /localized\.className = "creation-listing-localized";/);
-  assert.match(listingView, /creationRecordListingDrafts\?\.addEventListener\("click",[\s\S]*closest\?\.\("\[data-creation-listing-copy-text\]"\)[\s\S]*copyCreationListingFieldButton/);
+  assert.match(listingView, /const listingDraftContainers = new Set\(\[[\s\S]*creationRecordListingDrafts,[\s\S]*creationInlineListingDrafts,[\s\S]*\]\.filter\(Boolean\)\);/);
+  assert.match(listingView, /listingDraftContainers\.forEach\(\(container\) => \{[\s\S]*container\.addEventListener\("click",[\s\S]*closest\?\.\("\[data-creation-listing-copy-text\]"\)[\s\S]*copyCreationListingFieldButton/);
   assert.match(listingView, /setId: selectedSet\.setId,[\s\S]*productName: selectedSet\.productName,[\s\S]*listingDrafts: drafts/);
 
   assert.match(styles, /\.creation-listing-drafts\s*\{/);
   assert.match(styles, /\.creation-listing-card\s*\{/);
   assert.match(styles, /\.creation-listing-card[\s\S]*overflow-wrap:\s*anywhere;/);
+  assert.match(styles, /\.creation-record-meta-row\s*\{[\s\S]*justify-content:\s*space-between;/);
+  assert.match(styles, /\.creation-record-listing-badge\s*\{[\s\S]*background:\s*rgba\(54,\s*211,\s*153,\s*0\.14\);/);
   assert.match(styles, /\.creation-listing-content-frame\s*\{/);
   assert.match(readCssRule(styles, ".creation-listing-content-frame"), /border:\s*1px solid/);
   assert.match(readCssRule(styles, ".creation-listing-field"), /border:\s*1px solid/);
   assert.match(styles, /\.creation-listing-field-copy\s*\{/);
   assert.match(styles, /\.creation-listing-field-copy:hover\s*\{/);
+  assert.match(styles, /\.creation-listing-title-copy\s*\{/);
+  assert.match(styles, /\.creation-listing-title-copy:hover\s*\{/);
+  assert.match(styles, /\.creation-listing-character-count\s*\{/);
+  assert.match(readCssRule(styles, ".creation-listing-character-count"), /background:\s*rgba\(/);
+  assert.match(readCssRule(styles, ".creation-listing-character-count.english"), /color:\s*#/);
+  assert.match(readCssRule(styles, ".creation-listing-character-count.chinese"), /color:\s*#/);
   assert.match(styles, /\.creation-listing-localized\s*\{/);
   assert.match(styles, /\.creation-listing-localized::before\s*\{/);
   assert.match(styles, /\.creation-record-results\s*\{/);
   assert.match(readCssRule(styles, ".creation-record-results"), /display:\s*block;/);
   assert.doesNotMatch(readCssRule(styles, ".creation-record-results"), /display:\s*grid;/);
   assert.match(styles, /\.creation-record-result-grid\s*\{[\s\S]*min-height:\s*max-content;[\s\S]*overflow:\s*visible;/);
-  assert.match(styles, /\.creation-record-result-grid \+ \.creation-listing-panel:not\(\.hidden\)\s*\{[\s\S]*margin-top:\s*12px;/);
+  assert.match(styles, /\.creation-result-grid \+ \.creation-listing-panel:not\(\.hidden\)\s*\{[\s\S]*margin-top:\s*12px;/);
   assert.doesNotMatch(styles, /creation-card-listing-draft/);
+});
+
+test("creation listing copy handlers work for record and inline draft containers", async () => {
+  const { createCreationListingController } = await import(publicCreationListingViewPath);
+  const documentRef = createTestDocument();
+  const recordDrafts = createTestElement("div", documentRef);
+  const inlineDrafts = createTestElement("div", documentRef);
+  const recordCopyButton = createListingCopyButton(documentRef, "Title", "record title");
+  const inlineCopyButton = createListingCopyButton(documentRef, "Title", "inline title");
+  const copied = [];
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+
+  recordDrafts.appendChild(recordCopyButton);
+  inlineDrafts.appendChild(inlineCopyButton);
+  globalThis.setTimeout = () => 1;
+  globalThis.clearTimeout = () => {};
+  try {
+    const controller = createCreationListingController({
+      refs: {
+        creationRecordListingDrafts: recordDrafts,
+        creationInlineListingDrafts: inlineDrafts,
+      },
+      state: { creation: {} },
+      setFeedback: () => {},
+      writeTextToClipboard: async (text) => {
+        copied.push(text);
+      },
+    });
+
+    controller.bindEvents();
+    recordCopyButton.dispatchEvent({ type: "click", bubbles: true });
+    await Promise.resolve();
+    inlineCopyButton.dispatchEvent({ type: "click", bubbles: true });
+    await Promise.resolve();
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+
+  assert.deepEqual(copied, ["record title", "inline title"]);
+});
+
+test("creation listing drafts scroll in the right output panel without collapsing images", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+
+  const outputPanelRule = readCssRuleContaining(styles, ".creation-output-panel", "display: flex");
+  const resultGridRule = readCssRule(styles, ".creation-result-grid");
+
+  assert.doesNotMatch(outputPanelRule, /grid-template-rows:\s*auto auto minmax\(0,\s*1fr\) auto;/);
+  assert.match(outputPanelRule, /display:\s*flex;/);
+  assert.match(outputPanelRule, /flex-direction:\s*column;/);
+  assert.match(outputPanelRule, /overflow:\s*auto;/);
+  assert.match(resultGridRule, /flex:\s*0 0 auto;/);
+  assert.match(resultGridRule, /min-height:\s*max-content;/);
+  assert.match(resultGridRule, /overflow:\s*visible;/);
+  assert.match(styles, /\.creation-output-panel,[\s\S]*\.creation-form,[\s\S]*\.creation-result-grid,[\s\S]*scrollbar-width:\s*thin;/);
+  assert.match(styles, /\.creation-output-panel::-webkit-scrollbar,[\s\S]*\.creation-form::-webkit-scrollbar,[\s\S]*width:\s*var\(--scrollbar-size,\s*10px\);/);
 });
 
 test("creation listing agent can run automatically after full creation generation completes", async () => {
@@ -2391,7 +2910,7 @@ test("creation listing agent can run automatically after full creation generatio
   assert.match(app, /state\.creation\.generationScope === "full"/);
   assert.match(
     app,
-    /if \(eventName === "complete"\) \{[\s\S]*upsertCreationSet\(payload\.set\);[\s\S]*shouldAutoGenerateCreationListings\(\)[\s\S]*creationListingController\.generate\(payload\.set\.setId\)\.catch\(/,
+    /if \(eventName === "complete"\) \{[\s\S]*upsertCreationSet\(payload\.set\);[\s\S]*shouldAutoGenerateCreationListings\(\)[\s\S]*setCreationFeedback\("套图生成完成，正在自动生成 Listing\.\.\.", "busy"\);[\s\S]*creationListingController\.generate\(payload\.set\.setId\)[\s\S]*setCreationFeedback\("套图与 Listing 已生成。", "success"\)/,
   );
 });
 

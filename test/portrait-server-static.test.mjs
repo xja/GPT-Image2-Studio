@@ -34,6 +34,8 @@ test("portrait runtime keeps person references separate from styling accessory r
     server.match(/async function handlePortraitReferenceAnalyze[\s\S]*?\r?\n}\r?\n\r?\nasync function handlePortraitPlan/)?.[0] || "";
   const generateHandler =
     server.match(/async function handlePortraitGenerate[\s\S]*?\r?\n}\r?\n\r?\nasync function handleCreationGenerate/)?.[0] || "";
+  const repairHandler =
+    server.match(/async function handlePortraitRepair[\s\S]*?\r?\n}\r?\n\r?\nasync function handleCreationRepair/)?.[0] || "";
   const workerAnalyzeHandler =
     worker.match(/async function handlePortraitReferenceAnalyze[\s\S]*?\r?\n}\r?\n\r?\nasync function handlePortraitPlan/)?.[0] || "";
   const workerGenerateHandler =
@@ -46,21 +48,46 @@ test("portrait runtime keeps person references separate from styling accessory r
   assert.match(worker, /MAX_PORTRAIT_ACTION_REFERENCE_IMAGES/);
   assert.match(worker, /MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES/);
   assert.match(analyzeHandler, /personReferenceImages\.length > MAX_PORTRAIT_PERSON_REFERENCE_IMAGES/);
-  assert.doesNotMatch(analyzeHandler, /portraitAccessoryReferenceImages/);
-  assert.doesNotMatch(analyzeHandler, /portraitActionReferenceImages/);
+  assert.match(analyzeHandler, /formData\.getAll\("portraitActionReferenceImages"\)/);
+  assert.match(analyzeHandler, /formData\.getAll\("portraitAccessoryReferenceImages"\)/);
+  assert.match(analyzeHandler, /actionReferenceImages\.length > MAX_PORTRAIT_ACTION_REFERENCE_IMAGES/);
+  assert.match(analyzeHandler, /accessoryReferenceImages\.length > MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES/);
+  assert.match(analyzeHandler, /(?:const\s+)?referenceImages = \[\.\.\.personReferenceImages, \.\.\.actionReferenceImages, \.\.\.accessoryReferenceImages\]/);
   assert.match(generateHandler, /formData\.getAll\("portraitActionReferenceImages"\)/);
   assert.match(generateHandler, /formData\.getAll\("portraitAccessoryReferenceImages"\)/);
   assert.match(generateHandler, /actionReferenceImages\.length > MAX_PORTRAIT_ACTION_REFERENCE_IMAGES/);
   assert.match(generateHandler, /accessoryReferenceImages\.length > MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES/);
   assert.match(generateHandler, /(?:const\s+)?referenceImages = \[\.\.\.personReferenceImages, \.\.\.actionReferenceImages, \.\.\.accessoryReferenceImages\]/);
+  assert.match(repairHandler, /formData\.getAll\("portraitActionReferenceImages"\)/);
+  assert.match(repairHandler, /formData\.getAll\("portraitAccessoryReferenceImages"\)/);
+  assert.match(repairHandler, /actionReferenceImages\.length > MAX_PORTRAIT_ACTION_REFERENCE_IMAGES/);
+  assert.match(repairHandler, /accessoryReferenceImages\.length > MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES/);
+  assert.match(repairHandler, /(?:const\s+)?referenceImages = \[\.\.\.personReferenceImages, \.\.\.actionReferenceImages, \.\.\.accessoryReferenceImages\]/);
+  assert.match(repairHandler, /referenceImageLabels/);
   assert.match(workerAnalyzeHandler, /personReferenceImages\.length > MAX_PORTRAIT_PERSON_REFERENCE_IMAGES/);
-  assert.doesNotMatch(workerAnalyzeHandler, /portraitAccessoryReferenceImages/);
-  assert.doesNotMatch(workerAnalyzeHandler, /portraitActionReferenceImages/);
+  assert.match(workerAnalyzeHandler, /formData\.getAll\("portraitActionReferenceImages"\)/);
+  assert.match(workerAnalyzeHandler, /formData\.getAll\("portraitAccessoryReferenceImages"\)/);
+  assert.match(workerAnalyzeHandler, /actionReferenceImages\.length > MAX_PORTRAIT_ACTION_REFERENCE_IMAGES/);
+  assert.match(workerAnalyzeHandler, /accessoryReferenceImages\.length > MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES/);
+  assert.match(workerAnalyzeHandler, /(?:const\s+)?referenceImages = \[\.\.\.personReferenceImages, \.\.\.actionReferenceImages, \.\.\.accessoryReferenceImages\]/);
   assert.match(workerGenerateHandler, /formData\.getAll\("portraitActionReferenceImages"\)/);
   assert.match(workerGenerateHandler, /formData\.getAll\("portraitAccessoryReferenceImages"\)/);
   assert.match(workerGenerateHandler, /actionReferenceImages\.length > MAX_PORTRAIT_ACTION_REFERENCE_IMAGES/);
   assert.match(workerGenerateHandler, /accessoryReferenceImages\.length > MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES/);
   assert.match(workerGenerateHandler, /(?:const\s+)?referenceImages = \[\.\.\.personReferenceImages, \.\.\.actionReferenceImages, \.\.\.accessoryReferenceImages\]/);
+});
+
+test("portrait runtime labels clothing references as mandatory wardrobe authorities", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+
+  for (const source of [server, worker]) {
+    assert.match(source, /Portrait clothing, prop, and accessory reference/);
+    assert.match(source, /WARDROBE LOCK/);
+    assert.match(source, /must wear the supplied outfit/);
+    assert.match(source, /Do not replace it with a generic blazer, suit, dress, or everyday outfit/);
+    assert.match(source, /do not treat it as another person identity/);
+  }
 });
 
 test("portrait record list responses are not cacheable", async () => {

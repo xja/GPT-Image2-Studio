@@ -173,6 +173,21 @@ test("portrait prompts describe action references as pose-only guidance", () => 
   );
 });
 
+test("portrait prompts make supplied wardrobe references mandatory outfit locks", () => {
+  const plan = buildPortraitPlan({
+    subjectSummary: "adult subject with short dark hair",
+    imageCount: 1,
+    notes: "Styling reference 1: pastel fantasy costume with bow details, gloves, boots, wand prop.",
+  });
+
+  assert.match(plan.items[0].prompt, /WARDROBE LOCK/i);
+  assert.match(plan.items[0].prompt, /must wear the supplied clothing, prop, and accessory reference/i);
+  assert.match(plan.items[0].prompt, /style, shot type, scene, and photography instructions affect lighting, camera treatment, background, and composition only/i);
+  assert.match(plan.items[0].prompt, /must not override the wardrobe lock/i);
+  assert.match(plan.items[0].prompt, /preserve the person reference identity separately/i);
+  assert.match(plan.items[0].prompt, /adult, conservative, non-sexual portrait/i);
+});
+
 test("portrait planner uses only selected shot types when provided", () => {
   const plan = buildPortraitPlan({
     subjectSummary: "adult subject in a white shirt",

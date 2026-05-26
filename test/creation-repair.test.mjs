@@ -6,6 +6,7 @@ import {
   buildCreationRepairPlan,
   hasCreationRepairPlanningOverride,
   hydrateCreationRepairSkuSubjects,
+  needsCreationRepairPlanRefresh,
   refreshCreationRepairItemsFromPlan,
   selectCreationRepairItems,
 } from "../lib/creation-repair.mjs";
@@ -65,6 +66,32 @@ test("creation repair can select all incomplete or missing items", () => {
     items.map((item) => item.itemId),
     ["2-benefit", "3-scene"],
   );
+});
+
+test("creation repair treats Cloudflare-completed image URLs as complete for incomplete scope", () => {
+  const items = selectCreationRepairItems(
+    {
+      items: [
+        {
+          itemId: "cloudflare-done",
+          status: "completed",
+          filename: "cloudflare-done.png",
+          relativePath: "",
+          imageUrl: "https://images.example/cloudflare-done.png",
+          storageKey: "creation/cloudflare-done.png",
+        },
+        {
+          itemId: "failed",
+          status: "failed",
+          filename: "",
+          relativePath: "",
+        },
+      ],
+    },
+    { scope: "incomplete" },
+  );
+
+  assert.deepEqual(items.map((item) => item.itemId), ["failed"]);
 });
 
 test("creation repair treats completed items without filenames as incomplete", () => {
@@ -208,4 +235,129 @@ test("creation repair rehydrates SKU subject metadata from legacy set manifests"
     items.map((item) => item.skuSubject?.referenceIndexes),
     [[1], [2]],
   );
+});
+
+test("creation repair rebuilds retried SKU prompts with the shared SKU series lock", () => {
+  const set = {
+    productName: "Jointed fishing lure",
+    productDescription: "Three sellable lure colorways",
+    sellingPoints: ["lifelike swim action"],
+    targetLanguage: "en",
+    imageCount: 1,
+    scenario: "standard",
+    visualLanguage: "classic-commercial",
+    industryTemplate: "general",
+    selectedRoles: ["hero"],
+    skuSubjects: [
+      {
+        id: "silver",
+        title: "Silver lure",
+        filenames: ["silver-lure.png"],
+        referenceIndexes: [1],
+        note: "silver body",
+      },
+      {
+        id: "gold",
+        title: "Gold lure",
+        filenames: ["gold-lure.png"],
+        referenceIndexes: [2],
+        note: "gold body",
+      },
+    ],
+    items: [
+      {
+        itemId: "2-sku-silver",
+        slotIndex: 2,
+        role: "sku",
+        title: "SKU image 1",
+        prompt: "Old silver SKU prompt.",
+        status: "failed",
+      },
+      {
+        itemId: "3-sku-gold",
+        slotIndex: 3,
+        role: "sku",
+        title: "SKU image 2",
+        prompt: "Old gold SKU prompt.",
+        status: "completed",
+      },
+    ],
+  };
+
+  const plan = buildCreationRepairPlan(set, { visualLanguage: "clean-marketplace" });
+  const refreshed = refreshCreationRepairItemsFromPlan(set.items, plan);
+
+  assert.ok(refreshed.every((item) => item.prompt.includes("SKU SERIES CONSISTENCY LOCK")));
+  assert.ok(refreshed.every((item) => item.prompt.includes("same visual template across first generation and retries")));
+  assert.ok(refreshed.every((item) => item.prompt.includes("Series subjects: Silver lure; Gold lure")));
+});
+
+test("creation repair refreshes legacy SKU prompts that predate the series lock", () => {
+  assert.equal(
+    needsCreationRepairPlanRefresh([
+      { role: "sku", prompt: "Old silver SKU prompt." },
+      { role: "sku", prompt: "Old gold SKU prompt." },
+      { role: "hero", prompt: "Hero prompt." },
+    ]),
+    true,
+  );
+  assert.equal(
+    needsCreationRepairPlanRefresh([
+      { role: "sku", prompt: "SKU SERIES CONSISTENCY LOCK: Use the same visual template across first generation and retries." },
+    ]),
+    false,
+  );
+});
+
+test("creation repair does not refresh a single SKU prompt just because it lacks a series lock", () => {
+  assert.equal(
+    needsCreationRepairPlanRefresh([
+      { role: "sku", prompt: "Single SKU ecommerce prompt." },
+      { role: "hero", prompt: "Hero prompt." },
+    ]),
+    false,
+  );
+});
+
+test("creation repair preserves existing SKU subjects when repair preview sends an empty payload", () => {
+  const set = {
+    productName: "Jointed fishing lure",
+    productDescription: "Segmented electric lure",
+    sellingPoints: "realistic finish",
+    targetLanguage: "en",
+    imageCount: 1,
+    selectedRoles: [],
+    skuSubjects: [
+      {
+        id: "silver",
+        title: "Silver lure",
+        filenames: ["silver-reference.png"],
+        note: "Silver body with red head",
+      },
+    ],
+    items: [
+      {
+        itemId: "2-sku-silver",
+        slotIndex: 2,
+        role: "sku",
+        title: "SKU image 1",
+        prompt: "Single SKU ecommerce prompt.",
+        status: "failed",
+      },
+    ],
+  };
+
+  const plan = buildCreationRepairPlan(set, { skuSubjects: "[]" });
+  const skuItem = plan.items.find((item) => item.role === "sku");
+
+  assert.deepEqual(plan.skuSubjects.map((subject) => subject.id), ["silver"]);
+  assert.equal(skuItem.skuSubject.id, "silver");
+
+  for (const emptyPayload of ["", "   "]) {
+    const emptyPlan = buildCreationRepairPlan(set, { skuSubjects: emptyPayload });
+    const emptySkuItem = emptyPlan.items.find((item) => item.role === "sku");
+
+    assert.deepEqual(emptyPlan.skuSubjects.map((subject) => subject.id), ["silver"]);
+    assert.equal(emptySkuItem.skuSubject.id, "silver");
+  }
 });

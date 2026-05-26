@@ -90,11 +90,11 @@ function makeGenerationQueue() {
 
 function makeListingDraft(overrides = {}) {
   return {
-    title: "1 Pack 12 oz Blue Travel Bottle for Daily Hydration",
+    title: "1 Pack 340.19 g (12 oz) Blue Travel Bottle for Daily Hydration",
     sellingPoints: ["Compact bottle details are written from provided product metadata."],
     painPoints: ["Helps shoppers compare a blue bottle variant without extra guessing."],
     fiveBullets: [
-      "1 Pack 12 oz format keeps quantity and size easy to review.",
+      "1 Pack 340.19 g (12 oz) format keeps quantity and size easy to review.",
       "Blue bottle copy uses SKU-specific product information.",
       "Conservative wording avoids unsupported visual claims.",
       "Keyword structure supports US marketplace review.",
@@ -104,7 +104,7 @@ function makeListingDraft(overrides = {}) {
     backendSearchTerms: "blue travel bottle daily hydration",
     keywordBuckets: {
       exact: ["blue travel bottle"],
-      longTail: ["12 oz travel bottle"],
+      longTail: ["340.19 g 12 oz travel bottle"],
       traffic: ["daily hydration bottle"],
       descriptive: ["compact blue bottle"],
     },
@@ -200,7 +200,7 @@ test("Cloudflare creation listing route uses payload API settings outside mock m
   assert.equal(seenRequests[0].auth, "Bearer payload-key");
   assert.equal(seenRequests[0].body.model, "gpt-payload");
   assert.equal(seenRequests[0].body.reasoning.effort, "high");
-  assert.equal(body.listingDrafts[0].title, "1 Pack 12 oz Blue Travel Bottle for Daily Hydration");
+  assert.equal(body.listingDrafts[0].title, "1 Pack 340.19 g (12 oz) Blue Travel Bottle for Daily Hydration");
   assert.doesNotMatch(JSON.stringify(body), /payload-key/);
 });
 
@@ -547,6 +547,65 @@ test("Cloudflare portrait generation uses browser settings, split references and
   assert.deepEqual(complete.payload.set.referenceImageNames, ["person.png", "pose.png", "jacket.png"]);
   assert.equal(imageBucket.objects.size, 2);
   assert.doesNotMatch(text, /test-browser-key/);
+});
+
+test("Cloudflare portrait reference analysis uses complete portrait task references", async () => {
+  const seenRequests = [];
+  const analysis = {
+    summary: "Visible person with armor styling references.",
+    visiblePresentation: "feminine-presenting",
+    heightImpression: "unclear",
+    bodyBuild: "average",
+    pose: "standing reference plus separate pose cue",
+    clothing: "fantasy armor styling reference",
+    hair: "dark shoulder-length hair",
+    faceVisibility: "clear",
+    distinctVisibleFeatures: ["centered face reference"],
+    referenceRoles: [
+      "person.png is the person identity reference",
+      "pose.png is pose-only guidance",
+      "armor.png is clothing and prop styling guidance",
+    ],
+    risks: [],
+    safety: "Use ordinary portrait styling and avoid sensitive inferences.",
+    confidence: "medium",
+  };
+  const formData = new FormData();
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("portraitReferenceImages", new File(["person"], "person.png", { type: "image/png" }));
+  formData.append("portraitActionReferenceImages", new File(["pose"], "pose.png", { type: "image/png" }));
+  formData.append("portraitAccessoryReferenceImages", new File(["armor"], "armor.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/portrait/reference/analyze", {
+    method: "POST",
+    body: formData,
+  }), {
+    async fetchImpl(url, init) {
+      const body = JSON.parse(init.body);
+      seenRequests.push({ url, body });
+      return new Response(JSON.stringify({
+        output: [{ content: [{ type: "output_text", text: JSON.stringify(analysis) }] }],
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+
+  const payload = await response.json();
+  const inputContent = seenRequests[0]?.body.input[0].content || [];
+  const requestText = JSON.stringify(seenRequests[0]?.body || {});
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(seenRequests[0].url, "https://example.test/v1/responses");
+  assert.equal(inputContent.filter((item) => item.type === "input_image").length, 3);
+  assert.match(requestText, /Portrait person reference 1 of 1/);
+  assert.match(requestText, /Portrait action and pose reference 1 of 1/);
+  assert.match(requestText, /Portrait clothing, prop, and accessory reference 1 of 1/);
+  assert.deepEqual(payload.analysis.referenceRoles, analysis.referenceRoles);
 });
 
 test("Cloudflare portrait local record actions return unsupported capability contract", async () => {
@@ -1301,6 +1360,70 @@ test("Cloudflare config endpoint never returns a saved API key", async () => {
   assert.equal("apiKey" in payload, false);
   assert.equal(payload.responsesModel, "gpt-5.5");
   assert.equal(payload.defaults.size, "896x1120");
+});
+
+test("Cloudflare model list route uses browser API settings without echoing the key", async () => {
+  const seenRequests = [];
+  const formData = new FormData();
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/models", {
+    method: "POST",
+    body: formData,
+  }), {
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+      });
+      return new Response(JSON.stringify({
+        data: [
+          { id: "gpt-5.5" },
+          { id: "gpt-image-2" },
+          { id: "" },
+        ],
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(seenRequests[0].url, "https://example.test/v1/models");
+  assert.equal(seenRequests[0].auth, "Bearer test-browser-key");
+  assert.equal(payload.ok, true);
+  assert.deepEqual(payload.models, ["gpt-5.5", "gpt-image-2"]);
+  assert.doesNotMatch(JSON.stringify(payload), /test-browser-key/);
+});
+
+test("Cloudflare model list route returns upstream failures as a gateway error when a key is present", async () => {
+  const formData = new FormData();
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/models", {
+    method: "POST",
+    body: formData,
+  }), {
+    async fetchImpl() {
+      return new Response(JSON.stringify({ error: { message: "upstream unavailable" } }), {
+        status: 503,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 502);
+  assert.equal(payload.ok, false);
+  assert.match(payload.message, /upstream unavailable/);
+  assert.doesNotMatch(JSON.stringify(payload), /test-browser-key/);
 });
 
 test("Cloudflare PPT analysis uses browser API settings and returns parameter recommendations", async () => {

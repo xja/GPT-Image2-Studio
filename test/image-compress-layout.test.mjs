@@ -14,8 +14,14 @@ test("image compression tool is exposed as an independent create tool view", asy
   const app = await readFile(appPath, "utf8");
   const loader = await readFile(loaderPath, "utf8");
   const view = await readFile(viewPath, "utf8");
+  const createMenu = html.match(/<div class="nav-flyout mega-menu" id="nav-menu-studio"[\s\S]*?<div class="nav-item" data-nav-section="assets">/)?.[0] ?? "";
+  const createMenuColumns = createMenu.match(/<section class="mega-menu-column[^"]*"[\s\S]*?<\/section>/g) ?? [];
+  assert.equal(createMenuColumns.length, 2);
+  const [createPrimaryColumn, createToolColumn] = createMenuColumns;
 
   assert.match(html, /href="#image-compress"[\s\S]*图片压缩/);
+  assert.doesNotMatch(createPrimaryColumn, /href="#image-compress"/);
+  assert.match(createToolColumn, /href="#image-compress"[\s\S]*图片压缩/);
   assert.match(html, /data-view-panel="image-compress"/);
   assert.match(html, /id="imageCompressInput"/);
   assert.match(html, /id="imageCompressDropzone"/);

@@ -160,6 +160,28 @@ test("listing agent sends a strict JSON schema request with prompt guardrails", 
   assert.match(calls[0].body.input, /Do not invent material, warranty, certification, compatibility, medical, safety, or performance claims/);
 });
 
+test("listing agent times out stalled upstream requests", async () => {
+  const fetchImpl = async (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener("abort", () => {
+      const error = new Error("aborted");
+      error.name = "AbortError";
+      reject(error);
+    });
+  });
+
+  await assert.rejects(
+    requestCreationListingDraft({
+      baseUrl: "https://example.test/v1",
+      apiKey: "test-key",
+      responsesModel: "gpt-5.4",
+      source: standardSource,
+      fetchImpl,
+      requestTimeoutMs: 5,
+    }),
+    /Listing request timed out after 5ms/,
+  );
+});
+
 test("listing agent accepts UI-only Chinese display text alongside English public copy", async () => {
   const fetchImpl = async () => new Response(JSON.stringify({
     output_text: JSON.stringify(makeValidDraft({
@@ -367,9 +389,9 @@ test("listing agent retries when a metric plus imperial source title omits one u
         ],
       })
       : makeValidDraft({
-        title: "2 Pack 3.5 in / 9 cm Blue Fishing Lures for Bass",
+        title: "2 Pack 3.5 in (9 cm) Blue Fishing Lures for Bass",
         fiveBullets: [
-          "2 Pack 3.5 in / 9 cm size fits common freshwater tackle storage.",
+          "2 Pack 3.5 in (9 cm) size fits common freshwater tackle storage.",
           "Blue lure profile supports clear SKU identification.",
           "Compact design works for bass fishing presentations.",
           "Product details are based on provided inputs and SKU metadata.",
@@ -392,7 +414,7 @@ test("listing agent retries when a metric plus imperial source title omits one u
 
   assert.equal(callCount, 2);
   assert.match(prompts[1], /title must include all expected size units/);
-  assert.match(draft.title, /^2 Pack 3\.5 in \/ 9 cm/);
+  assert.match(draft.title, /^2 Pack 3\.5 in \(9 cm\)/);
 });
 
 test("generateCreationListingDrafts creates one parent draft for all SKU variants", async () => {
@@ -415,11 +437,38 @@ test("generateCreationListingDrafts creates one parent draft for all SKU variant
 
   assert.equal(drafts.length, 1);
   assert.equal(drafts[0].status, "completed");
-  assert.match(drafts[0].title, /^2 Pack 3\.5 in/);
+  assert.match(drafts[0].title, /^2 Pack 8\.89 cm \(3\.5 in\)/);
   assert.equal(drafts[0].skuSubjectId, "");
   assert.match(drafts[0].fiveBullets.join("\n"), /2 selectable SKU variants/);
   assert.match(visibleChineseDisplayText(drafts[0]), /SKU 变体/u);
-  assert.equal(validateCreationListingDraft(drafts[0], { expectedQuantity: "2 Pack", expectedSize: "3.5 in" }).ok, true);
+  assert.equal(validateCreationListingDraft(drafts[0], { expectedQuantity: "2 Pack", expectedSize: "8.89 cm (3.5 in)" }).ok, true);
+});
+
+test("generateCreationListingDrafts includes both metric and imperial units in titles when requested", async () => {
+  const drafts = await generateCreationListingDrafts({
+    set: {
+      setId: "set-dual-units",
+      productName: "Electric Fishing Lure",
+      productDescription: "Jointed lure with LED light and rechargeable battery",
+      dimensionSpecs: "13cm/42g",
+      dimensionUnitMode: "both",
+      skuBundleCount: 1,
+    },
+    config: { baseUrl: "https://example.test/v1", apiKey: "test-key", responsesModel: "gpt-5.4" },
+    fetchImpl() {
+      throw new Error("mock mode should not request the network");
+    },
+    mock: true,
+  });
+
+  assert.match(drafts[0].title, /^1 Pack 13cm \(5\.12 in\)\/42g \(1\.48 oz\) Electric Fishing Lure\b/);
+  assert.equal(
+    validateCreationListingDraft(drafts[0], {
+      expectedQuantity: "1 Pack",
+      expectedSize: "13cm (5.12 in)/42g (1.48 oz)",
+    }).ok,
+    true,
+  );
 });
 
 test("mock listing drafts avoid unsupported claims and competitor brand terms", () => {

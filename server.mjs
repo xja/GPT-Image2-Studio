@@ -49,6 +49,7 @@ import {
 } from "./lib/gallery-store.mjs";
 import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
 import { mergeRequestPrivateConfig } from "./lib/request-private-config.mjs";
+import { fetchAvailableModels } from "./lib/model-list-client.mjs";
 import { createGenerationTaskStore } from "./lib/generation-task-store.mjs";
 import { createSessionTaskSlotLimiter } from "./lib/generation-task-slots.mjs";
 import { runWithConcurrency } from "./lib/limited-concurrency.mjs";
@@ -105,6 +106,7 @@ import {
   buildCreationRepairPlan,
   hasCreationRepairPlanningOverride,
   hydrateCreationRepairSkuSubjects,
+  needsCreationRepairPlanRefresh,
   refreshCreationRepairItemsFromPlan,
   selectCreationRepairItems,
 } from "./lib/creation-repair.mjs";
@@ -148,6 +150,7 @@ const creationSetStore = createCreationSetStore({ outputDir, publicBasePath: "/o
 const portraitSetStore = createPortraitSetStore({ outputDir, publicBasePath: "/output" });
 const articleIllustrationSetStore = createArticleIllustrationSetStore({ outputDir, publicBasePath: "/output" });
 const port = Number(process.env.PORT || 3600);
+const DEFAULT_CREATION_LISTING_REASONING_EFFORT = "medium";
 const SESSION_TASK_SLOT_RETRY_DELAY_MS = 250;
 const sessionTaskSlotLimiter = createSessionTaskSlotLimiter({
   maxParallelTasks: MAX_PARALLEL_TASKS_PER_SESSION,
@@ -183,7 +186,7 @@ function buildPortraitReferenceImageLabels(personReferenceImages = [], actionRef
     ),
     ...accessoryReferenceImages.map(
       (image, index) =>
-        `Portrait clothing, prop, and accessory reference ${index + 1} of ${accessoryCount}: ${image.filename || "styling reference image"}. Use this only for outfit, fabric, prop, accessory, styling, color, and material cues; do not treat it as another person identity.`,
+        `Portrait clothing, prop, and accessory reference ${index + 1} of ${accessoryCount}: ${image.filename || "styling reference image"}. WARDROBE LOCK: This image is the wardrobe authority. The generated subject must wear the supplied outfit, fabric structure, silhouette, colors, material, accessories, shoes, and props from this reference. Do not replace it with a generic blazer, suit, dress, or everyday outfit; do not treat it as another person identity.`,
     ),
   ];
 }
@@ -479,6 +482,26 @@ async function handleConfigPost(request, response) {
     ...(await configStore.readPublicConfig()),
     aspectRatios: getAspectRatioOptions(),
   });
+}
+
+async function handleModelListPost(request, response) {
+  let hasApiKey = false;
+  try {
+    const formData = await readFormDataBody(request);
+    const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
+    hasApiKey = Boolean(config.apiKey);
+    const models = await fetchAvailableModels({
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      fetchImpl: fetch,
+    });
+    sendJson(response, 200, { ok: true, models });
+  } catch (error) {
+    sendJson(response, hasApiKey ? 502 : 400, {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 async function handleGalleryGet(response) {
@@ -2452,10 +2475,10 @@ async function handleCreationListingsGenerate(request, response) {
     });
   }
 
-  let reasoningEffort = DEFAULT_REASONING_EFFORT;
+  let reasoningEffort = DEFAULT_CREATION_LISTING_REASONING_EFFORT;
   try {
     reasoningEffort = normalizeReasoningEffort(
-      payload?.reasoningEffort || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+      payload?.reasoningEffort || DEFAULT_CREATION_LISTING_REASONING_EFFORT,
     );
   } catch (error) {
     return sendJson(response, 400, {
@@ -2595,6 +2618,12 @@ async function handlePortraitReferenceAnalyze(request, response) {
     ...formData.getAll("referenceImages"),
     ...formData.getAll("referenceImage"),
   ]);
+  const accessoryReferenceImages = await toReferenceImages([
+    ...formData.getAll("portraitAccessoryReferenceImages"),
+  ]);
+  const actionReferenceImages = await toReferenceImages([
+    ...formData.getAll("portraitActionReferenceImages"),
+  ]);
 
   if (personReferenceImages.length === 0) {
     return sendJson(response, 400, {
@@ -2607,8 +2636,25 @@ async function handlePortraitReferenceAnalyze(request, response) {
       message: `人物参考图最多支持 ${MAX_PORTRAIT_PERSON_REFERENCE_IMAGES} 张。`,
     });
   }
+  if (accessoryReferenceImages.length > MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES) {
+    return sendJson(response, 400, {
+      message: `服装道具配饰参考图最多支持 ${MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES} 张。`,
+    });
+  }
+  if (actionReferenceImages.length > MAX_PORTRAIT_ACTION_REFERENCE_IMAGES) {
+    return sendJson(response, 400, {
+      message: `动作参考图最多支持 ${MAX_PORTRAIT_ACTION_REFERENCE_IMAGES} 张。`,
+    });
+  }
 
-  if (personReferenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+  const referenceImages = [...personReferenceImages, ...actionReferenceImages, ...accessoryReferenceImages];
+  const referenceImageLabels = buildPortraitReferenceImageLabels(
+    personReferenceImages,
+    actionReferenceImages,
+    accessoryReferenceImages,
+  );
+
+  if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
     return sendJson(response, 400, {
       message: "仅支持图片参考文件。",
     });
@@ -2628,14 +2674,15 @@ async function handlePortraitReferenceAnalyze(request, response) {
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
     image: personReferenceImages[0],
-    images: personReferenceImages,
+    images: referenceImages,
+    imageLabels: referenceImageLabels,
     mode: PORTRAIT_REFERENCE_ANALYSIS_MODE,
     responsesModel: config.responsesModel,
     reasoningEffort,
   });
   const analysis = normalizePortraitReferenceAnalysis(
     json,
-    personReferenceImages.map((image) => image.filename).filter(Boolean),
+    referenceImages.map((image) => image.filename).filter(Boolean),
   );
 
   return sendJson(response, 200, {
@@ -3725,14 +3772,28 @@ async function handlePortraitRepair(request, response) {
       throw new Error("缺少写真记录 ID。");
     }
 
-    referenceImages = await toReferenceImages([
+    const personReferenceImages = await toReferenceImages([
       ...formData.getAll("portraitReferenceImages"),
       ...formData.getAll("referenceImages"),
       ...formData.getAll("referenceImage"),
     ]);
-    if (referenceImages.length > MAX_REFERENCE_IMAGES) {
-      throw new Error(`人物参考图最多支持 ${MAX_REFERENCE_IMAGES} 张。`);
+    const accessoryReferenceImages = await toReferenceImages([
+      ...formData.getAll("portraitAccessoryReferenceImages"),
+    ]);
+    const actionReferenceImages = await toReferenceImages([
+      ...formData.getAll("portraitActionReferenceImages"),
+    ]);
+    if (personReferenceImages.length > MAX_PORTRAIT_PERSON_REFERENCE_IMAGES) {
+      throw new Error(`人物参考图最多支持 ${MAX_PORTRAIT_PERSON_REFERENCE_IMAGES} 张。`);
     }
+    if (accessoryReferenceImages.length > MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES) {
+      throw new Error(`服装道具配饰参考图最多支持 ${MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES} 张。`);
+    }
+    if (actionReferenceImages.length > MAX_PORTRAIT_ACTION_REFERENCE_IMAGES) {
+      throw new Error(`动作参考图最多支持 ${MAX_PORTRAIT_ACTION_REFERENCE_IMAGES} 张。`);
+    }
+    referenceImages = [...personReferenceImages, ...actionReferenceImages, ...accessoryReferenceImages];
+    const referenceImageLabels = buildPortraitReferenceImageLabels(personReferenceImages, actionReferenceImages, accessoryReferenceImages);
     if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
       throw new Error("仅支持图片参考文件。");
     }
@@ -3800,6 +3861,7 @@ async function handlePortraitRepair(request, response) {
           apiKey: config.apiKey,
           prompt: finalPrompt,
           referenceImages,
+          referenceImageLabels,
           size: finalSize,
           quality: finalQuality,
           format: toApiOutputFormat(finalFormat),
@@ -4068,7 +4130,7 @@ async function handleCreationRepair(request, response) {
       skuBundleCount: existingSet.skuBundleCount || 1,
       logo: normalizedLogoOptions.enabled ? normalizedLogoOptions : existingSet.logo || null,
     };
-    if (hasCreationRepairPlanningOverride(existingSet, repairPlanningOverrides)) {
+    if (hasCreationRepairPlanningOverride(existingSet, repairPlanningOverrides) || needsCreationRepairPlanRefresh(repairItems)) {
       repairPlan = buildCreationRepairPlan(existingSet, repairPlanningOverrides);
       repairItems = refreshCreationRepairItemsFromPlan(repairItems, repairPlan);
     }
@@ -4738,6 +4800,10 @@ async function routeRequest(request, response) {
 
   if (request.method === "POST" && url.pathname === "/api/config") {
     return handleConfigPost(request, response);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/models") {
+    return handleModelListPost(request, response);
   }
 
   if (request.method === "GET" && url.pathname === "/api/gallery") {

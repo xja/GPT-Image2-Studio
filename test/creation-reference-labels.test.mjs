@@ -177,3 +177,21 @@ test("creation package references stay scoped to the package image role", () => 
     ["lure-main.png", "package-info.png"],
   );
 });
+
+test("creation dimensions item keeps the dimensions reference image", () => {
+  const images = [
+    { filename: "lure-main.png" },
+    { filename: "lure-size-card.png" },
+    { filename: "joint-detail.png" },
+  ];
+  const roles = [
+    { filename: "lure-main.png", role: "product" },
+    { filename: "lure-size-card.png", role: "dimensions" },
+    { filename: "joint-detail.png", role: "material" },
+  ];
+
+  assert.deepEqual(
+    buildCreationItemReferenceImages({ role: "dimensions" }, images, roles).map((image) => image.filename),
+    ["lure-main.png", "lure-size-card.png", "joint-detail.png"],
+  );
+});

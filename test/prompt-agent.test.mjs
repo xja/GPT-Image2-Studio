@@ -36,7 +36,7 @@ test("prompt agent request can analyze portrait person reference images safely",
     reasoningEffort: "high",
   });
 
-  assert.match(input[0].content[0].text, /portrait person reference analysis/i);
+  assert.match(input[0].content[0].text, /portrait task reference analysis/i);
   assert.match(input[0].content[0].text, /visiblePresentation/);
   assert.match(input[0].content[0].text, /Do not infer real age, race, ethnicity, nationality, religion/i);
   assert.match(input[0].content[0].text, /adult status is unclear/i);
@@ -57,6 +57,43 @@ test("prompt agent request can analyze portrait person reference images safely",
     requestBody.text.format.schema.properties.visiblePresentation.enum,
     ["masculine-presenting", "feminine-presenting", "androgynous-presenting", "unclear"],
   );
+});
+
+test("prompt agent request can label complete portrait task references", () => {
+  const images = [
+    { filename: "person.png", mimeType: "image/png", base64: "cGVyc29u" },
+    { filename: "pose.png", mimeType: "image/png", base64: "cG9zZQ==" },
+    { filename: "armor.png", mimeType: "image/png", base64: "YXJtb3I=" },
+  ];
+  const imageLabels = [
+    "Portrait person reference 1 of 1: person.png. Use this for visible person identity and facial/hair/body presentation cues.",
+    "Portrait action and pose reference 1 of 1: pose.png. Use this only for pose, gesture, body movement, limb placement, action rhythm, and composition cues; do not treat it as another person identity, outfit, or prop source.",
+    "Portrait clothing, prop, and accessory reference 1 of 1: armor.png. Use this only for outfit, fabric, prop, accessory, styling, color, and material cues; do not treat it as another person identity.",
+  ];
+
+  const input = buildPromptAgentInput({
+    images,
+    imageLabels,
+    mode: PORTRAIT_REFERENCE_ANALYSIS_MODE,
+  });
+  const requestBody = createPromptAgentRequestBody({
+    images,
+    imageLabels,
+    mode: PORTRAIT_REFERENCE_ANALYSIS_MODE,
+    responsesModel: "gpt-5.4",
+    reasoningEffort: "high",
+  });
+
+  assert.deepEqual(
+    input[0].content.filter((item) => item.type === "input_text").map((item) => item.text).slice(1),
+    imageLabels,
+  );
+  assert.equal(
+    requestBody.input[0].content.filter((item) => item.type === "input_image").length,
+    3,
+  );
+  assert.match(requestBody.input[0].content[3].text, /Portrait action and pose reference 1 of 1/);
+  assert.match(requestBody.input[0].content[5].text, /Portrait clothing, prop, and accessory reference 1 of 1/);
 });
 
 test("prompt agent normalizes portrait analysis without requiring prompt text", () => {
@@ -282,7 +319,14 @@ test("prompt agent request can identify ecommerce creation reference roles", () 
   assert.ok(requestBody.text.format.schema.required.includes("reference_roles"));
   assert.ok(requestBody.text.format.schema.required.includes("sku_subjects"));
   assert.ok(requestBody.text.format.schema.required.includes("category_hint"));
+  assert.ok(requestBody.text.format.schema.required.includes("visual_language"));
+  assert.deepEqual(requestBody.text.format.schema.properties.visual_language.enum, ["classic-commercial", "reference-style"]);
+  assert.ok(requestBody.text.format.schema.properties.reference_roles.items.properties.role.enum.includes("dimensions"));
   assert.equal(requestBody.text.format.schema.properties.sku_subjects.maxItems, 9);
+  assert.match(input[0].content[0].text, /dimensions/);
+  assert.match(input[0].content[0].text, /role=dimensions/);
+  assert.match(input[0].content[0].text, /型号 F4J16、长度 13cm、重量 42g、钩号 2#/);
+  assert.match(requestBody.text.format.schema.properties.reference_roles.items.properties.note.description, /13cm/);
   assert.match(input[0].content[0].text, /SKU/);
 });
 
@@ -348,6 +392,66 @@ test("prompt agent normalizes creation SKU subject groups", () => {
       ["red", ["red.png"], [3]],
     ],
   );
+});
+
+test("prompt agent normalizes creation reference visual language recommendation", () => {
+  const result = extractPromptAgentJson({
+    output: [
+      {
+        content: [
+          {
+            type: "output_text",
+            text: JSON.stringify({
+              summary: "识别到商品主体和一张风格参考。",
+              category_hint: "Fishing lure",
+              category_path: "Sports > Fishing > Lures > Hard bait",
+              visual_language: "reference-style",
+              visual_language_reason: "参考图主要提供光线、背景和构图风格。",
+              reference_roles: [
+                { index: 1, filename: "lure.png", role: "product", note: "商品主体。" },
+                { index: 2, filename: "mood.png", role: "style", note: "风格参考。" },
+              ],
+              sku_subjects: [{ id: "lure", title: "Lure", reference_indexes: [1], filenames: ["lure.png"], note: "Sellable lure." }],
+              risks: [],
+            }),
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(result.visual_language, "reference-style");
+  assert.equal(result.visual_language_reason, "参考图主要提供光线、背景和构图风格。");
+});
+
+test("prompt agent keeps original filenames for unnamed creation SKU subjects", () => {
+  const result = extractPromptAgentJson({
+    output: [
+      {
+        content: [
+          {
+            type: "output_text",
+            text: JSON.stringify({
+              summary: "One product reference.",
+              category_hint: "Fishing lure",
+              category_path: "Sports > Fishing > Lures > Hard bait",
+              reference_roles: [{ index: 1, filename: "blue-silver-lure.png", role: "product", note: "Blue silver body." }],
+              sku_subjects: [{ reference_indexes: [1], filenames: ["blue-silver-lure.png"], note: "Blue sellable subject." }],
+              risks: [],
+            }),
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(result.sku_subjects[0], {
+    id: "blue-silver-lure.png",
+    title: "blue-silver-lure.png",
+    reference_indexes: [1],
+    filenames: ["blue-silver-lure.png"],
+    note: "Blue sellable subject.",
+  });
 });
 
 test("prompt agent labels every reference image so the model can compare all images", () => {

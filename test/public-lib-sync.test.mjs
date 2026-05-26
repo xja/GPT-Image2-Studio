@@ -3,18 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 
-import { PUBLIC_LIB_SYNC_TARGETS } from "../scripts/sync-public-lib.mjs";
-
-const syncedModules = [
-  "api-contract.mjs",
-  "generation-stream-protocol.mjs",
-  "studio-formatters.mjs",
-  "gallery-organizer.mjs",
-  "generation-size-options.mjs",
-  "creation-category-templates.mjs",
-  "creation-listing-view.mjs",
-  "creation-sku-subjects.mjs",
-];
+import { PUBLIC_LIB_SYNC_TARGETS, syncPublicLib } from "../scripts/sync-public-lib.mjs";
 
 function getPublicAppTopLevelLibImports(source) {
   return [...source.matchAll(/from\s+["']\/lib\/([^"'?/]+\.mjs)(?:\?[^"']*)?["']/g)].map((match) => match[1]);
@@ -27,8 +16,11 @@ async function sha256(path) {
 
 test("public browser modules are synchronized from lib sources", async () => {
   await stat(new URL("../scripts/sync-public-lib.mjs", import.meta.url));
+  const checkedFiles = await syncPublicLib({ check: true });
 
-  for (const filename of syncedModules) {
+  assert.ok(checkedFiles.length >= PUBLIC_LIB_SYNC_TARGETS.length);
+
+  for (const filename of checkedFiles) {
     assert.equal(
       await sha256(`../public/lib/${filename}`),
       await sha256(`../lib/${filename}`),

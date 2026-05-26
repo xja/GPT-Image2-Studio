@@ -53,6 +53,7 @@ import {
 } from "./lib/ppt-completion.mjs";
 import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
 import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
+import { fetchAvailableModels } from "./lib/model-list-client.mjs";
 import { runWithConcurrency } from "./lib/limited-concurrency.mjs";
 import {
   CREATION_REFERENCE_ANALYSIS_MODE,
@@ -112,13 +113,14 @@ function buildPortraitReferenceImageLabels(personReferenceImages = [], actionRef
     ),
     ...accessoryReferenceImages.map(
       (image, index) =>
-        `Portrait clothing, prop, and accessory reference ${index + 1} of ${accessoryCount}: ${image.filename || "styling reference image"}. Use this only for outfit, fabric, prop, accessory, styling, color, and material cues; do not treat it as another person identity.`,
+        `Portrait clothing, prop, and accessory reference ${index + 1} of ${accessoryCount}: ${image.filename || "styling reference image"}. WARDROBE LOCK: This image is the wardrobe authority. The generated subject must wear the supplied outfit, fabric structure, silhouette, colors, material, accessories, shoes, and props from this reference. Do not replace it with a generic blazer, suit, dress, or everyday outfit; do not treat it as another person identity.`,
     ),
   ];
 }
 const GENERATION_MODES = new Set(["style-transfer", "reference-analysis", IMAGE_DECOMPOSITION_MODE, "portrait"]);
 const SERVER_IMAGE_BUCKET_MISSING_MESSAGE = "服务器图片存储未配置 IMAGE_BUCKET";
 const GENERATION_QUEUE_MISSING_MESSAGE = "服务器异步生成队列未配置 GENERATION_QUEUE";
+const DEFAULT_CREATION_LISTING_REASONING_EFFORT = "medium";
 const DEFAULT_CONFIG = {
   baseUrl: DEFAULT_BASE_URL,
   responsesModel: DEFAULT_RESPONSES_MODEL,
@@ -739,6 +741,26 @@ function normalizePrivateConfigPayload(payload = {}) {
   });
 }
 
+async function handleModelList(request, fetchImpl) {
+  let hasApiKey = false;
+  try {
+    const formData = await request.formData();
+    const config = normalizePrivateConfig(formData);
+    hasApiKey = Boolean(config.apiKey);
+    const models = await fetchAvailableModels({
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      fetchImpl,
+    });
+    return jsonResponse({ ok: true, models });
+  } catch (error) {
+    return jsonResponse({
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    }, hasApiKey ? 502 : 400);
+  }
+}
+
 function firstConfigString(values, fallback = "") {
   for (const value of values) {
     const normalized = String(value || "").trim();
@@ -787,7 +809,7 @@ function buildCloudCreationListingConfig(payload = {}, env = {}) {
         env.REASONING_EFFORT,
         env.IMAGE_STUDIO_REASONING_EFFORT,
       ],
-      DEFAULT_REASONING_EFFORT,
+      DEFAULT_CREATION_LISTING_REASONING_EFFORT,
     )),
   };
 }
@@ -1597,15 +1619,35 @@ async function handlePortraitReferenceAnalyze(request, fetchImpl) {
     ...formData.getAll("referenceImages"),
     ...formData.getAll("referenceImage"),
   ]);
+  const accessoryReferenceImages = await toReferenceImages([
+    ...formData.getAll("portraitAccessoryReferenceImages"),
+  ]);
+  const actionReferenceImages = await toReferenceImages([
+    ...formData.getAll("portraitActionReferenceImages"),
+  ]);
 
   if (personReferenceImages.length === 0) {
     return jsonResponse({ message: "请先上传人物参考图。" }, 400);
   }
-  if (personReferenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
-    return jsonResponse({ message: "仅支持图片文件。" }, 400);
-  }
   if (personReferenceImages.length > MAX_PORTRAIT_PERSON_REFERENCE_IMAGES) {
     return jsonResponse({ message: `人物参考图最多支持 ${MAX_PORTRAIT_PERSON_REFERENCE_IMAGES} 张。` }, 400);
+  }
+  if (accessoryReferenceImages.length > MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES) {
+    return jsonResponse({ message: `服装道具配饰参考图最多支持 ${MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES} 张。` }, 400);
+  }
+  if (actionReferenceImages.length > MAX_PORTRAIT_ACTION_REFERENCE_IMAGES) {
+    return jsonResponse({ message: `动作参考图最多支持 ${MAX_PORTRAIT_ACTION_REFERENCE_IMAGES} 张。` }, 400);
+  }
+
+  const referenceImages = [...personReferenceImages, ...actionReferenceImages, ...accessoryReferenceImages];
+  const referenceImageLabels = buildPortraitReferenceImageLabels(
+    personReferenceImages,
+    actionReferenceImages,
+    accessoryReferenceImages,
+  );
+
+  if (referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+    return jsonResponse({ message: "仅支持图片文件。" }, 400);
   }
 
   const config = normalizePrivateConfig(formData);
@@ -1616,7 +1658,8 @@ async function handlePortraitReferenceAnalyze(request, fetchImpl) {
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
     image: personReferenceImages[0],
-    images: personReferenceImages,
+    images: referenceImages,
+    imageLabels: referenceImageLabels,
     mode: PORTRAIT_REFERENCE_ANALYSIS_MODE,
     responsesModel: config.responsesModel,
     reasoningEffort,
@@ -3018,6 +3061,10 @@ export async function handleApiRequest(request, options = {}) {
 
   if (request.method === "POST" && url.pathname === "/api/config") {
     return jsonResponse(buildPublicConfig());
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/models") {
+    return handleModelList(request, fetchImpl);
   }
 
   if (request.method === "GET" && url.pathname === "/api/generation/tasks") {

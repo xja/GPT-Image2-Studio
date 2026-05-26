@@ -155,6 +155,8 @@ test("portrait reference uploads split person and styling accessory limits", asy
   assert.match(app, /formData\.append\("portraitActionReferenceImages", item\.file\)/);
   assert.match(app, /portraitAccessoryReferenceInput:\s*document\.querySelector\("#portraitAccessoryReferenceInput"\)/);
   assert.match(app, /formData\.append\("portraitAccessoryReferenceImages", item\.file\)/);
+  assert.doesNotMatch(app, /buildPortraitFormData\(\{\s*includeFiles:\s*true,\s*includeActionFiles:\s*false,\s*includeAccessoryFiles:\s*false\s*\}\)/);
+  assert.match(app, /const formData = buildPortraitFormData\(\{\s*includeFiles:\s*true\s*\}\);/);
 });
 
 test("portrait accessory asset library inserts real image assets into accessory references", async () => {
@@ -196,6 +198,12 @@ test("portrait accessory asset library inserts real image assets into accessory 
   assert.match(app, /formData\.set\("notes",\s*\[rawPortraitNotes,\s*getPortraitAccessoryPromptSummary\(\)\]\.filter\(Boolean\)\.join\("\\n\\n"\)\)/);
   assert.match(app, /Math\.min\(canvas\.width \/ image\.naturalWidth, canvas\.height \/ image\.naturalHeight\)/);
   assert.match(styles, /\.portrait-accessory-asset-panel\s*\{/);
+  assert.match(app, /label\.className = "portrait-accessory-asset-label"/);
+  assert.match(styles, /\.portrait-accessory-asset-list\s*\{[\s\S]*grid-auto-rows:\s*max-content;[\s\S]*align-content:\s*start;/);
+  assert.match(styles, /\.portrait-accessory-asset-item\s*\{[\s\S]*grid-template-rows:\s*auto auto;/);
+  assert.match(styles, /\.portrait-accessory-asset-add\s*\{[\s\S]*grid-template-rows:\s*auto auto;/);
+  assert.match(styles, /\.portrait-accessory-asset-label\s*\{[\s\S]*display:\s*block;[\s\S]*color:\s*var\(--text\);[\s\S]*white-space:\s*normal;/);
+  assert.doesNotMatch(styles, /\.portrait-accessory-asset-item span\s*\{/);
   assert.match(styles, /\.portrait-accessory-color-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(4,\s*minmax\(28px,\s*1fr\)\);/);
   assert.match(styles, /\.portrait-accessory-color-option img\s*\{[\s\S]*aspect-ratio:\s*1;/);
   assert.equal(whiteShirtAsset[0], 0x89);
@@ -225,16 +233,29 @@ test("portrait accessory asset library inserts real image assets into accessory 
   assert.doesNotMatch(attribution, /Wikimedia Commons/);
 });
 
-test("portrait workbench omits per-card tuning and repair controls", async () => {
+test("portrait workbench exposes failed item retry controls without prompt tuning", async () => {
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const portraitPlanActions = html.match(/<div class="creation-plan-actions">([\s\S]*?)<\/div>/)?.[1] || "";
 
-  assert.doesNotMatch(html, /id="portraitRepairFailedButton"/);
+  assert.match(html, /id="portraitRepairFailedButton"/);
+  assert.match(
+    html,
+    /class="panel-title between portrait-output-title"[\s\S]*id="portraitRepairFailedButton"/,
+  );
+  assert.doesNotMatch(portraitPlanActions, /portraitRepairFailedButton/);
+  assert.match(styles, /\.panel-title\.portrait-output-title\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto;/);
+  assert.match(styles, /\.portrait-output-retry-button\s*\{[\s\S]*justify-self:\s*end;/);
   assert.doesNotMatch(app, /data-portrait-edit-item-id/);
   assert.doesNotMatch(app, /data-portrait-save-prompt-item-id/);
-  assert.doesNotMatch(app, /data-portrait-retry-item-id/);
-  assert.doesNotMatch(app, /portrait-card-actions/);
-  assert.doesNotMatch(app, /repairPortraitItems/);
+  assert.match(app, /data-portrait-retry-item-id/);
+  assert.match(app, /portrait-card-actions/);
+  assert.match(app, /function canRepairPortraitSet/);
+  assert.match(app, /async function repairPortraitItems/);
+  assert.match(app, /requestGenerationStream\("\/api\/portrait\/repair"/);
+  assert.match(app, /refs\.portraitResultGrid\.addEventListener\("click"[\s\S]*portraitRetryItemId/);
+  assert.match(app, /refs\.portraitRepairFailedButton\.addEventListener\("click"/);
 });
 
 test("portrait lazy view modules delegate to portrait renderers", async () => {

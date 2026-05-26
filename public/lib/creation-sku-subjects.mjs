@@ -60,11 +60,38 @@ function normalizeIndexArray(value) {
     : [];
 }
 
+function buildReferenceRoleMap(referenceRoles = []) {
+  const roleMap = new Map();
+  if (!Array.isArray(referenceRoles)) {
+    return roleMap;
+  }
+
+  referenceRoles.forEach((entry = {}) => {
+    const filename = cleanString(entry.filename || entry.name).toLowerCase();
+    const role = cleanString(entry.role || "product");
+    if (filename) {
+      roleMap.set(filename, role || "product");
+    }
+  });
+
+  return roleMap;
+}
+
+function isSubjectBackedOnlyByNonProductReferences(subject = {}, roleMap = new Map()) {
+  if (!roleMap.size) {
+    return false;
+  }
+  const matchedRoles = normalizeStringArray(subject.filenames)
+    .map((filename) => roleMap.get(filename.toLowerCase()))
+    .filter(Boolean);
+  return matchedRoles.length > 0 && matchedRoles.every((role) => role !== "product");
+}
+
 export function normalizeCreationSkuSubjectForPayload(entry = {}, index = 0) {
   const filenames = normalizeStringArray(entry.filenames);
   const referenceIndexes = normalizeIndexArray(entry.referenceIndexes || entry.reference_indexes);
   const id = cleanString(entry.id || entry.subjectId || entry.subject_id || filenames[0] || `sku-${index + 1}`);
-  const title = cleanString(entry.title || entry.name || id);
+  const title = cleanString(entry.title || entry.name || filenames[0] || id);
   const note = cleanString(entry.note || entry.description);
   const rawBundleCount = entry.bundleCount ?? entry.bundle_count ?? entry.quantity ?? entry.count ?? entry.skuBundleCount;
   const bundleCount = rawBundleCount === undefined || rawBundleCount === null || cleanString(rawBundleCount) === ""
@@ -89,10 +116,12 @@ export function buildCreationSkuSubjectsForPayload({
   dirty = false,
   referenceRoles = [],
 } = {}) {
+  const roleMap = buildReferenceRoleMap(referenceRoles);
   const appliedSubjects = analysis && applied && !dirty ? analysis.skuSubjects || [] : [];
   const normalizedSubjects = appliedSubjects
     .map((entry, index) => normalizeCreationSkuSubjectForPayload(entry, index))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((subject) => !isSubjectBackedOnlyByNonProductReferences(subject, roleMap));
   if (normalizedSubjects.length > 0) {
     return normalizedSubjects;
   }
@@ -102,7 +131,7 @@ export function buildCreationSkuSubjectsForPayload({
     .filter((entry) => entry.role === "product")
     .map((entry, index) => ({
       id: entry.filename || `sku-${index + 1}`,
-      title: entry.note || entry.filename || `SKU ${index + 1}`,
+      title: entry.filename || `SKU ${index + 1}`,
       referenceIndexes: [entry.referenceIndex],
       filenames: [entry.filename].filter(Boolean),
       note: entry.note || "",

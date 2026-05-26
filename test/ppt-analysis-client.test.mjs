@@ -11,6 +11,8 @@ function createElementStub({ value = "", options = [] } = {}) {
     innerHTML: "",
     disabled: false,
     dataset: {},
+    offsetWidth: 96,
+    style: {},
     classList: {
       toggles: [],
       toggle(name, active) {
@@ -19,6 +21,13 @@ function createElementStub({ value = "", options = [] } = {}) {
     },
     addEventListener() {},
     appendChild() {},
+    replaceChildren(...children) {
+      this.children = children;
+      this.textContent = children.filter((child) => typeof child === "string").join("");
+    },
+    setAttribute(name, value) {
+      this[name] = value;
+    },
   };
 }
 

@@ -20,6 +20,76 @@ export function cleanCreationListingText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+function getCreationListingGeneratingSetIds(state = {}) {
+  const creation = state?.creation || {};
+  const ids = new Set();
+  if (Array.isArray(creation.listingGeneratingSetIds)) {
+    creation.listingGeneratingSetIds
+      .map(cleanCreationListingText)
+      .filter(Boolean)
+      .forEach((id) => ids.add(id));
+  }
+  const legacyId = cleanCreationListingText(creation.listingGeneratingSetId);
+  if (legacyId) {
+    ids.add(legacyId);
+  }
+  return ids;
+}
+
+function writeCreationListingGeneratingSetIds(context = {}, ids = new Set()) {
+  if (!context.state) {
+    context.state = {};
+  }
+  if (!context.state.creation) {
+    context.state.creation = {};
+  }
+  const nextIds = [...ids].map(cleanCreationListingText).filter(Boolean);
+  context.state.creation.listingGeneratingSetIds = nextIds;
+  context.state.creation.listingGeneratingSetId = nextIds[0] || "";
+}
+
+function setCreationListingGenerating(context = {}, setId, isGenerating) {
+  const id = cleanCreationListingText(setId);
+  if (!id) {
+    return;
+  }
+  const ids = getCreationListingGeneratingSetIds(context.state);
+  if (isGenerating) {
+    ids.add(id);
+  } else {
+    ids.delete(id);
+  }
+  writeCreationListingGeneratingSetIds(context, ids);
+}
+
+function isCreationListingGenerating(state = {}, setId) {
+  const id = cleanCreationListingText(setId);
+  return Boolean(id && getCreationListingGeneratingSetIds(state).has(id));
+}
+
+function createInlineBusyMotion() {
+  const motion = document.createElement("span");
+  motion.className = "inline-busy-motion";
+  motion.setAttribute?.("aria-hidden", "true");
+  for (let index = 0; index < 3; index += 1) {
+    motion.appendChild(document.createElement("span"));
+  }
+  return motion;
+}
+
+function renderCreationListingGenerateButton(button, { disabled = false, isGenerating = false } = {}) {
+  button.disabled = disabled;
+  button.classList?.toggle("is-loading", isGenerating);
+  if (!isGenerating || typeof document === "undefined" || typeof button.replaceChildren !== "function") {
+    button.textContent = isGenerating ? "生成中..." : "生成 Listing";
+    return;
+  }
+  const label = document.createElement("span");
+  label.className = "creation-listing-generate-label";
+  label.textContent = "生成中...";
+  button.replaceChildren(createInlineBusyMotion(), label);
+}
+
 function isEnglishCreationListingLanguage(language) {
   return /^en(?:-|$)/i.test(cleanCreationListingText(language));
 }
@@ -205,6 +275,22 @@ export function buildCreationListingFieldRows(value, localizedValue, { list = fa
   }));
 }
 
+export function countCreationListingTextCharacters(value, { list = false } = {}) {
+  const rows = list ? cleanCreationListingArray(value) : [cleanCreationListingText(value)].filter(Boolean);
+  return rows.reduce((total, text) => total + Array.from(text).length, 0);
+}
+
+function buildCreationListingFieldCharacterCounts(value, localizedValue, { list = false, countValue, localizedCountValue } = {}) {
+  const englishValue = countValue ?? value;
+  const chineseValue = localizedCountValue ?? localizedValue;
+  const englishList = Array.isArray(englishValue) ? true : list;
+  const chineseList = Array.isArray(chineseValue) ? true : list;
+  return {
+    english: countCreationListingTextCharacters(englishValue, { list: englishList }),
+    chinese: countCreationListingTextCharacters(chineseValue, { list: chineseList }),
+  };
+}
+
 export function buildCreationListingBucketCopyLines(keywordBuckets = {}) {
   return getCreationListingBucketEntries(keywordBuckets).flatMap((entry) => {
     const values = cleanCreationListingArray(entry.values)
@@ -224,11 +310,34 @@ function appendLocalizedText(parent, localizedText) {
   parent.appendChild(localized);
 }
 
-function createCreationListingField(label, value, { list = false, localizedValue, copyValue } = {}) {
+function applyCreationListingCopyData(target, label, value, { list = false } = {}) {
+  target.dataset.creationListingCopyLabel = label;
+  target.dataset.creationListingCopyText = buildCreationListingFieldCopyText(value, { list });
+}
+
+function createCreationListingCharacterCountsNode(counts) {
+  const stats = document.createElement("span");
+  stats.className = "creation-listing-character-counts";
+  stats.setAttribute("aria-label", `英文字符 ${counts.english}，中文字符 ${counts.chinese}`);
+
+  const english = document.createElement("span");
+  english.className = "creation-listing-character-count english";
+  english.textContent = `英文字符 ${counts.english}`;
+  const chinese = document.createElement("span");
+  chinese.className = "creation-listing-character-count chinese";
+  chinese.textContent = `中文字符 ${counts.chinese}`;
+
+  stats.append(english, chinese);
+  return stats;
+}
+
+function createCreationListingField(label, value, { list = false, localizedValue, copyValue, countValue, localizedCountValue } = {}) {
   const field = document.createElement("div");
   field.className = "creation-listing-field";
   const copySource = copyValue ?? value;
   const copyList = Array.isArray(copySource) ? true : list;
+  const fieldHead = document.createElement("div");
+  fieldHead.className = "creation-listing-field-head";
 
   const copyButton = document.createElement("button");
   copyButton.className = "creation-listing-field-copy";
@@ -236,9 +345,15 @@ function createCreationListingField(label, value, { list = false, localizedValue
   copyButton.textContent = label;
   copyButton.title = `点击复制${label}`;
   copyButton.setAttribute("aria-label", `复制${label}`);
-  copyButton.dataset.creationListingCopyLabel = label;
-  copyButton.dataset.creationListingCopyText = buildCreationListingFieldCopyText(copySource, { list: copyList });
-  field.appendChild(copyButton);
+  applyCreationListingCopyData(copyButton, label, copySource, { list: copyList });
+
+  fieldHead.append(
+    copyButton,
+    createCreationListingCharacterCountsNode(
+      buildCreationListingFieldCharacterCounts(value, localizedValue, { list, countValue, localizedCountValue }),
+    ),
+  );
+  field.appendChild(fieldHead);
 
   if (list) {
     const listNode = document.createElement("ul");
@@ -344,7 +459,7 @@ export function renderCreationListingDrafts({ refs, state, set } = {}) {
 
   const panel = refs.creationRecordListingDrafts.closest(".creation-listing-panel");
   const drafts = getCreationListingDrafts(set).map((draft, index) => normalizeCreationListingDraftForView(draft, index));
-  const isGenerating = Boolean(set?.setId && state?.creation?.listingGeneratingSetId === set.setId);
+  const isGenerating = isCreationListingGenerating(state, set?.setId);
   panel?.classList.toggle("hidden", !set);
   refs.creationRecordListingDrafts.replaceChildren();
 
@@ -376,7 +491,14 @@ export function renderCreationListingDrafts({ refs, state, set } = {}) {
     header.className = "creation-listing-card-head";
     const headerContent = formatCreationListingDraftHeader(draft, index);
     const title = document.createElement("h4");
-    title.textContent = headerContent.title;
+    const titleCopy = document.createElement("button");
+    titleCopy.className = "creation-listing-title-copy";
+    titleCopy.type = "button";
+    titleCopy.textContent = headerContent.title;
+    titleCopy.title = "点击复制标题";
+    titleCopy.setAttribute("aria-label", "复制标题");
+    applyCreationListingCopyData(titleCopy, "标题", headerContent.title);
+    title.appendChild(titleCopy);
     const meta = document.createElement("p");
     meta.textContent = headerContent.meta;
     header.append(title, meta);
@@ -403,6 +525,8 @@ export function renderCreationListingDrafts({ refs, state, set } = {}) {
       list: true,
       localizedValue: localizedBucketLines,
       copyValue: buildCreationListingBucketCopyLines(draft.keywordBuckets),
+      countValue: Object.values(draft.keywordBuckets || {}).flat(),
+      localizedCountValue: Object.values(draft.zhDisplay?.keywordBuckets || {}).flat(),
     });
     buckets.classList.add("creation-listing-buckets");
     contentFrame.appendChild(buckets);
@@ -424,6 +548,10 @@ export function renderCreationListingDrafts({ refs, state, set } = {}) {
 }
 
 export function createCreationListingController(context = {}) {
+  const renderViews = () => {
+    context.renderRecordView?.();
+    context.renderCurrentView?.();
+  };
   const getSelectedSet = (setId = "") => {
     const requestedSetId = cleanCreationListingText(setId);
     if (!requestedSetId) {
@@ -441,9 +569,14 @@ export function createCreationListingController(context = {}) {
       return null;
     }
 
-    context.state.creation.listingGeneratingSetId = selectedSet.setId;
+    if (isCreationListingGenerating(context.state, selectedSet.setId)) {
+      context.setFeedback?.("当前套图 Listing 正在生成。", "busy");
+      return selectedSet;
+    }
+
+    setCreationListingGenerating(context, selectedSet.setId, true);
     context.setFeedback?.("正在生成 Listing...", "busy");
-    context.renderRecordView?.();
+    renderViews();
 
     try {
       const response = await context.fetchImpl("/api/creation/listings", {
@@ -452,6 +585,7 @@ export function createCreationListingController(context = {}) {
         body: JSON.stringify({
           ...(context.getRequestConfig?.() || {}),
           setId: selectedSet.setId,
+          set: selectedSet,
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -476,8 +610,8 @@ export function createCreationListingController(context = {}) {
       context.setFeedback?.(message, "error");
       throw new Error(message);
     } finally {
-      context.state.creation.listingGeneratingSetId = "";
-      context.renderRecordView?.();
+      setCreationListingGenerating(context, selectedSet.setId, false);
+      renderViews();
     }
   }
 
@@ -516,21 +650,28 @@ export function createCreationListingController(context = {}) {
 
   function syncRecordControls(selectedSet) {
     const drafts = getCreationListingDrafts(selectedSet);
-    const isGenerating = Boolean(selectedSet?.setId && context.state?.creation?.listingGeneratingSetId === selectedSet.setId);
+    const isGenerating = isCreationListingGenerating(context.state, selectedSet?.setId);
     if (context.refs.creationRecordGenerateListingsButton) {
-      context.refs.creationRecordGenerateListingsButton.disabled = !selectedSet || Boolean(context.state.creation.listingGeneratingSetId);
-      context.refs.creationRecordGenerateListingsButton.textContent = isGenerating ? "生成中..." : "生成 Listing";
+      renderCreationListingGenerateButton(context.refs.creationRecordGenerateListingsButton, {
+        disabled: !selectedSet || isGenerating,
+        isGenerating,
+      });
     }
     if (context.refs.creationRecordCopyListingsButton) {
-      context.refs.creationRecordCopyListingsButton.disabled = drafts.length === 0 || Boolean(context.state.creation.listingGeneratingSetId);
+      context.refs.creationRecordCopyListingsButton.disabled = drafts.length === 0 || isGenerating;
     }
     if (context.refs.creationRecordExportListingsButton) {
-      context.refs.creationRecordExportListingsButton.disabled = drafts.length === 0 || Boolean(context.state.creation.listingGeneratingSetId);
+      context.refs.creationRecordExportListingsButton.disabled = drafts.length === 0 || isGenerating;
     }
     renderCreationListingDrafts({ refs: context.refs, state: context.state, set: selectedSet });
   }
 
   function bindEvents() {
+    const listingDraftContainers = new Set([
+      context.refs.creationRecordListingDrafts,
+      context.refs.creationInlineListingDrafts,
+    ].filter(Boolean));
+
     context.refs.creationRecordGenerateListingsButton?.addEventListener("click", () => {
       generate().catch((error) => context.setFeedback?.(error.message, "error"));
     });
@@ -538,13 +679,15 @@ export function createCreationListingController(context = {}) {
       copy().catch((error) => context.setFeedback?.(error.message, "error"));
     });
     context.refs.creationRecordExportListingsButton?.addEventListener("click", exportListings);
-    context.refs.creationRecordListingDrafts?.addEventListener("click", (event) => {
-      const copyButton = event.target?.closest?.("[data-creation-listing-copy-text]");
-      if (!copyButton || !context.refs.creationRecordListingDrafts.contains(copyButton)) {
-        return;
-      }
-      copyCreationListingFieldButton(copyButton, context).catch((error) => {
-        context.setFeedback?.(error.message, "error");
+    listingDraftContainers.forEach((container) => {
+      container.addEventListener("click", (event) => {
+        const copyButton = event.target?.closest?.("[data-creation-listing-copy-text]");
+        if (!copyButton || !container.contains(copyButton)) {
+          return;
+        }
+        copyCreationListingFieldButton(copyButton, context).catch((error) => {
+          context.setFeedback?.(error.message, "error");
+        });
       });
     });
   }

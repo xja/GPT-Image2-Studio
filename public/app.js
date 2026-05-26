@@ -1,18 +1,6 @@
 import { buildParameterText, formatImageModelLabel, formatRecentOutputMeta } from "/lib/studio-formatters.mjs";
 import { getPreviewPlaceholderState } from "/lib/preview-placeholder-state.mjs?v=20260510-activity-log-1";
-import {
-  buildGalleryReferenceFilterOptions,
-  buildGallerySections,
-  buildGallerySizeFilterOptions,
-  buildGalleryTimeFilterOptions,
-  distributeGalleryItemsIntoColumns,
-  filterGalleryItems,
-  getGalleryLayoutModeForWidth,
-  getRecentGalleryItems,
-  normalizeGalleryFilters,
-  paginateGallerySections,
-  sortGalleryItemsByCreatedAtDesc,
-} from "/lib/gallery-organizer.mjs";
+import { buildGalleryReferenceFilterOptions, buildGallerySections, buildGallerySizeFilterOptions, buildGalleryTimeFilterOptions, distributeGalleryItemsIntoColumns, filterGalleryItems, getGalleryLayoutModeForWidth, getRecentGalleryItems, normalizeGalleryFilters, paginateGallerySections, sortGalleryItemsByCreatedAtDesc } from "/lib/gallery-organizer.mjs";
 import {
   buildGalleryMetadataCacheEntry,
   collectGalleryMetadataRepairPatch,
@@ -30,30 +18,16 @@ import { GENERATION_STREAM_EVENTS, recordFinalImageChunk } from "/lib/generation
 import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260519-topbar-reveal-2";
 import { ensureLazyViewModule, getMountedLazyViewModule } from "/lib/view-mode-loader.mjs";
 import { appendBrowserConfigToFormData, getBrowserPrivateConfigRequestPayload, getOrCreateClientSessionId, readBrowserPrivateConfig, saveBrowserPrivateConfig, toPublicBrowserConfig } from "/lib/browser-config.mjs";
-import {
-  cacheBrowserGalleryItem,
-  clearBrowserImageCache,
-  dataUrlToBlob,
-  deleteBrowserCachedGalleryItem,
-  fetchServerImageAsDataUrl,
-  getBrowserCachedImageData,
-  getImageUrl,
-  getServerImageUrl,
-  getServerThumbnailUrl,
-  isCacheableBrowserImageUrl,
-  mergeServerAndBrowserGalleryItems,
-  readBrowserCachedGalleryItems,
-} from "/lib/browser-image-cache.mjs";
+import { cacheBrowserGalleryItem, clearBrowserImageCache, dataUrlToBlob, deleteBrowserCachedGalleryItem, fetchServerImageAsDataUrl, getBrowserCachedImageData, getImageUrl, getServerImageUrl, getServerThumbnailUrl, isCacheableBrowserImageUrl, mergeServerAndBrowserGalleryItems, readBrowserCachedGalleryItems } from "/lib/browser-image-cache.mjs";
+import { createCreationLogoLibraryController } from "/lib/creation-logo-library.mjs";
 import { consumeSse, requestGenerationStream } from "/lib/generation-client.mjs";
-import { createPptAnalysisController } from "/lib/ppt-analysis-client.mjs";
+import { createConfigModelPickerController } from "/lib/config-model-picker.mjs";
+import { createPptAnalysisController } from "/lib/ppt-analysis-client.mjs?v=20260526-portrait-retry-1";
 import { appendPptDeckDownloadLinks } from "/lib/ppt-record-links.mjs";
 import { buildCreationSkuSubjectsForPayload, normalizeCreationSkuBundleCountForPayload, normalizeCreationSkuSubjectForPayload } from "/lib/creation-sku-subjects.mjs";
-import {
-  createCreationListingController,
-  getCreationRecordListingMetaLabel,
-  getCreationListingSearchValues,
-  normalizeCreationListingDraftForView,
-} from "/lib/creation-listing-view.mjs";
+import { appendCreationVisualLanguageSuggestionCard, getCreationReferenceAnalysisVisualLanguageReason, getCreationReferenceAnalysisVisualLanguageSource, syncCreationReferenceVisualLanguageButton } from "/lib/creation-reference-analysis-view.mjs";
+import { createCreationListingController, getCreationRecordListingMetaLabel, getCreationListingSearchValues, normalizeCreationListingDraftForView, renderCreationListingDrafts } from "/lib/creation-listing-view.mjs";
+import { getCreationAutoRepairNotice, getCreationCompletionFeedback, getCreationIncompleteItems, shouldAutoRepairCreationSet } from "/lib/creation-auto-repair.mjs";
 import { DEFAULT_PORTRAIT_ACCESSORY_ASSETS, PORTRAIT_ACCESSORY_ASSET_CATEGORIES, getPortraitAccessoryAssetFileDescriptor } from "/lib/portrait-accessory-assets.mjs?v=20260523-portrait-cosplay-color-assets-1";
 const SURPRISE_PROMPTS = [
   {
@@ -404,6 +378,7 @@ const state = {
   creationCategoryTemplatesModule: null,
   creation: {
     currentSet: null,
+    autoRepairAttemptCount: 0,
     editingItemId: "",
     feedback: "",
     generationScope: "",
@@ -563,6 +538,7 @@ const refs = {
   configForm: document.querySelector("#configForm"),
   configGenerationLogPanel: document.querySelector("#configGenerationLogPanel"),
   configStatus: document.querySelector("#configStatus"),
+  fetchModelsButton: document.querySelector("#fetchModelsButton"),
   connectionLabel: document.querySelector("#connectionLabel"),
   connectionStatus: document.querySelector("#connectionStatus"),
   articleIllustrationContentTypeInput: document.querySelector("#articleIllustrationContentTypeInput"),
@@ -605,6 +581,8 @@ const refs = {
   creationDimensionSpecsInput: document.querySelector("#creationDimensionSpecsInput"),
   creationDimensionUnitModeInput: document.querySelector("#creationDimensionUnitModeInput"),
   creationImageCountInput: document.querySelector("#creationImageCountInput"),
+  creationInlineListingDrafts: document.querySelector("#creationInlineListingDrafts"),
+  creationInlineListingStatus: document.querySelector("#creationInlineListingStatus"),
   creationIndustryTemplateBrowser: document.querySelector("#creationIndustryTemplateBrowser"),
   creationIndustryTemplateBackButton: document.querySelector("#creationIndustryTemplateBackButton"),
   creationIndustryTemplateCurrent: document.querySelector("#creationIndustryTemplateCurrent"),
@@ -616,8 +594,8 @@ const refs = {
   creationIndustryTemplateTrigger: document.querySelector("#creationIndustryTemplateTrigger"),
   creationLogoBackgroundInput: document.querySelector("#creationLogoBackgroundInput"),
   creationLogoDropzone: document.querySelector("#creationLogoDropzone"),
-  creationLogoFilename: document.querySelector("#creationLogoFilename"),
   creationLogoInput: document.querySelector("#creationLogoInput"),
+  creationLogoLibraryButton: document.querySelector("#creationLogoLibraryButton"), creationLogoLibraryCloseButton: document.querySelector("#creationLogoLibraryCloseButton"), creationLogoLibraryCount: document.querySelector("#creationLogoLibraryCount"), creationLogoLibraryEmpty: document.querySelector("#creationLogoLibraryEmpty"), creationLogoLibraryInput: document.querySelector("#creationLogoLibraryInput"), creationLogoLibraryPanel: document.querySelector("#creationLogoLibraryPanel"),
   creationLogoBatchOnly: [...document.querySelectorAll("[data-creation-logo-batch-only]")],
   creationLogoBatchSourceCount: document.querySelector("#creationLogoBatchSourceCount"),
   creationLogoBatchSourceDropzone: document.querySelector("#creationLogoBatchSourceDropzone"),
@@ -627,6 +605,7 @@ const refs = {
   creationLogoPreview: document.querySelector("#creationLogoPreview"),
   creationLogoPreviewImage: document.querySelector("#creationLogoPreviewImage"),
   creationLogoRemoveButton: document.querySelector("#creationLogoRemoveButton"),
+  creationSavedLogoGrid: document.querySelector("#creationSavedLogoGrid"),
   creationOutputFormatInput: document.querySelector("#creationOutputFormatInput"),
   creationPlanButton: document.querySelector("#creationPlanButton"),
   creationPromptEditorLayer: document.querySelector("#creationPromptEditorLayer"),
@@ -641,6 +620,7 @@ const refs = {
   creationReferenceAnalysisToggleButton: document.querySelector("#creationReferenceAnalysisToggleButton"),
   creationReferenceAnalyzeButton: document.querySelector("#creationReferenceAnalyzeButton"),
   creationReferenceApplyAnalysisButton: document.querySelector("#creationReferenceApplyAnalysisButton"),
+  creationReferenceApplyVisualLanguageButton: document.querySelector("#creationReferenceApplyVisualLanguageButton"),
   creationReferenceCount: document.querySelector("#creationReferenceCount"),
   creationReferenceDropzone: document.querySelector("#creationReferenceDropzone"),
   creationReferenceGrid: document.querySelector("#creationReferenceGrid"),
@@ -698,6 +678,7 @@ const refs = {
   portraitReferenceDropzone: document.querySelector("#portraitReferenceDropzone"),
   portraitReferenceGrid: document.querySelector("#portraitReferenceGrid"),
   portraitReferenceInput: document.querySelector("#portraitReferenceInput"),
+  portraitRepairFailedButton: document.querySelector("#portraitRepairFailedButton"),
   portraitResultGrid: document.querySelector("#portraitResultGrid"),
   portraitSetMeta: document.querySelector("#portraitSetMeta"),
   portraitShotTypeInputs: [...document.querySelectorAll("[name=\"portraitShotTypes\"]")],
@@ -937,6 +918,8 @@ const refs = {
   referencePreviewImage: document.querySelector("#referencePreviewImage"),
   referencePreviewViewer: document.querySelector("#referencePreviewViewer"),
   refreshGalleryButton: document.querySelector("#refreshGalleryButton"),
+  modelOptionsList: document.querySelector("#modelOptionsList"),
+  modelPickerToggle: document.querySelector("#modelPickerToggle"),
   responsesModelInput: document.querySelector("#responsesModelInput"),
   savedKeyMask: document.querySelector("#savedKeyMask"),
   sizeInput: document.querySelector("#sizeInput"),
@@ -949,6 +932,7 @@ const refs = {
   sideColumn: document.querySelector(".side-column"),
   studioView: document.querySelector(".studio-view"),
   styleTransferBlock: document.querySelector("#styleTransferBlock"),
+  testConnectionButton: document.querySelector("#testConnectionButton"),
   styleTransferInstructionInput: document.querySelector("#styleTransferInstructionInput"),
   styleTransferPresetComparison: document.querySelector("#styleTransferPresetComparison"),
   styleTransferPresetDescription: document.querySelector("#styleTransferPresetDescription"),
@@ -980,6 +964,7 @@ const refs = {
   zoomResetButton: document.querySelector("#zoomResetButton"),
 };
 
+const configModelPicker = createConfigModelPickerController({ refs, state, getBrowserPrivateConfigRequestPayload }); const creationLogoLibrary = createCreationLogoLibraryController({ applyLogoFile: applyCreationLogoFile, refs, setFeedback: setCreationFeedback, showError });
 const pptAnalysis = createPptAnalysisController({
   state,
   buildFormData: buildPptFormData,
@@ -1032,6 +1017,31 @@ function formatFileSize(bytes) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function createInlineBusyMotion(className = "inline-busy-motion") {
+  const motion = Object.assign(document.createElement("span"), { className });
+  motion.setAttribute("aria-hidden", "true");
+  motion.append(document.createElement("span"), document.createElement("span"), document.createElement("span"));
+  return motion;
+}
+
+function renderInlineBusyButton(button, { busy = false, busyText = "", idleText = "", motionClassName = "inline-busy-motion" } = {}) {
+  if (!button) return;
+  button.classList.toggle("is-loading", busy);
+  button.setAttribute("aria-busy", String(busy));
+  if (busy) {
+    if (!button.dataset.busyMinWidth) {
+      const width = Math.ceil(button.offsetWidth || 0);
+      if (width > 0) button.dataset.busyMinWidth = `${width}px`;
+    }
+    if (button.dataset.busyMinWidth) button.style.minWidth = button.dataset.busyMinWidth;
+    button.replaceChildren(busyText, createInlineBusyMotion(motionClassName));
+    return;
+  }
+  delete button.dataset.busyMinWidth;
+  button.style.minWidth = "";
+  button.replaceChildren(idleText);
 }
 
 function buildReferenceFingerprint(file) {
@@ -1740,13 +1750,38 @@ function compactErrorMessage(message, fallbackLabel = "请求失败") {
 }
 
 function showError(message) {
-  refs.errorBanner.textContent = compactErrorMessage(message);
   refs.errorBanner.classList.remove("hidden");
+  refs.errorBanner.textContent = compactErrorMessage(message);
 }
 
 function clearError() {
   refs.errorBanner.textContent = "";
   refs.errorBanner.classList.add("hidden");
+}
+
+const overlayFocusTriggers = new Map();
+
+function captureOverlayTrigger(name) {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && document.contains(active)) {
+    overlayFocusTriggers.set(name, active);
+  }
+}
+
+function focusOverlayTarget(target) {
+  window.requestAnimationFrame(() => {
+    if (target instanceof HTMLElement && document.contains(target)) {
+      target.focus({ preventScroll: true });
+    }
+  });
+}
+
+function restoreOverlayTriggerFocus(name) {
+  const trigger = overlayFocusTriggers.get(name);
+  overlayFocusTriggers.delete(name);
+  if (trigger instanceof HTMLElement && document.contains(trigger)) {
+    focusOverlayTarget(trigger);
+  }
 }
 
 function setConnectionState(kind, label, entryLabel = CONNECTION_STATUS_ENTRY_LABEL) {
@@ -1772,8 +1807,17 @@ function syncConnectionState() {
 }
 
 function setDrawerOpen(open) {
+  const wasOpen = refs.configDrawer.classList.contains("open");
   refs.configDrawer.classList.toggle("open", open);
   refs.configDrawer.setAttribute("aria-hidden", String(!open));
+  if (open) {
+    if (!wasOpen) {
+      captureOverlayTrigger("config");
+    }
+    focusOverlayTarget(refs.closeConfigButton);
+  } else {
+    restoreOverlayTriggerFocus("config");
+  }
 }
 
 function openConfigGenerationLog() {
@@ -2108,12 +2152,19 @@ function revokePromptAgentPreview() {
   }
 }
 
-function setPromptAgentOpen(open) {
+function setPromptAgentOpen(open, { restoreFocus = true } = {}) {
+  const wasOpen = !refs.promptAgentModal.classList.contains("hidden");
   refs.promptAgentModal.classList.toggle("hidden", !open);
   refs.promptAgentModal.setAttribute("aria-hidden", String(!open));
   if (open) {
+    if (!wasOpen) {
+      captureOverlayTrigger("prompt-agent");
+    }
     renderPromptAgent();
     loadPromptAgentHistory().catch((error) => setPromptAgentFeedback(error.message, "error"));
+    focusOverlayTarget(refs.promptAgentCloseButton);
+  } else if (restoreFocus) {
+    restoreOverlayTriggerFocus("prompt-agent");
   }
 }
 
@@ -2289,7 +2340,11 @@ function renderPromptAgentHistory() {
 function renderPromptAgent() {
   renderPromptAgentPreview();
   refs.promptAgentAnalyzeButton.disabled = state.promptAgent.running || !state.promptAgent.file;
-  refs.promptAgentAnalyzeButton.textContent = state.promptAgent.running ? "分析中..." : "分析图片";
+  renderInlineBusyButton(refs.promptAgentAnalyzeButton, {
+    busy: state.promptAgent.running,
+    busyText: "分析中",
+    idleText: "分析图片",
+  });
   refs.copyPromptAgentJsonButton.disabled = !state.promptAgent.result?.json;
   refs.promptAgentResult.value = getPromptAgentJsonText();
   renderPromptAgentHistory();
@@ -4178,7 +4233,11 @@ function renderReferenceAnalysisSelectedPrompt() {
 
 function renderReferenceAnalysis() {
   refs.referenceAnalyzeButton.disabled = state.referenceAnalysis.running;
-  refs.referenceAnalyzeButton.textContent = state.referenceAnalysis.running ? "分析中..." : "融图分析";
+  renderInlineBusyButton(refs.referenceAnalyzeButton, {
+    busy: state.referenceAnalysis.running,
+    busyText: "分析中",
+    idleText: "融图分析",
+  });
   renderReferenceAnalysisSelectedPrompt();
 
   const item = state.referenceAnalysis.result;
@@ -4572,7 +4631,8 @@ function syncGalleryScrollUi() {
   const metrics = getGalleryScrollMetrics();
 
   refs.galleryScrollbar.dataset.disabled = String(metrics.disabled);
-  refs.galleryScrollbar.setAttribute("aria-hidden", String(metrics.disabled));
+  refs.galleryScrollbar.setAttribute("aria-disabled", String(metrics.disabled));
+  refs.galleryScrollThumb.disabled = metrics.disabled;
   refs.galleryScrollThumb.style.height = `${metrics.thumbHeight}px`;
   refs.galleryScrollThumb.style.transform = `translateY(${Math.round(metrics.offset)}px)`;
   refs.galleryScrollUp.disabled = metrics.disabled || metrics.currentScroll <= 0;
@@ -4766,6 +4826,7 @@ function syncConfigUi(config) {
   refs.responsesModelInput.value = config.responsesModel || "gpt-5.5";
   refs.savedKeyMask.textContent = config.apiKeyConfigured ? `已保存 ${config.apiKeyMask || ""}` : "未保存";
   refs.configStatus.textContent = config.apiKeyConfigured ? "配置已保存" : "配置未保存";
+  configModelPicker.render();
   state.aspectRatios = config.aspectRatios || [];
   const configLimits = config.limits || {};
   state.limits = {
@@ -4847,9 +4908,7 @@ function ensureSelectedPreview() {
     return;
   }
 
-  const sortedGallery = sortGalleryItemsByCreatedAtDesc(state.gallery);
-  const preferredGalleryItem = sortedGallery[0] || null;
-  state.selectedPreviewKey = preferredGalleryItem ? makeGalleryPreviewKey(preferredGalleryItem.filename) : "";
+  state.selectedPreviewKey = "";
 }
 
 function setSelectedPreviewKey(key) {
@@ -4887,7 +4946,9 @@ function openLightbox(item) {
   state.lightboxZoomed = false;
   syncLightboxItem();
   syncLightboxZoomState();
+  captureOverlayTrigger("lightbox");
   setLightboxOpen(true);
+  focusOverlayTarget(refs.lightboxClose);
 }
 
 function closeLightbox() {
@@ -4896,6 +4957,7 @@ function closeLightbox() {
   resetPromptCopyFeedback();
   syncLightboxZoomState();
   setLightboxOpen(false);
+  restoreOverlayTriggerFocus("lightbox");
 }
 
 function syncLightboxItem() {
@@ -6949,6 +7011,7 @@ const CREATION_REFERENCE_ROLE_OPTIONS = [
   { value: "product", label: "商品主体" },
   { value: "package", label: "包装清单" },
   { value: "material", label: "材质细节" },
+  { value: "dimensions", label: "尺寸规格" },
   { value: "scene", label: "使用场景" },
   { value: "style", label: "风格参考" },
   { value: "other", label: "其他" },
@@ -9065,11 +9128,6 @@ function getCreationProgressSummary(set = getCreationCurrentSet()) {
   return { total, completed, failed };
 }
 
-function getCreationIncompleteItems(set = getCreationCurrentSet()) {
-  const items = Array.isArray(set?.items) ? set.items : [];
-  return items.filter((item) => item.status !== "completed" || !item.filename || !item.relativePath);
-}
-
 function canRepairCreationSet(set = getCreationCurrentSet()) {
   return Boolean(set?.setId && !isCreationDraftSet(set));
 }
@@ -9255,6 +9313,11 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
     media.appendChild(image);
   } else {
     const placeholder = document.createElement("span");
+    const isWaitingPlaceholder = item.status !== "failed";
+    if (isWaitingPlaceholder) {
+      media.classList.add("is-waiting");
+      media.setAttribute("aria-busy", "true");
+    }
     placeholder.textContent = item.status === "failed" ? item.error || "生成失败" : "等待生成";
     media.appendChild(placeholder);
   }
@@ -9469,6 +9532,7 @@ const creationListingController = createCreationListingController({
   getSelectedSet: getCreationRecordSelectedSet,
   normalizeSet: normalizeCreationSetForView,
   nowIso,
+  renderCurrentView: renderCreationView,
   renderRecordView: renderCreationRecordView,
   setFeedback: setCreationRecordFeedback,
   upsertSet: upsertCreationSet,
@@ -9665,15 +9729,27 @@ function renderCreationRecordSetList() {
     title.textContent = set.productName || "未命名商品";
     button.appendChild(title);
 
+    const metaRow = document.createElement("span");
+    metaRow.className = "creation-record-meta-row";
+
     const meta = document.createElement("span");
     meta.className = "creation-record-meta";
     const progress = getCreationProgressSummary(set);
     const languageLabel = set.targetLanguageLabel || set.targetLanguage || "English";
     const listingLabel = getCreationRecordListingMetaLabel(set);
-    meta.textContent = [languageLabel, listingLabel, `${progress.completed}/${progress.total}`, formatClock(set.createdAt)]
+    meta.textContent = [languageLabel, `${progress.completed}/${progress.total}`, formatClock(set.createdAt)]
       .filter(Boolean)
       .join(" · ");
-    button.appendChild(meta);
+    metaRow.appendChild(meta);
+
+    if (listingLabel) {
+      const listingBadge = document.createElement("span");
+      listingBadge.className = "creation-record-listing-badge";
+      listingBadge.textContent = listingLabel;
+      metaRow.appendChild(listingBadge);
+    }
+
+    button.appendChild(metaRow);
 
     refs.creationRecordSetList.appendChild(button);
   });
@@ -9927,7 +10003,7 @@ function removeCreationLogoFile() {
   renderCreationView();
 }
 
-function applyCreationLogoFile(fileList) {
+function applyCreationLogoFile(fileList, { persist = true } = {}) {
   const file = [...(fileList || [])].find((item) => item.type.startsWith("image/"));
   if (!file) {
     return;
@@ -9953,6 +10029,9 @@ function applyCreationLogoFile(fileList) {
   startCreationLogoGenerationCompression(state.creationLogo);
   renderCreationLogo();
   renderCreationView();
+  if (persist) {
+    creationLogoLibrary.saveFiles([file], { applySaved: false }).catch((error) => showError(error instanceof Error ? error.message : String(error)));
+  }
 }
 
 function isCreationLogoBatchBranch() {
@@ -10181,9 +10260,6 @@ function applyCreationReferenceFiles(fileList) {
   state.creationReferenceFiles = next;
   state.creationReferenceRestoreQueue = restoreQueue;
   markCreationReferenceAnalysisDirty();
-  if (state.creationReferenceFiles.length > 0) {
-    setCreationSelectValue(refs.creationVisualLanguageInput, "reference-style", "classic-commercial");
-  }
   if (refs.creationReferenceInput) {
     refs.creationReferenceInput.value = "";
   }
@@ -10273,9 +10349,7 @@ function renderCreationLogo() {
       refs.creationLogoPreviewImage.removeAttribute("src");
     }
   }
-  if (refs.creationLogoFilename) {
-    refs.creationLogoFilename.textContent = hasLogo ? logo.file.name || "Logo" : "未上传";
-  }
+  creationLogoLibrary.render({ selectedFilename: hasLogo ? logo.file.name || "" : "" });
   syncReferenceDropzoneCompact(refs.creationLogoDropzone, hasLogo);
 }
 
@@ -10509,20 +10583,17 @@ function markCreationReferenceAnalysisDirty() {
     setCreationReferenceAnalysisFeedback("", "");
   }
 }
+const hasCreationReferenceDimensionSpecIntent = (value) => /dimension(s)?\s*(chart|guide|card|table|sheet|info|information|specifications?|feel|reference|focus|value|values)|size\s*(chart|guide|card|table|sheet|feel|reference|focus|value|values)|spec(ification)?\s*(table|chart|card|sheet|info|information|feel|reference|focus|value|values)|measurement\s*(chart|guide|card|table)|尺寸\s*(图|表|卡|规格|信息|参数|感|参考|依据|值|数值|重点|焦点)|规格\s*(图|表|卡|信息|参数|感|参考|依据|值|数值|重点|焦点)|尺码\s*(图|表|卡|信息|指南)|实物握持尺度|规格信息|尺寸规格|规格感|尺寸感/.test(String(value || "").trim().toLowerCase());
+const hasCreationReferenceDimensionSpecValue = (value) => { const text = String(value || "").trim().toLowerCase(); return /#\s*\d+|\d+\s*#\s*(?:hook|hooks|钩)?|\d+\s*(?:号|號)\s*钩|size\s*#?\s*\d+\s*hooks?/iu.test(text) || /(^|[^\p{L}\p{N}_])([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*(fl\.?\s*oz|fluid\s*ounces?|inches?|inch|in\.?|ft\.?|feet|foot|yards?|yard|yd\.?|毫米|厘米|英寸|英尺|毫升|液量盎司|千克|克|磅|盎司|升|mm|cm|kg|g|ml|lb|lbs|oz|m|l)(?=$|[^\p{L}\p{N}_])/iu.test(text); };
+const hasCreationReferenceDimensionSignal = (value) => { const text = String(value || "").trim().toLowerCase(); return hasCreationReferenceDimensionSpecIntent(text) || (hasCreationReferenceDimensionSpecValue(text) && /dimension|size|measurement|capacity|length|width|height|weight|hook|尺寸|规格|尺码|容量|长度|宽度|高度|重量|比例|尺度|钩/iu.test(text)); };
+function inferCreationReferenceAnalysisRole(entry = {}) { const explicitRole = String(entry.role || "").trim(), hasExplicitRole = CREATION_REFERENCE_ROLE_OPTIONS.some((option) => option.value === explicitRole), text = [entry.roleLabel, entry.title, entry.note, entry.description, entry.reason, entry.summary, entry.filename].map((item) => String(item || "").trim()).filter(Boolean).join(" "); const shouldUseDimensionRole = hasCreationReferenceDimensionSignal(text) && (!hasExplicitRole || explicitRole === "other" || (explicitRole === "product" && hasCreationReferenceDimensionSpecIntent(text))); return shouldUseDimensionRole ? "dimensions" : hasExplicitRole ? explicitRole : "product"; }
 
 function normalizeCreationReferenceAnalysisRecommendation(entry = {}, index = 0) {
   const filename = String(state.creationReferenceFiles[index]?.file?.name || entry.filename || `reference-image-${index + 1}`).trim();
-  if (!filename) {
-    return null;
-  }
-
-  return {
-    index: Number(entry.index) || index + 1,
-    filename,
-    role: CREATION_REFERENCE_ROLE_OPTIONS.some((option) => option.value === entry.role) ? entry.role : "product",
-    roleLabel: String(entry.roleLabel || getCreationReferenceRoleLabel(entry.role || "product")),
-    note: String(entry.note || "").trim(),
-  };
+  if (!filename) return null;
+  const role = inferCreationReferenceAnalysisRole(entry);
+  const suppliedRole = String(entry.role || "").trim();
+  return { index: Number(entry.index) || index + 1, filename, role, roleLabel: String(role !== suppliedRole ? getCreationReferenceRoleLabel(role) : entry.roleLabel || getCreationReferenceRoleLabel(role)), note: String(entry.note || "").trim() };
 }
 
 function normalizeCreationReferenceAnalysisPayload(payload = {}) {
@@ -10533,11 +10604,15 @@ function normalizeCreationReferenceAnalysisPayload(payload = {}) {
         .filter(Boolean)
     : [];
   const rawSkuSubjects = Array.isArray(analysis?.skuSubjects) ? analysis.skuSubjects : Array.isArray(analysis?.sku_subjects) ? analysis.sku_subjects : [];
+  const visualLanguage = normalizeCreationVisualLanguage(getCreationReferenceAnalysisVisualLanguageSource(analysis));
 
   return {
     summary: String(analysis?.summary || "已识别套图参考图用途").trim(),
     categoryHint: String(analysis?.categoryHint || analysis?.category_hint || analysis?.category || "").trim(),
     categoryPath: String(analysis?.categoryPath || analysis?.category_path || "").trim(),
+    visualLanguage,
+    visualLanguageLabel: formatCreationVisualLanguageLabel(visualLanguage),
+    visualLanguageReason: getCreationReferenceAnalysisVisualLanguageReason(analysis),
     recommendations,
     skuSubjects: rawSkuSubjects.map((entry, index) => normalizeCreationSkuSubjectForPayload(entry, index)).filter(Boolean),
     risks: Array.isArray(analysis?.risks) ? analysis.risks.map((item) => String(item).trim()).filter(Boolean) : [],
@@ -10635,6 +10710,7 @@ function applyCreationReferenceAnalysisRecommendations() {
     return;
   }
 
+  const previousVisualLanguage = refs.creationVisualLanguageInput?.value || "classic-commercial";
   const recommendationsByFilename = new Map(analysis.recommendations.map((entry) => [entry.filename, entry]));
   state.creationReferenceFiles = state.creationReferenceFiles.map((item, index) => {
     const filename = item.file?.name || `reference-image-${index + 1}`;
@@ -10656,14 +10732,20 @@ function applyCreationReferenceAnalysisRecommendations() {
       : `已应用 ${analysis.recommendations.length} 张参考图用途建议。`,
     "success",
   );
+  setCreationSelectValue(refs.creationVisualLanguageInput, previousVisualLanguage, "classic-commercial");
   renderCreationReferenceGrid();
   renderCreationReferenceAnalysis();
 }
 
+function applyCreationReferenceAnalysisVisualLanguage() {
+  const analysis = state.creationReferenceAnalysis.result;
+  if (!analysis || state.creationReferenceAnalysis.dirty || state.creationReferenceAnalysis.running || state.creation.generating) return;
+  setCreationSelectValue(refs.creationVisualLanguageInput, analysis.visualLanguage, "classic-commercial");
+  renderCreationReferenceAnalysis();
+}
+
 function renderCreationReferenceAnalysis() {
-  if (!refs.creationReferenceAnalysisPanel) {
-    return;
-  }
+  if (!refs.creationReferenceAnalysisPanel) return;
 
   const analyzingReferences = state.creationReferenceAnalysis.running;
   refs.creationReferenceAnalyzeButton.disabled = analyzingReferences || state.creation.generating || state.creationReferenceFiles.length === 0;
@@ -10682,6 +10764,7 @@ function renderCreationReferenceAnalysis() {
     refs.creationReferenceApplyAnalysisButton.disabled = !canApply;
     refs.creationReferenceApplyAnalysisButton.textContent = state.creationReferenceAnalysis.applied ? "已应用" : "应用建议";
   }
+  syncCreationReferenceVisualLanguageButton({ button: refs.creationReferenceApplyVisualLanguageButton, analysis, currentValue: refs.creationVisualLanguageInput?.value || "classic-commercial", dirty: state.creationReferenceAnalysis.dirty, running: state.creationReferenceAnalysis.running, generating: state.creation.generating, normalizeVisualLanguage: normalizeCreationVisualLanguage });
   refs.creationReferenceAnalysisPanel.classList.toggle("hidden", !analysis);
   refs.creationReferenceAnalysisList.replaceChildren();
 
@@ -10701,8 +10784,10 @@ function renderCreationReferenceAnalysis() {
   }
 
   refs.creationReferenceAnalysisSummary.textContent = analysis.summary || "已识别套图参考图用途";
+  const visualLanguageLabel = analysis.visualLanguageLabel || formatCreationVisualLanguageLabel(analysis.visualLanguage);
   refs.creationReferenceAnalysisMeta.textContent = [
     `${analysis.recommendations.length} 张建议`,
+    visualLanguageLabel ? `视觉语言: ${visualLanguageLabel}` : "",
     analysis.categoryTemplatePath || analysis.categoryPath || analysis.categoryHint
       ? `类目: ${analysis.categoryTemplatePath || analysis.categoryPath || analysis.categoryHint}`
       : "",
@@ -10719,6 +10804,8 @@ function renderCreationReferenceAnalysis() {
   refs.creationReferenceAnalysisSummary.classList.toggle("hidden", state.creationReferenceAnalysis.collapsed);
   refs.creationReferenceAnalysisMeta.classList.toggle("hidden", state.creationReferenceAnalysis.collapsed);
   refs.creationReferenceAnalysisList.classList.toggle("hidden", state.creationReferenceAnalysis.collapsed);
+
+  appendCreationVisualLanguageSuggestionCard(refs.creationReferenceAnalysisList, analysis, { formatVisualLanguageLabel: formatCreationVisualLanguageLabel });
 
   analysis.recommendations.forEach((entry) => {
     const item = document.createElement("article");
@@ -10842,6 +10929,8 @@ function buildCreationLogoBatchPreviewItems(status = "idle") {
   }));
 }
 
+function getCreationInlineListingRefs() { return { creationRecordListingDrafts: refs.creationInlineListingDrafts, creationRecordListingStatus: refs.creationInlineListingStatus }; }
+
 function renderCreationView() {
   if (!refs.creationResultGrid) {
     return;
@@ -10905,6 +10994,7 @@ function renderCreationView() {
   refs.creationPromptEditorLayer?.replaceChildren();
   const firstSkuItem = items.find((item) => item.role === "sku");
   items.forEach((item, index) => refs.creationResultGrid.appendChild(createCreationCard(item, index, { isSkuStart: item === firstSkuItem })));
+  renderCreationListingDrafts({ refs: getCreationInlineListingRefs(), state, set: currentSet });
 }
 
 function getCreationPlanOverrides() {
@@ -11053,7 +11143,7 @@ function buildCreationRepairFormData({ itemId = "", scope = "incomplete" } = {})
   return formData;
 }
 
-function handleCreationStreamEvent(eventName, payload = {}) {
+async function handleCreationStreamEvent(eventName, payload = {}) {
   if (eventName === "repair_started") {
     upsertCreationSet(payload.set);
     setCreationFeedback("正在补齐套图项...", "busy");
@@ -11149,7 +11239,11 @@ function handleCreationStreamEvent(eventName, payload = {}) {
         updatedAt: nowIso(),
       });
     }
-    setCreationFeedback(payload.message || "套图生成失败。", "error");
+    if (state.creation.generationScope === "full" && state.creation.autoRepairAttemptCount === 0) {
+      setCreationFeedback(payload.message ? `${payload.message}，完成后将自动补图。` : "有套图项失败，完成后将自动补图。", "busy");
+    } else {
+      setCreationFeedback(payload.message || "套图生成失败。", "error");
+    }
     renderCreationView();
     return;
   }
@@ -11157,14 +11251,23 @@ function handleCreationStreamEvent(eventName, payload = {}) {
   if (eventName === "complete") {
     if (payload.set) {
       upsertCreationSet(payload.set);
+      if (await runCreationAutoRepairIfNeeded(payload.set)) {
+        renderCreationView();
+        return;
+      }
       if (shouldAutoGenerateCreationListings() && payload.set?.setId) {
         state.creation.recordSetId = payload.set.setId;
-        creationListingController.generate(payload.set.setId).catch((error) => {
-          setCreationFeedback(compactErrorMessage(error instanceof Error ? error.message : String(error), "Listing 自动生成失败"), "error");
-        });
+        setCreationFeedback("套图生成完成，正在自动生成 Listing...", "busy");
+        creationListingController.generate(payload.set.setId)
+          .then((nextSet) => { if (nextSet) { setCreationFeedback("套图与 Listing 已生成。", "success"); renderCreationView(); } })
+          .catch((error) => {
+            setCreationFeedback(compactErrorMessage(error instanceof Error ? error.message : String(error), "Listing 自动生成失败"), "error");
+          });
+        renderCreationView();
+        return;
       }
     }
-    setCreationFeedback("套图生成完成。", "success");
+    const completion = getCreationCompletionFeedback(payload.set || getCreationCurrentSet()); setCreationFeedback(completion.message, completion.tone);
     renderCreationView();
     return;
   }
@@ -11196,8 +11299,16 @@ function handleCreationStreamEvent(eventName, payload = {}) {
 
 async function runCreationStream(response) {
   await consumeSse(response.body, async (eventName, payload) => {
-    handleCreationStreamEvent(eventName, payload);
+    await handleCreationStreamEvent(eventName, payload);
   });
+}
+
+async function runCreationRepairRequest({ itemId = "", scope = "incomplete" } = {}) { await ensureCreationReferenceGenerationFilesReady(); const response = await fetch("/api/creation/repair", { method: "POST", body: buildCreationRepairFormData({ itemId, scope }) }); if (response.status === 404) throw new Error("当前部署不支持套图补图。"); if (!response.ok || !response.body) throw new Error("套图补图请求失败"); await runCreationStream(response); await loadCreationSets(); }
+async function runCreationAutoRepairIfNeeded(set = getCreationCurrentSet()) {
+  const currentSet = set ? normalizeCreationSetForView(set) : getCreationCurrentSet(); if (!shouldAutoRepairCreationSet({ set: currentSet, generationScope: state.creation.generationScope, autoRepairAttemptCount: state.creation.autoRepairAttemptCount, canRepair: canRepairCreationSet(currentSet) })) return false;
+  const nextAttempt = state.creation.autoRepairAttemptCount + 1; state.creation.autoRepairAttemptCount = nextAttempt;
+  setCreationFeedback(getCreationAutoRepairNotice({ incompleteCount: getCreationIncompleteItems(currentSet).length, attemptCount: nextAttempt }), "busy");
+  renderCreationView(); await runCreationRepairRequest({ scope: "incomplete" }); return true;
 }
 
 async function loadCreationSets() {
@@ -11418,6 +11529,7 @@ async function startCreationGeneration(event) {
 
   state.creation.generating = true;
   state.creation.generationScope = "full";
+  state.creation.autoRepairAttemptCount = 0;
   state.creation.editingItemId = "";
   renderCreationView();
 
@@ -11525,20 +11637,7 @@ async function repairCreationItems({ itemId = "", scope = "incomplete" } = {}) {
   renderCreationView();
 
   try {
-    await ensureCreationReferenceGenerationFilesReady();
-    const response = await fetch("/api/creation/repair", {
-      method: "POST",
-      body: buildCreationRepairFormData({ itemId, scope }),
-    });
-    if (response.status === 404) {
-      throw new Error("当前部署不支持套图补图。");
-    }
-    if (!response.ok || !response.body) {
-      throw new Error("套图补图请求失败");
-    }
-
-    await runCreationStream(response);
-    await loadCreationSets();
+    await runCreationRepairRequest({ itemId, scope });
   } catch (error) {
     const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "套图补图请求失败");
     setCreationFeedback(message, "error");
@@ -11635,6 +11734,8 @@ function isPortraitDraftSet(set = getPortraitCurrentSet()) {
   const setId = String(set?.setId || "");
   return setId.startsWith("portrait-local-") || setId.startsWith("portrait-draft-");
 }
+
+function canRepairPortraitSet(set = getPortraitCurrentSet()) { return Boolean(set?.setId) && !isPortraitDraftSet(set); }
 
 function getPortraitProgressSummary(set = getPortraitCurrentSet()) {
   const items = Array.isArray(set?.items) ? set.items : [];
@@ -11775,7 +11876,7 @@ function togglePortraitAnalysisPanel() { if (!state.portrait.analysis) return; s
 function applyPortraitAnalysis() {
   const text = buildPortraitAnalysisText();
   if (!text) {
-    setPortraitFeedback("请先分析人物参考图，或直接手写人物描述。", "error");
+    setPortraitFeedback("请先分析写真任务参考图，或直接手写人物描述。", "error");
     return;
   }
   refs.portraitSubjectSummaryInput.value = text;
@@ -11964,7 +12065,7 @@ function renderPortraitAccessoryAssetLibrary() {
       const image = document.createElement("img");
       Object.assign(image, { src: selectedVariant.src, alt: selectedVariant.label, loading: "lazy", decoding: "async" });
       button.appendChild(image);
-      const label = document.createElement("span"); label.textContent = selectedVariant.label; button.appendChild(label);
+      const label = document.createElement("span"); label.className = "portrait-accessory-asset-label"; label.textContent = selectedVariant.label; button.appendChild(label);
       item.appendChild(button);
       if (Array.isArray(asset.colors) && asset.colors.length > 0) {
         const colorGrid = document.createElement("div");
@@ -12185,6 +12286,8 @@ function buildPortraitFormData({ includeFiles = true, repair = false, includeAct
   return formData;
 }
 
+function buildPortraitRepairFormData({ itemId = "", scope = "failed" } = {}) { const formData = buildPortraitFormData({ includeFiles: true, repair: true }); formData.set(itemId ? "itemId" : "scope", itemId || scope || "failed"); return formData; }
+
 function getPortraitReferenceFileNames() {
   return [...state.portrait.files, ...state.portrait.actionFiles, ...state.portrait.accessoryFiles]
     .map((item) => item.file?.name || "")
@@ -12300,6 +12403,11 @@ function createPortraitCard(item = {}, fallbackIndex = 0, options = {}) {
   ].filter(Boolean).join(" · ");
   card.appendChild(meta);
 
+  if (!showRecordActions && item.status === "failed" && canRepairPortraitSet()) {
+    const actions = Object.assign(document.createElement("div"), { className: "creation-card-actions portrait-card-actions" }), retryButton = Object.assign(document.createElement("button"), { className: "mini-action", type: "button", textContent: "重试", disabled: state.portrait.generating || state.portrait.planning });
+    retryButton.dataset.portraitRetryItemId = item.itemId; actions.appendChild(retryButton); card.appendChild(actions);
+  }
+
   if (showRecordActions) {
     const actions = document.createElement("div");
     actions.className = "creation-card-actions creation-record-card-actions portrait-record-card-actions";
@@ -12339,12 +12447,13 @@ function renderPortraitView() {
     refs.portraitPlanButton.textContent = state.portrait.planning ? "预览中..." : "预览计划";
     refs.portraitPlanButton.disabled = state.portrait.generating || state.portrait.planning;
   }
+  if (refs.portraitRepairFailedButton) { const canRepairFailedItems = canRepairPortraitSet(currentSet) && progress.failed > 0; refs.portraitRepairFailedButton.hidden = !canRepairFailedItems; refs.portraitRepairFailedButton.disabled = state.portrait.generating || state.portrait.planning; }
   if (refs.portraitReferenceAnalyzeButton) {
     refs.portraitReferenceAnalyzeButton.disabled =
       state.portrait.generating || state.portrait.analyzing || state.portrait.files.length === 0;
     refs.portraitReferenceAnalyzeButton.classList.toggle("is-loading", state.portrait.analyzing);
     refs.portraitReferenceAnalyzeButton.setAttribute("aria-busy", String(state.portrait.analyzing));
-    refs.portraitReferenceAnalyzeButton.textContent = state.portrait.analyzing ? "分析中" : "分析人物";
+    refs.portraitReferenceAnalyzeButton.textContent = state.portrait.analyzing ? "分析中" : "分析任务";
   }
   if (refs.portraitApplyAnalysisButton) {
     refs.portraitApplyAnalysisButton.disabled = state.portrait.analyzing || !state.portrait.analysis;
@@ -12380,11 +12489,11 @@ async function analyzePortraitReference() {
   }
   clearError();
   const analysisStartedAt = getPortraitAnalysisFeedbackNow();
-  setPortraitFeedback("正在分析人物参考图...", "busy");
+  setPortraitFeedback("正在分析写真任务参考图...", "busy");
   state.portrait.analyzing = true;
   renderPortraitView();
   try {
-    const formData = buildPortraitFormData({ includeFiles: true, includeActionFiles: false, includeAccessoryFiles: false });
+    const formData = buildPortraitFormData({ includeFiles: true });
     const response = await fetch("/api/portrait/reference/analyze", {
       method: "POST",
       body: formData,
@@ -12395,7 +12504,7 @@ async function analyzePortraitReference() {
     }
     state.portrait.analysis = payload.analysis || null;
     state.portrait.analysisCollapsed = true;
-    setPortraitFeedback("人物可见特征草稿已生成，请确认或编辑后再生成写真。", "success");
+    setPortraitFeedback("写真任务草稿已生成，请确认或编辑后再生成写真。", "success");
   } finally {
     await waitForPortraitAnalysisFeedback(analysisStartedAt);
     state.portrait.analyzing = false;
@@ -12410,7 +12519,7 @@ async function previewPortraitPlan() {
   clearError();
   setPortraitFeedback("");
   if (!refs.portraitSubjectSummaryInput.value.trim()) {
-    const message = "请先填写人物描述，或上传参考图后点击分析人物。";
+    const message = "请先填写人物描述，或上传参考图后点击分析任务。";
     setPortraitFeedback(message, "error");
     showError(message);
     return;
@@ -12468,140 +12577,69 @@ async function previewPortraitPlan() {
 
 function handlePortraitStreamEvent(eventName, payload = {}) {
   if (eventName === "set_started") {
-    upsertPortraitSet(payload.set);
-    setPortraitFeedback(`写真任务已创建，正在生成 ${payload.set?.imageCount || refs.portraitImageCountInput?.value || 12} 张图片。`, "busy");
-    renderPortraitView();
-    return;
+    upsertPortraitSet(payload.set); setPortraitFeedback(`写真任务已创建，正在生成 ${payload.set?.imageCount || refs.portraitImageCountInput?.value || 12} 张图片。`, "busy"); renderPortraitView(); return;
+  }
+  if (eventName === "repair_started") {
+    const count = Array.isArray(payload.itemIds) ? payload.itemIds.length : 0; setPortraitFeedback(count > 0 ? `正在重试 ${count} 张写真...` : "正在重试写真失败项...", "busy"); renderPortraitView(); return;
   }
   if (eventName === "plan") {
     if (payload.setId && state.portrait.currentSet?.setId !== payload.setId && Array.isArray(payload.items)) {
-      upsertPortraitSet({
-        ...state.portrait.currentSet,
-        setId: payload.setId,
-        items: payload.items,
-      });
+      upsertPortraitSet({ ...state.portrait.currentSet, setId: payload.setId, items: payload.items });
     }
-    renderPortraitView();
-    return;
+    renderPortraitView(); return;
   }
   if (eventName === "item_started") {
-    updatePortraitCurrentItem(payload.itemId, {
-      status: "generating",
-      updatedAt: nowIso(),
-    });
-    setPortraitFeedback(`正在生成 ${payload.itemId || "写真图"}...`, "busy");
-    renderPortraitView();
-    return;
+    updatePortraitCurrentItem(payload.itemId, { status: "generating", updatedAt: nowIso() }); setPortraitFeedback(`正在生成 ${payload.itemId || "写真图"}...`, "busy"); renderPortraitView(); return;
   }
   if (eventName === "item_status") {
-    updatePortraitCurrentItem(payload.itemId, {
-      status: "generating",
-      updatedAt: nowIso(),
-    });
-    if (payload.message) {
-      setPortraitFeedback(payload.message, "busy");
-    }
-    renderPortraitView();
-    return;
+    updatePortraitCurrentItem(payload.itemId, { status: "generating", updatedAt: nowIso() }); if (payload.message) setPortraitFeedback(payload.message, "busy"); renderPortraitView(); return;
   }
   if (eventName === "item_partial_image" || eventName === "item_final_image") {
-    updatePortraitCurrentItem(payload.itemId, {
-      status: "generating",
-      imageUrl: payload.dataUrl,
-      thumbnailUrl: payload.dataUrl,
-      updatedAt: nowIso(),
-    });
-    renderPortraitView();
-    return;
+    updatePortraitCurrentItem(payload.itemId, { status: "generating", imageUrl: payload.dataUrl, thumbnailUrl: payload.dataUrl, updatedAt: nowIso() }); renderPortraitView(); return;
   }
   if (eventName === "item_saved") {
     if (payload.set) {
       upsertPortraitSet(payload.set);
     } else if (payload.item) {
-      updatePortraitCurrentItem(payload.item.itemId, {
-        ...payload.item,
-        status: "completed",
-        updatedAt: nowIso(),
-      });
+      updatePortraitCurrentItem(payload.item.itemId, { ...payload.item, status: "completed", updatedAt: nowIso() });
     }
-    setPortraitFeedback("已生成一张写真图。", "success");
-    renderPortraitView();
-    return;
+    setPortraitFeedback("已生成一张写真图。", "success"); renderPortraitView(); return;
   }
   if (eventName === "item_failed") {
     if (payload.set) {
       upsertPortraitSet(payload.set);
     } else if (payload.itemId) {
-      updatePortraitCurrentItem(payload.itemId, {
-        status: "failed",
-        error: payload.message || "",
-        updatedAt: nowIso(),
-      });
+      updatePortraitCurrentItem(payload.itemId, { status: "failed", error: payload.message || "", updatedAt: nowIso() });
     }
-    setPortraitFeedback(payload.message || "写真图生成失败。", "error");
-    renderPortraitView();
-    return;
+    setPortraitFeedback(payload.message || "写真图生成失败。", "error"); renderPortraitView(); return;
   }
   if (eventName === "complete") {
-    if (payload.set) {
-      upsertPortraitSet(payload.set);
-    }
-    setPortraitFeedback("写真生成完成。", "success");
-    renderPortraitView();
-    return;
+    if (payload.set) upsertPortraitSet(payload.set);
+    const summary = getPortraitProgressSummary(payload.set || getPortraitCurrentSet());
+    setPortraitFeedback(summary.failed > 0 ? `写真生成结束：成功 ${summary.completed}/${summary.total}，失败 ${summary.failed}。可重试失败项。` : "写真生成完成。", summary.failed > 0 ? "error" : "success");
+    renderPortraitView(); return;
   }
   if (eventName === "error") {
     const message = compactErrorMessage(payload.message, "写真生成请求失败");
     const currentSet = getPortraitCurrentSet();
-    if (currentSet) {
-      state.portrait.currentSet = normalizePortraitSetForView({
-        ...currentSet,
-        status: "failed",
-        updatedAt: nowIso(),
-        items: currentSet.items.map((item) =>
-          item.status === "completed"
-            ? item
-            : {
-                ...item,
-                status: "failed",
-                error: message,
-              },
-        ),
-      });
-    }
-    setPortraitFeedback(message, "error");
-    showError(message);
-    renderPortraitView();
+    if (currentSet) state.portrait.currentSet = normalizePortraitSetForView({ ...currentSet, status: "failed", updatedAt: nowIso(), items: currentSet.items.map((item) => item.status === "completed" ? item : { ...item, status: "failed", error: message }) });
+    setPortraitFeedback(message, "error"); showError(message); renderPortraitView();
   }
 }
 
-async function runPortraitStream(response) {
-  await consumeSse(response.body, async (eventName, payload) => {
-    handlePortraitStreamEvent(eventName, payload);
-  });
-}
+async function runPortraitStream(response) { await consumeSse(response.body, async (eventName, payload) => handlePortraitStreamEvent(eventName, payload)); }
 
 async function startPortraitGeneration(event) {
   event?.preventDefault();
-  if (state.portrait.generating || state.portrait.planning) {
-    return;
-  }
-  clearError();
-  setPortraitFeedback("");
+  if (state.portrait.generating || state.portrait.planning) return;
+  clearError(); setPortraitFeedback("");
   if (state.portrait.files.length === 0) {
-    const message = "请先上传人物参考图。";
-    setPortraitFeedback(message, "error");
-    showError(message);
-    return;
+    const message = "请先上传人物参考图。"; setPortraitFeedback(message, "error"); showError(message); return;
   }
   if (!refs.portraitSubjectSummaryInput.value.trim()) {
-    const message = "请先填写人物描述，或上传参考图后点击分析人物。";
-    setPortraitFeedback(message, "error");
-    showError(message);
-    return;
+    const message = "请先填写人物描述，或上传参考图后点击分析任务。"; setPortraitFeedback(message, "error"); showError(message); return;
   }
-  state.portrait.generating = true;
-    renderPortraitView();
+  state.portrait.generating = true; renderPortraitView();
   try {
     const draftSet = isPortraitDraftSet() ? getPortraitCurrentSet() : null;
     const createdAt = nowIso();
@@ -12631,45 +12669,51 @@ async function startPortraitGeneration(event) {
       })),
     });
     renderPortraitView();
-    const response = await requestGenerationStream("/api/portrait/generate", {
-      body: buildPortraitFormData({ includeFiles: true }),
-      clientSessionId: state.clientSessionId,
-    });
-    await runPortraitStream(response);
-    await loadPortraitSets();
+    const response = await requestGenerationStream("/api/portrait/generate", { body: buildPortraitFormData({ includeFiles: true }), clientSessionId: state.clientSessionId });
+    await runPortraitStream(response); await loadPortraitSets();
   } catch (error) {
     const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "写真生成请求失败");
-    setPortraitFeedback(message, "error");
-    showError(message);
+    setPortraitFeedback(message, "error"); showError(message);
   } finally {
-    state.portrait.generating = false;
-    renderPortraitView();
+    state.portrait.generating = false; renderPortraitView();
+  }
+}
+
+async function repairPortraitItems({ itemId = "", scope = "failed" } = {}) {
+  if (state.portrait.generating || state.portrait.planning) return;
+  const currentSet = getPortraitCurrentSet();
+  if (!canRepairPortraitSet(currentSet)) {
+    const message = "当前写真记录还不能重试。"; setPortraitFeedback(message, "error"); showError(message); return;
+  }
+  if (state.portrait.files.length === 0) {
+    const message = "请先保留或重新上传人物参考图后再重试写真。"; setPortraitFeedback(message, "error"); showError(message); return;
+  }
+  clearError();
+  state.portrait.generating = true; setPortraitFeedback(itemId ? "正在重试当前写真..." : "正在重试失败写真...", "busy"); renderPortraitView();
+  try {
+    const response = await requestGenerationStream("/api/portrait/repair", { body: buildPortraitRepairFormData({ itemId, scope }), clientSessionId: state.clientSessionId });
+    await runPortraitStream(response); await loadPortraitSets();
+  } catch (error) {
+    const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "写真重试请求失败");
+    setPortraitFeedback(message, "error"); showError(message);
+  } finally {
+    state.portrait.generating = false; renderPortraitView();
   }
 }
 
 async function loadPortraitSets() {
-  const response = await fetch("/api/portrait/sets", {
-    cache: "no-store",
-  });
+  const response = await fetch("/api/portrait/sets", { cache: "no-store" });
   if (response.status === 404) {
-    state.portrait.sets = [];
-    state.portrait.recordSetId = "";
-    renderPortraitView();
-    renderPortraitRecordView();
-    return;
+    state.portrait.sets = []; state.portrait.recordSetId = ""; renderPortraitView(); renderPortraitRecordView(); return;
   }
-  if (!response.ok) {
-    throw new Error("读取写真记录失败");
-  }
+  if (!response.ok) throw new Error("读取写真记录失败");
   const payload = await response.json();
   const nextSets = Array.isArray(payload) ? payload.map(normalizePortraitSetForView).filter(Boolean) : [];
   const currentSetId = state.portrait.currentSet?.setId || "";
   state.portrait.sets = nextSets;
   if (currentSetId) {
     const matchedCurrentSet = nextSets.find((set) => set.setId === currentSetId);
-    if (matchedCurrentSet) {
-      state.portrait.currentSet = normalizePortraitSetForView(matchedCurrentSet);
-    }
+    if (matchedCurrentSet) state.portrait.currentSet = normalizePortraitSetForView(matchedCurrentSet);
   }
   if (state.portrait.recordSetId && !nextSets.some((set) => set.setId === state.portrait.recordSetId)) {
     state.portrait.recordSetId = "";
@@ -12847,32 +12891,18 @@ function reusePortraitRecordSet() {
   refs.portraitSizeInput.value = selectedSet.size || "auto";
   refs.portraitOutputFormatInput.value = normalizeOutputFormat(selectedSet.format || "png");
   const selectedStyles = new Set(selectedSet.selectedStyles || []);
-  refs.portraitStyleInputs.forEach((input) => {
-    input.checked = selectedStyles.size > 0 ? selectedStyles.has(input.value) : input.value === "business-profile";
-  });
+  refs.portraitStyleInputs.forEach((input) => { input.checked = selectedStyles.size > 0 ? selectedStyles.has(input.value) : input.value === "business-profile"; });
   const selectedShotTypes = new Set(selectedSet.selectedShotTypes || []);
-  refs.portraitShotTypeInputs.forEach((input) => {
-    input.checked = selectedShotTypes.size > 0 ? selectedShotTypes.has(input.value) : true;
-  });
+  refs.portraitShotTypeInputs.forEach((input) => { input.checked = selectedShotTypes.size > 0 ? selectedShotTypes.has(input.value) : true; });
   const selectedActions = new Set(selectedSet.selectedActions || []);
-  refs.portraitActionInputs.forEach((input) => {
-    input.checked = selectedActions.size > 0 ? selectedActions.has(input.value) : true;
-  });
+  refs.portraitActionInputs.forEach((input) => { input.checked = selectedActions.size > 0 ? selectedActions.has(input.value) : true; });
   revokePortraitReferenceFiles();
-  state.portrait.files = [];
-  state.portrait.actionFiles = [];
-  state.portrait.accessoryFiles = [];
+  state.portrait.files = []; state.portrait.actionFiles = []; state.portrait.accessoryFiles = [];
   state.portrait.analysis = selectedSet.analysis || null;
   state.portrait.currentSet = normalizePortraitSetForView(selectedSet);
-  if (refs.portraitReferenceInput) {
-    refs.portraitReferenceInput.value = "";
-  }
-  if (refs.portraitActionReferenceInput) {
-    refs.portraitActionReferenceInput.value = "";
-  }
-  if (refs.portraitAccessoryReferenceInput) {
-    refs.portraitAccessoryReferenceInput.value = "";
-  }
+  if (refs.portraitReferenceInput) refs.portraitReferenceInput.value = "";
+  if (refs.portraitActionReferenceInput) refs.portraitActionReferenceInput.value = "";
+  if (refs.portraitAccessoryReferenceInput) refs.portraitAccessoryReferenceInput.value = "";
   setPortraitFeedback("已复用写真记录的人物描述和提示词；参考图需要重新上传。", "success");
   setActiveView("portrait");
   renderPortraitView();
@@ -13329,7 +13359,11 @@ function renderPptView() {
   refs.pptCompleteMissingButton.disabled = state.ppt.generating || missing.length === 0;
   refs.pptCompleteMissingButton.textContent = missing.length > 0 ? `补齐缺页 (${missing.length})` : "补齐缺页";
   refs.pptGenerateButton.disabled = state.ppt.generating;
-  refs.pptGenerateButton.textContent = state.ppt.generating ? "正在生成..." : "生成 PPT 演示文稿";
+  renderInlineBusyButton(refs.pptGenerateButton, {
+    busy: state.ppt.generating,
+    busyText: "正在生成",
+    idleText: "生成 PPT 演示文稿",
+  });
 
   refs.pptDownloadLink.href = state.ppt.pptxUrl || "#";
   refs.pptDownloadLink.classList.toggle("disabled", !state.ppt.pptxUrl);
@@ -13745,7 +13779,7 @@ async function saveConfig(event) {
   const browserConfig = saveBrowserPrivateConfig(payload);
   state.config = toPublicBrowserConfig(browserConfig, state.config || {});
   refs.apiKeyInput.value = "";
-  refs.configFeedback.textContent = "配置已保存到当前浏览器，本项目不会把 API Key 写入源码或 Cloudflare 环境变量。";
+  configModelPicker.setFeedback("配置已保存到当前浏览器，本项目不会把 API Key 写入源码或 Cloudflare 环境变量。", "success");
   syncConfigUi(state.config);
 }
 
@@ -14091,7 +14125,7 @@ function mapPromptAgentPrompt(itemId) {
   refs.promptInput.value = promptText;
   updatePromptCounter();
   setPromptAgentFeedback("已映射到 Studio 提示词。", "success");
-  setPromptAgentOpen(false);
+  setPromptAgentOpen(false, { restoreFocus: false });
   refs.promptInput.focus();
 }
 
@@ -14564,6 +14598,7 @@ function handleStudioImagePaste(event) {
 }
 
 function bindEvents() {
+  creationLogoLibrary.bind();
   bindGlobalNavEvents();
   bindTopbarRevealEvents();
   bindAdaptiveWorkbenchSections();
@@ -14605,6 +14640,7 @@ function bindEvents() {
   refs.configForm.addEventListener("submit", (event) => {
     saveConfig(event).catch((error) => showError(error.message));
   });
+  configModelPicker.bindEvents();
   refs.generateForm.addEventListener("submit", startGeneration);
   refs.articleIllustrationPlanButton.addEventListener("click", () => {
     previewArticleIllustrationPlan().catch((error) => setArticleIllustrationFeedback(error.message, "error"));
@@ -14807,6 +14843,14 @@ function bindEvents() {
   refs.portraitForm.addEventListener("submit", startPortraitGeneration);
   refs.portraitPlanButton.addEventListener("click", () => {
     previewPortraitPlan().catch((error) => setPortraitFeedback(error.message, "error"));
+  });
+  refs.portraitRepairFailedButton.addEventListener("click", () => {
+    repairPortraitItems({ scope: "failed" }).catch((error) => setPortraitFeedback(error.message, "error"));
+  });
+  refs.portraitResultGrid.addEventListener("click", (event) => {
+    const retryButton = event.target.closest("[data-portrait-retry-item-id]");
+    if (!retryButton) return;
+    repairPortraitItems({ itemId: retryButton.dataset.portraitRetryItemId }).catch((error) => setPortraitFeedback(error.message, "error"));
   });
   refs.portraitReferenceAnalyzeButton.addEventListener("click", () => {
     analyzePortraitReference().catch((error) => {
@@ -15091,6 +15135,7 @@ function bindEvents() {
     });
   });
   refs.creationReferenceApplyAnalysisButton.addEventListener("click", applyCreationReferenceAnalysisRecommendations);
+  refs.creationReferenceApplyVisualLanguageButton.addEventListener("click", applyCreationReferenceAnalysisVisualLanguage);
   refs.creationReferenceAnalysisToggleButton.addEventListener("click", toggleCreationReferenceAnalysisPanel);
   refs.creationReferenceGrid.addEventListener("click", (event) => {
     const target = event.target.closest("[data-creation-reference-preview-id]");
@@ -15726,7 +15771,7 @@ async function bootstrap() {
   renderSizeOptions();
   renderReferenceAnalysisRatioGrid();
   renderReferenceAnalysisSizeOptions();
-  renderCreationIndustryTemplateBrowser();
+  renderCreationIndustryTemplateBrowser(); void creationLogoLibrary.load();
   updateGenerateButton();
   renderReferenceGrid();
   renderStyleTransferReferences();

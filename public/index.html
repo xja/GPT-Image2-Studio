@@ -65,7 +65,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260524-listing-layout-1" />
+    <link rel="stylesheet" href="./styles.css?v=20260526-portrait-retry-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -98,7 +98,6 @@
                     <a class="mega-menu-link" href="#style-transfer">风格迁移</a>
                     <a class="mega-menu-link" href="#reference-analysis">融图分析</a>
                     <a class="mega-menu-link" href="#image-decomposition">图片拆解</a>
-                    <a class="mega-menu-link" href="#image-compress">图片压缩</a>
                     <a class="mega-menu-link" href="#creation">套图模式</a>
                     <a class="mega-menu-link" href="#portrait">写真模式</a>
                     <a class="mega-menu-link" href="#article-illustration">文章插图</a>
@@ -107,6 +106,7 @@
                   <section class="mega-menu-column" aria-label="创作工具">
                     <span class="mega-menu-title">工具</span>
                     <button class="mega-menu-action large" type="button" data-nav-action="prompt-agent">图片转提示词</button>
+                    <a class="mega-menu-link" href="#image-compress">图片压缩</a>
                   </section>
                 </div>
               </div>
@@ -159,7 +159,7 @@
           </button>
         </div>
 
-        <div class="topbar-ghost-actions" aria-hidden="true">
+        <div class="topbar-ghost-actions">
           <div class="header-pill" id="configStatus">配置未保存</div>
           <button class="theme-toggle header-button" id="themeToggleButton" type="button" aria-pressed="false">
             <span class="theme-toggle-icon" aria-hidden="true"></span>
@@ -1046,6 +1046,14 @@
                         >
                           折叠建议
                         </button>
+                        <button
+                          class="inline-button reference-analysis-visual-button hidden"
+                          id="creationReferenceApplyVisualLanguageButton"
+                          type="button"
+                          disabled
+                        >
+                          应用视觉语言
+                        </button>
                       </div>
                       <small class="creation-reference-analysis-meta" id="creationReferenceAnalysisMeta">--</small>
                     </div>
@@ -1073,6 +1081,26 @@
                     <div>
                       <span>Logo（可选）</span>
                     </div>
+                    <button class="icon-button creation-logo-library-button" id="creationLogoLibraryButton" type="button" aria-label="打开常用 Logo" title="常用 Logo" aria-expanded="false" aria-controls="creationLogoLibraryPanel">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 3.5l2.65 5.37 5.93.86-4.29 4.18 1.01 5.9L12 17.03l-5.3 2.78 1.01-5.9-4.29-4.18 5.93-.86L12 3.5z" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="creation-logo-library-panel hidden" id="creationLogoLibraryPanel" aria-live="polite">
+                    <div class="creation-logo-library-head">
+                      <div>
+                        <span>常用 Logo</span>
+                        <small id="creationLogoLibraryCount">0 个已保存</small>
+                      </div>
+                      <button class="reference-remove creation-logo-library-close" id="creationLogoLibraryCloseButton" type="button" aria-label="关闭常用 Logo">x</button>
+                    </div>
+                    <label class="creation-logo-library-upload">
+                      <input id="creationLogoLibraryInput" type="file" accept="image/*" multiple />
+                      <span>上传并长期保存 Logo</span>
+                    </label>
+                    <div class="creation-saved-logo-grid hidden" id="creationSavedLogoGrid"></div>
+                    <p class="creation-logo-library-empty" id="creationLogoLibraryEmpty">还没有常用 Logo，上传后会保存在当前浏览器。</p>
                   </div>
                   <label class="reference-dropzone creation-logo-dropzone" id="creationLogoDropzone">
                     <input id="creationLogoInput" name="logoImage" type="file" accept="image/*" />
@@ -1081,7 +1109,6 @@
                   </label>
                   <div class="creation-logo-preview hidden" id="creationLogoPreview" aria-live="polite">
                     <img id="creationLogoPreviewImage" alt="Logo 预览" />
-                    <span id="creationLogoFilename">未上传</span>
                     <button class="reference-remove creation-logo-remove" id="creationLogoRemoveButton" type="button" aria-label="移除 Logo">x</button>
                   </div>
                   <div class="creation-logo-controls">
@@ -1269,6 +1296,13 @@
               </div>
               <div class="creation-record-detail" id="creationRecordDetail" aria-live="polite"></div>
               <div class="creation-result-grid" id="creationResultGrid"></div>
+              <section class="creation-listing-panel hidden" aria-label="Amazon Listing 草稿">
+                <div class="panel-title between">
+                  <h3>Amazon Listing</h3>
+                  <span class="count-pill small" id="creationInlineListingStatus">未生成</span>
+                </div>
+                <div class="creation-listing-drafts" id="creationInlineListingDrafts"></div>
+              </section>
               <div class="creation-prompt-editor-layer" id="creationPromptEditorLayer" aria-live="polite"></div>
             </section>
           </div>
@@ -1326,7 +1360,7 @@
                 </div>
 
                 <div class="portrait-analysis-actions">
-                  <button class="toolbar-button" id="portraitReferenceAnalyzeButton" type="button">分析人物</button>
+                  <button class="toolbar-button" id="portraitReferenceAnalyzeButton" type="button">分析任务</button>
                   <button class="toolbar-button" id="portraitApplyAnalysisButton" type="button" disabled>应用建议</button>
                   <button
                     class="toolbar-button portrait-analysis-toggle"
@@ -1506,11 +1540,12 @@
             </section>
 
             <section class="studio-panel portrait-output-panel">
-              <div class="panel-title between">
+              <div class="panel-title between portrait-output-title">
                 <div>
                   <h2>写真产物</h2>
                   <p id="portraitSetMeta">等待生成</p>
                 </div>
+                <button class="toolbar-button portrait-output-retry-button" id="portraitRepairFailedButton" type="button" hidden>重试失败项</button>
               </div>
               <div class="creation-record-detail" id="portraitDetail"></div>
               <div class="creation-result-grid portrait-result-grid" id="portraitResultGrid"></div>
@@ -1811,7 +1846,7 @@
                 <div class="gallery-sections" id="gallerySections"></div>
               </div>
 
-              <div class="gallery-scrollbar" id="galleryScrollbar" data-disabled="true" aria-hidden="true">
+              <div class="gallery-scrollbar" id="galleryScrollbar" data-disabled="true" aria-label="瀑布画廊滚动控制">
                 <button class="gallery-scroll-arrow" id="galleryScrollUp" type="button" aria-label="向上滚动">↑</button>
                 <div class="gallery-scroll-track" id="galleryScrollTrack">
                   <button
@@ -2146,7 +2181,10 @@
             <p class="drawer-eyebrow">Config</p>
             <h2>本地连接配置</h2>
           </div>
-          <button class="header-button" id="closeConfigButton" type="button">关闭</button>
+          <div class="drawer-head-actions config-actions-row">
+            <button class="header-button" id="testConnectionButton" type="button">测试连接</button>
+            <button class="header-button" id="closeConfigButton" type="button">关闭</button>
+          </div>
         </div>
 
         <form class="config-form" id="configForm">
@@ -2163,10 +2201,17 @@
             <input id="apiKeyInput" name="apiKey" type="password" placeholder="留空则保持当前浏览器已保存的 key" />
           </label>
 
-          <label class="field">
-            <span>Responses 模型</span>
-            <input id="responsesModelInput" name="responsesModel" type="text" placeholder="gpt-5.5" />
-          </label>
+          <div class="field model-field">
+            <div class="field-heading inline">
+              <label for="responsesModelInput">Responses 模型</label>
+              <button class="inline-button" id="fetchModelsButton" type="button">获取模型列表</button>
+            </div>
+            <div class="model-picker-control">
+              <input id="responsesModelInput" name="responsesModel" type="text" placeholder="gpt-5.5" autocomplete="off" aria-controls="modelOptionsList" />
+              <button class="model-picker-toggle" id="modelPickerToggle" type="button" aria-label="展开可用模型列表" aria-expanded="false" aria-controls="modelOptionsList" hidden></button>
+              <div class="model-options-list" id="modelOptionsList" role="listbox" hidden></div>
+            </div>
+          </div>
 
           <label class="field ui-language-field">
             <span>界面语言</span>
@@ -2188,7 +2233,7 @@
             <span class="count-pill small" id="liveCount">0 / 5</span>
           </div>
 
-          <div class="error-banner hidden" id="errorBanner"></div>
+          <div class="error-banner hidden" id="errorBanner" role="alert" aria-live="assertive"></div>
           <ol class="timeline-list" id="timelineList"></ol>
           <button class="timeline-new-indicator hidden" id="timelineNewIndicator" type="button" aria-label="查看新动态">
             <span aria-hidden="true">↑</span>
@@ -2288,6 +2333,6 @@
       </div>
     </aside>
 
-    <script type="module" src="./app.js?v=20260524-listing-layout-1"></script>
+    <script type="module" src="./app.js?v=20260526-portrait-retry-1"></script>
   </body>
 </html>

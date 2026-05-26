@@ -79,6 +79,43 @@ test("listing sources collapse duplicate skuSubjects before parent listing gener
   assert.deepEqual(sources[0].skuSubjects.map((sku) => sku.title), ["Blue Lure", "Green Lure"]);
 });
 
+test("listing sources compact generated items before prompt assembly", () => {
+  const sources = buildCreationListingSources({
+    setId: "set-compact",
+    productName: "Fishing Lure",
+    skuSubjects: [{ id: "blue", title: "Blue Lure", filenames: ["blue.png"], note: "blue body" }],
+    items: [
+      {
+        itemId: "hero",
+        role: "hero",
+        status: "completed",
+        title: "Hero image",
+        prompt: "Very long image prompt that should not be sent to the listing agent.",
+        marketingCopy: "Shows the lure profile clearly.",
+        filename: "blue.png",
+        relativePath: "sets/blue.png",
+        imageUrl: "/output/sets/blue.png",
+        thumbnailUrl: "/output/sets/blue-thumb.png",
+        error: "old transient upstream error",
+        generationStartedAt: "2026-05-25T00:00:00.000Z",
+        generationCompletedAt: "2026-05-25T00:01:00.000Z",
+        generationDurationMs: 60000,
+      },
+    ],
+  });
+
+  assert.equal(sources[0].imageItems[0].title, "Hero image");
+  assert.equal(sources[0].imageItems[0].marketingCopy, "Shows the lure profile clearly.");
+  assert.equal(sources[0].imageItems[0].relativePath, "sets/blue.png");
+  assert.equal(sources[0].imageItems[0].prompt, undefined);
+  assert.equal(sources[0].imageItems[0].imageUrl, undefined);
+  assert.equal(sources[0].imageItems[0].thumbnailUrl, undefined);
+  assert.equal(sources[0].imageItems[0].error, undefined);
+  assert.equal(sources[0].imageItems[0].generationStartedAt, undefined);
+  assert.equal(sources[0].plannedItems[0].prompt, undefined);
+  assert.equal(JSON.stringify(sources[0]).includes("Very long image prompt"), false);
+});
+
 test("listing draft validation rejects fields and bullets over 500 characters", () => {
   const draft = normalizeCreationListingDraft({
     id: "listing-1",

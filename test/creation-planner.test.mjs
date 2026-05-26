@@ -75,7 +75,7 @@ test("creation planner builds the fixed four-image ecommerce set", () => {
   assert.match(plan.items[3].prompt, /trust/i);
 });
 
-test("creation planner defaults to the existing visual language without changing prompts", () => {
+test("creation planner defaults to classic commercial photography with a shared visual lock", () => {
   const plan = buildCreationPlan({
     productName: "AeroPress Clear",
     productDescription: "Transparent portable coffee brewer",
@@ -87,7 +87,9 @@ test("creation planner defaults to the existing visual language without changing
   assert.equal(plan.visualLanguageLabel, "经典商业摄影");
   assert.equal(CREATION_VISUAL_LANGUAGE_OPTIONS.length, 12);
   assert.equal(normalizeCreationVisualLanguage("unknown").value, "classic-commercial");
-  assert.ok(plan.items.every((item) => !item.prompt.includes("Shared visual language:")));
+  assert.ok(plan.items.every((item) => item.prompt.includes("VISUAL LANGUAGE LOCK")));
+  assert.ok(plan.items.every((item) => item.prompt.includes("Shared visual language: 经典商业摄影")));
+  assert.ok(plan.items.every((item) => item.prompt.includes("classic commercial product photography")));
 });
 
 test("creation planner supports reference-style visual language for uploaded style references", () => {
@@ -549,6 +551,31 @@ test("creation planner appends distinct SKU images after twelve carousel roles",
   assert.match(skuItems[2].prompt, /red-white-bg\.png/);
 });
 
+test("creation planner SKU item titles keep the original subject names", () => {
+  const plan = buildCreationPlan({
+    productName: "Fishing lure assortment",
+    productDescription: "Two sellable lure colors photographed on white background",
+    sellingPoints: "lifelike swim action",
+    targetLanguage: "en",
+    selectedRoles: ["hero"],
+    skuSubjects: [
+      { id: "blue", title: "blue-white-bg.png", filenames: ["blue-white-bg.png"], note: "Blue lure SKU subject" },
+      { id: "green", title: "green-white-bg.png", filenames: ["green-white-bg.png"], note: "Green lure SKU subject" },
+    ],
+  });
+
+  const skuItems = plan.items.filter((item) => item.role === "sku");
+
+  assert.deepEqual(
+    skuItems.map((item) => item.title),
+    ["SKU image 1 - blue-white-bg.png", "SKU image 2 - green-white-bg.png"],
+  );
+  assert.deepEqual(
+    skuItems.map((item) => item.filenameToken),
+    ["sku-1-blue-white-bg.png", "sku-2-green-white-bg.png"],
+  );
+});
+
 test("creation planner renders same-SKU combination packs without changing the subject", () => {
   const plan = buildCreationPlan({
     productName: "Fishing lure assortment",
@@ -683,7 +710,7 @@ test("creation planner uses selected ecommerce role set when provided", () => {
   assert.ok(plan.items.every((item) => item.prompt.includes("Marketplace search scenario")));
 });
 
-test("creation planner only injects size specifications into the dimensions role", () => {
+test("creation planner only injects selected size specifications into the dimensions role", () => {
   const plan = buildCreationPlan({
     productName: "AeroPress Clear",
     productDescription: "Transparent portable coffee brewer",
@@ -700,9 +727,10 @@ test("creation planner only injects size specifications into the dimensions role
 
   assert.equal(plan.dimensionSpecs, "Height 145mm\nDiameter 110mm\nCapacity 350ml");
   assert.match(dimensionsPrompt, /Dimension specifications for this size chart only: Height 145mm \/ Diameter 110mm \/ Capacity 350ml\./);
-  assert.match(dimensionsPrompt, /Use these exact specifications only in the dimensions\/specification image/);
-  assert.doesNotMatch(heroPrompt, /145mm|110mm|350ml/);
-  assert.doesNotMatch(comparisonPrompt, /145mm|110mm|350ml/);
+  assert.match(dimensionsPrompt, /The dimensions\/specification image must visibly present these exact specifications/);
+  assert.match(dimensionsPrompt, /Render all recognized dimension values in metric units only\./);
+  assert.doesNotMatch(heroPrompt, /145mm|110mm|350ml|Dimension specifications for this size chart only|Set-level dimension/);
+  assert.doesNotMatch(comparisonPrompt, /145mm|110mm|350ml|Dimension specifications for this size chart only|Set-level dimension/);
 });
 
 test("creation planner converts dimension specs to the selected unit mode", () => {
@@ -744,6 +772,189 @@ test("creation planner converts compact metric weight specs in selected unit mod
   });
 
   assert.match(plan.items[0].prompt, /13cm \(5\.12 in\)\/35g \(1\.23 oz\)/);
+});
+
+test("creation planner applies selected unit mode to dimensions recognized from reference notes", () => {
+  const plan = buildCreationPlan({
+    productName: "Jointed fishing lure",
+    productDescription: "Segmented swim bait",
+    sellingPoints: "realistic finish",
+    targetLanguage: "en",
+    selectedRoles: ["hero", "dimensions"],
+    dimensionUnitMode: "both",
+    referenceImageRoles: [
+      {
+        filename: "lure-size-card.png",
+        role: "dimensions",
+        note: "Size card shows length 130mm, weight 35g, #4 hook, slow sinking.",
+      },
+    ],
+  });
+
+  const heroPrompt = plan.items.find((item) => item.role === "hero").prompt;
+  const dimensionsPrompt = plan.items.find((item) => item.role === "dimensions").prompt;
+
+  assert.equal(plan.dimensionUnitMode, "both");
+  assert.match(dimensionsPrompt, /Dimension specifications recognized from reference notes/);
+  assert.match(dimensionsPrompt, /Length 130mm \(5\.12 in\) \/ Weight 35g \(1\.23 oz\) \/ Hook Size 4#/);
+  assert.match(dimensionsPrompt, /Render each recognized dimension value with metric first and imperial in parentheses/);
+  assert.equal(plan.dimensionSpecs, "Length 130mm (5.12 in)\nWeight 35g (1.23 oz)\nHook Size 4#");
+  assert.doesNotMatch(
+    heroPrompt,
+    /130mm|35g|5\.12 in|1\.23 oz|Set-level dimension|Dimension specifications recognized/,
+  );
+});
+
+test("creation planner dedupes noisy reference-derived dimensions and stores selected units", () => {
+  const plan = buildCreationPlan({
+    productName: "Jointed fishing lure",
+    productDescription: "Segmented electric lure with LED light and two treble hooks",
+    sellingPoints: "realistic finish",
+    targetLanguage: "en",
+    selectedRoles: ["package", "promotion", "dimensions", "review-qa"],
+    dimensionUnitMode: "both",
+    referenceImageRoles: [
+      {
+        filename: "package-list.png",
+        role: "package",
+        note: "Package checklist area says Length 13cm, Weight 42g, Hook 2#.",
+      },
+      {
+        filename: "hero-callouts.png",
+        role: "product",
+        note: "Main product card also shows 13cm, 42g, 2# Hooks.",
+      },
+      {
+        filename: "size-spec-card.png",
+        role: "dimensions",
+        note: "Size & Specs card: Model F4J16, Length 13cm, Weight 42g, Hook Size 2#.",
+      },
+    ],
+  });
+
+  const dimensionsPrompt = plan.items.find((item) => item.role === "dimensions").prompt;
+  const nonDimensionPrompts = plan.items
+    .filter((item) => item.role !== "dimensions")
+    .map((item) => item.prompt);
+
+  assert.equal(
+    plan.dimensionSpecs,
+    "Model F4J16\nLength 13cm (5.12 in)\nWeight 42g (1.48 oz)\nHook Size 2#",
+  );
+  assert.match(
+    dimensionsPrompt,
+    /Dimension specifications recognized from reference notes: Model F4J16 \/ Length 13cm \(5\.12 in\) \/ Weight 42g \(1\.48 oz\) \/ Hook Size 2#\./,
+  );
+  assert.doesNotMatch(dimensionsPrompt, /Package checklist area|Main product card also shows|Size & Specs card/);
+  assert.equal((dimensionsPrompt.match(/13cm/g) || []).length, 1);
+  assert.equal((dimensionsPrompt.match(/42g/g) || []).length, 1);
+  assert.ok(
+    nonDimensionPrompts.every((prompt) =>
+      !/13cm|42g|5\.12 in|1\.48 oz|2#|Package checklist area|Main product card also shows|Size & Specs card/.test(prompt),
+    ),
+  );
+});
+
+test("creation planner prefers dimensions reference values over incidental image callout sizes", () => {
+  const plan = buildCreationPlan({
+    productName: "Jointed fishing lure",
+    productDescription: "Segmented electric lure",
+    sellingPoints: "realistic finish",
+    targetLanguage: "en",
+    selectedRoles: ["hero", "dimensions"],
+    dimensionUnitMode: "both",
+    referenceImageRoles: [
+      {
+        filename: "package-list.png",
+        role: "package",
+        note: "Package icon row includes old Length 12cm.",
+      },
+      {
+        filename: "hero-callouts.png",
+        role: "product",
+        note: "Hero image has a small callout saying Length 14cm.",
+      },
+      {
+        filename: "size-spec-card.png",
+        role: "dimensions",
+        note: "Size & Specs card: Model F4J16, Length 13cm, Weight 42g, Hook Size 2#.",
+      },
+    ],
+  });
+
+  const dimensionsPrompt = plan.items.find((item) => item.role === "dimensions").prompt;
+
+  assert.equal(
+    plan.dimensionSpecs,
+    "Model F4J16\nLength 13cm (5.12 in)\nWeight 42g (1.48 oz)\nHook Size 2#",
+  );
+  assert.match(dimensionsPrompt, /Length 13cm \(5\.12 in\)/);
+  assert.doesNotMatch(dimensionsPrompt, /12cm|14cm|Package icon row|Hero image has/);
+});
+
+test("creation planner reserves product analyst-note specifications for the dimensions role", () => {
+  const plan = buildCreationPlan({
+    productName: "Jointed fishing lure",
+    productDescription: "Segmented swim bait",
+    sellingPoints: "realistic finish",
+    targetLanguage: "en",
+    selectedRoles: ["hero", "comparison", "scene", "dimensions"],
+    dimensionUnitMode: "both",
+    referenceImageRoles: [
+      {
+        filename: "lure-product.png",
+        role: "product",
+        note: "Main product photo also says length 130mm, weight 35g, #4 hook, slow sinking.",
+      },
+    ],
+  });
+
+  const nonDimensionPrompts = plan.items
+    .filter((item) => item.role !== "dimensions")
+    .map((item) => item.prompt);
+  const dimensionsPrompt = plan.items.find((item) => item.role === "dimensions").prompt;
+
+  assert.match(dimensionsPrompt, /Dimension specifications recognized from reference notes/);
+  assert.match(dimensionsPrompt, /Length 130mm \(5\.12 in\) \/ Weight 35g \(1\.23 oz\) \/ Hook Size 4#/);
+  assert.ok(
+    nonDimensionPrompts.every(
+      (prompt) =>
+        !/130mm|35g|5\.12 in|1\.23 oz|#4 hook|slow sinking|Analyst note: Main product photo also says/.test(prompt),
+    ),
+  );
+  assert.ok(
+    nonDimensionPrompts.every((prompt) =>
+      prompt.includes("reserve all exact specifications for the dimensions/specification image only."),
+    ),
+  );
+});
+
+test("creation planner carries exact lure specification table values into dimensions prompt only", () => {
+  const plan = buildCreationPlan({
+    productName: "F4J16 jointed fishing lure",
+    productDescription: "Multi-section bionic swim bait with two treble hooks",
+    sellingPoints: "realistic fish profile",
+    targetLanguage: "zh-CN",
+    selectedRoles: ["hero", "dimensions"],
+    dimensionUnitMode: "metric",
+    referenceImageRoles: [
+      {
+        filename: "lure-size-and-weight.png",
+        role: "dimensions",
+        note: "尺寸和重量表显示型号 F4J16、长度 13cm、重量 42g、钩号 2#。",
+      },
+    ],
+  });
+
+  const heroPrompt = plan.items.find((item) => item.role === "hero").prompt;
+  const dimensionsPrompt = plan.items.find((item) => item.role === "dimensions").prompt;
+
+  assert.match(dimensionsPrompt, /型号 F4J16/);
+  assert.match(dimensionsPrompt, /长度 13cm/);
+  assert.match(dimensionsPrompt, /重量 42g/);
+  assert.match(dimensionsPrompt, /钩号 2#/);
+  assert.match(dimensionsPrompt, /Dimension specifications recognized from reference notes/);
+  assert.doesNotMatch(heroPrompt, /型号 F4J16、长度 13cm、重量 42g、钩号 2#/);
 });
 
 test("creation planner exposes scenario-specific role presets", () => {
@@ -1033,12 +1244,171 @@ test("creation reference analysis normalizes role suggestions and prompt notes",
   assert.ok(plan.items.every((item) => item.prompt.includes("Analyst note: 磨砂纹理和边缘细节")));
 });
 
+test("creation reference analysis classifies size-spec references as dimensions instead of product", () => {
+  const analysis = normalizeCreationReferenceAnalysis(
+    {
+      summary: "识别到一张商品规格参考图。",
+      reference_roles: [
+        {
+          index: 1,
+          filename: "lure-size-card.png",
+          role: "product",
+          note: "用于锁定银灰条纹色款的实物握持尺度以及长度 130mm、重量 35g、4#钩、缓沉等规格信息。",
+        },
+      ],
+      sku_subjects: [
+        {
+          id: "lure-size-card",
+          title: "尺寸规格图",
+          filenames: ["lure-size-card.png"],
+          note: "长度 130mm、重量 35g。",
+        },
+      ],
+      risks: [],
+    },
+    ["lure-size-card.png"],
+  );
+
+  assert.deepEqual(
+    analysis.recommendations.map((entry) => [entry.filename, entry.role, entry.roleLabel]),
+    [["lure-size-card.png", "dimensions", "尺寸规格"]],
+  );
+  assert.deepEqual(analysis.skuSubjects, []);
+});
+
+test("creation reference analysis treats product-labeled specification-feel cards as dimensions", () => {
+  const analysis = normalizeCreationReferenceAnalysis(
+    {
+      summary: "One reference is a lure size and weight card.",
+      reference_roles: [
+        {
+          index: 1,
+          filename: "lure-size-weight-card.png",
+          role: "product",
+          note: "\u5e94\u9501\u5b9a\u9c7c\u9975\u7ec6\u957f\u4f53\u578b\u6bd4\u4f8b\u3001\u591a\u8282\u5206\u6bb5\u7ed3\u6784\u3001\u53cc\u94a9\u5e03\u5c40\u4ee5\u53ca13cm\u89c4\u683c\u611f\u3002",
+        },
+      ],
+      sku_subjects: [
+        {
+          id: "lure-size-weight-card",
+          title: "Size card",
+          filenames: ["lure-size-weight-card.png"],
+          note: "13cm specification feel.",
+        },
+      ],
+      risks: [],
+    },
+    ["lure-size-weight-card.png"],
+  );
+
+  assert.deepEqual(analysis.recommendations.map((entry) => [entry.filename, entry.role]), [
+    ["lure-size-weight-card.png", "dimensions"],
+  ]);
+  assert.deepEqual(analysis.skuSubjects, []);
+});
+
+test("creation reference analysis classifies other size-spec references as dimensions", () => {
+  const analysis = normalizeCreationReferenceAnalysis(
+    {
+      summary: "识别到一张商品规格参考图。",
+      reference_roles: [
+        {
+          index: 1,
+          filename: "lure-size-card.png",
+          role: "other",
+          note: "这张图主要影响主商品的手持比例，130mm 长度，35g 重量，4#钩和缓沉属性呈现。",
+        },
+      ],
+      sku_subjects: [
+        {
+          id: "lure-size-card",
+          title: "尺寸规格图",
+          filenames: ["lure-size-card.png"],
+          note: "长度 130mm、重量 35g。",
+        },
+      ],
+      risks: [],
+    },
+    ["lure-size-card.png"],
+  );
+
+  assert.deepEqual(
+    analysis.recommendations.map((entry) => [entry.filename, entry.role, entry.roleLabel]),
+    [["lure-size-card.png", "dimensions", "尺寸规格"]],
+  );
+  assert.deepEqual(analysis.skuSubjects, []);
+});
+
+test("creation reference analysis keeps real product references with size facts as product", () => {
+  const analysis = normalizeCreationReferenceAnalysis(
+    {
+      summary: "识别到一张商品主体图。",
+      reference_roles: [
+        {
+          index: 1,
+          filename: "hero-product.png",
+          role: "product",
+          note: "商品正面主体，保留红色外观和结构，同时参考长度 130mm、重量 35g。",
+        },
+      ],
+      sku_subjects: [
+        {
+          id: "hero-product",
+          title: "红色路亚主体",
+          filenames: ["hero-product.png"],
+          note: "红色外观，长度 130mm、重量 35g。",
+        },
+      ],
+      risks: [],
+    },
+    ["hero-product.png"],
+  );
+
+  assert.deepEqual(
+    analysis.recommendations.map((entry) => [entry.filename, entry.role, entry.roleLabel]),
+    [["hero-product.png", "product", "商品主体"]],
+  );
+  assert.deepEqual(analysis.skuSubjects.map((subject) => subject.id), ["hero-product"]);
+});
+
+test("creation planner applies one SKU series consistency lock across all SKU prompts", () => {
+  const plan = buildCreationPlan({
+    productName: "Jointed swimbait",
+    productDescription: "Three sellable lure colorways photographed on white background",
+    sellingPoints: "lifelike finish, sharp treble hooks, durable body",
+    targetLanguage: "en",
+    selectedRoles: ["hero"],
+    visualLanguage: "clean-marketplace",
+    referenceImageRoles: [
+      { filename: "blue-silver.png", role: "product", note: "Blue silver lure subject" },
+      { filename: "yellow-green.png", role: "product", note: "Yellow green lure subject" },
+      { filename: "green-red.png", role: "product", note: "Green red lure subject" },
+    ],
+    skuSubjects: [
+      { id: "blue-silver", title: "Blue silver lure", filenames: ["blue-silver.png"], note: "Blue silver lure subject" },
+      { id: "yellow-green", title: "Yellow green lure", filenames: ["yellow-green.png"], note: "Yellow green lure subject" },
+      { id: "green-red", title: "Green red lure", filenames: ["green-red.png"], note: "Green red lure subject" },
+    ],
+  });
+  const skuPrompts = plan.items.filter((item) => item.role === "sku").map((item) => item.prompt);
+
+  assert.equal(skuPrompts.length, 3);
+  assert.ok(skuPrompts.every((prompt) => prompt.includes("SKU SERIES CONSISTENCY LOCK")));
+  assert.ok(skuPrompts.every((prompt) => prompt.includes("same visual template across first generation and retries")));
+  assert.ok(skuPrompts.every((prompt) => prompt.includes("Series subjects: Blue silver lure; Yellow green lure; Green red lure")));
+  assert.ok(skuPrompts.every((prompt) => prompt.includes("Use one locked SKU frame blueprint")));
+  assert.ok(skuPrompts.every((prompt) => prompt.includes("same camera height, focal length, lens perspective, product scale ratio, canvas margins")));
+  assert.ok(skuPrompts.every((prompt) => prompt.includes("Do not generate each SKU as an independent ad concept")));
+});
+
 test("creation reference analysis keeps category hints for template auto switching", () => {
   const analysis = normalizeCreationReferenceAnalysis(
     {
       summary: "识别到手机正面和屏幕细节。",
       category_hint: "智能手机",
       category_path: "数码电子 > 手机通讯 > 手机 > 智能手机",
+      visual_language: "reference-style",
+      visual_language_reason: "其中一张图只用于光线和背景风格。",
       reference_roles: [{ index: 1, filename: "phone.png", role: "product", note: "手机主体和屏幕比例。" }],
       risks: [],
     },
@@ -1047,6 +1417,9 @@ test("creation reference analysis keeps category hints for template auto switchi
 
   assert.equal(analysis.categoryHint, "智能手机");
   assert.equal(analysis.categoryPath, "数码电子 > 手机通讯 > 手机 > 智能手机");
+  assert.equal(analysis.visualLanguage, "reference-style");
+  assert.equal(analysis.visualLanguageLabel, "参考模式");
+  assert.equal(analysis.visualLanguageReason, "其中一张图只用于光线和背景风格。");
 });
 
 test("creation planner rejects missing product information", () => {

@@ -28,6 +28,30 @@ test("creation record list responses are not cacheable", async () => {
   assert.match(server, /sendJson\(response, 200, await creationSetStore\.listManifests\(\), \{\s*"Cache-Control": "no-store"/);
 });
 
+test("local model list route returns structured errors for malformed request bodies", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const handler = server.match(/async function handleModelListPost\(request, response\) \{[\s\S]*?\r?\n}\r?\n\r?\nasync function handleGalleryGet/)?.[0] || "";
+
+  assert.match(handler, /try\s*\{\s*const formData = await readFormDataBody\(request\);/);
+  assert.match(handler, /sendJson\(response,\s*hasApiKey\s*\?\s*502\s*:\s*400/);
+  assert.doesNotMatch(handler, /const formData = await readFormDataBody\(request\);\s*const config = mergeRequestPrivateConfig[\s\S]*?try\s*\{/);
+});
+
+test("creation listing uses an independent medium reasoning default", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+  const localHandler =
+    server.match(/async function handleCreationListingsGenerate[\s\S]*?\r?\n}\r?\n\r?\nasync function handlePortraitSetsGet/)?.[0] || "";
+  const workerConfig =
+    worker.match(/function buildCloudCreationListingConfig[\s\S]*?\r?\n}\r?\n\r?\nfunction getFileExtension/)?.[0] || "";
+
+  assert.match(server, /const DEFAULT_CREATION_LISTING_REASONING_EFFORT = "medium";/);
+  assert.match(worker, /const DEFAULT_CREATION_LISTING_REASONING_EFFORT = "medium";/);
+  assert.match(localHandler, /payload\?\.reasoningEffort \|\| DEFAULT_CREATION_LISTING_REASONING_EFFORT/);
+  assert.doesNotMatch(localHandler, /config\.defaults\?\.reasoningEffort/);
+  assert.match(workerConfig, /DEFAULT_CREATION_LISTING_REASONING_EFFORT/);
+});
+
 test("server saves creation assets into a dated creation folder and hides them from gallery", async () => {
   const server = await readFile(serverPath, "utf8");
   const galleryStore = await readFile(galleryStorePath, "utf8");
