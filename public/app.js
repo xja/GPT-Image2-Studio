@@ -1,12 +1,7 @@
 import { buildParameterText, formatImageModelLabel, formatRecentOutputMeta } from "/lib/studio-formatters.mjs";
 import { getPreviewPlaceholderState } from "/lib/preview-placeholder-state.mjs?v=20260510-activity-log-1";
 import { buildGalleryReferenceFilterOptions, buildGallerySections, buildGallerySizeFilterOptions, buildGalleryTimeFilterOptions, distributeGalleryItemsIntoColumns, filterGalleryItems, getGalleryLayoutModeForWidth, getRecentGalleryItems, normalizeGalleryFilters, paginateGallerySections, sortGalleryItemsByCreatedAtDesc } from "/lib/gallery-organizer.mjs";
-import {
-  buildGalleryMetadataCacheEntry,
-  collectGalleryMetadataRepairPatch,
-  mergeGalleryItemWithCachedMetadata,
-  pruneGalleryMetadataCache,
-} from "/lib/gallery-metadata-recovery.mjs";
+import { buildGalleryMetadataCacheEntry, collectGalleryMetadataRepairPatch, mergeGalleryItemWithCachedMetadata, pruneGalleryMetadataCache } from "/lib/gallery-metadata-recovery.mjs";
 import { getDefaultGenerationSize, getGenerationSizeOptions, normalizeGenerationSize } from "/lib/generation-size-options.mjs?v=20260512-one-megapixel-sizes-4";
 import { getOutputFormatOptions, normalizeOutputFormat, } from "/lib/output-format-options.mjs?v=20260504-vercel-static-lib-1";
 import { normalizeReferenceAnalysisLanguage, } from "/lib/reference-analysis-language.mjs?v=20260522-reference-language-1";
@@ -705,6 +700,7 @@ const refs = {
   creationRecordListingDrafts: document.querySelector("#creationRecordListingDrafts"),
   creationRecordListingStatus: document.querySelector("#creationRecordListingStatus"),
   creationRecordOpenFolderButton: document.querySelector("#creationRecordOpenFolderButton"),
+  creationRecordRepairIncompleteButton: document.querySelector("#creationRecordRepairIncompleteButton"),
   creationRecordRefreshButton: document.querySelector("#creationRecordRefreshButton"),
   creationRecordReuseButton: document.querySelector("#creationRecordReuseButton"),
   creationRecordResultGrid: document.querySelector("#creationRecordResultGrid"),
@@ -9853,6 +9849,8 @@ function reuseCreationRecordSet() {
   renderCreationView();
 }
 
+async function repairCreationRecordIncompleteImages() { if (state.creation.generating) return; const selectedSet = getCreationRecordSelectedSet(); if (!canRepairCreationSet(selectedSet)) { setCreationRecordFeedback("请先选择一个已保存的套图记录。", "error"); return; } const targetItems = getCreationIncompleteItems(selectedSet); if (targetItems.length === 0) { setCreationRecordFeedback("当前套图没有需要补齐的图像。", "success"); renderCreationRecordView(); return; } clearError(); applyCreationSetToForm(selectedSet); state.creation.currentSet = normalizeCreationSetForView(selectedSet); state.creation.recordSetId = selectedSet.setId; state.creation.generating = true; state.creation.generationScope = "repair"; state.creation.editingItemId = ""; targetItems.forEach((item) => updateCreationCurrentItem(item.itemId, { status: "generating", error: "", updatedAt: nowIso() })); setCreationRecordFeedback(`正在补齐未生成图像 ${targetItems.length} 张...`, "busy"); renderCreationView(); renderCreationRecordView(); try { await runCreationRepairRequest({ scope: "incomplete" }); const refreshedSet = getCreationRecordSelectedSet(); const remainingCount = getCreationIncompleteItems(refreshedSet).length; setCreationRecordFeedback(remainingCount > 0 ? `仍有 ${remainingCount} 张图像未生成。` : "未生成图像已补齐。", remainingCount > 0 ? "error" : "success"); } catch (error) { const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "套图补图请求失败"); setCreationRecordFeedback(message, "error"); showError(message); } finally { state.creation.generating = false; state.creation.generationScope = ""; renderCreationView(); renderCreationRecordView(); } }
+
 function renderCreationRecordArchiveDetail(set) {
   if (!refs.creationRecordArchiveDetail) {
     return;
@@ -9898,6 +9896,7 @@ function renderCreationRecordArchiveDetail(set) {
 function renderCreationRecordView() {
   const filteredSets = filterCreationRecordSets();
   const selectedSet = getCreationRecordSelectedSet();
+  const recordIncompleteItems = getCreationIncompleteItems(selectedSet);
   if (refs.creationRecordSearchInput && refs.creationRecordSearchInput.value !== state.creation.recordQuery) {
     refs.creationRecordSearchInput.value = state.creation.recordQuery;
   }
@@ -9927,6 +9926,7 @@ function renderCreationRecordView() {
   if (refs.creationRecordExportManifestButton) {
     refs.creationRecordExportManifestButton.disabled = !selectedSet;
   }
+  if (refs.creationRecordRepairIncompleteButton) { refs.creationRecordRepairIncompleteButton.disabled = state.creation.generating || !canRepairCreationSet(selectedSet) || recordIncompleteItems.length === 0; refs.creationRecordRepairIncompleteButton.textContent = recordIncompleteItems.length > 0 ? `补齐未生成图像 ${recordIncompleteItems.length}` : "补齐未生成图像"; }
   creationListingController.syncRecordControls(selectedSet);
 
   renderCreationRecordSetList();
@@ -10922,7 +10922,6 @@ function renderCreationRolePicker() {
     input.type = "checkbox";
     input.value = slot.role;
     input.checked = selectedRoleSet.has(slot.role);
-    input.disabled = state.creation.generating;
     input.dataset.creationRole = slot.role;
 
     const text = document.createElement("span");
@@ -14814,6 +14813,7 @@ function bindEvents() {
   refs.creationRecordCopyFullPathsButton.addEventListener("click", () => {
     copyCreationRecordFullPaths().catch((error) => setCreationRecordFeedback(error.message, "error"));
   });
+  refs.creationRecordRepairIncompleteButton.addEventListener("click", () => { repairCreationRecordIncompleteImages().catch((error) => setCreationRecordFeedback(error.message, "error")); });
   refs.creationRecordCopyPromptsButton.addEventListener("click", () => {
     copyCreationRecordPrompts().catch((error) => setCreationRecordFeedback(error.message, "error"));
   });

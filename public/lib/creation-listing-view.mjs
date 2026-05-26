@@ -15,6 +15,84 @@ const CREATION_LISTING_REVIEW_REFERENCE_TEXT = {
   warnings: "发布前请按该警告复核来源证据，避免加入未验证声明。",
   missingInfo: "源数据未提供该信息，发布前需要补充确认。",
 };
+const CREATION_LISTING_REVIEW_REFERENCE_RULES = {
+  warnings: [
+    {
+      pattern: /\bspecies-specific performance\b/i,
+      text: "不要宣称超过一般钓鱼用途的特定鱼种效果。",
+    },
+    {
+      pattern: /\bbattery life\b.*\bwaterproof rating\b.*\bcharging speed\b/i,
+      text: "不要宣称电池续航、防水等级或充电速度；来源未提供这些信息。",
+    },
+    {
+      pattern: /\bmaterial type\b.*\bcertification\b.*\bwarranty\b/i,
+      text: "不要宣称材料类型、认证或保修；来源未提供这些信息。",
+    },
+    {
+      pattern: /\bglow effect\b.*\bimage-backed\b.*\bbrightness duration\b.*\bunderwater range\b/i,
+      text: "发光效果有图片依据，但未提供亮度持续时间和水下范围。",
+    },
+    {
+      pattern: /\bone parent listing with\s+(\d+)\s+color variants\b/i,
+      text: (match) => `作为一个包含 ${match[1]} 个颜色变体的父 Listing 使用，不要拆成多个 Listing。`,
+    },
+    {
+      pattern: /\bwaterproofing\b.*\bmedical grade\b.*\bcertifications?\b.*\bsterility\b.*\btrauma performance\b/i,
+      text: "未经验证来源数据，不要添加防水、医用级材料、认证、无菌或创伤处理性能声明。",
+    },
+    {
+      pattern: /\bcarton size\b.*\bincomplete\/inconsistent\b.*\bnot used in the title\b/i,
+      text: "来源尺寸包含外箱尺寸，作为产品尺寸不完整或不一致，因此未用于标题。",
+    },
+    {
+      pattern: /\bkit contents\b.*\bpacking list\b.*\bconfirm final packout\b/i,
+      text: "套装内容来自装箱清单和图片参考；发布前请确认最终配包。",
+    },
+  ],
+  missingInfo: [
+    {
+      pattern: /\bmain body material\b/i,
+      text: "未提供主体材料。",
+    },
+    {
+      pattern: /\bbattery capacity\b.*\bruntime\b/i,
+      text: "未提供电池容量和续航时间。",
+    },
+    {
+      pattern: /\bwaterproof rating\b/i,
+      text: "未提供防水等级。",
+    },
+    {
+      pattern: /\btarget fish species\b/i,
+      text: "来源未指定目标鱼种。",
+    },
+    {
+      pattern: /\bpackage box material details\b/i,
+      text: "未提供包装盒材料详情。",
+    },
+    {
+      pattern: /\bactual bag dimensions\b/i,
+      text: "未提供实际包袋尺寸；来源数据似乎只有运输或外箱尺寸。",
+    },
+    {
+      pattern: /\bmaterial of the bag\b.*\binternal components\b/i,
+      text: "文本未确认包袋和内部组件的材料。",
+    },
+    {
+      pattern: /\bsterility\b.*\bcertification\b.*\bcompliance\b/i,
+      text: "未提供无菌、认证和合规详情。",
+    },
+    {
+      pattern: /\bvariant options beyond\b/i,
+      text: "未提供已展示款式之外的变体选项。",
+    },
+    {
+      pattern: /\bgenerated image evidence\b.*\bunavailable\b/i,
+      text: "生成图片证据不可用。",
+    },
+  ],
+};
 
 const CJK_TEXT_GLOBAL_PATTERN = /[\u3400-\u9fff]+/gu;
 const NON_ASCII_TEXT_PATTERN = /[^\x20-\x7E]+/g;
@@ -151,10 +229,21 @@ function cleanCreationListingPublicArray(value, { split = false, language = "" }
   return source.map((item) => formatCreationListingPublicText(item, language)).filter(Boolean);
 }
 
+function translateCreationListingReviewReferenceItem(value, type) {
+  const text = cleanCreationListingText(value);
+  for (const rule of CREATION_LISTING_REVIEW_REFERENCE_RULES[type] || []) {
+    const match = text.match(rule.pattern);
+    if (match) {
+      return typeof rule.text === "function" ? rule.text(match) : rule.text;
+    }
+  }
+  return CREATION_LISTING_REVIEW_REFERENCE_TEXT[type] || "";
+}
+
 function buildCreationListingReviewReferenceRows(value, type) {
-  const rows = cleanCreationListingArray(value);
-  const referenceText = CREATION_LISTING_REVIEW_REFERENCE_TEXT[type] || "";
-  return rows.length > 0 && referenceText ? rows.map(() => referenceText) : [];
+  return cleanCreationListingArray(value)
+    .map((item) => translateCreationListingReviewReferenceItem(item, type))
+    .filter(Boolean);
 }
 
 function resolveCreationListingReviewReferenceRows(value, localizedValue, type) {

@@ -2026,10 +2026,13 @@ html:not([data-ui-layout="tablet"]):not([data-ui-layout="mobile"]) .view-tab.act
 }
 
 .creation-queue-strip {
+  flex: 0 0 auto;
+  min-height: 50px;
   display: flex;
   align-items: center;
   gap: 10px;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: 4px 0 6px;
   scrollbar-width: thin;
 }

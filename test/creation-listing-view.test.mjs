@@ -385,9 +385,65 @@ test("rendered listing warning and missing info fields use Chinese review fallba
   const missingInfoField = fields.find((field) => field.children?.[0]?.children?.[0]?.textContent === "缺失信息");
 
   assert.match(getFakeTextContent(warningField), /发布前请按该警告复核来源证据/u);
-  assert.match(getFakeTextContent(missingInfoField), /源数据未提供该信息/u);
+  assert.match(getFakeTextContent(missingInfoField), /未提供实际包袋尺寸/u);
   assert.match(getFakeTextContent(warningField), /中文字符\s*[1-9]\d*/u);
   assert.match(getFakeTextContent(missingInfoField), /中文字符\s*[1-9]\d*/u);
+});
+
+test("rendered listing warning and missing info fallbacks summarize each English issue", () => {
+  const previousDocument = globalThis.document;
+  const root = makeFakeElement("div");
+  globalThis.document = {
+    createElement: makeFakeElement,
+  };
+
+  try {
+    renderCreationListingDrafts({
+      refs: { creationRecordListingDrafts: root },
+      state: {},
+      set: {
+        setId: "set-fishing-warning-fallback",
+        listingDrafts: [{
+          language: "en-US",
+          title: "1 Pack Electric Fishing Lure",
+          warnings: [
+            "Do not claim species-specific performance beyond general fishing use.",
+            "Do not claim battery life, waterproof rating, or charging speed; source does not provide them.",
+            "Glow effect is image-backed, but brightness duration and underwater range are not provided.",
+            "Use as one parent listing with 3 color variants, not separate listings.",
+          ],
+          missingInfo: [
+            "Main body material is not provided.",
+            "Battery capacity and runtime are not provided.",
+            "Waterproof rating is not provided.",
+            "Target fish species are not specified by the source.",
+          ],
+        }],
+      },
+    });
+  } finally {
+    globalThis.document = previousDocument;
+  }
+
+  const fields = collectFakeElements(root, (node) => (
+    String(node.className || "").split(/\s+/).includes("creation-listing-field")
+  ));
+  const warningField = fields.find((field) => field.children?.[0]?.children?.[0]?.textContent === "警告");
+  const missingInfoField = fields.find((field) => field.children?.[0]?.children?.[0]?.textContent === "缺失信息");
+  const warningText = getFakeTextContent(warningField);
+  const missingInfoText = getFakeTextContent(missingInfoField);
+
+  assert.match(warningText, /不要宣称超过一般钓鱼用途的特定鱼种效果/u);
+  assert.match(warningText, /不要宣称电池续航、防水等级或充电速度/u);
+  assert.match(warningText, /发光效果有图片依据，但未提供亮度持续时间和水下范围/u);
+  assert.match(warningText, /作为一个包含 3 个颜色变体的父 Listing 使用，不要拆成多个 Listing/u);
+  assert.match(missingInfoText, /未提供主体材料/u);
+  assert.match(missingInfoText, /未提供电池容量和续航时间/u);
+  assert.match(missingInfoText, /未提供防水等级/u);
+  assert.match(missingInfoText, /来源未指定目标鱼种/u);
+
+  const repeatedGenericCount = (warningText.match(/发布前请按该警告复核来源证据/g) || []).length;
+  assert.equal(repeatedGenericCount, 0);
 });
 
 test("rendered listing field copy data excludes zhDisplay and Chinese labels", () => {

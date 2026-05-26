@@ -150,6 +150,29 @@ test("listing draft validation rejects fields and bullets over 500 characters", 
   assert.match(validation.errors.join("\n"), /title exceeds 500 characters/);
 });
 
+test("listing draft validation rejects combined selling and pain point fields over 500 English characters", () => {
+  const longItem = "clear benefit ".repeat(21).trim();
+  const draft = normalizeCreationListingDraft({
+    id: "listing-combined-benefits",
+    title: "2 Pack 3.5 in Blue Fishing Lures",
+    sellingPoints: [longItem, longItem],
+    painPoints: [longItem, longItem],
+    fiveBullets: validBullets,
+    description: "A compact lure for freshwater fishing.",
+    backendSearchTerms: "blue fishing lure freshwater bait",
+  });
+
+  assert.equal(longItem.length <= CREATION_LISTING_FIELD_MAX_CHARS, true);
+  assert.equal(draft.sellingPoints.join("\n").length > CREATION_LISTING_FIELD_MAX_CHARS, true);
+  assert.equal(draft.painPoints.join("\n").length > CREATION_LISTING_FIELD_MAX_CHARS, true);
+
+  const validation = validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 in" });
+
+  assert.equal(validation.ok, false);
+  assert.match(validation.errors.join("\n"), /sellingPoints exceeds 500 English characters total/);
+  assert.match(validation.errors.join("\n"), /painPoints exceeds 500 English characters total/);
+});
+
 test("listing draft validation requires quantity first and size second when dimensions exist", () => {
   const draft = normalizeCreationListingDraft({
     id: "listing-2",

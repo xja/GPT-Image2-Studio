@@ -155,6 +155,7 @@ test("listing agent sends a strict JSON schema request with prompt guardrails", 
   assert.match(calls[0].body.input, /Title rule: start with 2 Pack/);
   assert.match(calls[0].body.input, /place it immediately after quantity/);
   assert.match(calls[0].body.input, /Public listing fields must be English only/);
+  assert.match(calls[0].body.input, /sellingPoints and painPoints must each be 500 English characters or fewer in total/);
   assert.match(calls[0].body.input, /zhDisplay/);
   assert.match(calls[0].body.input, /warnings and missingInfo/);
   assert.ok(calls[0].body.text.format.schema.properties.zhDisplay);

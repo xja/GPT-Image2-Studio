@@ -2131,6 +2131,10 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function renderCreationRatioOptions\(\) \{/);
   assert.match(app, /function renderCreationSizeOptions\(\) \{/);
   assert.match(app, /function renderCreationRolePicker\(\) \{/);
+  const creationRolePickerBody =
+    app.match(/function renderCreationRolePicker\(\) \{[\s\S]*?\r?\n\}\r?\n\r?\nfunction buildCreationLogoBatchPreviewItems/)?.[0] || "";
+  assert.match(creationRolePickerBody, /input\.type = "checkbox";/);
+  assert.doesNotMatch(creationRolePickerBody, /input\.disabled = state\.creation\.generating;/);
   assert.match(app, /function applyCreationReferenceFiles\(fileList\) \{/);
   assert.match(app, /function applyCreationStyleReferenceFiles\(fileList\) \{/);
   const creationReferenceUploadHandler =
@@ -2507,6 +2511,9 @@ test("creation mode exposes a set-level queue strip for queued suites", async ()
   assert.match(queueModule, /buildCreationQueuedSkuItems\(skuSubjects/);
 
   assert.match(styles, /\.creation-queue-strip\s*\{/);
+  assert.match(styles, /\.creation-queue-strip\s*\{[\s\S]*flex:\s*0 0 auto;/);
+  assert.match(styles, /\.creation-queue-strip\s*\{[\s\S]*min-height:\s*50px;/);
+  assert.match(styles, /\.creation-queue-strip\s*\{[\s\S]*overflow-y:\s*hidden;/);
   assert.match(styles, /\.creation-queue-item\s*\{/);
   assert.match(styles, /\.creation-queue-item\s*\{[\s\S]*border-radius:\s*999px;/);
   assert.match(styles, /\.creation-queue-item\s*\{[\s\S]*background:/);
@@ -2662,6 +2669,7 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.match(html, /id="creationRecordOpenFolderButton"/);
   assert.match(html, /id="creationRecordCopyPathsButton"/);
   assert.match(html, /id="creationRecordCopyFullPathsButton"/);
+  assert.match(html, /id="creationRecordRepairIncompleteButton"[\s\S]*补齐未生成图像/);
   assert.match(html, /id="creationRecordRefreshButton"/);
   assert.match(html, /id="creationRecordActionFeedback"/);
   assert.match(html, /id="creationRecordSetList"/);
@@ -2692,6 +2700,11 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.match(app, /async function copyCreationRecordPaths\(\) \{/);
   assert.match(app, /async function copyCreationRecordFullPaths\(\) \{/);
   assert.match(app, /async function openCreationRecordFolder\(\) \{/);
+  assert.match(app, /creationRecordRepairIncompleteButton: document\.querySelector\("#creationRecordRepairIncompleteButton"\)/);
+  assert.match(app, /const recordIncompleteItems = getCreationIncompleteItems\(selectedSet\);[\s\S]*creationRecordRepairIncompleteButton\.disabled = state\.creation\.generating \|\| !canRepairCreationSet\(selectedSet\) \|\| recordIncompleteItems\.length === 0;/);
+  assert.match(app, /async function repairCreationRecordIncompleteImages\(\) \{/);
+  assert.match(app, /applyCreationSetToForm\(selectedSet\);[\s\S]*state\.creation\.currentSet = normalizeCreationSetForView\(selectedSet\);/);
+  assert.match(app, /await runCreationRepairRequest\(\{ scope: "incomplete" \}\);/);
   assert.match(app, /navigator\.clipboard\.writeText/);
   assert.match(app, /document\.execCommand\("copy"\)/);
   assert.match(app, /await writeTextToClipboard\(text\)/);
@@ -2703,6 +2716,7 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.match(app, /refs\.creationRecordOpenFolderButton\.addEventListener\("click",/);
   assert.match(app, /refs\.creationRecordCopyPathsButton\.addEventListener\("click",/);
   assert.match(app, /refs\.creationRecordCopyFullPathsButton\.addEventListener\("click",/);
+  assert.match(app, /refs\.creationRecordRepairIncompleteButton\.addEventListener\("click",/);
   assert.match(app, /refs\.creationRecordRefreshButton\.addEventListener\("click",/);
   assert.match(app, /function refreshCreationRecordSets\(\) \{/);
   assert.match(app, /if \(view === "creation-record"\) \{[\s\S]*refreshCreationRecordSets\(\);[\s\S]*\}/);

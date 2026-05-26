@@ -8,6 +8,7 @@ import {
   renderCreationQueueStrip,
   scheduleCreationGenerationQueue,
   selectCreationQueueJob,
+  syncActiveCreationQueueSet,
 } from "../lib/creation-suite-queue.mjs";
 
 function normalizeSet(set = {}) {
@@ -230,6 +231,37 @@ test("creation suite queue renders selectable active and queued suites", () => {
   } finally {
     globalThis.document = originalDocument;
   }
+});
+
+test("creation suite queue syncs repaired sets back into matching completed queue jobs", () => {
+  const creationState = {
+    activeQueueId: "",
+    queue: [
+      {
+        id: "creation-queue-1",
+        status: "completed",
+        set: {
+          setId: "set-a",
+          productName: "A",
+          items: [{ itemId: "material", status: "failed", error: "HTTP 504" }],
+        },
+      },
+    ],
+    selectedQueueId: "creation-queue-1",
+  };
+
+  syncActiveCreationQueueSet(
+    creationState,
+    {
+      setId: "set-a",
+      productName: "A",
+      items: [{ itemId: "material", status: "generating", error: "" }],
+    },
+    normalizeSet,
+  );
+
+  assert.equal(creationState.queue[0].set.items[0].status, "generating");
+  assert.equal(creationState.queue[0].set.items[0].error, "");
 });
 
 test("creation suite queue schedules queued sets serially", async () => {
