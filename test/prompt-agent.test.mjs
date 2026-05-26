@@ -230,6 +230,38 @@ test("prompt agent request can orchestrate multiple reference images into scene 
   assert.ok(requestBody.text.format.schema.required.includes("prompts"));
 });
 
+test("reference orchestration request preserves subject fidelity and non-subject reference boundaries", () => {
+  const input = buildPromptAgentInput({
+    images: [
+      {
+        filename: "product-front.png",
+        mimeType: "image/png",
+        base64: "ZnJvbnQ=",
+      },
+      {
+        filename: "spec-card.png",
+        mimeType: "image/png",
+        base64: "c3BlYw==",
+      },
+      {
+        filename: "usage-state.png",
+        mimeType: "image/png",
+        base64: "dXNhZ2U=",
+      },
+    ],
+    mode: "reference-orchestration",
+  });
+
+  const instruction = input[0].content[0].text;
+
+  assert.match(instruction, /同一(?:商品|产品|主体).*保持不变|保持.*同一(?:商品|产品|主体)/);
+  assert.match(instruction, /不得.*(?:新增|编造).*(?:人|动物|物体)|(?:人|动物|物体).*不存在/);
+  assert.match(instruction, /说明图|规格图|局部特写|不同状态图/);
+  assert.match(instruction, /只能作为(?:结构|细节|信息).*参考/);
+  assert.match(instruction, /(?:不能|不得).*新主体/);
+  assert.match(instruction, /(?:不能|不得).*混成同一画面状态/);
+});
+
 test("reference orchestration analysis can request English output prompts", () => {
   const images = [
     {
@@ -322,9 +354,12 @@ test("prompt agent request can identify ecommerce creation reference roles", () 
   assert.ok(requestBody.text.format.schema.required.includes("visual_language"));
   assert.deepEqual(requestBody.text.format.schema.properties.visual_language.enum, ["classic-commercial", "reference-style"]);
   assert.ok(requestBody.text.format.schema.properties.reference_roles.items.properties.role.enum.includes("dimensions"));
+  assert.ok(requestBody.text.format.schema.properties.reference_roles.items.properties.role.enum.includes("usage"));
   assert.equal(requestBody.text.format.schema.properties.sku_subjects.maxItems, 9);
   assert.match(input[0].content[0].text, /dimensions/);
   assert.match(input[0].content[0].text, /role=dimensions/);
+  assert.match(input[0].content[0].text, /role=usage/);
+  assert.match(input[0].content[0].text, /充电指南|正负极|使用说明/);
   assert.match(input[0].content[0].text, /型号 F4J16、长度 13cm、重量 42g、钩号 2#/);
   assert.match(requestBody.text.format.schema.properties.reference_roles.items.properties.note.description, /13cm/);
   assert.match(input[0].content[0].text, /SKU/);

@@ -138,6 +138,27 @@ test("creation material item reference images keep primary product plus material
   ]);
 });
 
+test("creation usage-step item reference images keep usage instruction references", () => {
+  const item = {
+    role: "usage-steps",
+  };
+  const images = [
+    { filename: "lure-main.png" },
+    { filename: "charging-guide.png" },
+    { filename: "campaign-style.png" },
+  ];
+  const roles = [
+    { filename: "lure-main.png", role: "product" },
+    { filename: "charging-guide.png", role: "usage" },
+    { filename: "campaign-style.png", role: "style" },
+  ];
+
+  assert.deepEqual(
+    buildCreationItemReferenceImages(item, images, roles).map((image) => image.filename),
+    ["lure-main.png", "charging-guide.png"],
+  );
+});
+
 test("creation package references stay scoped to the package image role", () => {
   const images = [
     { filename: "lure-main.png" },

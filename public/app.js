@@ -17,13 +17,13 @@ import { cacheBrowserGalleryItem, clearBrowserImageCache, dataUrlToBlob, deleteB
 import { createCreationLogoLibraryController } from "/lib/creation-logo-library.mjs";
 import { consumeSse, requestGenerationStream } from "/lib/generation-client.mjs";
 import { createConfigModelPickerController } from "/lib/config-model-picker.mjs";
-import { createPptAnalysisController } from "/lib/ppt-analysis-client.mjs?v=20260526-reference-analysis-layout-1";
+import { createPptAnalysisController } from "/lib/ppt-analysis-client.mjs?v=20260527-density-overlap-1";
 import { appendPptDeckDownloadLinks } from "/lib/ppt-record-links.mjs";
 import { buildCreationSkuSubjectsForPayload, normalizeCreationSkuBundleCountForPayload, normalizeCreationSkuSubjectForPayload } from "/lib/creation-sku-subjects.mjs";
 import { appendCreationVisualLanguageSuggestionCard, getCreationReferenceAnalysisVisualLanguageReason, getCreationReferenceAnalysisVisualLanguageSource, syncCreationReferenceVisualLanguageButton } from "/lib/creation-reference-analysis-view.mjs";
 import { createCreationListingController, getCreationRecordListingMetaLabel, getCreationListingSearchValues, normalizeCreationListingDraftForView, renderCreationListingDrafts } from "/lib/creation-listing-view.mjs";
 import { getCreationAutoRepairNotice, getCreationCompletionFeedback, getCreationIncompleteItems, shouldAutoRepairCreationSet } from "/lib/creation-auto-repair.mjs";
-import { buildCreationQueuedSet as buildCreationQueuedSetFromState, createCreationQueueJob, getActiveCreationQueueJob as getActiveCreationQueueJobFromState, getCreationQueueJobs as getCreationQueueJobsFromState, getPendingCreationQueueCount as getPendingCreationQueueCountFromState, getSelectedCreationQueueJob as getSelectedCreationQueueJobFromState, renderCreationQueueStrip as renderCreationQueueStripView, runCreationQueuedJob as runCreationQueuedJobFromQueue, scheduleCreationGenerationQueue as scheduleCreationGenerationQueueFromState, selectCreationQueueJob as selectCreationQueueJobInState, syncActiveCreationQueueSet as syncActiveCreationQueueSetInState } from "/lib/creation-suite-queue.mjs?v=20260526-reference-analysis-layout-1";
+import { buildCreationQueuedSet as buildCreationQueuedSetFromState, createCreationQueueJob, getActiveCreationQueueJob as getActiveCreationQueueJobFromState, getCreationQueueJobs as getCreationQueueJobsFromState, getPendingCreationQueueCount as getPendingCreationQueueCountFromState, getSelectedCreationQueueJob as getSelectedCreationQueueJobFromState, renderCreationQueueStrip as renderCreationQueueStripView, runCreationQueuedJob as runCreationQueuedJobFromQueue, scheduleCreationGenerationQueue as scheduleCreationGenerationQueueFromState, selectCreationQueueJob as selectCreationQueueJobInState, syncActiveCreationQueueSet as syncActiveCreationQueueSetInState } from "/lib/creation-suite-queue.mjs?v=20260527-density-overlap-1";
 import { DEFAULT_PORTRAIT_ACCESSORY_ASSETS, PORTRAIT_ACCESSORY_ASSET_CATEGORIES, getPortraitAccessoryAssetFileDescriptor } from "/lib/portrait-accessory-assets.mjs?v=20260523-portrait-cosplay-color-assets-1";
 const SURPRISE_PROMPTS = [
   {
@@ -7013,6 +7013,7 @@ const CREATION_REFERENCE_ROLE_OPTIONS = [
   { value: "package", label: "包装清单" },
   { value: "material", label: "材质细节" },
   { value: "dimensions", label: "尺寸规格" },
+  { value: "usage", label: "使用说明" },
   { value: "scene", label: "使用场景" },
   { value: "style", label: "风格参考" },
   { value: "other", label: "其他" },
@@ -9942,9 +9943,8 @@ function renderCreationRecordView() {
     return;
   }
 
-  selectedSet.items.forEach((item, index) => {
-    refs.creationRecordResultGrid.appendChild(createCreationCard(item, index, { showActions: false, showRecordActions: true }));
-  });
+  const firstRecordSkuItem = selectedSet.items.find((item) => item.role === "sku");
+  selectedSet.items.forEach((item, index) => refs.creationRecordResultGrid.appendChild(createCreationCard(item, index, { showActions: false, showRecordActions: true, isSkuStart: item === firstRecordSkuItem })));
 }
 
 function openCreationReferencePreview(referenceId) {
@@ -10604,7 +10604,8 @@ function markCreationReferenceAnalysisDirty() {
 const hasCreationReferenceDimensionSpecIntent = (value) => /dimension(s)?\s*(chart|guide|card|table|sheet|info|information|specifications?|feel|reference|focus|value|values)|size\s*(chart|guide|card|table|sheet|feel|reference|focus|value|values)|spec(ification)?\s*(table|chart|card|sheet|info|information|feel|reference|focus|value|values)|measurement\s*(chart|guide|card|table)|尺寸\s*(图|表|卡|规格|信息|参数|感|参考|依据|值|数值|重点|焦点)|规格\s*(图|表|卡|信息|参数|感|参考|依据|值|数值|重点|焦点)|尺码\s*(图|表|卡|信息|指南)|实物握持尺度|规格信息|尺寸规格|规格感|尺寸感/.test(String(value || "").trim().toLowerCase());
 const hasCreationReferenceDimensionSpecValue = (value) => { const text = String(value || "").trim().toLowerCase(); return /#\s*\d+|\d+\s*#\s*(?:hook|hooks|钩)?|\d+\s*(?:号|號)\s*钩|size\s*#?\s*\d+\s*hooks?/iu.test(text) || /(^|[^\p{L}\p{N}_])([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*(fl\.?\s*oz|fluid\s*ounces?|inches?|inch|in\.?|ft\.?|feet|foot|yards?|yard|yd\.?|毫米|厘米|英寸|英尺|毫升|液量盎司|千克|克|磅|盎司|升|mm|cm|kg|g|ml|lb|lbs|oz|m|l)(?=$|[^\p{L}\p{N}_])/iu.test(text); };
 const hasCreationReferenceDimensionSignal = (value) => { const text = String(value || "").trim().toLowerCase(); return hasCreationReferenceDimensionSpecIntent(text) || (hasCreationReferenceDimensionSpecValue(text) && /dimension|size|measurement|capacity|length|width|height|weight|hook|尺寸|规格|尺码|容量|长度|宽度|高度|重量|比例|尺度|钩/iu.test(text)); };
-function inferCreationReferenceAnalysisRole(entry = {}) { const explicitRole = String(entry.role || "").trim(), hasExplicitRole = CREATION_REFERENCE_ROLE_OPTIONS.some((option) => option.value === explicitRole), text = [entry.roleLabel, entry.title, entry.note, entry.description, entry.reason, entry.summary, entry.filename].map((item) => String(item || "").trim()).filter(Boolean).join(" "); const shouldUseDimensionRole = hasCreationReferenceDimensionSignal(text) && (!hasExplicitRole || explicitRole === "other" || (explicitRole === "product" && hasCreationReferenceDimensionSpecIntent(text))); return shouldUseDimensionRole ? "dimensions" : hasExplicitRole ? explicitRole : "product"; }
+const hasCreationReferenceUsageInstructionSignal = (value) => /usage\s*(guide|manual|instructions?|steps?|diagram|method)|user\s*(guide|manual|instructions?)|operation\s*(guide|manual|instructions?|steps?|method|diagram)|instruction(s)?|manual|tutorial|step[-\s]?by[-\s]?step|how\s*to|setup\s*(guide|instructions?|steps?)|assembly\s*(guide|instructions?|steps?)|install(?:ation)?\s*(guide|instructions?|steps?)|charging\s*(guide|instructions?|steps?|method|connection|diagram)|connection\s*(guide|instructions?|steps?|method|diagram)|polarity|positive\s*(pole|terminal|electrode)|negative\s*(pole|terminal|electrode)|使用\s*(指南|说明|教程|步骤|方法|方式|指引)|操作\s*(指南|说明|教程|步骤|方法|流程)|安装\s*(指南|说明|教程|步骤|方法|流程)|装配\s*(指南|说明|教程|步骤|方法|流程)|充电\s*(指南|说明|教程|步骤|方式|方法|连接|接线)|连接\s*(指南|说明|教程|步骤|方式|方法|示意|接线)|接线|正负极|正极|负极|请按照|注意事项|说明书|教程图|步骤图/iu.test(String(value || "").trim().toLowerCase());
+function inferCreationReferenceAnalysisRole(entry = {}) { const explicitRole = String(entry.role || "").trim(), hasExplicitRole = CREATION_REFERENCE_ROLE_OPTIONS.some((option) => option.value === explicitRole), text = [entry.roleLabel, entry.title, entry.note, entry.description, entry.reason, entry.summary, entry.filename].map((item) => String(item || "").trim()).filter(Boolean).join(" "); const shouldUseDimensionRole = hasCreationReferenceDimensionSignal(text) && (!hasExplicitRole || explicitRole === "other" || (explicitRole === "product" && hasCreationReferenceDimensionSpecIntent(text))); const shouldUseUsageRole = hasCreationReferenceUsageInstructionSignal(text) && (!hasExplicitRole || explicitRole === "other" || explicitRole === "product" || explicitRole === "scene"); return shouldUseDimensionRole ? "dimensions" : shouldUseUsageRole ? "usage" : hasExplicitRole ? explicitRole : "product"; }
 
 function normalizeCreationReferenceAnalysisRecommendation(entry = {}, index = 0) {
   const filename = String(state.creationReferenceFiles[index]?.file?.name || entry.filename || `reference-image-${index + 1}`).trim();
@@ -10616,10 +10617,8 @@ function normalizeCreationReferenceAnalysisRecommendation(entry = {}, index = 0)
 
 function normalizeCreationReferenceAnalysisPayload(payload = {}) {
   const analysis = payload.analysis || payload;
-  const recommendations = Array.isArray(analysis?.recommendations)
-    ? analysis.recommendations
-        .map((entry, index) => normalizeCreationReferenceAnalysisRecommendation(entry, index))
-        .filter(Boolean)
+  const rawRecommendations = Array.isArray(analysis?.recommendations) ? analysis.recommendations : Array.isArray(analysis?.reference_roles) ? analysis.reference_roles : [];
+  const recommendations = rawRecommendations.length > 0 ? rawRecommendations.map((entry, index) => normalizeCreationReferenceAnalysisRecommendation(entry, index)).filter(Boolean)
     : [];
   const rawSkuSubjects = Array.isArray(analysis?.skuSubjects) ? analysis.skuSubjects : Array.isArray(analysis?.sku_subjects) ? analysis.sku_subjects : [];
   const visualLanguage = normalizeCreationVisualLanguage(getCreationReferenceAnalysisVisualLanguageSource(analysis));

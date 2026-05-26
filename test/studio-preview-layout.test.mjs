@@ -17,7 +17,7 @@ const publicConfigModelPickerPath = new URL("../public/lib/config-model-picker.m
 const publicCreationListingViewPath = new URL("../public/lib/creation-listing-view.mjs", import.meta.url);
 const generationClientPath = new URL("../lib/generation-client.mjs", import.meta.url);
 const pptAnalysisClientPath = new URL("../lib/ppt-analysis-client.mjs", import.meta.url);
-const assetVersion = "20260526-reference-analysis-layout-1";
+const assetVersion = "20260527-density-overlap-1";
 
 test("static assets use the current cache-busting version", async () => {
   const html = await readFile(indexPath, "utf8");
@@ -351,6 +351,7 @@ test("filmstrip thumbnails stay square, fill the available rail, and keep labels
   assert.match(styles, /\.filmstrip-row\s*\{[\s\S]*overflow:\s*hidden;[\s\S]*min-height:\s*118px;/);
   assert.match(styles, /\.filmstrip\s*\{[\s\S]*width:\s*100%;[\s\S]*max-width:\s*100%;/);
   assert.match(styles, /\.filmstrip\s*\{[\s\S]*grid-auto-columns:\s*92px;[\s\S]*justify-content:\s*start;/);
+  assert.match(styles, /\.filmstrip\s*\{[\s\S]*padding:\s*calc\(var\(--field-gap,\s*6px\) \* 0\.5\)\s*2px\s*6px;/);
   assert.match(styles, /\.filmstrip-item\s*\{[\s\S]*justify-items:\s*center;/);
   assert.match(styles, /\.filmstrip-item span\s*\{[\s\S]*font-size:\s*var\(--type-subtitle-size\);[\s\S]*line-height:\s*14px;[\s\S]*white-space:\s*nowrap;/);
   assert.match(styles, /\.filmstrip-item img\s*\{[\s\S]*object-fit:\s*cover;/);
@@ -892,10 +893,12 @@ test("generation loading shell uses light DOM and transform-only motion", async 
 
 test("studio panels start without redundant title blocks and merge parameters under ratio controls", async () => {
   const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
   const promptParameterSettings = html.match(/<details[\s\S]*class="field-group parameter-settings adaptive-section"[\s\S]*?(?=<\/form>)/)?.[0] || "";
 
   assert.match(html, /<details[\s\S]*class="field-group parameter-settings adaptive-section"[\s\S]*id="parameterAdaptiveSection"[\s\S]*<div class="ratio-grid" id="ratioGrid"><\/div>[\s\S]*<div class="advanced-content">/);
+  assert.match(styles, /\.parameter-settings > \.ratio-grid\s*\{[\s\S]*margin-bottom:\s*calc\(var\(--field-gap,\s*6px\) \+ 2px\);/);
   assert.doesNotMatch(promptParameterSettings, /<small>Parameters<\/small>/);
   assert.match(html, /<details[\s\S]*class="field-group parameter-settings adaptive-section"[\s\S]*<label class="compact-field">[\s\S]*<span>思考等级<\/span>[\s\S]*id="reasoningEffortInput"[\s\S]*<label class="compact-field">[\s\S]*id="sizeInput"[\s\S]*<label class="compact-field">[\s\S]*id="outputFormatInput"/);
   assert.match(app, /const REASONING_LABELS = \{[\s\S]*low: "Low",[\s\S]*medium: "Medium",[\s\S]*high: "High",[\s\S]*xhigh: "XHigh",[\s\S]*\};/);
@@ -1164,6 +1167,9 @@ test("compact select controls use theme-aware form surfaces", async () => {
   assert.match(compactOptionRule, /color:\s*var\(--text\);[\s\S]*background:\s*var\(--bg-soft\);/);
   assert.match(gallerySelectRule, /color-scheme:\s*inherit;/);
   assert.match(creationTemplateSearchRule, /color:\s*var\(--text\);[\s\S]*background:\s*var\(--input-bg/);
+  assert.match(creationTemplateSearchRule, /width:\s*100%;/);
+  assert.match(creationTemplateSearchRule, /max-width:\s*100%;/);
+  assert.match(creationTemplateSearchRule, /box-sizing:\s*border-box;/);
   assert.doesNotMatch(creationTemplateSearchRule, /rgba\(12,\s*18,\s*32,\s*0\.88\)|color:\s*#f5f7ff/);
   assert.match(
     styles,
@@ -2055,7 +2061,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(styles, /\.creation-reference-note\s*\{/);
   assert.match(styles, /\.creation-template-search\s*\{/);
   assert.match(styles, /\.creation-industry-browser\s*\{/);
-  assert.match(styles, /\.creation-industry-browser-head\s*\{[\s\S]*grid-template-columns:\s*minmax\(210px,\s*1fr\)\s*clamp\(128px,\s*28%,\s*180px\);/);
+  assert.match(styles, /\.creation-industry-browser-head\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*minmax\(112px,\s*128px\);[\s\S]*gap:\s*10px;/);
   assert.match(styles, /\.creation-industry-trigger\s*\{/);
   assert.match(styles, /\.creation-industry-popover\s*\{/);
   assert.match(styles, /\.creation-industry-popover\[hidden\]\s*\{/);
@@ -2113,6 +2119,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /creationSelectedRoles:\s*\[\]/);
   assert.match(app, /const CREATION_REFERENCE_ROLE_OPTIONS = \[/);
   assert.match(app, /\{ value: "dimensions", label: "尺寸规格" \}/);
+  assert.match(app, /\{ value: "usage", label: "使用说明" \}/);
   assert.match(app, /const CREATION_SCENARIO_ROLE_PRESETS = \{/);
   assert.match(app, /const CREATION_VISUAL_LANGUAGE_LABELS = \{/);
   assert.match(app, /"reference-style": "参考模式"/);
@@ -2153,6 +2160,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function analyzeCreationReferenceImages\(\) \{/);
   assert.match(app, /async function applyCreationReferenceAnalysis\(analysis\) \{/);
   assert.match(app, /function applyCreationReferenceAnalysisCategoryMatch\(analysis\) \{/);
+  assert.match(app, /analysis\?\.reference_roles/);
   assert.match(app, /findCreationIndustryTemplateMatch/);
   assert.match(app, /function applyCreationReferenceAnalysisRecommendations\(\) \{/);
   assert.match(app, /function applyCreationReferenceAnalysisVisualLanguage\(\) \{/);
@@ -2163,6 +2171,8 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /formatCreationVisualLanguageLabel:\s*\(value\)\s*=>\s*CREATION_VISUAL_LANGUAGE_LABELS\[normalizeCreationVisualLanguage\(value\)\]/);
   assert.doesNotMatch(app, /formatCreationVisualLanguageLabel,\s*getCreationCurrentSet/);
   assert.match(app, /visualLanguageReason:/);
+  assert.match(app, /hasCreationReferenceUsageInstructionSignal/);
+  assert.match(app, /shouldUseUsageRole/);
   assert.match(app, /setCreationSelectValue\(refs\.creationVisualLanguageInput,\s*analysis\.visualLanguage,\s*"classic-commercial"\)/);
   assert.match(creationReferenceAnalysisView, /export function syncCreationReferenceVisualLanguageButton/);
   assert.match(creationReferenceAnalysisView, /button\.textContent = alreadyUsingSuggestion \? "已是建议视觉语言" : "应用视觉语言"/);
@@ -2441,6 +2451,8 @@ test("creation mode exposes record detail and item repair actions", async () => 
   assert.match(app, /card\.classList\.toggle\("is-sku-start", options\.isSkuStart === true\);/);
   assert.match(app, /const firstSkuItem = items\.find\(\(item\) => item\.role === "sku"\);/);
   assert.match(app, /createCreationCard\(item, index, \{ isSkuStart: item === firstSkuItem \}\)/);
+  assert.match(app, /const firstRecordSkuItem = selectedSet\.items\.find\(\(item\) => item\.role === "sku"\);/);
+  assert.match(app, /createCreationCard\(item, index, \{ showActions: false, showRecordActions: true, isSkuStart: item === firstRecordSkuItem \}\)/);
   assert.match(app, /const shouldRenderPath = !imageUrl && !showRecordActions && !hideGenerationDetails;/);
   assert.match(app, /path\.textContent = item\.error \|\| "";/);
   assert.match(app, /refs\.creationResultGrid\.addEventListener\("click",[\s\S]*creationRetryItemId/);
@@ -2498,7 +2510,7 @@ test("creation mode exposes a set-level queue strip for queued suites", async ()
 
   assert.match(app, /queue:\s*\[\]/);
   assert.match(app, /selectedQueueId:\s*""/);
-  assert.match(app, /from "\/lib\/creation-suite-queue\.mjs\?v=20260526-reference-analysis-layout-1"/);
+  assert.match(app, new RegExp(`from "/lib/creation-suite-queue\\.mjs\\?v=${assetVersion}"`));
   assert.match(app, /function getCreationQueueJobs\(\) \{/);
   assert.match(app, /function getSelectedCreationQueueJob\(\) \{/);
   assert.match(app, /function renderCreationQueueStrip\(\) \{/);
@@ -2806,7 +2818,7 @@ test("creation record cards open gallery-style lightbox details", async () => {
   assert.match(app, /refs\.lightboxCopyPathButton\.addEventListener\("click",/);
   assert.match(app, /refs\.lightboxCopyFullPathButton\.addEventListener\("click",/);
   assert.match(app, /refs\.creationRecordResultGrid\.addEventListener\("click",[\s\S]*creationRecordPreviewItemId/);
-  assert.match(app, /createCreationCard\(item, index, \{ showActions: false, showRecordActions: true \}\)/);
+  assert.match(app, /createCreationCard\(item, index, \{ showActions: false, showRecordActions: true, isSkuStart: item === firstRecordSkuItem \}\)/);
   assert.doesNotMatch(app, /dataset\.creationRecordCopyPromptItemId/);
   assert.doesNotMatch(app, /dataset\.creationRecordCopyPathItemId/);
   assert.doesNotMatch(app, /dataset\.creationRecordCopyFullPathItemId/);

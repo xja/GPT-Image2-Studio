@@ -10,9 +10,9 @@ test("studio density switches to compact mode on 2.5k 16:10 laptop viewports", (
   });
 
   assert.equal(settings.mode, "compact");
-  assert.equal(settings.variables["--ui-root-font-size"], "15px");
-  assert.equal(settings.variables["--studio-grid-left"], "360px");
-  assert.equal(settings.variables["--header-control-height"], "34px");
+  assert.equal(settings.variables["--ui-root-font-size"], "14.66px");
+  assert.equal(settings.variables["--studio-grid-left"], "351.94px");
+  assert.equal(settings.variables["--header-control-height"], "33.24px");
 });
 
 test("studio density also keeps compact mode for scaled 16:10 desktop windows", () => {
@@ -31,12 +31,12 @@ test("studio density switches to wide mode on 2560x1348 desktops without changin
   });
 
   assert.equal(settings.mode, "wide");
-  assert.equal(settings.variables["--app-shell-max-width"], "2200px");
-  assert.equal(settings.variables["--studio-grid-left"], "392px");
-  assert.equal(settings.variables["--studio-grid-right"], "328px");
-  assert.equal(settings.variables["--view-root-offset"], "12px");
-  assert.equal(settings.variables["--textarea-min-height"], "100px");
-  assert.equal(settings.variables["--reference-dropzone-min-height"], "140px");
+  assert.equal(settings.variables["--app-shell-max-width"], "2150.72px");
+  assert.equal(settings.variables["--studio-grid-left"], "383.22px");
+  assert.equal(settings.variables["--studio-grid-right"], "320.65px");
+  assert.equal(settings.variables["--view-root-offset"], "11.73px");
+  assert.equal(settings.variables["--textarea-min-height"], "97.76px");
+  assert.equal(settings.variables["--reference-dropzone-min-height"], "136.86px");
 });
 
 test("studio density keeps wide mode on ultrawide desktops after browser zoom changes", () => {
@@ -47,7 +47,7 @@ test("studio density keeps wide mode on ultrawide desktops after browser zoom ch
   });
 
   assert.equal(settings.mode, "wide");
-  assert.equal(settings.variables["--app-shell-max-width"], "2200px");
+  assert.equal(settings.variables["--app-shell-max-width"], "2150.72px");
 });
 
 test("studio density restores regular mode from zoomed CSS pixels when the physical viewport is tall enough", () => {
@@ -58,7 +58,7 @@ test("studio density restores regular mode from zoomed CSS pixels when the physi
   });
 
   assert.equal(settings.mode, "regular");
-  assert.equal(settings.variables["--ui-root-font-size"], "16px");
+  assert.equal(settings.variables["--ui-root-font-size"], "15.64px");
 });
 
 test("studio density keeps regular mode on tall desktop viewports", () => {
@@ -68,8 +68,8 @@ test("studio density keeps regular mode on tall desktop viewports", () => {
   });
 
   assert.equal(settings.mode, "regular");
-  assert.equal(settings.variables["--ui-root-font-size"], "16px");
-  assert.equal(settings.variables["--studio-grid-left"], "392px");
+  assert.equal(settings.variables["--ui-root-font-size"], "15.64px");
+  assert.equal(settings.variables["--studio-grid-left"], "383.22px");
 });
 
 test("studio density does not force compact mode on narrow layouts", () => {
@@ -79,7 +79,7 @@ test("studio density does not force compact mode on narrow layouts", () => {
   });
 
   assert.equal(settings.mode, "regular");
-  assert.equal(settings.variables["--view-tab-height"], "40px");
+  assert.equal(settings.variables["--view-tab-height"], "39.1px");
 });
 
 test("studio layout mode keeps desktop structure when browser zoom only shrinks CSS pixels", () => {
@@ -243,8 +243,8 @@ test("studio density scales pixel-based workspace variables back up when browser
   });
 
   assert.equal(settings.mode, "regular");
-  assert.equal(settings.variables["--ui-root-font-size"], "32px");
-  assert.equal(settings.variables["--app-shell-max-width"], "3360px");
-  assert.equal(settings.variables["--studio-grid-left"], "784px");
-  assert.equal(settings.variables["--topbar-padding"], "12px 20px 28px");
+  assert.equal(settings.variables["--ui-root-font-size"], "31.28px");
+  assert.equal(settings.variables["--app-shell-max-width"], "3284.74px");
+  assert.equal(settings.variables["--studio-grid-left"], "766.44px");
+  assert.equal(settings.variables["--topbar-padding"], "11.73px 19.55px 27.37px");
 });

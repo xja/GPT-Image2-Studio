@@ -1380,6 +1380,38 @@ test("creation reference analysis treats product-labeled specification-feel card
   assert.deepEqual(analysis.skuSubjects, []);
 });
 
+test("creation reference analysis classifies product-labeled usage guides as usage instructions", () => {
+  const analysis = normalizeCreationReferenceAnalysis(
+    {
+      summary: "识别到一张电子路亚充电指南图。",
+      reference_roles: [
+        {
+          index: 1,
+          filename: "charging-guide.png",
+          role: "product",
+          note: "充电指南，图中用红黑夹子标注正极、负极连接方式，并提示请按照正确的充电方式。",
+        },
+      ],
+      sku_subjects: [
+        {
+          id: "charging-guide",
+          title: "充电指南",
+          filenames: ["charging-guide.png"],
+          note: "说明正负极充电连接步骤。",
+        },
+      ],
+      risks: [],
+    },
+    ["charging-guide.png"],
+  );
+
+  assert.deepEqual(
+    analysis.recommendations.map((entry) => [entry.filename, entry.role, entry.roleLabel]),
+    [["charging-guide.png", "usage", "使用说明"]],
+  );
+  assert.deepEqual(analysis.skuSubjects, []);
+});
+
 test("creation reference analysis classifies other size-spec references as dimensions", () => {
   const analysis = normalizeCreationReferenceAnalysis(
     {
