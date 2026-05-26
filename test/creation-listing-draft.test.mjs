@@ -57,6 +57,24 @@ test("listing sources fall back to one input-only product package when no SKU an
   assert.match(sources[0].warnings.join("\n"), /Generated images were unavailable/);
 });
 
+test("listing sources bound overlong product descriptions before model prompt assembly", () => {
+  const longDescription = Array.from({ length: 160 }, (_, index) =>
+    `Feature ${index + 1}: realistic fishing lure detail with ABS body treble hooks reflective scales long cast stable swim action shopper pain point visibility and stiff lure replacement.`,
+  ).join("\n");
+  const sources = buildCreationListingSources({
+    setId: "set-long",
+    productName: "Bionic Fishing Lure",
+    productDescription: longDescription,
+    sellingPoints: [],
+    items: [],
+  });
+
+  assert.ok(sources[0].productDescription.length < 2000);
+  assert.match(sources[0].productDescription, /Feature 1/);
+  assert.match(sources[0].productDescription, /truncated from a longer product description/);
+  assert.doesNotMatch(sources[0].productDescription, /Feature 160/);
+});
+
 test("listing sources collapse duplicate skuSubjects before parent listing generation", () => {
   const sources = buildCreationListingSources({
     setId: "set-duplicates",
@@ -248,6 +266,38 @@ test("listing draft preserves Chinese display text without treating it as public
 
   assert.equal(draft.zhDisplay.title, "2 件 3.5 英寸蓝色路亚鱼饵");
   assert.deepEqual(draft.zhDisplay.sellingPoints, ["亮蓝色外观便于区分颜色变体。"]);
+  assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 in" }).ok, true);
+});
+
+test("listing draft preserves Chinese warning and missing info display text", () => {
+  const draft = normalizeCreationListingDraft({
+    id: "listing-zh-warning-missing",
+    title: "2 Pack 3.5 in Blue Fishing Lures",
+    sellingPoints: ["Bright blue profile"],
+    painPoints: ["Low visibility in stained water"],
+    fiveBullets: validBullets,
+    description: "A compact lure for freshwater fishing.",
+    backendSearchTerms: "blue fishing lure bass bait",
+    missingInfo: ["Actual bag dimensions were not provided."],
+    warnings: ["Do not add waterproofing claims without source data."],
+    zhDisplay: {
+      title: "2 件装 3.5 英寸蓝色路亚鱼饵",
+      sellingPoints: ["明亮蓝色外观便于区分颜色变体。"],
+      painPoints: ["减少在浑水中选择颜色的判断成本。"],
+      fiveBullets: ["2 件装 3.5 英寸规格便于确认数量和尺寸。"],
+      description: "蓝色路亚鱼饵的中文参考说明。",
+      backendSearchTerms: "蓝色 路亚 鱼饵",
+      keywordBuckets: {
+        exact: ["蓝色路亚鱼饵"],
+      },
+      missingInfo: ["未提供实际包袋尺寸。"],
+      warnings: ["没有来源数据前不要加入防水声明。"],
+    },
+    language: "en-US",
+  });
+
+  assert.deepEqual(draft.zhDisplay.missingInfo, ["未提供实际包袋尺寸。"]);
+  assert.deepEqual(draft.zhDisplay.warnings, ["没有来源数据前不要加入防水声明。"]);
   assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 in" }).ok, true);
 });
 

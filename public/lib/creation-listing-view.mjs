@@ -11,6 +11,10 @@ const CREATION_LISTING_BUCKET_COPY_LABELS = {
   traffic: "Traffic keywords",
   descriptive: "Descriptive keywords",
 };
+const CREATION_LISTING_REVIEW_REFERENCE_TEXT = {
+  warnings: "发布前请按该警告复核来源证据，避免加入未验证声明。",
+  missingInfo: "源数据未提供该信息，发布前需要补充确认。",
+};
 
 const CJK_TEXT_GLOBAL_PATTERN = /[\u3400-\u9fff]+/gu;
 const NON_ASCII_TEXT_PATTERN = /[^\x20-\x7E]+/g;
@@ -147,6 +151,17 @@ function cleanCreationListingPublicArray(value, { split = false, language = "" }
   return source.map((item) => formatCreationListingPublicText(item, language)).filter(Boolean);
 }
 
+function buildCreationListingReviewReferenceRows(value, type) {
+  const rows = cleanCreationListingArray(value);
+  const referenceText = CREATION_LISTING_REVIEW_REFERENCE_TEXT[type] || "";
+  return rows.length > 0 && referenceText ? rows.map(() => referenceText) : [];
+}
+
+function resolveCreationListingReviewReferenceRows(value, localizedValue, type) {
+  const localizedRows = cleanCreationListingArray(localizedValue);
+  return localizedRows.length > 0 ? localizedRows : buildCreationListingReviewReferenceRows(value, type);
+}
+
 function normalizeCreationListingKeywordBuckets(value = {}) {
   const source = value && typeof value === "object" ? value : {};
   return {
@@ -179,6 +194,8 @@ function normalizeCreationListingDisplayForView(value = {}) {
     description: cleanCreationListingText(value.description),
     backendSearchTerms: cleanCreationListingText(value.backendSearchTerms || value.backend_search_terms),
     keywordBuckets: normalizeCreationListingKeywordBuckets(value.keywordBuckets || value.keyword_buckets),
+    missingInfo: cleanCreationListingArray(value.missingInfo || value.missing_info),
+    warnings: cleanCreationListingArray(value.warnings),
   };
 }
 
@@ -533,12 +550,16 @@ export function renderCreationListingDrafts({ refs, state, set } = {}) {
 
     const warningCopy = cleanCreationListingPublicArray(draft.warnings, { language: draft.language });
     const missingInfoCopy = cleanCreationListingPublicArray(draft.missingInfo, { language: draft.language });
+    const warningReference = resolveCreationListingReviewReferenceRows(draft.warnings, draft.zhDisplay?.warnings, "warnings");
+    const missingInfoReference = resolveCreationListingReviewReferenceRows(draft.missingInfo, draft.zhDisplay?.missingInfo, "missingInfo");
     contentFrame.appendChild(createCreationListingField("警告", draft.warnings, {
       list: true,
+      localizedValue: warningReference,
       copyValue: warningCopy.length > 0 ? warningCopy : ["None"],
     }));
     contentFrame.appendChild(createCreationListingField("缺失信息", draft.missingInfo, {
       list: true,
+      localizedValue: missingInfoReference,
       copyValue: missingInfoCopy.length > 0 ? missingInfoCopy : ["None"],
     }));
     card.appendChild(contentFrame);

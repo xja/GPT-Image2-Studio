@@ -22,12 +22,13 @@ import { cacheBrowserGalleryItem, clearBrowserImageCache, dataUrlToBlob, deleteB
 import { createCreationLogoLibraryController } from "/lib/creation-logo-library.mjs";
 import { consumeSse, requestGenerationStream } from "/lib/generation-client.mjs";
 import { createConfigModelPickerController } from "/lib/config-model-picker.mjs";
-import { createPptAnalysisController } from "/lib/ppt-analysis-client.mjs?v=20260526-portrait-retry-1";
+import { createPptAnalysisController } from "/lib/ppt-analysis-client.mjs?v=20260526-reference-analysis-layout-1";
 import { appendPptDeckDownloadLinks } from "/lib/ppt-record-links.mjs";
 import { buildCreationSkuSubjectsForPayload, normalizeCreationSkuBundleCountForPayload, normalizeCreationSkuSubjectForPayload } from "/lib/creation-sku-subjects.mjs";
 import { appendCreationVisualLanguageSuggestionCard, getCreationReferenceAnalysisVisualLanguageReason, getCreationReferenceAnalysisVisualLanguageSource, syncCreationReferenceVisualLanguageButton } from "/lib/creation-reference-analysis-view.mjs";
 import { createCreationListingController, getCreationRecordListingMetaLabel, getCreationListingSearchValues, normalizeCreationListingDraftForView, renderCreationListingDrafts } from "/lib/creation-listing-view.mjs";
 import { getCreationAutoRepairNotice, getCreationCompletionFeedback, getCreationIncompleteItems, shouldAutoRepairCreationSet } from "/lib/creation-auto-repair.mjs";
+import { buildCreationQueuedSet as buildCreationQueuedSetFromState, createCreationQueueJob, getActiveCreationQueueJob as getActiveCreationQueueJobFromState, getCreationQueueJobs as getCreationQueueJobsFromState, getPendingCreationQueueCount as getPendingCreationQueueCountFromState, getSelectedCreationQueueJob as getSelectedCreationQueueJobFromState, renderCreationQueueStrip as renderCreationQueueStripView, runCreationQueuedJob as runCreationQueuedJobFromQueue, scheduleCreationGenerationQueue as scheduleCreationGenerationQueueFromState, selectCreationQueueJob as selectCreationQueueJobInState, syncActiveCreationQueueSet as syncActiveCreationQueueSetInState } from "/lib/creation-suite-queue.mjs?v=20260526-reference-analysis-layout-1";
 import { DEFAULT_PORTRAIT_ACCESSORY_ASSETS, PORTRAIT_ACCESSORY_ASSET_CATEGORIES, getPortraitAccessoryAssetFileDescriptor } from "/lib/portrait-accessory-assets.mjs?v=20260523-portrait-cosplay-color-assets-1";
 const SURPRISE_PROMPTS = [
   {
@@ -378,6 +379,7 @@ const state = {
   creationCategoryTemplatesModule: null,
   creation: {
     currentSet: null,
+    activeQueueId: "",
     autoRepairAttemptCount: 0,
     editingItemId: "",
     feedback: "",
@@ -386,8 +388,10 @@ const state = {
     itemDrafts: {},
     listingGeneratingSetId: "",
     planning: false,
+    queue: [],
     recordQuery: "",
     recordSetId: "",
+    selectedQueueId: "",
     sets: [],
   },
   portrait: {
@@ -706,6 +710,7 @@ const refs = {
   creationRecordResultGrid: document.querySelector("#creationRecordResultGrid"),
   creationRecordSearchInput: document.querySelector("#creationRecordSearchInput"),
   creationRecordSetList: document.querySelector("#creationRecordSetList"),
+  creationQueueStrip: document.querySelector("#creationQueueStrip"),
   creationRepairFailedButton: document.querySelector("#creationRepairFailedButton"),
   creationResultGrid: document.querySelector("#creationResultGrid"),
   creationRoleCount: document.querySelector("#creationRoleCount"),
@@ -9064,6 +9069,17 @@ function getCreationCurrentSet() {
   return state.creation.currentSet ? normalizeCreationSetForView(state.creation.currentSet) : null;
 }
 
+function getCreationQueueJobs() { return getCreationQueueJobsFromState(state.creation); }
+function getPendingCreationQueueCount() { return getPendingCreationQueueCountFromState(state.creation); }
+function getActiveCreationQueueJob() { return getActiveCreationQueueJobFromState(state.creation); }
+function getSelectedCreationQueueJob() { return getSelectedCreationQueueJobFromState(state.creation); }
+function syncActiveCreationQueueSet(set) { syncActiveCreationQueueSetInState(state.creation, set, normalizeCreationSetForView); }
+function selectCreationQueueJob(queueId) {
+  if (!selectCreationQueueJobInState(state.creation, queueId)) return;
+  state.creation.editingItemId = "";
+  renderCreationView();
+}
+
 function isCreationDraftSet(set = getCreationCurrentSet()) {
   const setId = String(set?.setId || "");
   return setId.startsWith("creation-local-") || setId.startsWith("creation-draft-");
@@ -9189,6 +9205,7 @@ function upsertCreationSet(set) {
   if (!currentSetId || currentSetId === normalized.setId || currentSetId.startsWith("creation-local-") || state.creation.generating) {
     state.creation.currentSet = normalized;
   }
+  syncActiveCreationQueueSet(normalized);
   renderCreationRecordView();
 
   return normalized;
@@ -9222,6 +9239,7 @@ function updateCreationCurrentItem(itemId, patch = {}) {
   if (!isCreationDraftSet(nextSet)) {
     state.creation.sets = [nextSet, ...state.creation.sets.filter((entry) => entry.setId !== nextSet.setId)];
   }
+  syncActiveCreationQueueSet(nextSet);
   return nextSet;
 }
 
@@ -10929,6 +10947,10 @@ function buildCreationLogoBatchPreviewItems(status = "idle") {
   }));
 }
 
+function renderCreationQueueStrip() {
+  renderCreationQueueStripView({ strip: refs.creationQueueStrip, queueJobs: getCreationQueueJobs(), selectedQueueId: state.creation.selectedQueueId, normalizeSet: normalizeCreationSetForView, getProgressSummary: getCreationProgressSummary, getStatusLabel: getCreationStatusLabel, formatClock });
+}
+
 function getCreationInlineListingRefs() { return { creationRecordListingDrafts: refs.creationInlineListingDrafts, creationRecordListingStatus: refs.creationInlineListingStatus }; }
 
 function renderCreationView() {
@@ -10937,8 +10959,9 @@ function renderCreationView() {
   }
 
   syncCreationBranchPanels();
-  const currentSet = getCreationCurrentSet();
   const logoBatchBranch = isCreationLogoBatchBranch();
+  const selectedQueueJob = logoBatchBranch ? null : getSelectedCreationQueueJob();
+  const currentSet = selectedQueueJob?.set ? normalizeCreationSetForView(selectedQueueJob.set) : getCreationCurrentSet();
   const previewSlots = logoBatchBranch
     ? buildCreationLogoBatchPreviewItems(state.creation.generating ? "queued" : "idle")
     : getCreationPreviewSlots(currentSet?.imageCount || getCreationSelectedImageCount());
@@ -10964,10 +10987,13 @@ function renderCreationView() {
     ? state.creation.generating
       ? "添加中..."
       : "批量添加 Logo"
-    : state.creation.generating
-      ? "生成中..."
+    : state.creation.generating || getPendingCreationQueueCount() > 0
+      ? "加入队列"
       : "生成套图";
-  refs.creationGenerateButton.disabled = state.creation.generating || state.creation.planning || preparingReferences;
+  refs.creationGenerateButton.disabled = state.creation.planning || preparingReferences || getPendingCreationQueueCount() >= getMaxQueuedJobCount();
+  if (logoBatchBranch && state.creation.generating) {
+    refs.creationGenerateButton.disabled = true;
+  }
   if (refs.creationPlanButton) {
     refs.creationPlanButton.textContent = state.creation.planning ? "预览中..." : "预览计划";
     refs.creationPlanButton.disabled = state.creation.generating || state.creation.planning;
@@ -10988,6 +11014,7 @@ function renderCreationView() {
         : "上传图片后批量添加 Logo"
       : "等待生成";
 
+  renderCreationQueueStrip();
   renderCreationRecordDetail(currentSet);
 
   refs.creationResultGrid.innerHTML = "";
@@ -11504,13 +11531,31 @@ async function startCreationLogoBatchGeneration() {
   }
 }
 
+function buildCreationQueuedSet(input = {}) { return buildCreationQueuedSetFromState({ ...input, buildCreationReferenceRolePayload, buildCreationSkuSubjectPayload, creationState: state.creation, formatCreationDimensionUnitModeLabel, formatCreationVisualLanguageLabel: (value) => CREATION_VISUAL_LANGUAGE_LABELS[normalizeCreationVisualLanguage(value)], getCreationCurrentSet, getCreationLogoPayload, getCreationPreviewSlots, getCreationSelectedDimensionUnitMode, getCreationSelectedImageCount, getCreationSelectedIndustryTemplate, getCreationSelectedLanguage, getCreationSelectedRoles, getCreationSelectedScenario, isCreationDraftSet, normalizeCreationSkuBundleCountForPayload, normalizeCreationVisualLanguage, normalizeSet: normalizeCreationSetForView, referenceFiles: state.creationReferenceFiles, refs }); }
+
+function enqueueCreationGeneration({ formData, set }) {
+  const job = createCreationQueueJob({ creationState: state.creation, formData, set, normalizeSet: normalizeCreationSetForView, nowIso });
+  setCreationFeedback(`已加入队列 · 第 ${getPendingCreationQueueCount()} 位`, "busy");
+  renderCreationView();
+  scheduleCreationGenerationQueue();
+  return job;
+}
+
+function getCreationQueueContext() {
+  return { creationState: state.creation, compactErrorMessage, loadCreationSets, normalizeSet: normalizeCreationSetForView, nowIso, render: renderCreationView, runCreationStream, setFeedback: setCreationFeedback, showError };
+}
+
+async function runCreationQueuedJob(job) { await runCreationQueuedJobFromQueue(job, getCreationQueueContext()); }
+
+function scheduleCreationGenerationQueue() { scheduleCreationGenerationQueueFromState(getCreationQueueContext()); }
+
 async function startCreationGeneration(event) {
   event.preventDefault();
   if (isCreationLogoBatchBranch()) {
     await startCreationLogoBatchGeneration();
     return;
   }
-  if (state.creation.generating || state.creation.planning) {
+  if (state.creation.planning) {
     return;
   }
 
@@ -11527,75 +11572,23 @@ async function startCreationGeneration(event) {
     return;
   }
 
-  state.creation.generating = true;
-  state.creation.generationScope = "full";
-  state.creation.autoRepairAttemptCount = 0;
-  state.creation.editingItemId = "";
-  renderCreationView();
+  if (getPendingCreationQueueCount() >= getMaxQueuedJobCount()) {
+    const message = `同一会话最多排队 ${getMaxQueuedJobCount()} 个套图任务。`;
+    setCreationFeedback(message, "error");
+    showError(message);
+    return;
+  }
 
   try {
     await ensureCreationReferenceGenerationFilesReady();
     const generationFormData = buildCreationFormData();
-    const draftSet = isCreationDraftSet() ? getCreationCurrentSet() : null;
-    const draftItems = draftSet?.items?.length ? draftSet.items : null;
     const createdAt = nowIso();
-    const scenario = getCreationSelectedScenario();
-    const industryTemplate = getCreationSelectedIndustryTemplate();
-    const previewSlots = getCreationPreviewSlots();
-    const selectedRoles = getCreationSelectedRoles();
-    const imageCount = draftItems?.length || selectedRoles.length || previewSlots.length || getCreationSelectedImageCount();
-    state.creation.currentSet = normalizeCreationSetForView({
-      setId: `creation-local-${Date.now()}`,
-      productName,
-      productDescription,
-      sellingPoints,
-      dimensionSpecs: refs.creationDimensionSpecsInput.value.trim(),
-      dimensionUnitMode: getCreationSelectedDimensionUnitMode(),
-      dimensionUnitModeLabel: formatCreationDimensionUnitModeLabel(getCreationSelectedDimensionUnitMode()),
-      targetLanguage: getCreationSelectedLanguage().value,
-      targetLanguageLabel: getCreationSelectedLanguage().label,
-      imageCount,
-      scenario: scenario.value,
-      scenarioLabel: scenario.label,
-      visualLanguage: normalizeCreationVisualLanguage(refs.creationVisualLanguageInput?.value),
-      visualLanguageLabel: formatCreationVisualLanguageLabel(refs.creationVisualLanguageInput?.value),
-      industryTemplate: industryTemplate.value,
-      industryTemplateLabel: industryTemplate.label,
-      industryTemplatePath: industryTemplate.categoryPath || "",
-      selectedRoles,
-      referenceImageNames: state.creationReferenceFiles.map((item) => item.file?.name || "").filter(Boolean),
-      referenceImageRoles: buildCreationReferenceRolePayload(),
-      skuSubjects: buildCreationSkuSubjectPayload(),
-      skuBundleCount: normalizeCreationSkuBundleCountForPayload(refs.creationSkuBundleCountInput?.value || "1"),
-      logo: getCreationLogoPayload(),
-      createdAt,
-      updatedAt: createdAt,
-      status: "generating",
-      items: (draftItems || previewSlots).map((slot, index) => ({
-        ...slot,
-        slotIndex: index + 1,
-        status: "queued",
-      })),
-    });
-    renderCreationView();
-
-    const response = await fetch("/api/creation/generate", {
-      method: "POST",
-      body: generationFormData,
-    });
-    if (!response.ok || !response.body) {
-      throw new Error("套图生成请求失败");
-    }
-
-    await runCreationStream(response);
-    await loadCreationSets();
+    const queuedSet = buildCreationQueuedSet({ productName, productDescription, sellingPoints, createdAt });
+    enqueueCreationGeneration({ formData: generationFormData, set: queuedSet });
   } catch (error) {
     const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "套图生成请求失败");
     setCreationFeedback(message, "error");
     showError(message);
-  } finally {
-    state.creation.generating = false;
-    state.creation.generationScope = "";
     renderCreationView();
   }
 }
@@ -14798,6 +14791,12 @@ function bindEvents() {
   refs.creationForm.addEventListener("submit", startCreationGeneration);
   refs.creationPlanButton.addEventListener("click", () => {
     previewCreationPlan().catch((error) => setCreationFeedback(error.message, "error"));
+  });
+  refs.creationQueueStrip.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-creation-queue-id]");
+    if (button) {
+      selectCreationQueueJob(button.dataset.creationQueueId);
+    }
   });
   refs.creationRepairFailedButton.addEventListener("click", () => {
     repairCreationItems({ scope: "incomplete" }).catch((error) => setCreationFeedback(error.message, "error"));

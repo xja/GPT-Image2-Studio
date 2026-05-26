@@ -892,6 +892,10 @@ test("Cloudflare creation SKU bundle generation only sends the selected SKU subj
   });
 
   await response.text();
+  const storedCreationFilenames = [...imageBucket.objects.values()]
+    .map((object) => object.customMetadata.filename)
+    .filter(Boolean)
+    .join("\n");
   const skuRequest = seenRequests.find((request) =>
     request.body.input[0].content.some(
       (item) => item.type === "input_text" && /Render exactly 2 identical copies/.test(item.text),
@@ -912,6 +916,8 @@ test("Cloudflare creation SKU bundle generation only sends the selected SKU subj
   assert.match(inputText, /Uploaded reference count: 1\./);
   assert.doesNotMatch(inputText, /blue-lure\.png/);
   assert.doesNotMatch(inputText, /package\.png/);
+  assert.match(storedCreationFilenames, /silver-lure\.png/);
+  assert.doesNotMatch(storedCreationFilenames, /Silverlure/);
 });
 
 test("Cloudflare creation logo batch edits each uploaded source with the shared logo", async () => {

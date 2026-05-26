@@ -271,6 +271,54 @@ test("creation planner does not repeat the full detailed description across unre
   assert.doesNotMatch(promptByRole["review-qa"], new RegExp(fullDescription.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
+test("creation planner keeps overlong product descriptions bounded and role-useful", () => {
+  const longDescription = Array.from({ length: 180 }, (_, index) =>
+    `feature${index + 1} realistic fishing lure ABS body treble hooks reflective scales long cast stable swim action pain point low visibility stiff lure replacement`,
+  ).join(" ");
+  const plan = buildCreationPlan({
+    productName: "",
+    productDescription: longDescription,
+    sellingPoints: "",
+    targetLanguage: "en",
+    selectedRoles: ["hero", "benefit", "material-closeup"],
+  });
+
+  const promptByRole = Object.fromEntries(plan.items.map((item) => [item.role, item.prompt]));
+
+  assert.ok(plan.items.every((item) => item.prompt.length < 8000));
+  assert.doesNotMatch(promptByRole.hero, new RegExp(`Product: ${longDescription.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  assert.doesNotMatch(promptByRole["material-closeup"], new RegExp(longDescription.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.notEqual(plan.items.find((item) => item.role === "benefit").sourceFocus.selling, "围绕商品核心价值提炼短卖点");
+  assert.match(promptByRole.benefit, /pain point|low visibility|stable swim action/);
+  assert.match(promptByRole["material-closeup"], /ABS body|treble hooks|reflective scales/);
+});
+
+test("creation planner keeps numbered kit descriptions from becoming orphan number fragments", () => {
+  const productDescription = [
+    "配置清单：",
+    "1.创口贴*20片",
+    "2.5*450cmPBT绷带*3卷",
+    "3.7.5*450cmPBT绷带*3卷",
+    "7.40*60cm烧伤敷料*1包",
+    "16.TPE止血带*1个",
+    "21.急救包*1个",
+  ].join("\n\n");
+  const plan = buildCreationPlan({
+    productName: "急救包",
+    productDescription,
+    sellingPoints: "",
+    targetLanguage: "zh-CN",
+    selectedRoles: ["hero", "benefit", "package"],
+  });
+
+  const promptByRole = Object.fromEntries(plan.items.map((item) => [item.role, item.prompt]));
+
+  assert.doesNotMatch(promptByRole.hero, /Description: 1 \/ 创口贴\*20片 \/ 2/u);
+  assert.doesNotMatch(promptByRole.package, /Description: 配置清单：\./u);
+  assert.match(promptByRole.benefit, /创口贴\*20片|PBT绷带|烧伤敷料|止血带/u);
+  assert.match(promptByRole.package, /创口贴\*20片|5\*450cmPBT绷带|7\.5\*450cmPBT绷带/u);
+});
+
 test("creation planner avoids duplicated punctuation in composed prompt fields", () => {
   const plan = buildCreationPlan({
     productName: "AeroPress Clear.",
@@ -574,6 +622,31 @@ test("creation planner SKU item titles keep the original subject names", () => {
     skuItems.map((item) => item.filenameToken),
     ["sku-1-blue-white-bg.png", "sku-2-green-white-bg.png"],
   );
+});
+
+test("creation planner SKU filename tokens prefer source filenames over generic subject titles", () => {
+  const plan = buildCreationPlan({
+    productName: "Fishing lure assortment",
+    productDescription: "Two sellable lure colors photographed on white background",
+    sellingPoints: "lifelike swim action",
+    targetLanguage: "en",
+    selectedRoles: ["hero"],
+    referenceImageRoles: [
+      { filename: "260526-SKU-151142-5714.png", role: "product", referenceIndex: 1 },
+    ],
+    skuSubjects: [
+      {
+        title: "SKU image 2",
+        filenames: ["260526-SKU-151142-5714.png"],
+        referenceIndexes: [1],
+      },
+    ],
+  });
+
+  const skuItem = plan.items.find((item) => item.role === "sku");
+
+  assert.equal(skuItem.title, "SKU image 1 - SKU image 2");
+  assert.equal(skuItem.filenameToken, "sku-1-260526-SKU-151142-5714.png");
 });
 
 test("creation planner renders same-SKU combination packs without changing the subject", () => {

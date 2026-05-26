@@ -1502,7 +1502,9 @@ function buildCloudCreationSet({ setId, plan, createdAt, updatedAt, status, item
 }
 
 function buildCloudCreationFilename({ setId, item, createdAt, format }) {
-  const filenameToken = sanitizeCreationFilenameToken(item.title || item.filenameToken || item.role || item.itemId, "creation");
+  const filenameTokenSource =
+    item.role === "sku" ? item.filenameToken || item.title : item.title || item.filenameToken;
+  const filenameToken = sanitizeCreationFilenameToken(filenameTokenSource || item.role || item.itemId, "creation");
   const cloudFilename = buildCloudFilename({
     taskId: `${setId}-${item.slotIndex || item.itemId}`,
     createdAt,

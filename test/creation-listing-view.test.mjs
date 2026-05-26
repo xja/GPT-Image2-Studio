@@ -135,6 +135,23 @@ test("listing draft view preserves UI-only Chinese display fields", () => {
   assert.deepEqual(draft.zhDisplay.fiveBullets, ["中文五点"]);
 });
 
+test("listing draft view preserves Chinese warning and missing info display fields", () => {
+  const draft = normalizeCreationListingDraftForView({
+    language: "en-US",
+    title: "1 Pack First Aid Kit",
+    warnings: ["Do not add waterproofing claims without source data."],
+    missingInfo: ["Actual bag dimensions were not provided."],
+    zhDisplay: {
+      title: "1 件装急救包",
+      warnings: ["没有来源数据前不要加入防水声明。"],
+      missingInfo: ["未提供实际包袋尺寸。"],
+    },
+  });
+
+  assert.deepEqual(draft.zhDisplay.warnings, ["没有来源数据前不要加入防水声明。"]);
+  assert.deepEqual(draft.zhDisplay.missingInfo, ["未提供实际包袋尺寸。"]);
+});
+
 test("English listing view strips legacy Chinese from public copy fields", () => {
   const draft = normalizeCreationListingDraftForView({
     language: "en-US",
@@ -291,6 +308,86 @@ test("rendered listing fields show separate English and Chinese character counts
   ));
 
   assert.equal(getFakeTextContent(bucketCounts), "英文字符 0中文字符 0");
+});
+
+test("rendered listing warning and missing info fields show Chinese references", () => {
+  const previousDocument = globalThis.document;
+  const root = makeFakeElement("div");
+  globalThis.document = {
+    createElement: makeFakeElement,
+  };
+
+  try {
+    renderCreationListingDrafts({
+      refs: { creationRecordListingDrafts: root },
+      state: {},
+      set: {
+        setId: "set-listing-warning-zh",
+        listingDrafts: [{
+          language: "en-US",
+          title: "1 Pack First Aid Kit",
+          warnings: ["Do not add waterproofing claims without source data."],
+          missingInfo: ["Actual bag dimensions were not provided."],
+          zhDisplay: {
+            warnings: ["没有来源数据前不要加入防水声明。"],
+            missingInfo: ["未提供实际包袋尺寸。"],
+          },
+        }],
+      },
+    });
+  } finally {
+    globalThis.document = previousDocument;
+  }
+
+  const fields = collectFakeElements(root, (node) => (
+    String(node.className || "").split(/\s+/).includes("creation-listing-field")
+  ));
+  const warningField = fields.find((field) => field.children?.[0]?.children?.[0]?.textContent === "警告");
+  const missingInfoField = fields.find((field) => field.children?.[0]?.children?.[0]?.textContent === "缺失信息");
+
+  assert.match(getFakeTextContent(warningField), /没有来源数据前不要加入防水声明。/u);
+  assert.match(getFakeTextContent(missingInfoField), /未提供实际包袋尺寸。/u);
+  assert.doesNotMatch(
+    root.querySelectorAll("[data-creation-listing-copy-text]").map((button) => button.dataset.creationListingCopyText).join("\n"),
+    /没有来源数据|未提供实际包袋/u,
+  );
+});
+
+test("rendered listing warning and missing info fields use Chinese review fallback for older drafts", () => {
+  const previousDocument = globalThis.document;
+  const root = makeFakeElement("div");
+  globalThis.document = {
+    createElement: makeFakeElement,
+  };
+
+  try {
+    renderCreationListingDrafts({
+      refs: { creationRecordListingDrafts: root },
+      state: {},
+      set: {
+        setId: "set-listing-warning-fallback",
+        listingDrafts: [{
+          language: "en-US",
+          title: "1 Pack First Aid Kit",
+          warnings: ["Do not add waterproofing claims without source data."],
+          missingInfo: ["Actual bag dimensions were not provided."],
+        }],
+      },
+    });
+  } finally {
+    globalThis.document = previousDocument;
+  }
+
+  const fields = collectFakeElements(root, (node) => (
+    String(node.className || "").split(/\s+/).includes("creation-listing-field")
+  ));
+  const warningField = fields.find((field) => field.children?.[0]?.children?.[0]?.textContent === "警告");
+  const missingInfoField = fields.find((field) => field.children?.[0]?.children?.[0]?.textContent === "缺失信息");
+
+  assert.match(getFakeTextContent(warningField), /发布前请按该警告复核来源证据/u);
+  assert.match(getFakeTextContent(missingInfoField), /源数据未提供该信息/u);
+  assert.match(getFakeTextContent(warningField), /中文字符\s*[1-9]\d*/u);
+  assert.match(getFakeTextContent(missingInfoField), /中文字符\s*[1-9]\d*/u);
 });
 
 test("rendered listing field copy data excludes zhDisplay and Chinese labels", () => {

@@ -12,11 +12,12 @@ const browserImageCachePath = new URL("../lib/browser-image-cache.mjs", import.m
 const configModelPickerPath = new URL("../lib/config-model-picker.mjs", import.meta.url);
 const creationListingViewPath = new URL("../lib/creation-listing-view.mjs", import.meta.url);
 const creationReferenceAnalysisViewPath = new URL("../lib/creation-reference-analysis-view.mjs", import.meta.url);
+const creationSuiteQueuePath = new URL("../lib/creation-suite-queue.mjs", import.meta.url);
 const publicConfigModelPickerPath = new URL("../public/lib/config-model-picker.mjs", import.meta.url);
 const publicCreationListingViewPath = new URL("../public/lib/creation-listing-view.mjs", import.meta.url);
 const generationClientPath = new URL("../lib/generation-client.mjs", import.meta.url);
 const pptAnalysisClientPath = new URL("../lib/ppt-analysis-client.mjs", import.meta.url);
-const assetVersion = "20260526-portrait-retry-1";
+const assetVersion = "20260526-reference-analysis-layout-1";
 
 test("static assets use the current cache-busting version", async () => {
   const html = await readFile(indexPath, "utf8");
@@ -1922,6 +1923,7 @@ test("creation mode is a separate studio view with isolated state and routes", a
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
+  const queueModule = await readFile(creationSuiteQueuePath, "utf8");
   const creationPanel = html.match(/data-view-panel="creation"[\s\S]*?(?=<section class="view-panel ppt-view)/)?.[0] || "";
 
   assert.doesNotMatch(html, /<nav class="studio-mode-tabs"/);
@@ -1946,7 +1948,7 @@ test("creation mode is a separate studio view with isolated state and routes", a
   assert.match(app, /if \(window\.location\.hash === "#creation"\)/);
   assert.match(app, /view === "creation" \? "#creation"/);
   assert.match(app, /fetch\("\/api\/creation\/plan"/);
-  assert.match(app, /fetch\("\/api\/creation\/generate"/);
+  assert.match(queueModule, /fetchImpl\("\/api\/creation\/generate"/);
   assert.match(app, /fetch\("\/api\/creation\/sets"/);
   assert.match(app, /creationPlanButton: document\.querySelector\("#creationPlanButton"\)/);
   assert.doesNotMatch(app, /creationPlanMeta: document\.querySelector\("#creationPlanMeta"\)/);
@@ -1958,6 +1960,7 @@ test("creation mode has independent references count and scenario controls", asy
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
+  const queueModule = await readFile(creationSuiteQueuePath, "utf8");
   const creationReferenceAnalysisView = await readFile(creationReferenceAnalysisViewPath, "utf8");
 
   assert.match(html, /id="creationReferenceDropzone"/);
@@ -1972,7 +1975,10 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(html, /id="creationReferenceApplyAnalysisButton"[\s\S]*应用建议/);
   assert.match(html, /id="creationReferenceAnalysisFeedback"/);
   assert.match(html, /id="creationReferenceAnalysisPanel"/);
-  assert.match(html, /class="creation-reference-analysis-head-copy"[\s\S]*id="creationReferenceAnalysisSummary"/);
+  const creationReferenceAnalysisHeadCopy = html.match(/<div class="creation-reference-analysis-head-copy">[\s\S]*?<\/div>/)?.[0] || "";
+  assert.match(creationReferenceAnalysisHeadCopy, /<span>[\s\S]*<\/span>/);
+  assert.doesNotMatch(creationReferenceAnalysisHeadCopy, /creationReferenceAnalysisSummary/);
+  assert.match(html, /<\/div>\s*<strong id="creationReferenceAnalysisSummary">--<\/strong>\s*<small class="creation-reference-analysis-meta" id="creationReferenceAnalysisMeta">--<\/small>/);
   assert.match(html, /id="creationReferenceAnalysisToggleButton"[\s\S]*aria-controls="creationReferenceAnalysisList"/);
   assert.match(html, /id="creationReferenceApplyVisualLanguageButton"[\s\S]*应用视觉语言/);
   const creationReferenceAnalysisHeadActions = html.match(/<div class="creation-reference-analysis-head-actions">[\s\S]*?<\/div>/)?.[0] || "";
@@ -2034,7 +2040,11 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(styles, /#creationProductDescriptionInput,\s*#creationSellingPointsInput,\s*#creationDimensionSpecsInput\s*\{[\s\S]*overflow-y:\s*hidden;[\s\S]*resize:\s*vertical;/);
   assert.doesNotMatch(styles, /#creationSellingPointsInput,\s*#creationDimensionSpecsInput\s*\{[^}]*resize:\s*none;/);
   assert.match(styles, /\.creation-reference-analysis-panel\s*\{/);
-  assert.match(styles, /\.creation-reference-analysis-panel \.reference-analysis-head\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto;/);
+  assert.match(styles, /\.creation-reference-analysis-panel \.reference-analysis-head\s*\{[\s\S]*grid-template-columns:\s*auto minmax\(0,\s*1fr\) auto;/);
+  assert.match(styles, /\.creation-reference-analysis-head-copy\s*\{[\s\S]*grid-column:\s*1;[\s\S]*grid-row:\s*1;[\s\S]*display:\s*flex;/);
+  assert.match(styles, /\.creation-reference-analysis-panel \.creation-reference-analysis-head-copy span\s*\{[\s\S]*color:\s*var\(--text\);[\s\S]*font-size:\s*var\(--type-body-size\);[\s\S]*font-weight:\s*800;/);
+  assert.match(styles, /#creationReferenceAnalysisSummary\s*\{[\s\S]*min-width:\s*0;[\s\S]*grid-column:\s*1 \/ -1;[\s\S]*grid-row:\s*2;[\s\S]*padding-left:\s*8px;[\s\S]*overflow-wrap:\s*anywhere;/);
+  assert.match(styles, /\.creation-reference-analysis-head-actions\s*\{[\s\S]*grid-column:\s*3;[\s\S]*grid-row:\s*1;/);
   assert.match(styles, /\.creation-reference-analysis-panel\.is-collapsed #creationReferenceAnalysisSummary,\s*\.creation-reference-analysis-panel\.is-collapsed #creationReferenceAnalysisMeta\s*\{[\s\S]*display:\s*none;/);
   assert.match(styles, /\.creation-reference-analysis-actions\s*\{[\s\S]*border:\s*1px solid color-mix\(in srgb, var\(--accent\) 18%, var\(--border\)\);[\s\S]*background:[\s\S]*linear-gradient\(135deg, color-mix\(in srgb, var\(--accent\) 10%, transparent\), color-mix\(in srgb, var\(--success\) 8%, transparent\)\)/);
   assert.match(styles, /\.creation-reference-analysis-actions \.reference-analysis-button\s*\{[\s\S]*background:[\s\S]*color-mix\(in srgb, var\(--accent\) 18%, var\(--control-bg\)\)/);
@@ -2143,8 +2153,11 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /function applyCreationReferenceAnalysisRecommendations\(\) \{/);
   assert.match(app, /function applyCreationReferenceAnalysisVisualLanguage\(\) \{/);
   assert.match(app, /from "\/lib\/creation-reference-analysis-view\.mjs"/);
-  assert.match(app, /visualLanguage:\s*normalizeCreationVisualLanguage\(/);
-  assert.match(app, /visualLanguageLabel:\s*formatCreationVisualLanguageLabel\(/);
+  assert.match(queueModule, /const normalizedVisualLanguage = normalizeVisualLanguageForQueue\(rawVisualLanguage, normalizeCreationVisualLanguage\);/);
+  assert.match(queueModule, /visualLanguage:\s*normalizedVisualLanguage\.value/);
+  assert.match(queueModule, /visualLanguageLabel:\s*formatVisualLanguageLabelForQueue\(rawVisualLanguage, normalizedVisualLanguage, formatCreationVisualLanguageLabel\)/);
+  assert.match(app, /formatCreationVisualLanguageLabel:\s*\(value\)\s*=>\s*CREATION_VISUAL_LANGUAGE_LABELS\[normalizeCreationVisualLanguage\(value\)\]/);
+  assert.doesNotMatch(app, /formatCreationVisualLanguageLabel,\s*getCreationCurrentSet/);
   assert.match(app, /visualLanguageReason:/);
   assert.match(app, /setCreationSelectValue\(refs\.creationVisualLanguageInput,\s*analysis\.visualLanguage,\s*"classic-commercial"\)/);
   assert.match(creationReferenceAnalysisView, /export function syncCreationReferenceVisualLanguageButton/);
@@ -2257,6 +2270,7 @@ test("creation mode exposes optional logo upload placement and background contro
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
+  const queueModule = await readFile(creationSuiteQueuePath, "utf8");
 
   assert.match(html, /id="creationLogoLibraryButton"[\s\S]*aria-controls="creationLogoLibraryPanel"/);
   assert.match(html, /id="creationLogoLibraryPanel"[\s\S]*id="creationLogoLibraryInput"[\s\S]*accept="image\/\*"[\s\S]*multiple[\s\S]*id="creationSavedLogoGrid"/);
@@ -2296,8 +2310,29 @@ test("creation mode exposes optional logo upload placement and background contro
   assert.match(app, /formData\.set\("logoOptions", JSON\.stringify\(getCreationLogoPayload\(\)\)\);/);
   assert.match(app, /formData\.append\("logoImage", logoFile\);/);
   assert.match(app, /logo:\s*plan\.logo \|\| getCreationLogoPayload\(\),/);
-  assert.match(app, /logo:\s*getCreationLogoPayload\(\),/);
+  assert.match(queueModule, /logo:\s*getCreationLogoPayload\(\),/);
   assert.match(app, /refs\.creationLogoInput\.addEventListener\("change"/);
+});
+
+test("creation compact layouts keep panels and reference grids from overlapping", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+
+  assert.match(
+    styles,
+    /html\[data-ui-layout="stacked"\] \.creation-workspace,[\s\S]*html\[data-ui-layout="tablet"\] \.creation-workspace,[\s\S]*html\[data-ui-layout="mobile"\] \.creation-workspace\s*\{[\s\S]*grid-auto-rows:\s*max-content;[\s\S]*align-content:\s*start;/,
+  );
+  assert.match(
+    styles,
+    /html\[data-ui-layout="stacked"\] \.creation-settings-panel,[\s\S]*html\[data-ui-layout="tablet"\] \.creation-output-panel,[\s\S]*html\[data-ui-layout="mobile"\] \.creation-output-panel\s*\{[\s\S]*height:\s*auto;[\s\S]*max-height:\s*none;/,
+  );
+  assert.match(
+    styles,
+    /html\[data-ui-layout="mobile"\] \.creation-reference-grid,[\s\S]*html\[data-ui-layout="mobile"\] \.creation-logo-batch-source-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/,
+  );
+  assert.match(
+    styles,
+    /html\[data-ui-layout="mobile"\] \.creation-reference-grid \.reference-card,[\s\S]*html\[data-ui-layout="mobile"\] \.creation-logo-batch-source-grid \.reference-card\s*\{[\s\S]*min-width:\s*0;/,
+  );
 });
 
 test("creation mode exposes upload-image logo batch branch", async () => {
@@ -2354,6 +2389,7 @@ test("creation mode exposes record detail and item repair actions", async () => 
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
+  const queueModule = await readFile(creationSuiteQueuePath, "utf8");
 
   assert.match(html, /id="creationRepairFailedButton"[\s\S]*补齐未完成项/);
   assert.match(html, /id="creationRecordDetail"/);
@@ -2383,7 +2419,7 @@ test("creation mode exposes record detail and item repair actions", async () => 
   assert.match(app, /renderCreationRecordDetail\(set\)[\s\S]*formatCreationReferenceRoleSummary\(set\.referenceImageRoles\)/);
   assert.match(app, /function repairCreationItems\(/);
   assert.match(app, /formData\.set\("referenceImageRoles", JSON\.stringify\(getCreationRepairReferenceRolePayload\(currentSet\)\)\);/);
-  assert.match(app, /referenceImageRoles: buildCreationReferenceRolePayload\(\),/);
+  assert.match(queueModule, /referenceImageRoles: buildCreationReferenceRolePayload\(\),/);
   assert.match(app, /function getCreationItemDraftKey\(setId, itemId\) \{/);
   assert.match(app, /function toggleCreationItemEditor\(itemId\) \{/);
   assert.match(app, /state\.creation\.editingItemId = state\.creation\.editingItemId === itemId \? "" : itemId;/);
@@ -2413,6 +2449,7 @@ test("creation mode exposes record detail and item repair actions", async () => 
 test("creation generation cards replace plan details with loading animation", async () => {
   const styles = await readFile(stylesPath, "utf8");
   const app = await readFile(appPath, "utf8");
+  const queueModule = await readFile(creationSuiteQueuePath, "utf8");
 
   assert.match(app, /generationScope:\s*""/);
   assert.match(app, /function shouldShowCreationCardLoading\(item = \{\}, showRecordActions = false\) \{/);
@@ -2428,7 +2465,7 @@ test("creation generation cards replace plan details with loading animation", as
   assert.match(app, /const shouldRenderPath = !imageUrl && !showRecordActions && !hideGenerationDetails;/);
   assert.match(app, /if \(shouldRenderPath\) \{/);
   assert.match(app, /if \(showActions && !hideGenerationDetails\) \{/);
-  assert.match(app, /state\.creation\.generationScope = "full";/);
+  assert.match(queueModule, /creationState\.generationScope = "full";/);
   assert.match(app, /state\.creation\.generationScope = itemId \? "single" : "repair";/);
 
   const generatingCardRule = styles.match(/\.creation-card\.is-generating\s*\{[\s\S]*?\}/)?.[0] || "";
@@ -2441,6 +2478,60 @@ test("creation generation cards replace plan details with loading animation", as
   assert.match(styles, /\.creation-card-loading\s*\{[\s\S]*min-height:\s*132px;[\s\S]*padding:\s*12px;/);
   assert.match(styles, /\.creation-card-loading-motion span\s*\{[\s\S]*animation:\s*creation-card-loading-bar/);
   assert.match(styles, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.creation-card-loading-motion span[\s\S]*animation:\s*none;/);
+});
+
+test("creation mode exposes a set-level queue strip for queued suites", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+  const queueModule = await readFile(creationSuiteQueuePath, "utf8");
+
+  assert.match(html, /id="creationQueueStrip"/);
+  assert.match(
+    html,
+    /id="creationSetMeta"[\s\S]*id="creationQueueStrip"[\s\S]*id="creationRecordDetail"/,
+  );
+
+  assert.match(app, /queue:\s*\[\]/);
+  assert.match(app, /selectedQueueId:\s*""/);
+  assert.match(app, /from "\/lib\/creation-suite-queue\.mjs\?v=20260526-reference-analysis-layout-1"/);
+  assert.match(app, /function getCreationQueueJobs\(\) \{/);
+  assert.match(app, /function getSelectedCreationQueueJob\(\) \{/);
+  assert.match(app, /function renderCreationQueueStrip\(\) \{/);
+  assert.match(app, /function selectCreationQueueJob\(queueId\) \{/);
+  assert.match(app, /creationQueueStrip:\s*document\.querySelector\("#creationQueueStrip"\)/);
+  assert.match(app, /refs\.creationQueueStrip\.addEventListener\("click"/);
+  assert.match(queueModule, /export function renderCreationQueueStrip\(/);
+  assert.match(queueModule, /button\.dataset\.creationQueueId = job\.id;/);
+  assert.match(queueModule, /formatCreationQueueLabel\(index \+ 1\)/);
+  assert.match(queueModule, /buildCreationQueuedSkuItems\(skuSubjects/);
+
+  assert.match(styles, /\.creation-queue-strip\s*\{/);
+  assert.match(styles, /\.creation-queue-item\s*\{/);
+  assert.match(styles, /\.creation-queue-item\s*\{[\s\S]*border-radius:\s*999px;/);
+  assert.match(styles, /\.creation-queue-item\s*\{[\s\S]*background:/);
+  assert.match(styles, /\.creation-queue-label\s*\{/);
+  assert.match(styles, /\.creation-queue-item\.is-active\s*\{/);
+  assert.match(styles, /\.creation-queue-item\.is-selected\s*\{/);
+  assert.match(styles, /html\[data-ui-layout="mobile"\] \.creation-queue-strip\s*\{/);
+});
+
+test("creation generation can enqueue another suite while one is running", async () => {
+  const app = await readFile(appPath, "utf8");
+  const queueModule = await readFile(creationSuiteQueuePath, "utf8");
+
+  assert.match(app, /function getPendingCreationQueueCount\(\) \{/);
+  assert.match(app, /function buildCreationQueuedSet\(/);
+  assert.match(app, /function enqueueCreationGeneration\(/);
+  assert.match(app, /async function runCreationQueuedJob\(job\) \{/);
+  assert.match(app, /function scheduleCreationGenerationQueue\(\) \{/);
+  assert.match(queueModule, /creationState\.queue\.push\(job\);/);
+  assert.match(queueModule, /export async function runCreationQueuedJob\(job, context = \{\}\) \{/);
+  assert.match(queueModule, /export function scheduleCreationGenerationQueue\(context = \{\}\) \{/);
+  assert.match(app, /setCreationFeedback\(`已加入队列 · 第 \$\{getPendingCreationQueueCount\(\)\} 位`, "busy"\);/);
+  assert.match(app, /refs\.creationGenerateButton\.textContent = [\s\S]*\? "加入队列"[\s\S]*: "生成套图";/);
+  assert.match(app, /refs\.creationGenerateButton\.disabled = state\.creation\.planning \|\| preparingReferences \|\| getPendingCreationQueueCount\(\) >= getMaxQueuedJobCount\(\);/);
+  assert.doesNotMatch(app, /refs\.creationGenerateButton\.disabled = state\.creation\.generating \|\| state\.creation\.planning \|\| preparingReferences;/);
 });
 
 test("recognition and analysis busy states expose motion hooks", async () => {

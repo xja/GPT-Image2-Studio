@@ -65,7 +65,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260526-portrait-retry-1" />
+    <link rel="stylesheet" href="./styles.css?v=20260526-reference-analysis-layout-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -1033,7 +1033,6 @@
                     <div class="reference-analysis-head">
                       <div class="creation-reference-analysis-head-copy">
                         <span>参考图建议</span>
-                        <strong id="creationReferenceAnalysisSummary">--</strong>
                       </div>
                       <div class="creation-reference-analysis-head-actions">
                         <button
@@ -1055,6 +1054,7 @@
                           应用视觉语言
                         </button>
                       </div>
+                      <strong id="creationReferenceAnalysisSummary">--</strong>
                       <small class="creation-reference-analysis-meta" id="creationReferenceAnalysisMeta">--</small>
                     </div>
                     <div class="reference-analysis-list" id="creationReferenceAnalysisList"></div>
@@ -1294,6 +1294,7 @@
                   <button class="toolbar-button" id="creationRepairFailedButton" type="button" disabled>补齐未完成项</button>
                 </div>
               </div>
+              <div class="creation-queue-strip hidden" id="creationQueueStrip" aria-label="套图生成队列"></div>
               <div class="creation-record-detail" id="creationRecordDetail" aria-live="polite"></div>
               <div class="creation-result-grid" id="creationResultGrid"></div>
               <section class="creation-listing-panel hidden" aria-label="Amazon Listing 草稿">
@@ -2333,6 +2334,6 @@
       </div>
     </aside>
 
-    <script type="module" src="./app.js?v=20260526-portrait-retry-1"></script>
+    <script type="module" src="./app.js?v=20260526-reference-analysis-layout-1"></script>
   </body>
 </html>

@@ -148,12 +148,15 @@ test("listing agent sends a strict JSON schema request with prompt guardrails", 
   assert.equal(calls[0].body.text.format.strict, true);
   assert.deepEqual(calls[0].body.text.format.schema.required, CREATION_LISTING_JSON_SCHEMA.required);
   assert.ok(calls[0].body.text.format.schema.required.includes("zhDisplay"));
+  assert.ok(calls[0].body.text.format.schema.properties.zhDisplay.required.includes("warnings"));
+  assert.ok(calls[0].body.text.format.schema.properties.zhDisplay.required.includes("missingInfo"));
   assert.match(calls[0].body.input, /Amazon US English listing writer/);
   assert.match(calls[0].body.input, /Every field and every bullet must be 500 characters or fewer/);
   assert.match(calls[0].body.input, /Title rule: start with 2 Pack/);
   assert.match(calls[0].body.input, /place it immediately after quantity/);
   assert.match(calls[0].body.input, /Public listing fields must be English only/);
   assert.match(calls[0].body.input, /zhDisplay/);
+  assert.match(calls[0].body.input, /warnings and missingInfo/);
   assert.ok(calls[0].body.text.format.schema.properties.zhDisplay);
   assert.match(calls[0].body.input, /Do not use the phrase "Listing Draft"/);
   assert.match(calls[0].body.input, /Rufus-friendly/);
@@ -522,6 +525,49 @@ test("mock and failed fallback drafts use English Amazon-style titles for Chines
     assert.doesNotMatch(visibleDraftText(draft), /[\u3400-\u9fff]/u);
     assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "1 Pack", expectedSize: "13cm/42g" }).ok, true);
   }
+});
+
+test("mock listing draft does not infer product keywords from numbered first aid kit contents", () => {
+  const source = {
+    ...standardSource,
+    productName: "急救包",
+    skuBundleCount: 1,
+    productDescription: [
+      "配置清单：",
+      "1.创口贴*20片",
+      "2.5*450cmPBT绷带*3卷",
+      "3.7.5*450cmPBT绷带*3卷",
+      "16.TPE止血带*1个",
+      "21.急救包*1个",
+    ].join("\n\n"),
+    dimensionSpecs: "重量：0.35kg (12.35 oz)",
+    skuSubjects: [{ id: "red-first-aid-kit", title: "红色手提急救包", bundleCount: 1 }],
+  };
+
+  const draft = makeMockCreationListingDraft(source);
+
+  assert.match(draft.title, /^1 Pack 0\.35kg \(12\.35 oz\) First Aid Kit\b/);
+  assert.doesNotMatch(visibleDraftText(draft), /\bPBT\b|\bTPE\b|450cm|\*20/);
+  assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "1 Pack", expectedSize: "0.35kg (12.35 oz)" }).ok, true);
+});
+
+test("mock listing draft does not classify single bandage items as a first aid kit", () => {
+  const source = {
+    ...standardSource,
+    productName: "创口贴",
+    skuTitle: "",
+    skuBundleCount: 1,
+    productDescription: "创口贴*20片，独立包装，适合家庭和旅行备用。",
+    dimensionSpecs: "10cm",
+    industryTemplatePath: "Health & Household > Bandages",
+    skuSubjects: [{ id: "adhesive-bandages", title: "创口贴单品", bundleCount: 1 }],
+  };
+
+  const draft = makeMockCreationListingDraft(source);
+
+  assert.match(draft.title, /^1 Pack 10cm Bandages\b/);
+  assert.doesNotMatch(draft.title, /\bFirst Aid Kit\b/);
+  assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "1 Pack", expectedSize: "10cm" }).ok, true);
 });
 
 test("mock and fallback drafts keep long SKU fields under 500 characters", async () => {

@@ -30,6 +30,7 @@
 - [参数与限制](#参数与限制)
 - [输出路径](#输出路径)
 - [本地与云端能力边界](#本地与云端能力边界)
+- [常见启动问题](#常见启动问题)
 - [构建与验证](#构建与验证)
 - [项目结构](#项目结构)
 
@@ -39,7 +40,7 @@
 | --- | --- | --- |
 | Studio 单图 | 提示词生图、参考图生图、风格迁移 | 参考图上传、比例/分辨率/格式选择、SSE 实时状态、瀑布画廊 |
 | 图片拆解 | 产品、设备、服饰、包装结构分析 | 单张源图生成高信息密度拆解图，支持标注语言和两侧说明卡片 |
-| 套图模式 | 电商商品营销图、SKU 补图、品牌图批量生产 | 计划预览、单图提示词微调、9 张参考图、Logo 控制、四级类目模板 |
+| 套图模式 | 电商商品营销图、SKU 补图、品牌图批量生产 | 计划预览、套图生成队列、单图提示词微调、9 张参考图、Logo 控制、四级类目模板 |
 | 写真模式 | 人物参考图生成专业摄影写真 | 1-100 张计划、人物可见特征分析、服装/道具/配饰资产库、动作预览 |
 | 文章插图 | 长文配图、分镜插图、系列化视觉 | 先解析文章包，再生成分镜、风格圣经、人物/场景设定和正式插图计划 |
 | PPT 生成 | 文档转演示、主题转演示、逐页配图 | 文档分析、逐页生图、补齐缺页、单页标注重绘、PPTX 导出 |
@@ -53,6 +54,15 @@
 ```powershell
 npm install
 npm start
+```
+
+从 GitHub 新拉取仓库时推荐用下面的完整流程，能避开 Windows npm shim 和 PowerShell 编码造成的误判：
+
+```powershell
+git clone https://github.com/aEboli/GPT-Image2-Studio.git
+cd GPT-Image2-Studio
+cmd /c npm ci
+cmd /c npm start
 ```
 
 启动后打开：
@@ -79,6 +89,8 @@ launch-studio.cmd
 ```text
 stop-studio-services.cmd
 ```
+
+如果控制台出现中文乱码，但浏览器能打开 `http://localhost:3600`，那通常只是 Windows 控制台编码显示问题，不代表服务启动失败。
 
 ## 配置 API
 
@@ -249,6 +261,17 @@ output/generated-时间戳.<ext>
 | PPT 普通导出 | 支持 | 支持 |
 | PPT 可编辑重建 | 需要本地 Presentations artifact-tool runtime | 不加载 artifact-tool，只保留普通 PPTX 并返回不支持提示 |
 | API Key 存储 | `.local/config.json` | 浏览器本地配置或部署侧安全注入 |
+
+## 常见启动问题
+
+| 现象 | 常见原因 | 处理方式 |
+| --- | --- | --- |
+| `npm start` 后中文日志显示乱码 | Windows 控制台没有按 UTF-8 显示输出 | 先打开 `http://localhost:3600` 验证服务；需要看中文日志时用 `cmd /c npm start` 或浏览器页面结果判断 |
+| 端口 `3600` 被占用 | 本机已有旧服务或其他程序占用端口 | 用 `$env:PORT="3601"; npm start`，或双击 `launch-studio.cmd` 让启动器自动找附近可用端口 |
+| 页面能打开，但生成时报 API Key 或上游请求错误 | 本地没有保存 API Key，或 Base URL / 模型配置不正确 | 在右下角配置面板保存 API Key、Base URL、Responses 模型后再生成；命令行生成则先设置 `OPENAI_API_KEY` |
+| 拉取后提示找不到依赖模块 | 没安装依赖，或旧 `node_modules` 与当前 lockfile 不一致 | 在仓库根目录执行 `cmd /c npm ci`；不要提交 `node_modules/` |
+| 浏览器控制台提示 `/lib/*.mjs` 404 或公共模块不一致 | 开发时改了 `lib/` 但没有同步 `public/lib/` | 执行 `cmd /c npm run sync:public-lib -- --check`；如果检查失败，执行 `cmd /c npm run sync:public-lib` 后重新测试 |
+| 自写 Node 脚本里 `spawn npm` 出现 `spawn EINVAL` | Windows npm shim 在部分执行环境里不能被 Node 子进程直接调用 | 直接用 `cmd /c npm start`、`cmd /c npm test`，或改为 spawn `cmd.exe /c npm ...` |
 
 ## 构建与验证
 

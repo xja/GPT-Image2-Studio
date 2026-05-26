@@ -18,6 +18,7 @@ export const PUBLIC_LIB_SYNC_TARGETS = [
   "creation-logo-library.mjs",
   "creation-reference-analysis-view.mjs",
   "creation-listing-view.mjs",
+  "creation-suite-queue.mjs",
   "creation-sku-subjects.mjs",
   "gallery-metadata-recovery.mjs",
   "gallery-organizer.mjs",

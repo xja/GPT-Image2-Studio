@@ -260,6 +260,18 @@ test("creation generation passes SKU subjects through local and worker planning"
   assert.match(worker, /visualLanguageLabel:\s*plan\.visualLanguageLabel/);
 });
 
+test("creation saved filenames prefer SKU filename tokens over display titles", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+  const conditionalTokenPattern =
+    /const filenameTokenSource =\s*item\.role === "sku"\s*\? item\.filenameToken \|\| item\.title\s*: item\.title \|\| item\.filenameToken;[\s\S]*const filenameToken = sanitizeCreationFilenameToken\(filenameTokenSource \|\| item\.role \|\| item\.itemId,\s*"creation"\);/;
+
+  assert.match(server, conditionalTokenPattern);
+  assert.match(worker, conditionalTokenPattern);
+  assert.doesNotMatch(server, /sanitizeCreationFilenameToken\(item\.title \|\| item\.filenameToken/);
+  assert.doesNotMatch(worker, /sanitizeCreationFilenameToken\(item\.title \|\| item\.filenameToken/);
+});
+
 test("creation reference uploads use the dedicated nine-image limit", async () => {
   const server = await readFile(serverPath, "utf8");
   const worker = await readFile(cloudflareWorkerPath, "utf8");

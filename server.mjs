@@ -1575,7 +1575,9 @@ function sanitizeCreationFilenameToken(value, fallback = "creation") {
 }
 
 function buildCreationImageFilename({ item, createdAt, setId, format }) {
-  const filenameToken = sanitizeCreationFilenameToken(item.title || item.filenameToken || item.role || item.itemId, "creation");
+  const filenameTokenSource =
+    item.role === "sku" ? item.filenameToken || item.title : item.title || item.filenameToken;
+  const filenameToken = sanitizeCreationFilenameToken(filenameTokenSource || item.role || item.itemId, "creation");
   const baseName = createTimestampedFilename({
     format,
     prompt: item.title || item.filenameToken || item.role || item.prompt,
