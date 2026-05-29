@@ -64,7 +64,7 @@ function makeFakeDocumentElement(tagName) {
 
 test("browser config module normalizes private config without requiring window globals", () => {
   const normalized = normalizeBrowserPrivateConfig({
-    baseUrl: "https://example.test/v1/",
+    baseUrl: "https://example.test/",
     apiKey: "sk-browser-secret",
     responsesModel: "gpt-5.5",
   });
@@ -72,14 +72,14 @@ test("browser config module normalizes private config without requiring window g
   const formData = appendBrowserConfigToFormData(new FormData(), () => normalized);
 
   assert.deepEqual(normalized, {
-    baseUrl: "https://example.test/v1/",
+    baseUrl: "https://example.test/v1",
     apiKey: "sk-browser-secret",
     responsesModel: "gpt-5.5",
   });
   assert.equal(publicConfig.apiKeyConfigured, true);
   assert.equal(publicConfig.apiKeyMask, "sk-b***cret");
   assert.equal(publicConfig.defaults.size, "auto");
-  assert.equal(formData.get("baseUrl"), "https://example.test/v1/");
+  assert.equal(formData.get("baseUrl"), "https://example.test/v1");
   assert.equal(formData.get("apiKey"), "sk-browser-secret");
   assert.equal(formData.get("responsesModel"), "gpt-5.5");
 });
@@ -303,7 +303,7 @@ test("creation listing view removes Chinese from English draft headers", () => {
     status: "failed",
   }, 0);
 
-  assert.equal(header.title, "1 Pack 13cm Product Listing Draft");
+  assert.equal(header.title, "1 Pack 13cm Product");
   assert.equal(header.meta, "amazon-us · en-US · image-backed · failed");
   assert.doesNotMatch(`${header.title} ${header.meta}`, /[\u3400-\u9fff]/u);
 });

@@ -23,8 +23,10 @@ import { buildCreationSkuSubjectsForPayload, normalizeCreationSkuBundleCountForP
 import { appendCreationVisualLanguageSuggestionCard, getCreationReferenceAnalysisVisualLanguageReason, getCreationReferenceAnalysisVisualLanguageSource, syncCreationReferenceVisualLanguageButton } from "/lib/creation-reference-analysis-view.mjs";
 import { createCreationListingController, getCreationRecordListingMetaLabel, getCreationListingSearchValues, normalizeCreationListingDraftForView, renderCreationListingDrafts } from "/lib/creation-listing-view.mjs";
 import { getCreationAutoRepairNotice, getCreationCompletionFeedback, getCreationIncompleteItems, shouldAutoRepairCreationSet } from "/lib/creation-auto-repair.mjs";
-import { buildCreationQueuedSet as buildCreationQueuedSetFromState, createCreationQueueJob, getActiveCreationQueueJob as getActiveCreationQueueJobFromState, getCreationQueueJobs as getCreationQueueJobsFromState, getPendingCreationQueueCount as getPendingCreationQueueCountFromState, getSelectedCreationQueueJob as getSelectedCreationQueueJobFromState, renderCreationQueueStrip as renderCreationQueueStripView, runCreationQueuedJob as runCreationQueuedJobFromQueue, scheduleCreationGenerationQueue as scheduleCreationGenerationQueueFromState, selectCreationQueueJob as selectCreationQueueJobInState, syncActiveCreationQueueSet as syncActiveCreationQueueSetInState } from "/lib/creation-suite-queue.mjs?v=20260527-density-overlap-1";
-import { DEFAULT_PORTRAIT_ACCESSORY_ASSETS, PORTRAIT_ACCESSORY_ASSET_CATEGORIES, getPortraitAccessoryAssetFileDescriptor } from "/lib/portrait-accessory-assets.mjs?v=20260523-portrait-cosplay-color-assets-1";
+import { canRepairCreationItem as canRepairCreationItemFromQueue, getCreationRepairButtonText as getCreationRepairButtonTextFromQueue, isCreationItemRepairActive as isCreationItemRepairActiveInQueue, queueCreationItemRepair as queueCreationItemRepairInState, removeQueuedCreationItemRepair, shiftNextQueuedCreationItemRepair } from "/lib/creation-item-repair-queue.mjs";
+import { buildCreationQueuedSet as buildCreationQueuedSetFromState, createCreationQueueJob, getActiveCreationQueueJob as getActiveCreationQueueJobFromState, getCreationQueueJobs as getCreationQueueJobsFromState, getCreationRepairTargetSet as getCreationRepairTargetSetFromState, getPendingCreationQueueCount as getPendingCreationQueueCountFromState, getSelectedCreationQueueJob as getSelectedCreationQueueJobFromState, renderCreationQueueStrip as renderCreationQueueStripView, runCreationQueuedJob as runCreationQueuedJobFromQueue, scheduleCreationGenerationQueue as scheduleCreationGenerationQueueFromState, selectCreationQueueJob as selectCreationQueueJobInState, syncActiveCreationQueueSet as syncActiveCreationQueueSetInState } from "/lib/creation-suite-queue.mjs?v=20260528-creation-sku-rule-1";
+import { DEFAULT_PORTRAIT_ACCESSORY_ASSETS, PORTRAIT_ACCESSORY_ASSET_CATEGORIES, getPortraitAccessoryAssetFileDescriptor } from "/lib/portrait-accessory-assets.mjs?v=20260528-portrait-assets-sort-1";
+import { createDefaultPortraitLocationState, createPortraitLocationSelectorController } from "/lib/portrait-location-selector.mjs?v=20260527-portrait-location-1";
 const SURPRISE_PROMPTS = [
   {
     name: "清晨通勤",
@@ -85,7 +87,7 @@ const DEFAULT_LIMITS = {
   maxConcurrentTasksPerSession: 25,
   maxParallelTasksPerSession: 10,
   maxReferenceImages: 6,
-  maxCreationReferenceImages: 9,
+  maxCreationReferenceImages: 12,
   maxCreationStyleReferenceImages: 3,
   maxPortraitPersonReferenceImages: 3,
   maxPortraitActionReferenceImages: 3,
@@ -384,8 +386,10 @@ const state = {
     listingGeneratingSetId: "",
     planning: false,
     queue: [],
+    queuedRepairItemIds: [],
     recordQuery: "",
     recordSetId: "",
+    repairingItemId: "",
     selectedQueueId: "",
     sets: [],
   },
@@ -401,6 +405,7 @@ const state = {
     actionFiles: [],
     files: [],
     generating: false,
+    location: createDefaultPortraitLocationState(),
     planning: false,
     recordQuery: "",
     recordSetId: "",
@@ -689,7 +694,6 @@ const refs = {
   creationRecordArchiveDetail: document.querySelector("#creationRecordArchiveDetail"),
   creationRecordCopyFullPathsButton: document.querySelector("#creationRecordCopyFullPathsButton"),
   creationRecordCopyListingsButton: document.querySelector("#creationRecordCopyListingsButton"),
-  creationRecordCopyPathsButton: document.querySelector("#creationRecordCopyPathsButton"),
   creationRecordCopyPromptsButton: document.querySelector("#creationRecordCopyPromptsButton"),
   creationRecordCount: document.querySelector("#creationRecordCount"),
   creationRecordDetail: document.querySelector("#creationRecordDetail"),
@@ -717,6 +721,7 @@ const refs = {
   creationSetMeta: document.querySelector("#creationSetMeta"),
   creationSizeInput: document.querySelector("#creationSizeInput"),
   creationSkuBundleCountInput: document.querySelector("#creationSkuBundleCountInput"),
+  creationSkuGenerationRuleInput: document.querySelector("#creationSkuGenerationRuleInput"),
   creationRatioInput: document.querySelector("#creationRatioInput"),
   creationTargetLanguageInput: document.querySelector("#creationTargetLanguageInput"),
   creationVisualLanguageInput: document.querySelector("#creationVisualLanguageInput"),
@@ -965,6 +970,7 @@ const refs = {
   zoomResetButton: document.querySelector("#zoomResetButton"),
 };
 
+const portraitLocationController = createPortraitLocationSelectorController({ refs, state, renderPortraitView });
 const configModelPicker = createConfigModelPickerController({ refs, state, getBrowserPrivateConfigRequestPayload }); const creationLogoLibrary = createCreationLogoLibraryController({ applyLogoFile: applyCreationLogoFile, refs, setFeedback: setCreationFeedback, showError });
 const pptAnalysis = createPptAnalysisController({
   state,
@@ -6924,24 +6930,12 @@ const CREATION_ITEM_STATUS_LABELS = {
   planning: "待开始",
 };
 
-const CREATION_PREVIEW_SLOTS = [
-  { itemId: "1-hero", role: "hero", title: "主图", brief: "商品清晰居中，适合作为首图" },
-  { itemId: "2-benefit", role: "benefit", title: "卖点图", brief: "突出 1-2 个核心卖点" },
-  { itemId: "3-scene", role: "scene", title: "场景图", brief: "展示真实使用环境、比例和使用方式" },
-  { itemId: "4-detail-trust", role: "detail-trust", title: "详情信任图", brief: "强调材质、结构、包装或品质证明" },
-  { itemId: "5-comparison", role: "comparison", title: "对比图", brief: "让商品优势一眼可比" },
-  { itemId: "6-social-proof", role: "social-proof", title: "种草图", brief: "适合社媒与口碑分享语境" },
-  { itemId: "7-package", role: "package", title: "包装清单图", brief: "说明包装、配件和到手内容" },
-  { itemId: "8-promotion", role: "promotion", title: "活动图", brief: "突出优惠、限时和购买理由" },
-  { itemId: "9-material-closeup", role: "material-closeup", title: "材质细节图", brief: "放大纹理、工艺和品质细节" },
-  { itemId: "10-usage-steps", role: "usage-steps", title: "使用步骤图", brief: "用步骤降低理解和使用门槛" },
-  { itemId: "11-dimensions", role: "dimensions", title: "尺寸规格图", brief: "呈现尺寸、容量和兼容信息" },
-  { itemId: "12-review-qa", role: "review-qa", title: "口碑问答图", brief: "回答购买前常见疑虑" },
-];
+const CREATION_PREVIEW_SLOTS = "1-hero|hero|主图|商品清晰居中，适合作为首图;2-benefit|benefit|卖点图|突出 1-2 个核心卖点;3-scene|scene|场景图|展示真实使用环境、比例和使用方式;4-detail-trust|detail-trust|详情信任图|强调材质、结构、包装或品质证明;5-comparison|comparison|对比图|让商品优势一眼可比;6-social-proof|social-proof|种草图|适合社媒与口碑分享语境;7-package|package|包装清单图|说明包装、配件和到手内容;8-promotion|promotion|活动图|突出优惠、限时和购买理由;9-material-closeup|material-closeup|材质细节图|放大纹理、工艺和品质细节;10-usage-steps|usage-steps|使用步骤图|用步骤降低理解和使用门槛;11-dimensions|dimensions|尺寸规格图|呈现尺寸、容量和兼容信息;12-review-qa|review-qa|口碑问答图|回答购买前常见疑虑;13-feature-callout|feature-callout|功能拆解图|拆解关键功能、结构和购买理由;14-variant-matrix|variant-matrix|变体矩阵图|整理颜色、尺寸、套装或 SKU 选择;15-compatibility|compatibility|适配兼容图|说明适配对象、兼容范围和选择依据;16-care-guide|care-guide|保养维护图|展示清洁、收纳、替换或维护步骤;17-brand-story|brand-story|品牌故事图|呈现品牌理念、工艺来源和使用价值;18-certification-proof|certification-proof|资质背书图|展示明确提供的认证、检测、质保或安全背书".split(";").map((entry) => { const [itemId, role, title, brief] = entry.split("|"); return { itemId, role, title, brief }; });
 
 const CREATION_SCENARIO_LABELS = { standard: "标准电商", "detail-page": "详情页转化", "social-seeding": "社媒种草", launch: "新品发布", promotion: "活动促销", livestream: "直播电商", "gift-guide": "礼品推荐", "marketplace-search": "平台搜索", "brand-story": "品牌故事" };
 const CREATION_VISUAL_LANGUAGE_LABELS = { "classic-commercial": "经典商业摄影", "premium-studio": "高端棚拍", "reference-style": "参考模式", "clean-marketplace": "平台清爽白底", "lifestyle-editorial": "生活方式杂志", "social-ugc": "社媒实拍", "detail-infographic": "详情页信息图", "macro-material": "微距材质", "outdoor-context": "户外场景", "minimal-luxury": "极简奢华", "bold-campaign": "活动海报", "warm-handcrafted": "手作温度" };
 const CREATION_DIMENSION_UNIT_MODE_LABELS = { metric: "公制", imperial: "英制", both: "公制和英制" };
+const CREATION_SKU_GENERATION_RULE_LABELS = { none: "无", "package-list": "添加包装清单", dimensions: "添加尺寸", "package-list-dimensions": "添加包装清单和尺寸" };
 
 const CREATION_CATEGORY_TEMPLATE_MODULE_URL = "/lib/creation-category-templates.mjs?v=20260509-category-search-2";
 const CREATION_BASE_INDUSTRY_TEMPLATE_OPTIONS = [
@@ -6990,9 +6984,11 @@ const CREATION_SCENARIO_ROLE_PRESETS = {
   "brand-story": [
     "hero",
     "scene",
+    "brand-story",
     "material-closeup",
     "package",
     "detail-trust",
+    "certification-proof",
     "social-proof",
     "usage-steps",
     "review-qa",
@@ -7024,8 +7020,8 @@ function getCreationReferenceRoleLabel(role) {
 }
 
 function getCreationSelectedImageCount() {
-  const value = Number.parseInt(refs.creationImageCountInput?.value || "4", 10);
-  return [4, 6, 8, 10, 12].includes(value) ? value : 4;
+  const value = Number.parseInt(refs.creationImageCountInput?.value || "10", 10);
+  return [4, 6, 8, 10, 12, 14, 16, 18].includes(value) ? value : 10;
 }
 
 function createEmptyCreationReferenceAnalysisState() {
@@ -7483,8 +7479,8 @@ function setCreationImageCountValue(count) {
     return;
   }
 
-  const normalizedCount = Number(count) || 4;
-  refs.creationImageCountInput.value = [4, 6, 8, 10, 12].includes(normalizedCount) ? String(normalizedCount) : "4";
+  const normalizedCount = Number(count) || 10;
+  refs.creationImageCountInput.value = [4, 6, 8, 10, 12, 14, 16, 18].includes(normalizedCount) ? String(normalizedCount) : "10";
 }
 
 function getCreationSelectedScenario() {
@@ -7565,7 +7561,7 @@ function syncCreationSelectedRolesToCount() {
 function syncCreationSelectedRolesToScenario() {
   const selectedRoles = getCreationRecommendedRolePreset();
   state.creationSelectedRoles = selectedRoles;
-  if (refs.creationImageCountInput && [4, 6, 8, 10, 12].includes(selectedRoles.length)) {
+  if (refs.creationImageCountInput && [4, 6, 8, 10, 12, 14, 16, 18].includes(selectedRoles.length)) {
     refs.creationImageCountInput.value = String(selectedRoles.length);
   }
   resetCreationDraftPreview();
@@ -7574,7 +7570,7 @@ function syncCreationSelectedRolesToScenario() {
 function syncCreationSelectedRolesToIndustry() {
   const selectedRoles = getCreationRecommendedRolePreset();
   state.creationSelectedRoles = selectedRoles;
-  if (refs.creationImageCountInput && [4, 6, 8, 10, 12].includes(selectedRoles.length)) {
+  if (refs.creationImageCountInput && [4, 6, 8, 10, 12, 14, 16, 18].includes(selectedRoles.length)) {
     refs.creationImageCountInput.value = String(selectedRoles.length);
   }
   resetCreationDraftPreview();
@@ -7645,6 +7641,8 @@ function formatCreationVisualLanguageLabel(value) { return CREATION_VISUAL_LANGU
 function getCreationSelectedDimensionUnitMode() {
   return normalizeCreationDimensionUnitMode(refs.creationDimensionUnitModeInput?.value || "both");
 }
+
+function getCreationSelectedSkuGenerationRule() { const value = refs.creationSkuGenerationRuleInput?.value || "none"; return { value: CREATION_SKU_GENERATION_RULE_LABELS[value] ? value : "none", label: CREATION_SKU_GENERATION_RULE_LABELS[value] || CREATION_SKU_GENERATION_RULE_LABELS.none }; }
 
 function setCreationFeedback(message = "", kind = "") {
   if (!refs.creationFeedback) {
@@ -8764,7 +8762,7 @@ function normalizeCreationSetForView(set = {}) {
     dimensionUnitModeLabel: String(set.dimensionUnitModeLabel || formatCreationDimensionUnitModeLabel(set.dimensionUnitMode)),
     targetLanguage: String(set.targetLanguage || "en"),
     targetLanguageLabel: String(set.targetLanguageLabel || ""),
-    imageCount: Number(set.imageCount) || items.length || 4,
+    imageCount: Number(set.imageCount) || items.length || 10,
     selectedRoles: normalizeCreationRoleIds(set.selectedRoles || items.map((item) => item.role)),
     scenario: String(set.scenario || "standard"),
     scenarioLabel: String(set.scenarioLabel || CREATION_SCENARIO_LABELS[set.scenario] || ""),
@@ -8788,6 +8786,8 @@ function normalizeCreationSetForView(set = {}) {
       : [],
     skuSubjects: Array.isArray(set.skuSubjects) ? set.skuSubjects.map((item, index) => normalizeCreationSkuSubjectForPayload(item, index)).filter(Boolean) : [],
     skuBundleCount: normalizeCreationSkuBundleCountForPayload(set.skuBundleCount || set.sku_bundle_count || set.skuSubjects?.[0]?.bundleCount || "1"),
+    skuGenerationRule: CREATION_SKU_GENERATION_RULE_LABELS[set.skuGenerationRule || set.sku_generation_rule] ? String(set.skuGenerationRule || set.sku_generation_rule) : "none",
+    skuGenerationRuleLabel: String(set.skuGenerationRuleLabel || set.sku_generation_rule_label || CREATION_SKU_GENERATION_RULE_LABELS[set.skuGenerationRule || set.sku_generation_rule] || CREATION_SKU_GENERATION_RULE_LABELS.none),
     logo: normalizeCreationLogoPayload(set.logo || set.creationLogo || null),
     listingDrafts: Array.isArray(set.listingDrafts)
       ? set.listingDrafts.map((draft, index) => normalizeCreationListingDraftForView(draft, index)).filter((draft) => draft.id)
@@ -9042,6 +9042,7 @@ function applyCreationSetToForm(set) {
   refs.creationSellingPointsInput.value = normalized.sellingPoints.join("\n");
   refs.creationDimensionSpecsInput.value = normalized.dimensionSpecs || "";
   if (refs.creationSkuBundleCountInput) refs.creationSkuBundleCountInput.value = String(normalized.skuBundleCount || 1);
+  setCreationSelectValue(refs.creationSkuGenerationRuleInput, normalized.skuGenerationRule, "none");
   setCreationSelectValue(refs.creationDimensionUnitModeInput, normalized.dimensionUnitMode, "both");
   setCreationSelectValue(refs.creationTargetLanguageInput, normalized.targetLanguage, "en");
   setCreationSelectValue(refs.creationScenarioInput, normalized.scenario, "standard");
@@ -9070,6 +9071,7 @@ function getCreationQueueJobs() { return getCreationQueueJobsFromState(state.cre
 function getPendingCreationQueueCount() { return getPendingCreationQueueCountFromState(state.creation); }
 function getActiveCreationQueueJob() { return getActiveCreationQueueJobFromState(state.creation); }
 function getSelectedCreationQueueJob() { return getSelectedCreationQueueJobFromState(state.creation); }
+function getCreationRepairTargetSet() { return getCreationRepairTargetSetFromState(state.creation, getCreationCurrentSet(), normalizeCreationSetForView); }
 function syncActiveCreationQueueSet(set) { syncActiveCreationQueueSetInState(state.creation, set, normalizeCreationSetForView); }
 function selectCreationQueueJob(queueId) {
   if (!selectCreationQueueJobInState(state.creation, queueId)) return;
@@ -9144,6 +9146,12 @@ function getCreationProgressSummary(set = getCreationCurrentSet()) {
 function canRepairCreationSet(set = getCreationCurrentSet()) {
   return Boolean(set?.setId && !isCreationDraftSet(set));
 }
+
+function isCreationItemRepairActive(itemId) { return isCreationItemRepairActiveInQueue(state.creation, itemId); }
+function canRepairCreationItem(itemId) { return canRepairCreationItemFromQueue({ creationState: state.creation, itemId, canRepairSet: canRepairCreationSet(getCreationRepairTargetSet()) }); }
+function getCreationRepairButtonText(item = {}) { return getCreationRepairButtonTextFromQueue({ creationState: state.creation, item }); }
+function queueCreationItemRepair(itemId) { if (!canRepairCreationItem(itemId) || !queueCreationItemRepairInState(state.creation, itemId)) return false; setCreationFeedback("已加入单图重生成队列。", "busy"); renderCreationView(); return true; }
+async function runNextQueuedCreationItemRepair() { const nextItemId = shiftNextQueuedCreationItemRepair(state.creation, (candidate) => Boolean(getCreationCurrentSet()?.items.some((item) => item.itemId === candidate))); if (!nextItemId) { renderCreationView(); return; } renderCreationView(); await repairCreationItems({ itemId: nextItemId }); }
 
 function renderCreationRecordDetail(set) {
   if (!refs.creationRecordDetail) {
@@ -9253,8 +9261,14 @@ function shouldShowCreationCardLoading(item = {}, showRecordActions = false) {
   return !["completed", "failed"].includes(status);
 }
 
-function shouldHideCreationCardDetails(showRecordActions = false) {
-  return !showRecordActions && state.creation.generating;
+function shouldHideCreationCardDetails(item = {}, showRecordActions = false) {
+  if (showRecordActions || !state.creation.generating) {
+    return false;
+  }
+  if (state.creation.generationScope === "single") {
+    return isCreationItemRepairActive(item.itemId) && !getImageUrl(item);
+  }
+  return true;
 }
 
 function createCreationCardLoading(status = "generating") {
@@ -9284,7 +9298,7 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
   const showActions = options.showActions !== false;
   const showRecordActions = options.showRecordActions === true;
   const isLoadingCard = shouldShowCreationCardLoading(item, showRecordActions);
-  const hideGenerationDetails = shouldHideCreationCardDetails(showRecordActions);
+  const hideGenerationDetails = shouldHideCreationCardDetails(item, showRecordActions);
   const card = document.createElement("article");
   card.className = "creation-card";
   card.classList.toggle("is-record-card", showRecordActions);
@@ -9408,8 +9422,8 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
     button.className = "mini-action";
     button.type = "button";
     button.dataset.creationRetryItemId = item.itemId;
-    button.textContent = item.status === "completed" ? "重生成" : item.status === "failed" ? "重试" : "补图";
-    button.disabled = state.creation.generating || !canRepairCreationSet();
+    button.textContent = getCreationRepairButtonText(item);
+    button.disabled = !canRepairCreationItem(item.itemId);
     button.setAttribute("aria-label", `${item.title || "套图项"}${button.textContent}`);
     actions.appendChild(button);
     card.appendChild(actions);
@@ -9476,20 +9490,6 @@ function getCreationRecordSelectedSet() {
 
 function getCreationRecordImagePaths(set) {
   return Array.isArray(set?.items) ? set.items.map((item) => item.relativePath).filter(Boolean) : [];
-}
-
-function buildCreationRecordPathText(set) {
-  const paths = getCreationRecordImagePaths(set);
-  if (!set || paths.length === 0) {
-    return "";
-  }
-
-  return [
-    `套图: ${set.productName || "未命名商品"}`,
-    `目录: ${set.relativeDir || "未记录目录"}`,
-    "图片:",
-    ...paths.map((path, index) => `${index + 1}. ${path}`),
-  ].join("\n");
 }
 
 function buildCreationRecordPromptText(set) {
@@ -9806,18 +9806,6 @@ async function openCreationRecordFolder() {
   setCreationRecordFeedback("已打开套图文件夹。", "success");
 }
 
-async function copyCreationRecordPaths() {
-  const selectedSet = getCreationRecordSelectedSet();
-  const text = buildCreationRecordPathText(selectedSet);
-  if (!text) {
-    setCreationRecordFeedback("当前套图还没有可复制的图片路径。", "error");
-    return;
-  }
-
-  await writeTextToClipboard(text);
-  setCreationRecordFeedback("已复制当前套图图片路径。", "success");
-}
-
 async function copyCreationRecordFullPaths() {
   const selectedSet = getCreationRecordSelectedSet();
   if (getCreationRecordImagePaths(selectedSet).length === 0) {
@@ -9850,7 +9838,7 @@ function reuseCreationRecordSet() {
   renderCreationView();
 }
 
-async function repairCreationRecordIncompleteImages() { if (state.creation.generating) return; const selectedSet = getCreationRecordSelectedSet(); if (!canRepairCreationSet(selectedSet)) { setCreationRecordFeedback("请先选择一个已保存的套图记录。", "error"); return; } const targetItems = getCreationIncompleteItems(selectedSet); if (targetItems.length === 0) { setCreationRecordFeedback("当前套图没有需要补齐的图像。", "success"); renderCreationRecordView(); return; } clearError(); applyCreationSetToForm(selectedSet); state.creation.currentSet = normalizeCreationSetForView(selectedSet); state.creation.recordSetId = selectedSet.setId; state.creation.generating = true; state.creation.generationScope = "repair"; state.creation.editingItemId = ""; targetItems.forEach((item) => updateCreationCurrentItem(item.itemId, { status: "generating", error: "", updatedAt: nowIso() })); setCreationRecordFeedback(`正在补齐未生成图像 ${targetItems.length} 张...`, "busy"); renderCreationView(); renderCreationRecordView(); try { await runCreationRepairRequest({ scope: "incomplete" }); const refreshedSet = getCreationRecordSelectedSet(); const remainingCount = getCreationIncompleteItems(refreshedSet).length; setCreationRecordFeedback(remainingCount > 0 ? `仍有 ${remainingCount} 张图像未生成。` : "未生成图像已补齐。", remainingCount > 0 ? "error" : "success"); } catch (error) { const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "套图补图请求失败"); setCreationRecordFeedback(message, "error"); showError(message); } finally { state.creation.generating = false; state.creation.generationScope = ""; renderCreationView(); renderCreationRecordView(); } }
+async function repairCreationRecordIncompleteImages() { if (state.creation.generating) return; const selectedSet = getCreationRecordSelectedSet(); if (!canRepairCreationSet(selectedSet)) { setCreationRecordFeedback("请先选择一个已保存的套图记录。", "error"); return; } const targetItems = getCreationIncompleteItems(selectedSet); if (targetItems.length === 0) { setCreationRecordFeedback("当前套图没有需要补齐的图像。", "success"); renderCreationRecordView(); return; } clearError(); applyCreationSetToForm(selectedSet); state.creation.currentSet = normalizeCreationSetForView(selectedSet); state.creation.recordSetId = selectedSet.setId; state.creation.generating = true; state.creation.generationScope = "repair"; state.creation.editingItemId = ""; targetItems.forEach((item) => updateCreationCurrentItem(item.itemId, { status: "generating", error: "", updatedAt: nowIso() })); setCreationRecordFeedback(`正在补齐未生成图像 ${targetItems.length} 张...`, "busy"); renderCreationView(); renderCreationRecordView(); try { await runCreationRepairRequest({ scope: "incomplete", set: selectedSet }); const refreshedSet = getCreationRecordSelectedSet(); const remainingCount = getCreationIncompleteItems(refreshedSet).length; setCreationRecordFeedback(remainingCount > 0 ? `仍有 ${remainingCount} 张图像未生成。` : "未生成图像已补齐。", remainingCount > 0 ? "error" : "success"); } catch (error) { const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "套图补图请求失败"); setCreationRecordFeedback(message, "error"); showError(message); } finally { state.creation.generating = false; state.creation.generationScope = ""; renderCreationView(); renderCreationRecordView(); } }
 
 function renderCreationRecordArchiveDetail(set) {
   if (!refs.creationRecordArchiveDetail) {
@@ -9911,9 +9899,6 @@ function renderCreationRecordView() {
   }
   if (refs.creationRecordOpenFolderButton) {
     refs.creationRecordOpenFolderButton.disabled = !selectedSet?.relativeDir;
-  }
-  if (refs.creationRecordCopyPathsButton) {
-    refs.creationRecordCopyPathsButton.disabled = getCreationRecordImagePaths(selectedSet).length === 0;
   }
   if (refs.creationRecordCopyFullPathsButton) {
     refs.creationRecordCopyFullPathsButton.disabled = getCreationRecordImagePaths(selectedSet).length === 0;
@@ -10001,6 +9986,7 @@ function updateCreationReferenceRole(referenceId, role) {
   state.creationReferenceFiles = state.creationReferenceFiles.map((item) =>
     item.id === referenceId ? { ...item, role: role || "product" } : item,
   );
+  markCreationReferenceAnalysisDirty();
   renderCreationReferenceGrid();
 }
 
@@ -10756,7 +10742,7 @@ function applyCreationReferenceAnalysisRecommendations() {
 
 function applyCreationReferenceAnalysisVisualLanguage() {
   const analysis = state.creationReferenceAnalysis.result;
-  if (!analysis || state.creationReferenceAnalysis.dirty || state.creationReferenceAnalysis.running || state.creation.generating) return;
+  if (!analysis || state.creationReferenceAnalysis.dirty || state.creationReferenceAnalysis.running) return;
   setCreationSelectValue(refs.creationVisualLanguageInput, analysis.visualLanguage, "classic-commercial");
   renderCreationReferenceAnalysis();
 }
@@ -10765,7 +10751,7 @@ function renderCreationReferenceAnalysis() {
   if (!refs.creationReferenceAnalysisPanel) return;
 
   const analyzingReferences = state.creationReferenceAnalysis.running;
-  refs.creationReferenceAnalyzeButton.disabled = analyzingReferences || state.creation.generating || state.creationReferenceFiles.length === 0;
+  refs.creationReferenceAnalyzeButton.disabled = analyzingReferences || state.creationReferenceFiles.length === 0;
   refs.creationReferenceAnalyzeButton.classList.toggle("is-loading", analyzingReferences);
   refs.creationReferenceAnalyzeButton.replaceChildren(analyzingReferences ? "识别中" : "智能识别", ...(analyzingReferences ? [Object.assign(document.createElement("span"), { className: "creation-reference-analyze-spinner", ariaHidden: "true" })] : []));
 
@@ -10775,13 +10761,12 @@ function renderCreationReferenceAnalysis() {
       Boolean(analysis) &&
       !state.creationReferenceAnalysis.dirty &&
       !state.creationReferenceAnalysis.applied &&
-      !state.creationReferenceAnalysis.running &&
-      !state.creation.generating;
+      !state.creationReferenceAnalysis.running;
     refs.creationReferenceApplyAnalysisButton.classList.toggle("hidden", !analysis);
     refs.creationReferenceApplyAnalysisButton.disabled = !canApply;
     refs.creationReferenceApplyAnalysisButton.textContent = state.creationReferenceAnalysis.applied ? "已应用" : "应用建议";
   }
-  syncCreationReferenceVisualLanguageButton({ button: refs.creationReferenceApplyVisualLanguageButton, analysis, currentValue: refs.creationVisualLanguageInput?.value || "classic-commercial", dirty: state.creationReferenceAnalysis.dirty, running: state.creationReferenceAnalysis.running, generating: state.creation.generating, normalizeVisualLanguage: normalizeCreationVisualLanguage });
+  syncCreationReferenceVisualLanguageButton({ button: refs.creationReferenceApplyVisualLanguageButton, analysis, currentValue: refs.creationVisualLanguageInput?.value || "classic-commercial", dirty: state.creationReferenceAnalysis.dirty, running: state.creationReferenceAnalysis.running, normalizeVisualLanguage: normalizeCreationVisualLanguage });
   refs.creationReferenceAnalysisPanel.classList.toggle("hidden", !analysis);
   refs.creationReferenceAnalysisList.replaceChildren();
 
@@ -11064,6 +11049,7 @@ function buildCreationPlanPreviewFormData() {
   formData.set("referenceImageRoles", JSON.stringify(buildCreationReferenceRolePayload()));
   formData.set("skuSubjects", JSON.stringify(buildCreationSkuSubjectPayload()));
   formData.set("skuBundleCount", refs.creationSkuBundleCountInput?.value || "1");
+  formData.set("skuGenerationRule", getCreationSelectedSkuGenerationRule().value);
   formData.set("logoOptions", JSON.stringify(getCreationLogoPayload()));
   formData.set("planOverrides", JSON.stringify(getCreationPlanOverrides()));
 
@@ -11126,11 +11112,17 @@ function buildCreationLogoBatchFormData() {
   return formData;
 }
 
-function buildCreationRepairFormData({ itemId = "", scope = "incomplete" } = {}) {
-  const formData = new FormData(), currentSet = getCreationCurrentSet();
+function applyCreationRepairTargetFormFields(formData, set = {}) { Object.entries({ productName: set.productName || "", productDescription: set.productDescription || "", sellingPoints: Array.isArray(set.sellingPoints) ? set.sellingPoints.join("\n") : String(set.sellingPoints || ""), dimensionSpecs: set.dimensionSpecs || "", dimensionUnitMode: set.dimensionUnitMode || "both", targetLanguage: set.targetLanguage || "en", scenario: set.scenario || "standard", visualLanguage: set.visualLanguage || "classic-commercial", industryTemplate: set.industryTemplate || "general", selectedRoles: JSON.stringify(Array.isArray(set.selectedRoles) ? set.selectedRoles : []), skuSubjects: JSON.stringify(Array.isArray(set.skuSubjects) ? set.skuSubjects : []), skuBundleCount: String(set.skuBundleCount || 1), skuGenerationRule: set.skuGenerationRule || "none", logoOptions: JSON.stringify(set.logo || null) }).forEach(([key, value]) => formData.set(key, value)); }
+
+function buildCreationRepairFormData({ itemId = "", scope = "incomplete", set = getCreationRepairTargetSet() } = {}) {
+  const formData = new FormData(), currentSet = set ? normalizeCreationSetForView(set) : getCreationCurrentSet();
+  const shouldUseQueueTargetFields = Boolean(currentSet?.setId && currentSet.setId !== String(getCreationCurrentSet()?.setId || ""));
 
   formData.set("setId", currentSet?.setId || "");
   for (const [key, value] of buildCreationPlanPreviewFormData().entries()) formData.set(key, value);
+  if (shouldUseQueueTargetFields) {
+    applyCreationRepairTargetFormFields(formData, currentSet);
+  }
   if (itemId) {
     formData.set("itemId", itemId);
     const promptOverride = getCreationItemDraft(itemId, currentSet);
@@ -11328,12 +11320,12 @@ async function runCreationStream(response) {
   });
 }
 
-async function runCreationRepairRequest({ itemId = "", scope = "incomplete" } = {}) { await ensureCreationReferenceGenerationFilesReady(); const response = await fetch("/api/creation/repair", { method: "POST", body: buildCreationRepairFormData({ itemId, scope }) }); if (response.status === 404) throw new Error("当前部署不支持套图补图。"); if (!response.ok || !response.body) throw new Error("套图补图请求失败"); await runCreationStream(response); await loadCreationSets(); }
+async function runCreationRepairRequest({ itemId = "", scope = "incomplete", set = getCreationRepairTargetSet() } = {}) { await ensureCreationReferenceGenerationFilesReady(); const response = await fetch("/api/creation/repair", { method: "POST", body: buildCreationRepairFormData({ itemId, scope, set }) }); if (response.status === 404) throw new Error("当前部署不支持套图补图。"); if (!response.ok || !response.body) throw new Error("套图补图请求失败"); await runCreationStream(response); await loadCreationSets(); }
 async function runCreationAutoRepairIfNeeded(set = getCreationCurrentSet()) {
   const currentSet = set ? normalizeCreationSetForView(set) : getCreationCurrentSet(); if (!shouldAutoRepairCreationSet({ set: currentSet, generationScope: state.creation.generationScope, autoRepairAttemptCount: state.creation.autoRepairAttemptCount, canRepair: canRepairCreationSet(currentSet) })) return false;
   const nextAttempt = state.creation.autoRepairAttemptCount + 1; state.creation.autoRepairAttemptCount = nextAttempt;
   setCreationFeedback(getCreationAutoRepairNotice({ incompleteCount: getCreationIncompleteItems(currentSet).length, attemptCount: nextAttempt }), "busy");
-  renderCreationView(); await runCreationRepairRequest({ scope: "incomplete" }); return true;
+  renderCreationView(); await runCreationRepairRequest({ scope: "incomplete", set: currentSet }); return true;
 }
 
 async function loadCreationSets() {
@@ -11435,6 +11427,8 @@ async function previewCreationPlan() {
       referenceImageRoles: plan.referenceImageRoles || buildCreationReferenceRolePayload(),
       skuSubjects: plan.skuSubjects || buildCreationSkuSubjectPayload(),
       skuBundleCount: plan.skuBundleCount || normalizeCreationSkuBundleCountForPayload(refs.creationSkuBundleCountInput?.value || "1"),
+      skuGenerationRule: plan.skuGenerationRule || getCreationSelectedSkuGenerationRule().value,
+      skuGenerationRuleLabel: plan.skuGenerationRuleLabel || getCreationSelectedSkuGenerationRule().label,
       logo: plan.logo || getCreationLogoPayload(),
       createdAt: previousDraft?.createdAt || createdAt,
       updatedAt: createdAt,
@@ -11529,7 +11523,7 @@ async function startCreationLogoBatchGeneration() {
   }
 }
 
-function buildCreationQueuedSet(input = {}) { return buildCreationQueuedSetFromState({ ...input, buildCreationReferenceRolePayload, buildCreationSkuSubjectPayload, creationState: state.creation, formatCreationDimensionUnitModeLabel, formatCreationVisualLanguageLabel: (value) => CREATION_VISUAL_LANGUAGE_LABELS[normalizeCreationVisualLanguage(value)], getCreationCurrentSet, getCreationLogoPayload, getCreationPreviewSlots, getCreationSelectedDimensionUnitMode, getCreationSelectedImageCount, getCreationSelectedIndustryTemplate, getCreationSelectedLanguage, getCreationSelectedRoles, getCreationSelectedScenario, isCreationDraftSet, normalizeCreationSkuBundleCountForPayload, normalizeCreationVisualLanguage, normalizeSet: normalizeCreationSetForView, referenceFiles: state.creationReferenceFiles, refs }); }
+function buildCreationQueuedSet(input = {}) { return buildCreationQueuedSetFromState({ ...input, buildCreationReferenceRolePayload, buildCreationSkuSubjectPayload, creationState: state.creation, formatCreationDimensionUnitModeLabel, formatCreationVisualLanguageLabel: (value) => CREATION_VISUAL_LANGUAGE_LABELS[normalizeCreationVisualLanguage(value)], getCreationCurrentSet, getCreationLogoPayload, getCreationPreviewSlots, getCreationSelectedDimensionUnitMode, getCreationSelectedImageCount, getCreationSelectedIndustryTemplate, getCreationSelectedLanguage, getCreationSelectedRoles, getCreationSelectedScenario, getCreationSelectedSkuGenerationRule, isCreationDraftSet, normalizeCreationSkuBundleCountForPayload, normalizeCreationVisualLanguage, normalizeSet: normalizeCreationSetForView, referenceFiles: state.creationReferenceFiles, refs }); }
 
 function enqueueCreationGeneration({ formData, set }) {
   const job = createCreationQueueJob({ creationState: state.creation, formData, set, normalizeSet: normalizeCreationSetForView, nowIso });
@@ -11593,10 +11587,13 @@ async function startCreationGeneration(event) {
 
 async function repairCreationItems({ itemId = "", scope = "incomplete" } = {}) {
   if (state.creation.generating) {
+    if (itemId && state.creation.generationScope === "single") {
+      queueCreationItemRepair(itemId);
+    }
     return;
   }
 
-  const currentSet = getCreationCurrentSet();
+  const currentSet = getCreationRepairTargetSet();
   if (!canRepairCreationSet(currentSet)) {
     const message = "请先选择一个已保存的套图记录。";
     setCreationFeedback(message, "error");
@@ -11614,21 +11611,21 @@ async function repairCreationItems({ itemId = "", scope = "incomplete" } = {}) {
   }
 
   clearError();
+  if (itemId) {
+    removeQueuedCreationItemRepair(state.creation, itemId);
+  }
   state.creation.generating = true;
   state.creation.generationScope = itemId ? "single" : "repair";
   state.creation.editingItemId = "";
-  targetItems.forEach((item) => {
-    updateCreationCurrentItem(item.itemId, {
-      status: "generating",
-      error: "",
-      updatedAt: nowIso(),
-    });
-  });
+  state.creation.repairingItemId = String(itemId || "");
+  state.creation.currentSet = normalizeCreationSetForView(currentSet);
+  syncActiveCreationQueueSet(state.creation.currentSet);
+  targetItems.forEach((item) => updateCreationCurrentItem(item.itemId, { status: "generating", error: "", updatedAt: nowIso() }));
   setCreationFeedback(itemId ? "正在重生成单张套图..." : "正在补齐未完成项...", "busy");
   renderCreationView();
 
   try {
-    await runCreationRepairRequest({ itemId, scope });
+    await runCreationRepairRequest({ itemId, scope, set: currentSet });
   } catch (error) {
     const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "套图补图请求失败");
     setCreationFeedback(message, "error");
@@ -11636,7 +11633,11 @@ async function repairCreationItems({ itemId = "", scope = "incomplete" } = {}) {
   } finally {
     state.creation.generating = false;
     state.creation.generationScope = "";
+    state.creation.repairingItemId = "";
     renderCreationView();
+    if (itemId) {
+      await runNextQueuedCreationItemRepair();
+    }
   }
 }
 
@@ -11704,6 +11705,7 @@ function normalizePortraitSetForView(set = {}) {
       : [],
     selectedActions: Array.isArray(set.selectedActions) ? set.selectedActions.map((item) => String(item)).filter(Boolean) : [],
     customStyle: String(set.customStyle || ""),
+    ...portraitLocationController.normalizeSetFields(set),
     notes: String(set.notes || ""),
     ratio: String(set.ratio || DEFAULT_PORTRAIT_RATIO),
     size: String(set.size || "auto"),
@@ -11717,14 +11719,9 @@ function normalizePortraitSetForView(set = {}) {
   };
 }
 
-function getPortraitCurrentSet() {
-  return state.portrait.currentSet ? normalizePortraitSetForView(state.portrait.currentSet) : null;
-}
+function getPortraitCurrentSet() { return state.portrait.currentSet ? normalizePortraitSetForView(state.portrait.currentSet) : null; }
 
-function isPortraitDraftSet(set = getPortraitCurrentSet()) {
-  const setId = String(set?.setId || "");
-  return setId.startsWith("portrait-local-") || setId.startsWith("portrait-draft-");
-}
+function isPortraitDraftSet(set = getPortraitCurrentSet()) { const setId = String(set?.setId || ""); return setId.startsWith("portrait-local-") || setId.startsWith("portrait-draft-"); }
 
 function canRepairPortraitSet(set = getPortraitCurrentSet()) { return Boolean(set?.setId) && !isPortraitDraftSet(set); }
 
@@ -11769,13 +11766,9 @@ function setPortraitRecordFeedback(message = "", kind = "") {
   refs.portraitRecordActionFeedback.dataset.state = kind || "";
 }
 
-function getPortraitSelectedStyles() {
-  return refs.portraitStyleInputs.filter((input) => input.checked).map((input) => input.value);
-}
+function getPortraitSelectedStyles() { return refs.portraitStyleInputs.filter((input) => input.checked).map((input) => input.value); }
 
-function getPortraitSelectedShotTypes() {
-  return refs.portraitShotTypeInputs.filter((input) => input.checked).map((input) => input.value);
-}
+function getPortraitSelectedShotTypes() { return refs.portraitShotTypeInputs.filter((input) => input.checked).map((input) => input.value); }
 
 function getPortraitSelectedActions() { return refs.portraitActionInputs.filter((input) => input.checked).map((input) => input.value); }
 
@@ -12241,6 +12234,7 @@ function buildPortraitFormData({ includeFiles = true, repair = false, includeAct
   formData.set("selectedShotTypes", JSON.stringify(getPortraitSelectedShotTypes()));
   formData.set("selectedActions", JSON.stringify(getPortraitSelectedActions()));
   formData.set("customStyle", refs.portraitCustomStyleInput?.value.trim() || "");
+  portraitLocationController.appendFormData(formData);
   const rawPortraitNotes = refs.portraitNotesInput?.value.trim() || "";
   formData.set("notes", [rawPortraitNotes, getPortraitAccessoryPromptSummary()].filter(Boolean).join("\n\n"));
   formData.set("ratio", refs.portraitRatioInput?.value || DEFAULT_PORTRAIT_RATIO);
@@ -12455,10 +12449,11 @@ function renderPortraitView() {
   if (refs.portraitSetMeta) {
     refs.portraitSetMeta.hidden = !currentSet;
     refs.portraitSetMeta.textContent = currentSet
-      ? `${currentSet.subjectName || "未命名人物"} · ${formatPortraitStyleSummary(currentSet)} · ${PORTRAIT_STATUS_LABELS[currentSet.status] || currentSet.status} · ${formatClock(currentSet.createdAt)}`
+      ? [currentSet.subjectName || "未命名人物", currentSet.locationName, formatPortraitStyleSummary(currentSet), PORTRAIT_STATUS_LABELS[currentSet.status] || currentSet.status, formatClock(currentSet.createdAt)].filter(Boolean).join(" · ")
       : "等待生成";
   }
 
+  portraitLocationController.render();
   renderPortraitReferenceGrid();
   renderPortraitAccessoryAssetLibrary();
   renderPortraitAnalysis();
@@ -12538,6 +12533,7 @@ async function previewPortraitPlan() {
       selectedShotTypes: plan.selectedShotTypes || getPortraitSelectedShotTypes(),
       selectedActions: plan.selectedActions || getPortraitSelectedActions(),
       customStyle: plan.customStyle || refs.portraitCustomStyleInput.value.trim(),
+      ...portraitLocationController.getSetFields(plan),
       notes: plan.notes || refs.portraitNotesInput.value.trim(),
       ratio: plan.ratio || refs.portraitRatioInput.value || DEFAULT_PORTRAIT_RATIO,
       size: plan.size || refs.portraitSizeInput.value || "auto",
@@ -12644,6 +12640,7 @@ async function startPortraitGeneration(event) {
       selectedShotTypes: getPortraitSelectedShotTypes(),
       selectedActions: getPortraitSelectedActions(),
       customStyle: refs.portraitCustomStyleInput.value.trim(),
+      ...portraitLocationController.getSetFields(),
       notes: refs.portraitNotesInput.value.trim(),
       ratio: refs.portraitRatioInput.value || DEFAULT_PORTRAIT_RATIO,
       size: refs.portraitSizeInput.value || "auto",
@@ -12887,6 +12884,7 @@ function reusePortraitRecordSet() {
   refs.portraitShotTypeInputs.forEach((input) => { input.checked = selectedShotTypes.size > 0 ? selectedShotTypes.has(input.value) : true; });
   const selectedActions = new Set(selectedSet.selectedActions || []);
   refs.portraitActionInputs.forEach((input) => { input.checked = selectedActions.size > 0 ? selectedActions.has(input.value) : true; });
+  portraitLocationController.setFromSelection(selectedSet.locationSelection || {});
   revokePortraitReferenceFiles();
   state.portrait.files = []; state.portrait.actionFiles = []; state.portrait.accessoryFiles = [];
   state.portrait.analysis = selectedSet.analysis || null;
@@ -14588,11 +14586,13 @@ function handleStudioImagePaste(event) {
   applyReferenceFiles(imageFiles);
 }
 
+function handleCreationReferenceImagePaste(event) { if (state.activeView !== "creation" || isCreationLogoBatchBranch()) return; const imageFiles = getClipboardImageFiles(event.clipboardData); if (imageFiles.length === 0) return; event.preventDefault(); applyCreationReferenceFiles(imageFiles); }
 function bindEvents() {
   creationLogoLibrary.bind();
   bindGlobalNavEvents();
   bindTopbarRevealEvents();
   bindAdaptiveWorkbenchSections();
+  document.addEventListener("paste", handleCreationReferenceImagePaste);
 
   refs.viewTabs.forEach((button) => {
     button.addEventListener("click", () => {
@@ -14806,9 +14806,6 @@ function bindEvents() {
   refs.creationRecordOpenFolderButton.addEventListener("click", () => {
     openCreationRecordFolder().catch((error) => setCreationRecordFeedback(error.message, "error"));
   });
-  refs.creationRecordCopyPathsButton.addEventListener("click", () => {
-    copyCreationRecordPaths().catch((error) => setCreationRecordFeedback(error.message, "error"));
-  });
   refs.creationRecordCopyFullPathsButton.addEventListener("click", () => {
     copyCreationRecordFullPaths().catch((error) => setCreationRecordFeedback(error.message, "error"));
   });
@@ -14966,6 +14963,7 @@ function bindEvents() {
   refs.portraitActionInputs.forEach((input) => {
     input.addEventListener("change", renderPortraitView);
   });
+  portraitLocationController.bind();
   refs.portraitRatioInput.addEventListener("change", (event) => {
     syncPortraitRatio(event.target.value);
   });
@@ -15064,6 +15062,7 @@ function bindEvents() {
   });
   refs.creationImageCountInput.addEventListener("change", syncCreationSelectedRolesToCount);
   refs.creationSkuBundleCountInput?.addEventListener("input", resetCreationDraftPreview);
+  refs.creationSkuGenerationRuleInput?.addEventListener("change", resetCreationDraftPreview);
   refs.creationScenarioInput.addEventListener("change", syncCreationSelectedRolesToScenario);
   refs.creationIndustryTemplateTrigger.addEventListener("click", async () => {
     const shouldOpenCreationIndustryTemplateBrowser = refs.creationIndustryTemplatePopover?.hidden !== false;

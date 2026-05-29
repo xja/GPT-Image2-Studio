@@ -80,6 +80,35 @@ test("creation SKU item reference images only include the matching subject files
   ]);
 });
 
+test("creation SKU item reference images keep package-list content text-only and include dimension references", () => {
+  const item = {
+    role: "sku",
+    skuSubject: {
+      filenames: ["silver-lure.png"],
+    },
+    skuSupportingReferenceRoles: ["package", "dimensions"],
+  };
+  const images = [
+    { filename: "blue-lure.png" },
+    { filename: "silver-lure.png" },
+    { filename: "package-list.png" },
+    { filename: "size-card.png" },
+    { filename: "lifestyle.png" },
+  ];
+  const roles = [
+    { filename: "blue-lure.png", role: "product" },
+    { filename: "silver-lure.png", role: "product" },
+    { filename: "package-list.png", role: "package" },
+    { filename: "size-card.png", role: "dimensions" },
+    { filename: "lifestyle.png", role: "scene" },
+  ];
+
+  assert.deepEqual(
+    buildCreationItemReferenceImages(item, images, roles).map((image) => image.filename),
+    ["silver-lure.png", "size-card.png"],
+  );
+});
+
 test("creation non-SKU item reference images keep the full uploaded set", () => {
   const item = {
     role: "hero",

@@ -26,7 +26,7 @@ test("config store returns empty public config before any save", async () => {
     maxConcurrentTasksPerSession: 25,
     maxParallelTasksPerSession: 10,
     maxReferenceImages: 6,
-    maxCreationReferenceImages: 9,
+    maxCreationReferenceImages: 12,
     maxCreationStyleReferenceImages: 3,
     maxPortraitPersonReferenceImages: 3,
     maxPortraitActionReferenceImages: 3,
@@ -40,7 +40,7 @@ test("config store persists private config and only exposes masked api key publi
   const store = createConfigStore({ rootDir });
 
   await store.saveConfig({
-    baseUrl: "https://example.com/v1",
+    baseUrl: "https://example.com",
     apiKey: "placeholder-test-key-1234567890",
     responsesModel: "gpt-5.4",
     defaults: {
@@ -69,5 +69,7 @@ test("config store persists private config and only exposes masked api key publi
   });
 
   assert.equal(privateConfig.apiKey, "placeholder-test-key-1234567890");
+  assert.equal(privateConfig.baseUrl, "https://example.com/v1");
   assert.equal(raw.apiKey, "placeholder-test-key-1234567890");
+  assert.equal(raw.baseUrl, "https://example.com/v1");
 });

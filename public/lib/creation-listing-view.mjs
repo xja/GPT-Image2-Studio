@@ -96,6 +96,7 @@ const CREATION_LISTING_REVIEW_REFERENCE_RULES = {
 
 const CJK_TEXT_GLOBAL_PATTERN = /[\u3400-\u9fff]+/gu;
 const NON_ASCII_TEXT_PATTERN = /[^\x20-\x7E]+/g;
+const LEGACY_INTERNAL_LISTING_PUBLIC_FIELD_PATTERN = /\b(?:provided product attributes|provided inputs?|sku metadata|searchable copy|shopper-ready language|sellers often struggle|this draft|listing copy|keyword structure|five-bullet layout|configured (?:character )?limit)\b/i;
 const listingFieldCopyTimers = new WeakMap();
 
 export function cleanCreationListingText(value) {
@@ -185,9 +186,15 @@ function cleanEnglishVisibleListingText(value, fallback = "") {
   if (!cleaned) {
     return fallback;
   }
+  if (LEGACY_INTERNAL_LISTING_PUBLIC_FIELD_PATTERN.test(cleaned)) {
+    return fallback;
+  }
   const ascii = cleanCreationListingText(cleaned
     .replace(CJK_TEXT_GLOBAL_PATTERN, " ")
     .replace(NON_ASCII_TEXT_PATTERN, " ")
+    .replace(/\blisting\s+draft\b/gi, " ")
+    .replace(/\b(?:provided product attributes|searchable copy|shopper-ready language|keyword structure|five-bullet layout)\b/gi, " ")
+    .replace(/\bconfigured (?:character )?limit\b/gi, " ")
     .replace(/:\s*(?:[,;]\s*)+\./g, ".")
     .replace(/:\s*(?:[,;]\s*)+(?=\s|$)/g, "")
     .replace(/,\s*(?=[,.;])/g, "")
@@ -363,6 +370,13 @@ function getCreationListingBucketEntries(keywordBuckets = {}) {
   }));
 }
 
+function buildCreationListingLocalizedBucketLines(keywordBuckets = {}) {
+  return getCreationListingBucketEntries(keywordBuckets).flatMap((entry) => {
+    const values = cleanCreationListingArray(entry.values);
+    return values.length > 0 ? [`${entry.label}: ${values.join("、")}`] : [];
+  });
+}
+
 function formatCreationListingList(value) {
   const items = cleanCreationListingArray(value);
   return items.length > 0 ? items : ["无"];
@@ -424,16 +438,24 @@ function applyCreationListingCopyData(target, label, value, { list = false } = {
 function createCreationListingCharacterCountsNode(counts) {
   const stats = document.createElement("span");
   stats.className = "creation-listing-character-counts";
-  stats.setAttribute("aria-label", `英文字符 ${counts.english}，中文字符 ${counts.chinese}`);
+  stats.setAttribute(
+    "aria-label",
+    counts.chinese > 0
+      ? `英文字符 ${counts.english}，中文字符 ${counts.chinese}`
+      : `英文字符 ${counts.english}`,
+  );
 
   const english = document.createElement("span");
   english.className = "creation-listing-character-count english";
   english.textContent = `英文字符 ${counts.english}`;
-  const chinese = document.createElement("span");
-  chinese.className = "creation-listing-character-count chinese";
-  chinese.textContent = `中文字符 ${counts.chinese}`;
 
-  stats.append(english, chinese);
+  stats.appendChild(english);
+  if (counts.chinese > 0) {
+    const chinese = document.createElement("span");
+    chinese.className = "creation-listing-character-count chinese";
+    chinese.textContent = `中文字符 ${counts.chinese}`;
+    stats.appendChild(chinese);
+  }
   return stats;
 }
 
@@ -591,7 +613,8 @@ export function renderCreationListingDrafts({ refs, state, set } = {}) {
 
   drafts.forEach((draft, index) => {
     const card = document.createElement("article");
-    card.className = "creation-listing-card";
+    const isFailedDraft = cleanCreationListingText(draft.status).toLowerCase() === "failed";
+    card.className = isFailedDraft ? "creation-listing-card is-failed" : "creation-listing-card";
 
     const header = document.createElement("div");
     header.className = "creation-listing-card-head";
@@ -610,29 +633,48 @@ export function renderCreationListingDrafts({ refs, state, set } = {}) {
     header.append(title, meta);
     card.appendChild(header);
 
+    if (isFailedDraft) {
+      const failedNote = document.createElement("p");
+      failedNote.className = "creation-listing-failed-note";
+      failedNote.textContent = "Listing 生成失败：下方是保守占位草稿，请重写或重新生成后再发布。";
+      card.appendChild(failedNote);
+    }
+
     const contentFrame = document.createElement("div");
     contentFrame.className = "creation-listing-content-frame";
-    contentFrame.appendChild(createCreationListingField("标题", draft.title, { localizedValue: draft.zhDisplay?.title }));
-    contentFrame.appendChild(createCreationListingField("卖点", draft.sellingPoints, { list: true, localizedValue: draft.zhDisplay?.sellingPoints }));
-    contentFrame.appendChild(createCreationListingField("痛点", draft.painPoints, { list: true, localizedValue: draft.zhDisplay?.painPoints }));
-    contentFrame.appendChild(createCreationListingField("五点描述", draft.fiveBullets, { list: true, localizedValue: draft.zhDisplay?.fiveBullets }));
-    contentFrame.appendChild(createCreationListingField("描述", draft.description, { localizedValue: draft.zhDisplay?.description }));
-    contentFrame.appendChild(createCreationListingField("后台搜索词", draft.backendSearchTerms, { localizedValue: draft.zhDisplay?.backendSearchTerms }));
+    contentFrame.appendChild(createCreationListingField("标题", draft.title, {
+      localizedValue: draft.zhDisplay?.title,
+    }));
+    contentFrame.appendChild(createCreationListingField("卖点", draft.sellingPoints, {
+      list: true,
+      localizedValue: draft.zhDisplay?.sellingPoints,
+    }));
+    contentFrame.appendChild(createCreationListingField("痛点", draft.painPoints, {
+      list: true,
+      localizedValue: draft.zhDisplay?.painPoints,
+    }));
+    contentFrame.appendChild(createCreationListingField("五点描述", draft.fiveBullets, {
+      list: true,
+      localizedValue: draft.zhDisplay?.fiveBullets,
+    }));
+    contentFrame.appendChild(createCreationListingField("描述", draft.description, {
+      localizedValue: draft.zhDisplay?.description,
+    }));
+    contentFrame.appendChild(createCreationListingField("后台搜索词", draft.backendSearchTerms, {
+      localizedValue: draft.zhDisplay?.backendSearchTerms,
+    }));
 
     const bucketLines = getCreationListingBucketEntries(draft.keywordBuckets).map(
       (entry) => `${entry.label}: ${formatCreationListingList(entry.values).join("、")}`,
     );
-    const localizedBucketLines = draft.zhDisplay?.keywordBuckets
-      ? getCreationListingBucketEntries(draft.zhDisplay.keywordBuckets).map(
-        (entry) => `${entry.label}: ${formatCreationListingList(entry.values).join("、")}`,
-      )
-      : [];
+    const localizedBucketLines = buildCreationListingLocalizedBucketLines(draft.zhDisplay?.keywordBuckets);
+    const localizedBucketValues = Object.values(draft.zhDisplay?.keywordBuckets || {}).flat();
     const buckets = createCreationListingField("关键词分组", bucketLines, {
       list: true,
       localizedValue: localizedBucketLines,
       copyValue: buildCreationListingBucketCopyLines(draft.keywordBuckets),
       countValue: Object.values(draft.keywordBuckets || {}).flat(),
-      localizedCountValue: Object.values(draft.zhDisplay?.keywordBuckets || {}).flat(),
+      localizedCountValue: localizedBucketValues,
     });
     buckets.classList.add("creation-listing-buckets");
     contentFrame.appendChild(buckets);

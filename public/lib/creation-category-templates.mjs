@@ -19740,7 +19740,15 @@ function scoreCategoryTemplateSearch(template, query) {
   }
 
   let score = 0;
-  const directSearchText = [template.value, template.code, template.level3Name, template.level4Name]
+  const directSearchText = [
+    template.value,
+    template.code,
+    template.level1Name,
+    template.level2Name,
+    template.level3Name,
+    template.level4Name,
+    template.categoryPath,
+  ]
     .map(cleanString)
     .filter(Boolean)
     .join(" ");
@@ -19750,6 +19758,8 @@ function scoreCategoryTemplateSearch(template, query) {
   const normalizedCode = normalizeSearchText(template.code);
   const normalizedCodeQuery = normalizeSearchText(normalizeCategoryCode(query));
   const isFullCategoryCodeQuery = /^c\d{2}-\d{3}-\d{3}-\d{3}$/.test(normalizedCodeQuery);
+  const normalizedLevel1Name = normalizeSearchText(template.level1Name);
+  const normalizedLevel2Name = normalizeSearchText(template.level2Name);
   const normalizedLevel3Name = normalizeSearchText(template.level3Name);
   const normalizedLevel4Name = normalizeSearchText(template.level4Name);
 
@@ -19768,6 +19778,12 @@ function scoreCategoryTemplateSearch(template, query) {
   }
   if (normalizedLevel3Name && normalizedQuery === normalizedLevel3Name) {
     score += 4500;
+  }
+  if (normalizedLevel2Name && normalizedQuery === normalizedLevel2Name) {
+    score += 4200;
+  }
+  if (normalizedLevel1Name && normalizedQuery === normalizedLevel1Name) {
+    score += 4000;
   }
   if (compactQuery && compactDirectSearchText.includes(compactQuery)) {
     score += 2000;

@@ -104,9 +104,7 @@ import {
 import {
   applyCreationRepairOverrides,
   buildCreationRepairPlan,
-  hasCreationRepairPlanningOverride,
   hydrateCreationRepairSkuSubjects,
-  needsCreationRepairPlanRefresh,
   refreshCreationRepairItemsFromPlan,
   selectCreationRepairItems,
 } from "./lib/creation-repair.mjs";
@@ -1557,6 +1555,8 @@ function buildCreationSetManifest({
     referenceImageRoles: plan.referenceImageRoles || referenceImageRoles,
     skuSubjects: plan.skuSubjects || [],
     skuBundleCount: plan.skuBundleCount || 1,
+    skuGenerationRule: plan.skuGenerationRule || "none",
+    skuGenerationRuleLabel: plan.skuGenerationRuleLabel || "无",
     logo: plan.logo || null,
     createdAt,
     updatedAt: updatedAt || createdAt,
@@ -1669,6 +1669,8 @@ function buildPortraitPlanFromFormData(formData) {
     selectedActions: formData.get("selectedActions"),
     customStyle: formData.get("customStyle"),
     notes: formData.get("notes") || formData.get("photographyNotes"),
+    locationSelection: formData.get("portraitLocationSelection") || formData.get("locationSelection"),
+    locationPrompt: formData.get("portraitLocationPrompt") || formData.get("locationPrompt"),
     ratio: formData.get("ratio"),
     size: formData.get("size"),
     format: formData.get("format"),
@@ -1691,6 +1693,9 @@ function buildPortraitSetManifest({
     subjectName: plan.subjectName,
     subjectSummary: plan.subjectSummary,
     analysis: plan.visibleProfile,
+    locationSelection: plan.locationSelection,
+    locationName: plan.locationName,
+    locationPrompt: plan.locationPrompt,
     referenceImageNames,
     selectedStyles: plan.selectedStyles,
     selectedShotTypes: plan.selectedShotTypes,
@@ -2784,6 +2789,7 @@ async function handleCreationPlan(request, response) {
       referenceImageRoles,
       skuSubjects: formData.get("skuSubjects"),
       skuBundleCount: formData.get("skuBundleCount"),
+      skuGenerationRule: formData.get("skuGenerationRule"),
       logoOptions: buildCreationLogoOptionsFromFormData(formData),
     });
     plan = applyCreationPlanOverrides(plan, formData.get("planOverrides"));
@@ -3169,6 +3175,7 @@ async function handleCreationGenerate(request, response) {
       referenceImageRoles,
       skuSubjects: formData.get("skuSubjects"),
       skuBundleCount: formData.get("skuBundleCount"),
+      skuGenerationRule: formData.get("skuGenerationRule"),
       logoOptions: buildCreationLogoOptionsFromFormData(formData, logoImage),
     });
     plan = applyCreationPlanOverrides(plan, formData.get("planOverrides"));
@@ -4094,6 +4101,7 @@ async function handleCreationRepair(request, response) {
       referenceImageRoles,
       skuSubjects: formData.get("skuSubjects"),
       skuBundleCount: formData.get("skuBundleCount"),
+      skuGenerationRule: formData.get("skuGenerationRule"),
       logoOptions: normalizedLogoOptions.enabled ? normalizedLogoOptions : existingSet.logo || null,
     };
     let repairItems = hydrateCreationRepairSkuSubjects(
@@ -4130,12 +4138,12 @@ async function handleCreationRepair(request, response) {
       referenceImageRoles,
       skuSubjects: existingSet.skuSubjects || [],
       skuBundleCount: existingSet.skuBundleCount || 1,
+      skuGenerationRule: existingSet.skuGenerationRule || "none",
+      skuGenerationRuleLabel: existingSet.skuGenerationRuleLabel || "无",
       logo: normalizedLogoOptions.enabled ? normalizedLogoOptions : existingSet.logo || null,
     };
-    if (hasCreationRepairPlanningOverride(existingSet, repairPlanningOverrides) || needsCreationRepairPlanRefresh(repairItems)) {
-      repairPlan = buildCreationRepairPlan(existingSet, repairPlanningOverrides);
-      repairItems = refreshCreationRepairItemsFromPlan(repairItems, repairPlan);
-    }
+    repairPlan = buildCreationRepairPlan(existingSet, repairPlanningOverrides);
+    repairItems = refreshCreationRepairItemsFromPlan(repairItems, repairPlan);
     if (repairItemId) {
       repairItems = repairItems.map((item) =>
         applyCreationRepairOverrides(item, {

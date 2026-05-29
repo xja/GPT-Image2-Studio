@@ -6,7 +6,7 @@ const appPath = new URL("../public/app.js", import.meta.url);
 const indexPath = new URL("../public/index.html", import.meta.url);
 const assetModulePath = new URL("../lib/portrait-accessory-assets.mjs", import.meta.url);
 const attributionPath = new URL("../public/assets/portrait-accessories/ATTRIBUTION.md", import.meta.url);
-const shellAssetVersion = "20260527-density-overlap-1";
+const shellAssetVersion = "20260528-creation-sku-rule-1";
 
 const COSPLAY_ASSETS = [
   ["cosplay-shrine-miko", "巫女COS", "cosplay-shrine-miko.png", /cosplay portrait[\s\S]*costume[\s\S]*props/],
@@ -23,7 +23,7 @@ test("portrait accessory library adds COS cosplay references with prompt metadat
 
   assert.match(assetModule, /value:\s*"hat",\s*label:\s*"帽子"[\s\S]*value:\s*"cosplay",\s*label:\s*"COS"/);
   assert.doesNotMatch(app, /COS 极简白T|COS 廓形西装|COS 直筒长裤|COS 极简直筒裙/);
-  assert.match(app, /portrait-accessory-assets\.mjs\?v=20260523-portrait-cosplay-color-assets-1/);
+  assert.match(app, /portrait-accessory-assets\.mjs\?v=20260528-portrait-assets-sort-1/);
   assert.match(app, /function getPortraitAccessoryPromptSummary\(\)/);
   assert.match(app, /applyPortraitAccessoryReferenceFiles\(\[file\],\s*\{\s*asset:\s*selectedVariant\s*\}\)/);
   assert.match(

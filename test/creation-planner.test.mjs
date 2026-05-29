@@ -4,10 +4,13 @@ import assert from "node:assert/strict";
 import {
   applyCreationPlanOverrides,
   buildCreationPlan,
+  CREATION_ITEM_ROLES,
+  CREATION_SKU_GENERATION_RULE_OPTIONS,
   CREATION_VISUAL_LANGUAGE_OPTIONS,
   getCreationIndustryRolePreset,
   getCreationScenarioRoleInstruction,
   getCreationScenarioRolePreset,
+  normalizeCreationSkuGenerationRule,
   normalizeCreationVisualLanguage,
   normalizeCreationLogoOptions,
   normalizeCreationDimensionUnitMode,
@@ -55,6 +58,7 @@ test("creation planner builds the fixed four-image ecommerce set", () => {
     productDescription: "透明便携咖啡冲煮器，适合办公室和旅行",
     sellingPoints: "轻便, 易清洁, 口感稳定",
     targetLanguage: "en",
+    imageCount: "4",
   });
 
   assert.equal(plan.targetLanguage, "en");
@@ -317,6 +321,55 @@ test("creation planner keeps numbered kit descriptions from becoming orphan numb
   assert.doesNotMatch(promptByRole.package, /Description: 配置清单：\./u);
   assert.match(promptByRole.benefit, /创口贴\*20片|PBT绷带|烧伤敷料|止血带/u);
   assert.match(promptByRole.package, /创口贴\*20片|5\*450cmPBT绷带|7\.5\*450cmPBT绷带/u);
+});
+
+test("creation planner keeps complete first aid inventory facts for package images", () => {
+  const productDescription = [
+    "Package checklist:",
+    "1.Small Bandage*80",
+    "2.H Style Bandages*10",
+    "3.Emergency Blanket*1",
+    "4.Bandages Teiangularire*1",
+    "5.Cotton Swab*100",
+    "6.Round Bandages*10",
+    "7.Butterfly Bandages*10",
+    "8.Safety Pin*20",
+    "9.PBT Bandage*1 (Large)",
+    "10.PBT Bandage*2 (Small)",
+    "11.PBT Bandage*2 (Medium)",
+    "12.Non-woven tape*1",
+    "13.TPE Toumiquet*1",
+    "14.Whistle*1",
+    "15.Adhesive dressing*1",
+    "16.Soap Wipe*16",
+    "17.Tweezers*1",
+    "18.Scissor*1",
+    "19.First aid Kit*1",
+  ].join("\n");
+  const plan = buildCreationPlan({
+    productName: "First Aid Kit",
+    productDescription,
+    sellingPoints: "",
+    targetLanguage: "en",
+    selectedRoles: ["hero", "package"],
+    referenceImageRoles: [
+      {
+        filename: "kit-checklist.png",
+        role: "package",
+        note: "Full product checklist with 19 numbered included items and quantities.",
+      },
+    ],
+  });
+
+  const packagePrompt = plan.items.find((item) => item.role === "package").prompt;
+
+  assert.match(packagePrompt, /Small Bandage\*80/);
+  assert.match(packagePrompt, /PBT Bandage\*2 \(Medium\)/);
+  assert.match(packagePrompt, /Tweezers\*1/);
+  assert.match(packagePrompt, /Scissor\*1/);
+  assert.match(packagePrompt, /First aid Kit\*1/);
+  assert.match(packagePrompt, /Package inventory lock/i);
+  assert.match(packagePrompt, /show every distinct visible included item and quantity/i);
 });
 
 test("creation planner avoids duplicated punctuation in composed prompt fields", () => {
@@ -599,6 +652,135 @@ test("creation planner appends distinct SKU images after twelve carousel roles",
   assert.match(skuItems[2].prompt, /red-white-bg\.png/);
 });
 
+test("creation planner defaults suite generation to ten carousel images", () => {
+  const plan = buildCreationPlan({
+    productName: "Travel bottle",
+    productDescription: "Leakproof travel bottle with carry loop and silicone seal.",
+    sellingPoints: "portable, leakproof, dishwasher safe",
+    targetLanguage: "en",
+  });
+
+  assert.equal(normalizeCreationImageCount("99"), 10);
+  assert.equal(plan.imageCount, 10);
+  assert.deepEqual(
+    plan.items.map((item) => item.role),
+    [
+      "hero",
+      "benefit",
+      "scene",
+      "detail-trust",
+      "comparison",
+      "social-proof",
+      "package",
+      "promotion",
+      "material-closeup",
+      "usage-steps",
+    ],
+  );
+});
+
+test("creation planner supports additional ecommerce image types with dedicated rules", () => {
+  const roleValues = CREATION_ITEM_ROLES.map((role) => role.role);
+  assert.ok(roleValues.includes("feature-callout"));
+  assert.ok(roleValues.includes("variant-matrix"));
+  assert.ok(roleValues.includes("compatibility"));
+  assert.ok(roleValues.includes("care-guide"));
+  assert.ok(roleValues.includes("brand-story"));
+  assert.ok(roleValues.includes("certification-proof"));
+
+  const plan = buildCreationPlan({
+    productName: "Modular desk lamp",
+    productDescription: "LED desk lamp with adjustable arm, USB-C power, replaceable diffuser, desk clamp compatibility, factory test card, and maker craft notes.",
+    sellingPoints: "stable clamp, three brightness levels, replaceable diffuser, easy cleaning, tested wiring, workshop-built hinge",
+    targetLanguage: "en",
+    selectedRoles: ["feature-callout", "variant-matrix", "compatibility", "care-guide", "brand-story", "certification-proof"],
+  });
+
+  assert.deepEqual(plan.selectedRoles, ["feature-callout", "variant-matrix", "compatibility", "care-guide", "brand-story", "certification-proof"]);
+  assert.match(plan.items.find((item) => item.role === "feature-callout").prompt, /exploded feature callout/i);
+  assert.match(plan.items.find((item) => item.role === "variant-matrix").prompt, /variant matrix/i);
+  assert.match(plan.items.find((item) => item.role === "compatibility").prompt, /compatibility fit/i);
+  assert.match(plan.items.find((item) => item.role === "care-guide").prompt, /care and maintenance/i);
+  assert.match(plan.items.find((item) => item.role === "brand-story").prompt, /brand story/i);
+  assert.match(plan.items.find((item) => item.role === "certification-proof").prompt, /certification and trust proof/i);
+});
+
+test("creation planner applies SKU generation rules for package-list content and dimensions", () => {
+  assert.deepEqual(
+    CREATION_SKU_GENERATION_RULE_OPTIONS.map((option) => option.value),
+    ["none", "package-list", "dimensions", "package-list-dimensions"],
+  );
+  assert.equal(normalizeCreationSkuGenerationRule("package-list-dimensions").value, "package-list-dimensions");
+  assert.equal(normalizeCreationSkuGenerationRule("bad-value").value, "none");
+
+  const plan = buildCreationPlan({
+    productName: "Travel bottle bundle",
+    productDescription: [
+      "Package checklist:",
+      "Bottle body*1",
+      "Cleaning brush*1",
+      "Spare silicone seal*2",
+      "Canvas pouch*1",
+    ].join("\n"),
+    sellingPoints: "8 cm diameter, 24 cm height, 750 ml capacity, leakproof travel kit",
+    dimensionSpecs: "Height 24 cm, diameter 8 cm, capacity 750 ml",
+    targetLanguage: "en",
+    selectedRoles: ["hero"],
+    skuGenerationRule: "package-list-dimensions",
+    referenceImageRoles: [
+      { filename: "bottle-blue.png", role: "product", note: "Blue bottle SKU subject." },
+      { filename: "packing-list.png", role: "package", note: "Use as package checklist content only: bottle body, brush, spare seals, canvas pouch." },
+      { filename: "size-card.png", role: "dimensions", note: "Dimension values: Height 24 cm, diameter 8 cm, capacity 750 ml." },
+    ],
+    skuSubjects: [
+      { id: "blue", title: "Blue bottle", filenames: ["bottle-blue.png"], note: "Blue SKU." },
+    ],
+  });
+
+  const skuItem = plan.items.find((item) => item.role === "sku");
+
+  assert.equal(plan.skuGenerationRule, "package-list-dimensions");
+  assert.equal(plan.skuGenerationRuleLabel, "添加包装清单和尺寸");
+  assert.deepEqual(skuItem.skuSupportingReferenceRoles, ["dimensions"]);
+  assert.match(skuItem.prompt, /SKU generation rule: add package-list content and dimensions/i);
+  assert.match(skuItem.prompt, /Bottle body\*1/);
+  assert.match(skuItem.prompt, /Spare silicone seal\*2/);
+  assert.match(skuItem.prompt, /Height 24 cm, diameter 8 cm, capacity 750 ml/);
+  assert.match(skuItem.prompt, /package-list content only, not packaging box appearance/i);
+});
+
+test("creation planner SKU prompts treat source card text as non-subject noise", () => {
+  const plan = buildCreationPlan({
+    productName: "Paisley neck gaiter",
+    productDescription: "Neck gaiter product photographed on a white SKU card with a corner promo badge.",
+    sellingPoints: "soft fabric, paisley print, multiple colors",
+    targetLanguage: "en",
+    selectedRoles: ["hero"],
+    referenceImageRoles: [
+      {
+        filename: "WB-M-C-28-red-original.jpg",
+        role: "product",
+        note: "Red paisley neck gaiter subject. The source card also has 2025 NEW and bottom SKU/color text.",
+      },
+    ],
+    skuSubjects: [
+      {
+        id: "light-gray",
+        title: "WB-M-C-25 Light Gray",
+        filenames: ["WB-M-C-28-red-original.jpg"],
+        note: "Generate the light gray colorway from the neck gaiter subject.",
+      },
+    ],
+  });
+
+  const skuItem = plan.items.find((item) => item.role === "sku");
+
+  assert.match(skuItem.prompt, /Treat source-image text outside the physical product as non-subject noise/);
+  assert.match(skuItem.prompt, /Do not reproduce source-image corner badges, stickers, promotional labels/);
+  assert.match(skuItem.prompt, /The generated SKU may use only the current SKU template's required product code or color label/);
+  assert.doesNotMatch(skuItem.prompt, /Preserve the SKU subject exactly:.*printed text/);
+});
+
 test("creation planner SKU item titles keep the original subject names", () => {
   const plan = buildCreationPlan({
     productName: "Fishing lure assortment",
@@ -674,7 +856,7 @@ test("creation planner renders same-SKU combination packs without changing the s
   assert.match(skuItem.prompt, /The final SKU image must show exactly 5 complete visible product units/);
   assert.match(skuItem.prompt, /Do not output one enlarged product unit when the requested combination count is 5/);
   assert.match(skuItem.prompt, /copying and arranging the supplied main SKU subject/);
-  assert.match(skuItem.prompt, /Do not change any individual copy's shape, proportions, colors, materials, markings, labels, printed text, hooks, hardware, logo, or visible structure/);
+  assert.match(skuItem.prompt, /Do not change any individual copy's shape, proportions, colors, materials, intrinsic markings, product-surface logos or model identifiers, hooks, hardware, or visible structure/);
   assert.match(skuItem.prompt, /do not introduce a second distinct SKU/);
 });
 
@@ -1241,11 +1423,28 @@ test("creation planner normalizes supported scenario and image count options", (
   assert.equal(normalizeCreationImageCount("8"), 8);
   assert.equal(normalizeCreationImageCount("10"), 10);
   assert.equal(normalizeCreationImageCount("12"), 12);
-  assert.equal(normalizeCreationImageCount("99"), 4);
+  assert.equal(normalizeCreationImageCount("14"), 14);
+  assert.equal(normalizeCreationImageCount("16"), 16);
+  assert.equal(normalizeCreationImageCount("18"), 18);
+  assert.equal(normalizeCreationImageCount("99"), 10);
   assert.equal(normalizeCreationScenario("social-seeding").value, "social-seeding");
   assert.equal(normalizeCreationScenario("livestream").value, "livestream");
   assert.equal(normalizeCreationScenario("gift-guide").value, "gift-guide");
   assert.equal(normalizeCreationScenario("unknown").value, "standard");
+});
+
+test("creation planner supports full eighteen-image suites", () => {
+  const plan = buildCreationPlan({
+    productName: "Modular desk lamp",
+    productDescription: "LED desk lamp with adjustable arm, USB-C power, replaceable diffuser, compatibility notes, care card, brand story, and certification proof.",
+    sellingPoints: "stable clamp, three brightness levels, replaceable diffuser, easy cleaning, tested wiring, workshop-built hinge",
+    targetLanguage: "en",
+    imageCount: "18",
+  });
+
+  assert.equal(plan.imageCount, 18);
+  assert.equal(plan.items.length, 18);
+  assert.deepEqual(plan.items.map((item) => item.role), CREATION_ITEM_ROLES.map((role) => role.role));
 });
 
 test("creation planner injects reference image role guidance", () => {
@@ -1275,7 +1474,7 @@ test("creation planner injects reference image role guidance", () => {
   assert.equal(plan.referenceImageRoles.length, 4);
   assert.ok(plan.items.every((item) => item.prompt.includes("Reference image roles:")));
   assert.ok(plan.items.every((item) => item.prompt.includes("front.png = product subject")));
-  assert.ok(plan.items.every((item) => item.prompt.includes("box.png = package and included items")));
+  assert.ok(plan.items.every((item) => item.prompt.includes("box.png = package-list content and included items")));
   assert.ok(plan.items.every((item) => item.prompt.includes("texture.png = material and close-up detail")));
 });
 
@@ -1315,6 +1514,27 @@ test("creation reference analysis normalizes role suggestions and prompt notes",
   assert.deepEqual(analysis.risks, ["包装信息不足"]);
   assert.ok(plan.items.every((item) => item.prompt.includes("texture.png = material and close-up detail")));
   assert.ok(plan.items.every((item) => item.prompt.includes("Analyst note: 磨砂纹理和边缘细节")));
+});
+
+test("creation reference analysis keeps twelve reference role suggestions", () => {
+  const referenceRoles = Array.from({ length: 12 }, (_, index) => ({
+    index: index + 1,
+    filename: `reference-${index + 1}.png`,
+    role: index % 2 === 0 ? "product" : "scene",
+    note: `Reference note ${index + 1}`,
+  }));
+  const analysis = normalizeCreationReferenceAnalysis(
+    {
+      summary: "Twelve ecommerce references.",
+      reference_roles: referenceRoles,
+      risks: [],
+    },
+    referenceRoles.map((entry) => entry.filename),
+  );
+
+  assert.equal(analysis.recommendations.length, 12);
+  assert.equal(analysis.recommendations[11].index, 12);
+  assert.equal(analysis.recommendations[11].filename, "reference-12.png");
 });
 
 test("creation reference analysis classifies size-spec references as dimensions instead of product", () => {

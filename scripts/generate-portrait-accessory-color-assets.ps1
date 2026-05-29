@@ -2,6 +2,12 @@ Add-Type -AssemblyName System.Drawing
 
 $json = node --input-type=module -e "import { DEFAULT_PORTRAIT_ACCESSORY_ASSETS } from './lib/portrait-accessory-assets.mjs'; console.log(JSON.stringify(DEFAULT_PORTRAIT_ACCESSORY_ASSETS.filter((a) => a.colors).map(({ id, category, colors }) => ({ id, category, colors }))));"
 $assets = $json | ConvertFrom-Json
+$classicAssetIds = @(
+  'upper-minimal-tee', 'upper-white-shirt', 'upper-tube-top', 'upper-knit-shrug',
+  'bottom-straight-trousers', 'bottom-blue-jeans', 'bottom-tailored-trousers', 'bottom-capri-pants',
+  'shoes-white-sneakers', 'shoes-skate-sneakers', 'shoes-black-loafers', 'shoes-high-heels'
+)
+$assets = $assets | Where-Object { $classicAssetIds -contains $_.id }
 $outDir = Join-Path (Get-Location) 'public\assets\portrait-accessories'
 
 $colorMap = @{

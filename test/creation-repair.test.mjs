@@ -186,6 +186,38 @@ test("creation repair rebuilds targeted prompts when current visual language dif
   assert.doesNotMatch(item.prompt, /polished commercial lighting/);
 });
 
+test("creation repair treats current selling point input as a planning override", () => {
+  const set = {
+    productName: "Jointed fishing lure",
+    productDescription: "Segmented lifelike lure for bass fishing",
+    sellingPoints: ["old swim action"],
+    targetLanguage: "en",
+    imageCount: 1,
+    scenario: "standard",
+    visualLanguage: "classic-commercial",
+    industryTemplate: "general",
+    selectedRoles: ["hero"],
+    items: [
+      {
+        itemId: "1-hero",
+        slotIndex: 1,
+        role: "hero",
+        title: "Hero image",
+        prompt: "Old hero prompt with the old swim action.",
+        status: "completed",
+      },
+    ],
+  };
+
+  assert.equal(hasCreationRepairPlanningOverride(set, { sellingPoints: "new silent rattle chamber" }), true);
+
+  const plan = buildCreationRepairPlan(set, { sellingPoints: "new silent rattle chamber" });
+  const [item] = refreshCreationRepairItemsFromPlan(set.items, plan);
+
+  assert.match(item.prompt, /new silent rattle chamber/);
+  assert.doesNotMatch(item.prompt, /Old hero prompt/);
+});
+
 test("creation repair rehydrates SKU subject metadata from legacy set manifests", () => {
   const items = hydrateCreationRepairSkuSubjects(
     [

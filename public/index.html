@@ -65,7 +65,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260527-density-overlap-1" />
+    <link rel="stylesheet" href="./styles.css?v=20260528-creation-sku-rule-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -1007,7 +1007,7 @@
                     <div>
                       <span>套图参考图</span>
                     </div>
-                    <small id="creationReferenceCount">0 / 9</small>
+                    <small id="creationReferenceCount">0 / 12</small>
                   </div>
                   <label class="reference-dropzone creation-reference-dropzone" id="creationReferenceDropzone">
                     <input id="creationReferenceInput" name="creationReferenceImages" type="file" accept="image/*" multiple />
@@ -1143,8 +1143,11 @@
                       <option value="4">4 张</option>
                       <option value="6">6 张</option>
                       <option value="8">8 张</option>
-                      <option value="10">10 张</option>
+                      <option value="10" selected>10 张</option>
                       <option value="12">12 张</option>
+                      <option value="14">14 张</option>
+                      <option value="16">16 张</option>
+                      <option value="18">18 张</option>
                     </select>
                   </label>
 
@@ -1221,7 +1224,17 @@
                     </select>
                   </label>
 
-                  <label class="creation-listing-toggle" data-creation-set-only>
+                  <label class="compact-field creation-sku-generation-rule-field" data-creation-set-only>
+                    <span>SKU 生成规则</span>
+                    <select id="creationSkuGenerationRuleInput" name="skuGenerationRule">
+                      <option value="none" selected>无</option>
+                      <option value="package-list">添加包装清单</option>
+                      <option value="dimensions">添加尺寸</option>
+                      <option value="package-list-dimensions">添加包装清单和尺寸</option>
+                    </select>
+                  </label>
+
+                  <label class="creation-listing-toggle is-prominent" data-creation-set-only>
                     <input id="creationListingAgentEnabledInput" type="checkbox" />
                     <span>生成后自动撰写 Amazon Listing</span>
                   </label>
@@ -1271,7 +1284,7 @@
                     <div>
                       <span>图片类型</span>
                     </div>
-                    <small id="creationRoleCount">4 / 12</small>
+                    <small id="creationRoleCount">10 / 18</small>
                   </div>
                   <div class="creation-role-grid" id="creationRoleGrid"></div>
                 </section>
@@ -1337,11 +1350,11 @@
 
                 <div class="portrait-reference-block">
                   <div class="field-head portrait-accessory-head">
-                    <div>
+                    <div class="portrait-accessory-title">
                       <span>服装道具配饰参考图</span>
+                      <small id="portraitAccessoryReferenceCount">0 / 9</small>
                     </div>
                     <div class="portrait-accessory-head-actions">
-                      <small id="portraitAccessoryReferenceCount">0 / 9</small>
                       <button
                         class="mini-action portrait-accessory-asset-button"
                         id="portraitAccessoryAssetButton"
@@ -1390,6 +1403,35 @@
                   <span>数量</span>
                   <input id="portraitImageCountInput" name="imageCount" type="number" min="1" max="100" value="12" />
                 </label>
+
+                <section class="portrait-location-section" aria-label="地点写真">
+                  <div class="field-head portrait-location-head">
+                    <label class="portrait-location-toggle">
+                      <input id="portraitLocationEnabledInput" name="portraitLocationEnabled" type="checkbox" />
+                      <span>地点写真</span>
+                    </label>
+                    <small id="portraitLocationSourceText">全国省市区镇</small>
+                  </div>
+                  <div class="portrait-location-grid">
+                    <label class="compact-field">
+                      <span>省份</span>
+                      <select id="portraitLocationProvinceInput" name="portraitLocationProvince"></select>
+                    </label>
+                    <label class="compact-field">
+                      <span>城市</span>
+                      <select id="portraitLocationCityInput" name="portraitLocationCity"></select>
+                    </label>
+                    <label class="compact-field">
+                      <span>区县</span>
+                      <select id="portraitLocationDistrictInput" name="portraitLocationDistrict"></select>
+                    </label>
+                    <label class="compact-field">
+                      <span>乡镇</span>
+                      <select id="portraitLocationTownInput" name="portraitLocationTown"></select>
+                    </label>
+                  </div>
+                  <p class="portrait-location-feature" id="portraitLocationFeatureText"></p>
+                </section>
 
                 <section class="portrait-style-section" aria-label="写真风格">
                   <div class="field-head">
@@ -1941,7 +1983,6 @@
                 </label>
                 <span class="count-pill" id="creationRecordCount">0 套</span>
                 <button class="toolbar-button" id="creationRecordOpenFolderButton" type="button" disabled>打开套图文件夹</button>
-                <button class="toolbar-button" id="creationRecordCopyPathsButton" type="button" disabled>复制相对路径</button>
                 <button class="toolbar-button" id="creationRecordCopyFullPathsButton" type="button" disabled>复制完整路径</button>
                 <div class="creation-record-export-actions">
                   <button class="toolbar-button" id="creationRecordCopyPromptsButton" type="button" disabled>复制提示词</button>
@@ -2335,6 +2376,6 @@
       </div>
     </aside>
 
-    <script type="module" src="./app.js?v=20260527-density-overlap-1"></script>
+    <script type="module" src="./app.js?v=20260528-creation-sku-rule-1"></script>
   </body>
 </html>

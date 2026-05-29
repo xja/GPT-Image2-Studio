@@ -29,7 +29,6 @@ export function syncCreationReferenceVisualLanguageButton({
   currentValue = "classic-commercial",
   dirty = false,
   running = false,
-  generating = false,
   normalizeVisualLanguage = (value) => String(value || "classic-commercial"),
 } = {}) {
   if (!button) return null;
@@ -38,7 +37,7 @@ export function syncCreationReferenceVisualLanguageButton({
   const suggestedVisualLanguage = normalizeVisualLanguage(analysis?.visualLanguage || "classic-commercial");
   const alreadyUsingSuggestion = currentVisualLanguage === suggestedVisualLanguage;
   button.classList.toggle("hidden", !analysis);
-  button.disabled = !analysis || alreadyUsingSuggestion || dirty || running || generating;
+  button.disabled = !analysis || alreadyUsingSuggestion || dirty || running;
   button.textContent = alreadyUsingSuggestion ? "已是建议视觉语言" : "应用视觉语言";
   return { alreadyUsingSuggestion, currentVisualLanguage, suggestedVisualLanguage };
 }

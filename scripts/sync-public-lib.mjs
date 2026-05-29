@@ -9,12 +9,14 @@ const publicLibDir = join(rootDir, "public", "lib");
 
 export const PUBLIC_LIB_SYNC_TARGETS = [
   "api-contract.mjs",
+  "api-base-url.mjs",
   "aspect-ratios.mjs",
   "browser-config.mjs",
   "browser-image-cache.mjs",
   "config-model-picker.mjs",
   "creation-auto-repair.mjs",
   "creation-category-templates.mjs",
+  "creation-item-repair-queue.mjs",
   "creation-logo-library.mjs",
   "creation-reference-analysis-view.mjs",
   "creation-listing-view.mjs",
@@ -33,6 +35,8 @@ export const PUBLIC_LIB_SYNC_TARGETS = [
   "preview-loading-shell.mjs",
   "preview-placeholder-state.mjs",
   "portrait-accessory-assets.mjs",
+  "portrait-location-presets.mjs",
+  "portrait-location-selector.mjs",
   "ppt-analysis-client.mjs",
   "ppt-record-links.mjs",
   "reference-analysis-language.mjs",

@@ -21,6 +21,15 @@ export function getSelectedCreationQueueJob(creationState = {}) {
   );
 }
 
+export function getCreationRepairTargetSet(creationState = {}, currentSet = null, normalizeSet) {
+  const selectedJob = getSelectedCreationQueueJob(creationState);
+  const targetSet = selectedJob?.set || currentSet;
+  if (!targetSet) {
+    return null;
+  }
+  return typeof normalizeSet === "function" ? normalizeSet(targetSet) : targetSet;
+}
+
 export function syncActiveCreationQueueSet(creationState = {}, set, normalizeSet) {
   const activeQueueId = creationState.activeQueueId;
   if (!set || typeof normalizeSet !== "function") {
@@ -148,6 +157,7 @@ export function buildCreationQueuedSet({
   getCreationSelectedLanguage,
   getCreationSelectedRoles,
   getCreationSelectedScenario,
+  getCreationSelectedSkuGenerationRule,
   isCreationDraftSet,
   normalizeCreationSkuBundleCountForPayload,
   normalizeCreationVisualLanguage,
@@ -162,6 +172,10 @@ export function buildCreationQueuedSet({
   const draftItems = draftSet?.items?.length ? draftSet.items : null;
   const scenario = getCreationSelectedScenario();
   const industryTemplate = getCreationSelectedIndustryTemplate();
+  const skuGenerationRule =
+    typeof getCreationSelectedSkuGenerationRule === "function"
+      ? getCreationSelectedSkuGenerationRule()
+      : { value: "none", label: "无" };
   const previewSlots = getCreationPreviewSlots();
   const selectedRoles = getCreationSelectedRoles();
   const imageCount = draftItems?.length || selectedRoles.length || previewSlots.length || getCreationSelectedImageCount();
@@ -194,6 +208,8 @@ export function buildCreationQueuedSet({
     referenceImageRoles: buildCreationReferenceRolePayload(),
     skuSubjects,
     skuBundleCount: normalizeCreationSkuBundleCountForPayload(refs.creationSkuBundleCountInput?.value || "1"),
+    skuGenerationRule: skuGenerationRule.value || "none",
+    skuGenerationRuleLabel: skuGenerationRule.label || "无",
     logo: getCreationLogoPayload(),
     createdAt,
     updatedAt: createdAt,
@@ -245,7 +261,7 @@ export function renderCreationQueueStrip({
     status.textContent = getCreationQueueStatusText(job, isActive);
 
     const meta = document.createElement("small");
-    meta.textContent = `${progress.completed}/${progress.total} · ${formatClock(job.createdAt || set.createdAt)}`;
+    meta.textContent = `${progress.completed}/${progress.total}`;
 
     button.append(label, status, meta);
     strip.appendChild(button);

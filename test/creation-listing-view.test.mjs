@@ -156,8 +156,14 @@ test("English listing view strips legacy Chinese from public copy fields", () =>
   const draft = normalizeCreationListingDraftForView({
     language: "en-US",
     title: "1 Pack 13cm 路亚硬饵 Product Listing Draft",
-    sellingPoints: ["路亚硬饵 listing draft for US marketplace review."],
-    painPoints: ["Helps shoppers compare product variants."],
+    sellingPoints: [
+      "路亚硬饵 listing draft for US marketplace review.",
+      "Provided product attributes are converted into searchable copy.",
+    ],
+    painPoints: [
+      "Helps shoppers compare product variants.",
+      "Sellers often struggle; this draft maps specs into shopper-ready language.",
+    ],
     fiveBullets: [
       "1 Pack 13cm format keeps quantity visible.",
       "Includes 3 selectable SKU variants: 银蓝鳞纹橙红尾电动仿生鱼饵, 黄绿黑斑电动仿生鱼饵.",
@@ -190,7 +196,9 @@ test("English listing view strips legacy Chinese from public copy fields", () =>
 
   assert.doesNotMatch(publicText, /[\u3400-\u9fff]/u);
   assert.doesNotMatch(draft.fiveBullets.join("\n"), /:\s*[,，]/u);
-  assert.equal(buildCreationListingFieldCopyText(draft.title), "1 Pack 13cm Product Listing Draft");
+  assert.doesNotMatch(publicText, /Listing Draft|listing draft/i);
+  assert.doesNotMatch(publicText, /Provided product attributes|Sellers often struggle|this draft|Keyword structure|Five-bullet layout|searchable copy/i);
+  assert.equal(buildCreationListingFieldCopyText(draft.title), "1 Pack 13cm Product");
   assert.equal(draft.zhDisplay.title, "路亚硬饵");
   assert.doesNotMatch(buildCreationRecordListingText({ listingDrafts: [draft] }), /路亚|银蓝|黄绿|硬饵/u);
 });
@@ -262,7 +270,7 @@ test("rendered listing panel recognizes concurrent generating set ids", () => {
   assert.equal(root.children[0].textContent, "正在生成 Listing 草稿...");
 });
 
-test("rendered listing fields show separate English and Chinese character counts", () => {
+test("rendered public listing fields show UI-only Chinese reference text", () => {
   const previousDocument = globalThis.document;
   const root = makeFakeElement("div");
   globalThis.document = {
@@ -279,9 +287,29 @@ test("rendered listing fields show separate English and Chinese character counts
           language: "en-US",
           title: "Mini Rod",
           sellingPoints: ["Casts far"],
+          painPoints: ["Hard to compare rods"],
+          fiveBullets: ["Mini Rod keeps size clear"],
+          description: "Mini rod option for compact fishing kits.",
+          backendSearchTerms: "mini rod compact fishing",
+          keywordBuckets: {
+            exact: ["mini rod"],
+            longTail: ["mini fishing rod"],
+            traffic: ["compact fishing kit"],
+            descriptive: ["portable rod"],
+          },
           zhDisplay: {
             title: "迷你鱼竿",
             sellingPoints: ["抛投更远"],
+            painPoints: ["鱼竿不易比较"],
+            fiveBullets: ["尺寸信息清楚"],
+            description: "适合紧凑钓具套装。",
+            backendSearchTerms: "迷你 鱼竿 便携",
+            keywordBuckets: {
+              exact: ["迷你鱼竿"],
+              longTail: ["迷你钓鱼竿"],
+              traffic: ["紧凑钓具套装"],
+              descriptive: ["便携鱼竿"],
+            },
           },
         }],
       },
@@ -293,21 +321,81 @@ test("rendered listing fields show separate English and Chinese character counts
   const countNodes = collectFakeElements(root, (node) => (
     String(node.className || "").split(/\s+/).includes("creation-listing-character-counts")
   ));
-  const countTexts = countNodes.map((node) => getFakeTextContent(node));
-
-  assert.ok(countTexts.includes("英文字符 8中文字符 4"));
-  assert.ok(countTexts.includes("英文字符 9中文字符 4"));
-  assert.ok(countNodes.some((node) => node.children?.[0]?.className === "creation-listing-character-count english"));
-  assert.ok(countNodes.some((node) => node.children?.[1]?.className === "creation-listing-character-count chinese"));
-
-  const [bucketField] = collectFakeElements(root, (node) => (
-    String(node.className || "").split(/\s+/).includes("creation-listing-buckets")
+  const fields = collectFakeElements(root, (node) => (
+    String(node.className || "").split(/\s+/).includes("creation-listing-field")
   ));
+  const fieldByLabel = (label) => fields.find((field) => field.children?.[0]?.children?.[0]?.textContent === label);
+  const titleField = fieldByLabel("标题");
+  const sellingField = fieldByLabel("卖点");
+  const painField = fieldByLabel("痛点");
+  const bulletField = fieldByLabel("五点描述");
+  const descriptionField = fieldByLabel("描述");
+  const backendField = fieldByLabel("后台搜索词");
+  const bucketField = fieldByLabel("关键词分组");
+  const titleText = getFakeTextContent(titleField);
+  const sellingText = getFakeTextContent(sellingField);
+  const copyData = root.querySelectorAll("[data-creation-listing-copy-text]")
+    .map((button) => button.dataset.creationListingCopyText)
+    .join("\n");
+
+  assert.match(titleText, /英文字符 8/u);
+  assert.match(titleText, /中文字符 4/u);
+  assert.match(titleText, /迷你鱼竿/u);
+  assert.match(sellingText, /英文字符 9/u);
+  assert.match(sellingText, /抛投更远/u);
+  assert.match(getFakeTextContent(painField), /鱼竿不易比较/u);
+  assert.match(getFakeTextContent(bulletField), /尺寸信息清楚/u);
+  assert.match(getFakeTextContent(descriptionField), /适合紧凑钓具套装。/u);
+  assert.match(getFakeTextContent(backendField), /迷你 鱼竿 便携/u);
+  assert.match(getFakeTextContent(bucketField), /精准关键词: 迷你鱼竿/u);
+  assert.match(getFakeTextContent(bucketField), /长尾关键词: 迷你钓鱼竿/u);
+  assert.doesNotMatch(copyData, /迷你鱼竿|抛投更远|紧凑钓具/u);
+  assert.ok(countNodes.some((node) => node.children?.[0]?.className === "creation-listing-character-count english"));
   const [bucketCounts] = collectFakeElements(bucketField, (node) => (
     String(node.className || "").split(/\s+/).includes("creation-listing-character-counts")
   ));
 
-  assert.equal(getFakeTextContent(bucketCounts), "英文字符 0中文字符 0");
+  assert.match(getFakeTextContent(bucketCounts), /英文字符 55/u);
+  assert.match(getFakeTextContent(bucketCounts), /中文字符 19/u);
+});
+
+test("rendered failed listing drafts show a clear rewrite notice", () => {
+  const previousDocument = globalThis.document;
+  const root = makeFakeElement("div");
+  globalThis.document = {
+    createElement: makeFakeElement,
+  };
+
+  try {
+    renderCreationListingDrafts({
+      refs: { creationRecordListingDrafts: root },
+      state: {},
+      set: {
+        setId: "set-listing-failed",
+        listingDrafts: [{
+          language: "en-US",
+          status: "failed",
+          title: "1 Pack First Aid Kit",
+          sellingPoints: ["Compact first aid kit for home and travel storage."],
+          painPoints: ["Loose supplies can be hard to find."],
+          fiveBullets: [
+            "1 Pack First Aid Kit keeps the offer clear.",
+            "Compact kit format supports home and travel storage.",
+            "Clear option names help shoppers compare choices.",
+            "Product wording focuses on visible attributes.",
+            "Conservative wording avoids unsupported claims.",
+          ],
+          description: "First Aid Kit option for home and travel.",
+          backendSearchTerms: "first aid kit home travel compact",
+        }],
+      },
+    });
+  } finally {
+    globalThis.document = previousDocument;
+  }
+
+  assert.match(getFakeTextContent(root), /Listing 生成失败：下方是保守占位草稿，请重写或重新生成后再发布。/u);
+  assert.ok(String(root.children[0]?.className || "").includes("is-failed"));
 });
 
 test("rendered listing warning and missing info fields show Chinese references", () => {
@@ -499,7 +587,7 @@ test("rendered listing field copy data excludes zhDisplay and Chinese labels", (
     button.dataset.creationListingCopyText,
   ]));
 
-  assert.equal(copyByLabel["标题"], "1 Pack 13cm Product Listing Draft");
+  assert.equal(copyByLabel["标题"], "1 Pack 13cm Product");
   assert.equal(
     copyByLabel["关键词分组"],
     "Long-tail keywords: fishing lure\nTraffic keywords: product listing\nDescriptive keywords: sku specific",

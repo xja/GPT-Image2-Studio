@@ -173,6 +173,20 @@ test("portrait prompts describe action references as pose-only guidance", () => 
   );
 });
 
+test("portrait prompts lock the selected action into the final pose", () => {
+  const plan = buildPortraitPlan({
+    subjectSummary: "adult subject in a tailored black suit",
+    imageCount: 1,
+    selectedActions: ["looking-back"],
+  });
+
+  assert.equal(plan.items[0].action, "looking-back");
+  assert.match(plan.items[0].prompt, /ACTION LOCK/i);
+  assert.match(plan.items[0].prompt, /selected action above is mandatory/i);
+  assert.match(plan.items[0].prompt, /looking-back over-the-shoulder gesture/i);
+  assert.match(plan.items[0].prompt, /must not replace it with a neutral standing pose/i);
+});
+
 test("portrait prompts make supplied wardrobe references mandatory outfit locks", () => {
   const plan = buildPortraitPlan({
     subjectSummary: "adult subject with short dark hair",
@@ -201,4 +215,25 @@ test("portrait planner uses only selected shot types when provided", () => {
     ["close-up", "extreme-close-up", "close-up", "extreme-close-up", "close-up"],
   );
   assert.deepEqual(plan.selectedShotTypes, ["close-up", "extreme-close-up"]);
+});
+
+test("portrait planner injects selected location cues into every prompt", () => {
+  const plan = buildPortraitPlan({
+    subjectSummary: "adult subject in a linen travel outfit",
+    imageCount: 2,
+    selectedStyles: ["outdoor-travel"],
+    locationSelection: {
+      enabled: true,
+      province: { name: "浙江省", code: "33" },
+      city: { name: "杭州市", code: "330100000000" },
+      district: { name: "西湖区", code: "330106000000" },
+      town: { name: "灵隐街道", code: "330106002000" },
+    },
+  });
+
+  assert.equal(plan.locationName, "浙江省 · 杭州市 · 西湖区 · 灵隐街道");
+  assert.match(plan.locationPrompt, /杭州西湖茶景|Selected location portrait setting/);
+  assert.match(plan.items[0].prompt, /LOCATION LOCK/);
+  assert.match(plan.items[0].prompt, /Longjing tea mood|lake mist|bamboo shadows/i);
+  assert.match(plan.items[1].prompt, /浙江省 · 杭州市 · 西湖区 · 灵隐街道/);
 });

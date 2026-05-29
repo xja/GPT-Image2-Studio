@@ -11,6 +11,11 @@ test("model list client appends models to a configured v1 base URL", () => {
   assert.equal(buildModelsEndpoint("https://example.test/v1/"), "https://example.test/v1/models");
 });
 
+test("model list client appends v1 when the configured base URL omits it", () => {
+  assert.equal(buildModelsEndpoint("https://example.test"), "https://example.test/v1/models");
+  assert.equal(buildModelsEndpoint("https://example.test/openai"), "https://example.test/openai/v1/models");
+});
+
 test("model list client fetches model ids with bearer auth", async () => {
   const seenRequests = [];
   const models = await fetchAvailableModels({

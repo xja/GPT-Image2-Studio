@@ -54,6 +54,7 @@ import {
 import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
 import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
 import { fetchAvailableModels } from "./lib/model-list-client.mjs";
+import { normalizeApiBaseUrl } from "./lib/api-base-url.mjs";
 import { runWithConcurrency } from "./lib/limited-concurrency.mjs";
 import {
   CREATION_REFERENCE_ANALYSIS_MODE,
@@ -268,7 +269,7 @@ function normalizeReasoningEffort(value, fallback = DEFAULT_REASONING_EFFORT) {
 }
 
 function normalizePrivateConfig(formData) {
-  const baseUrl = String(formData.get("baseUrl") || DEFAULT_CONFIG.baseUrl).trim();
+  const baseUrl = normalizeApiBaseUrl(formData.get("baseUrl"), { defaultBaseUrl: DEFAULT_CONFIG.baseUrl });
   const apiKey = String(formData.get("apiKey") || "").trim();
   const responsesModel = String(formData.get("responsesModel") || DEFAULT_CONFIG.responsesModel).trim();
 
@@ -774,15 +775,18 @@ function firstConfigString(values, fallback = "") {
 function buildCloudCreationListingConfig(payload = {}, env = {}) {
   const nestedConfig = payload.config && typeof payload.config === "object" ? payload.config : {};
   return {
-    baseUrl: firstConfigString(
-      [
-        payload.baseUrl,
-        nestedConfig.baseUrl,
-        env.baseUrl,
-        env.OPENAI_BASE_URL,
-        env.IMAGE_STUDIO_BASE_URL,
-      ],
-      DEFAULT_CONFIG.baseUrl,
+    baseUrl: normalizeApiBaseUrl(
+      firstConfigString(
+        [
+          payload.baseUrl,
+          nestedConfig.baseUrl,
+          env.baseUrl,
+          env.OPENAI_BASE_URL,
+          env.IMAGE_STUDIO_BASE_URL,
+        ],
+        DEFAULT_CONFIG.baseUrl,
+      ),
+      { defaultBaseUrl: DEFAULT_CONFIG.baseUrl },
     ),
     apiKey: firstConfigString([
       payload.apiKey,
@@ -1492,6 +1496,8 @@ function buildCloudCreationSet({ setId, plan, createdAt, updatedAt, status, item
     referenceImageRoles: plan.referenceImageRoles || [],
     skuSubjects: plan.skuSubjects || [],
     skuBundleCount: plan.skuBundleCount || 1,
+    skuGenerationRule: plan.skuGenerationRule || "none",
+    skuGenerationRuleLabel: plan.skuGenerationRuleLabel || "无",
     logo: plan.logo || null,
     createdAt,
     updatedAt: updatedAt || createdAt,
@@ -1537,6 +1543,8 @@ function buildPortraitPlanFromFormData(formData) {
     selectedActions: formData.get("selectedActions"),
     customStyle: formData.get("customStyle"),
     notes: formData.get("notes") || formData.get("photographyNotes"),
+    locationSelection: formData.get("portraitLocationSelection") || formData.get("locationSelection"),
+    locationPrompt: formData.get("portraitLocationPrompt") || formData.get("locationPrompt"),
     ratio: formData.get("ratio"),
     size: formData.get("size"),
     format: formData.get("format"),
@@ -1561,6 +1569,7 @@ function buildCreationPlanFromFormData(formData) {
     referenceImageRoles,
     skuSubjects: formData.get("skuSubjects"),
     skuBundleCount: formData.get("skuBundleCount"),
+    skuGenerationRule: formData.get("skuGenerationRule"),
     logoOptions: buildCreationLogoOptionsFromFormData(formData),
   });
   plan = applyCreationPlanOverrides(plan, formData.get("planOverrides"));
@@ -1688,6 +1697,9 @@ function buildCloudPortraitSet({ setId, plan, createdAt, updatedAt, status, item
     subjectName: plan.subjectName,
     subjectSummary: plan.subjectSummary,
     analysis: plan.visibleProfile,
+    locationSelection: plan.locationSelection,
+    locationName: plan.locationName,
+    locationPrompt: plan.locationPrompt,
     selectedStyles: plan.selectedStyles,
     selectedShotTypes: plan.selectedShotTypes,
     selectedActions: plan.selectedActions,
@@ -1763,6 +1775,7 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
     referenceImageRoles,
     skuSubjects: formData.get("skuSubjects"),
     skuBundleCount: formData.get("skuBundleCount"),
+    skuGenerationRule: formData.get("skuGenerationRule"),
     logoOptions: buildCreationLogoOptionsFromFormData(formData, logoImage),
   });
   const config = normalizePrivateConfig(formData);

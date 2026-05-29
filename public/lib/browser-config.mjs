@@ -1,3 +1,5 @@
+import { normalizeApiBaseUrl } from "./api-base-url.mjs";
+
 export const BROWSER_CONFIG_STORAGE_KEY = "image-studio-browser-config-v1";
 export const CLIENT_SESSION_STORAGE_KEY = "image-studio-client-session-id";
 export const DEFAULT_BROWSER_BASE_URL = "https://api.openai.com/v1";
@@ -31,7 +33,7 @@ export function maskBrowserApiKey(apiKey) {
 }
 
 export function normalizeBrowserPrivateConfig(source = {}) {
-  const baseUrl = String(source.baseUrl || DEFAULT_BROWSER_BASE_URL).trim();
+  const baseUrl = normalizeApiBaseUrl(source.baseUrl, { defaultBaseUrl: DEFAULT_BROWSER_BASE_URL });
   const apiKey = String(source.apiKey || "").trim();
   const responsesModel = String(source.responsesModel || DEFAULT_BROWSER_RESPONSES_MODEL).trim();
 

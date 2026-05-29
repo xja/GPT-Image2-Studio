@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildCreationQueuedSet,
   createCreationQueueJob,
+  getCreationRepairTargetSet,
   getPendingCreationQueueCount,
   renderCreationQueueStrip,
   scheduleCreationGenerationQueue,
@@ -93,6 +94,7 @@ test("creation suite queue builds a complete queued set from current form state"
     getCreationSelectedLanguage: () => ({ value: "en", label: "English" }),
     getCreationSelectedRoles: () => [{ itemId: "hero", role: "main" }],
     getCreationSelectedScenario: () => ({ value: "standard", label: "Standard" }),
+    getCreationSelectedSkuGenerationRule: () => ({ value: "package-list", label: "添加包装清单" }),
     isCreationDraftSet: () => false,
     normalizeCreationSkuBundleCountForPayload: (value) => Number(value),
     normalizeCreationVisualLanguage: (value) => value || "classic-commercial",
@@ -116,6 +118,8 @@ test("creation suite queue builds a complete queued set from current form state"
   assert.deepEqual(set.referenceImageNames, ["reference-a.png"]);
   assert.deepEqual(set.referenceImageRoles, [{ id: "ref-1", role: "product" }]);
   assert.deepEqual(set.skuSubjects, [{ id: "sku-a", title: "SKU A", filenames: ["sku-a.jpg"] }]);
+  assert.equal(set.skuGenerationRule, "package-list");
+  assert.equal(set.skuGenerationRuleLabel, "添加包装清单");
   assert.deepEqual(set.logo, { placement: "top-left" });
   assert.equal(set.items[0].status, "queued");
 });
@@ -226,6 +230,7 @@ test("creation suite queue renders selectable active and queued suites", () => {
     assert.equal(strip.children[1].children[0].textContent, "队列二");
     assert.equal(strip.children[1].classList.contains("is-selected"), true);
     assert.equal(strip.children[1].attributes["aria-pressed"], "true");
+    assert.equal(strip.children[1].children[2].textContent, "0/4");
     assert.equal(strip.children[2].children[0].textContent, "队列三");
     assert.equal(strip.children[2].children[1].textContent, "已完成");
   } finally {
@@ -262,6 +267,39 @@ test("creation suite queue syncs repaired sets back into matching completed queu
 
   assert.equal(creationState.queue[0].set.items[0].status, "generating");
   assert.equal(creationState.queue[0].set.items[0].error, "");
+});
+
+test("creation suite queue resolves repair target from selected queue instead of current active set", () => {
+  const currentActiveSet = {
+    setId: "set-c",
+    productName: "Queue C",
+    items: [{ itemId: "c-material", status: "failed" }],
+  };
+  const creationState = {
+    activeQueueId: "queue-c",
+    selectedQueueId: "queue-b",
+    queue: [
+      {
+        id: "queue-b",
+        status: "completed",
+        set: {
+          setId: "set-b",
+          productName: "Queue B",
+          items: [{ itemId: "b-material", status: "failed" }],
+        },
+      },
+      {
+        id: "queue-c",
+        status: "failed",
+        set: currentActiveSet,
+      },
+    ],
+  };
+
+  const target = getCreationRepairTargetSet(creationState, currentActiveSet, normalizeSet);
+
+  assert.equal(target.setId, "set-b");
+  assert.equal(target.items[0].itemId, "b-material");
 });
 
 test("creation suite queue schedules queued sets serially", async () => {

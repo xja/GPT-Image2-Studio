@@ -203,7 +203,9 @@ test("creation generation labels uploaded reference image count and file order",
     /const itemReferenceImages = buildCreationItemReferenceImages\(item,\s*referenceImages,\s*plan\.referenceImageRoles\);[\s\S]*referenceImageLabels:\s*buildCreationGenerationReferenceImageLabels\(\s*itemReferenceImages,\s*plan\.referenceImageRoles,/,
   );
   assert.match(worker, /normalizeCreationReferenceRoles\(formData\.get\("referenceImageRoles"\)\)/);
-  assert.match(worker, /referenceImageRoles,\s*\n\s*skuSubjects:\s*formData\.get\("skuSubjects"\),\s*\n\s*skuBundleCount:\s*formData\.get\("skuBundleCount"\),\s*\n\s*logoOptions:/);
+  assert.match(server, /skuGenerationRule:\s*formData\.get\("skuGenerationRule"\)/);
+  assert.match(worker, /skuGenerationRule:\s*formData\.get\("skuGenerationRule"\)/);
+  assert.match(worker, /referenceImageRoles,\s*\n\s*skuSubjects:\s*formData\.get\("skuSubjects"\),\s*\n\s*skuBundleCount:\s*formData\.get\("skuBundleCount"\),\s*\n\s*skuGenerationRule:\s*formData\.get\("skuGenerationRule"\),\s*\n\s*logoOptions:/);
 });
 
 test("creation generation keeps style references separate from subject references", async () => {
@@ -272,7 +274,7 @@ test("creation saved filenames prefer SKU filename tokens over display titles", 
   assert.doesNotMatch(worker, /sanitizeCreationFilenameToken\(item\.title \|\| item\.filenameToken/);
 });
 
-test("creation reference uploads use the dedicated nine-image limit", async () => {
+test("creation reference uploads use the dedicated twelve-image limit", async () => {
   const server = await readFile(serverPath, "utf8");
   const worker = await readFile(cloudflareWorkerPath, "utf8");
   const analyzeHandler =
@@ -401,7 +403,13 @@ test("creation repair route regenerates selected set items", async () => {
   assert.match(app, /function buildCreationPlanPreviewFormData[\s\S]*formData\.set\("visualLanguage"/);
   assert.match(app, /function buildCreationRepairFormData[\s\S]*buildCreationPlanPreviewFormData\(\)\.entries\(\)/);
   assert.match(server, /handleCreationRepair[\s\S]*visualLanguage:\s*formData\.get\("visualLanguage"\)/);
-  assert.match(server, /hasCreationRepairPlanningOverride/);
   assert.match(server, /refreshCreationRepairItemsFromPlan/);
+  assert.match(
+    server,
+    /repairPlan = buildCreationRepairPlan\(existingSet,\s*repairPlanningOverrides\);[\s\S]*repairItems = refreshCreationRepairItemsFromPlan\(repairItems,\s*repairPlan\);/,
+  );
+  const repairHandler =
+    server.match(/async function handleCreationRepair[\s\S]*?\r?\n}\r?\n\r?\nasync function handlePortraitRepair/)?.[0] || "";
+  assert.doesNotMatch(repairHandler, /hasCreationRepairPlanningOverride\(existingSet,\s*repairPlanningOverrides\) \|\| needsCreationRepairPlanRefresh\(repairItems\)/);
   assert.match(server, /writeSseEvent\(response, "repair_started"/);
 });

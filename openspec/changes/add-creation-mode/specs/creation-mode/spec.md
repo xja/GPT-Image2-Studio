@@ -12,7 +12,7 @@ The system SHALL expose Creation Mode as a separate tab under the creation works
 - **THEN** the prompt-mode activity feed and default gallery-visible history are not updated as if the images were prompt-mode single-image jobs
 
 ### Requirement: Creation Mode generates configurable ecommerce sets
-The system SHALL generate one set for one product with quick presets of 4, 6, 8, 10, or 12 ecommerce marketing roles and SHALL allow the user to customize which of the 12 image roles are generated for the current set. The system SHALL also allow the user to choose an industry template for general ecommerce, apparel, beauty, food, consumer electronics, home/living products, or a searchable fourth-level ecommerce category template. The system SHALL support a set-level visual-language selector that defaults to `classic-commercial` and keeps the generated set visually consistent across lighting, tone, material treatment, realism level, and brand atmosphere. When the user uses a preset without custom role changes and no non-general industry template is selected, the first four roles SHALL remain hero image, benefit image, lifestyle scene, and detail/trust image.
+The system SHALL generate one set for one product with quick presets of 4, 6, 8, 10, 12, 14, 16, or 18 ecommerce marketing roles and SHALL allow the user to customize which of the 18 image roles are generated for the current set, including brand story and certification/trust proof roles. The system SHALL also allow the user to choose an industry template for general ecommerce, apparel, beauty, food, consumer electronics, home/living products, or a searchable fourth-level ecommerce category template. The system SHALL support a set-level visual-language selector that defaults to `classic-commercial` and keeps the generated set visually consistent across lighting, tone, material treatment, realism level, and brand atmosphere. When the user uses a preset without custom role changes and no non-general industry template is selected, the first four roles SHALL remain hero image, benefit image, lifestyle scene, and detail/trust image.
 
 #### Scenario: User starts a creation set
 - **WHEN** the user submits product information and a target language in Creation Mode
@@ -31,7 +31,7 @@ The system SHALL generate one set for one product with quick presets of 4, 6, 8,
 #### Scenario: User adds SKU images from distinct product references
 - **WHEN** Creation reference analysis identifies distinct sellable product subjects from uploaded white-background product images
 - **THEN** the planned set appends one SKU image item for each distinct sellable product subject after the selected carousel roles
-- **AND** SKU image items do not count against the selected 4, 6, 8, 10, or 12 carousel image count
+- **AND** SKU image items do not count against the selected 4, 6, 8, 10, 12, 14, 16, or 18 carousel image count
 - **AND** accessory-only, package-only, material-only, scene, and style references do not create standalone SKU image items
 - **AND** each SKU prompt changes the background while preserving the subject shape, colors, markings, identifiers, and existing product logos
 - **AND** if the user uploaded a Logo reference, each SKU prompt also applies that supplied logo without covering existing product identifiers

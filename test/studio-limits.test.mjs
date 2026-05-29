@@ -13,6 +13,7 @@ import {
 } from "../lib/studio-constants.mjs";
 
 const appPath = new URL("../public/app.js", import.meta.url);
+const indexPath = new URL("../public/index.html", import.meta.url);
 const serverPath = new URL("../server.mjs", import.meta.url);
 
 test("studio task limits keep 25 queued tasks and allow ten parallel tasks", async () => {
@@ -25,20 +26,22 @@ test("studio task limits keep 25 queued tasks and allow ten parallel tasks", asy
   assert.match(app, /maxParallelTasksPerSession:\s*10/);
 });
 
-test("studio reference limits keep standard references at six and creation references at nine", async () => {
+test("studio reference limits keep standard references at six and creation references at twelve", async () => {
   assert.equal(MAX_REFERENCE_IMAGES, 6);
-  assert.equal(MAX_CREATION_REFERENCE_IMAGES, 9);
+  assert.equal(MAX_CREATION_REFERENCE_IMAGES, 12);
   assert.equal(MAX_CREATION_STYLE_REFERENCE_IMAGES, 3);
   assert.equal(MAX_PORTRAIT_PERSON_REFERENCE_IMAGES, 3);
   assert.equal(MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES, 9);
 
   const app = await readFile(appPath, "utf8");
+  const index = await readFile(indexPath, "utf8");
 
   assert.match(app, /maxReferenceImages:\s*6/);
-  assert.match(app, /maxCreationReferenceImages:\s*9/);
+  assert.match(app, /maxCreationReferenceImages:\s*12/);
   assert.match(app, /maxCreationStyleReferenceImages:\s*3/);
   assert.match(app, /maxPortraitPersonReferenceImages:\s*3/);
   assert.match(app, /maxPortraitAccessoryReferenceImages:\s*9/);
+  assert.match(index, /id="creationReferenceCount">0 \/ 12<\/small>/);
 });
 
 test("local server counts active generation slots per request mode", async () => {

@@ -82,7 +82,7 @@ test("creation category templates derive targeted prompt strategy for every four
   );
 });
 
-test("creation category templates search by category code and third or fourth level names only", () => {
+test("creation category templates search by category code and every category level name", () => {
   const smartphone = normalizeCreationIndustryTemplate("category:C06-001-001-001");
 
   const byLevel4Name = searchCreationIndustryTemplates(smartphone.level4Name, { limit: 5, includeBase: false });
@@ -91,18 +91,25 @@ test("creation category templates search by category code and third or fourth le
   const byLevel3Name = searchCreationIndustryTemplates(smartphone.level3Name, { limit: 20, includeBase: false });
   assert.ok(byLevel3Name.some((template) => template.value === smartphone.value));
 
+  const byLevel2Name = searchCreationIndustryTemplates(smartphone.level2Name, { limit: 60, includeBase: false });
+  assert.ok(byLevel2Name.some((template) => template.value === smartphone.value));
+  assert.ok(byLevel2Name.every((template) => template.level2Name === smartphone.level2Name));
+
+  const byLevel1Name = searchCreationIndustryTemplates(smartphone.level1Name, { limit: 120, includeBase: false });
+  assert.ok(byLevel1Name.some((template) => template.value === smartphone.value));
+  assert.ok(byLevel1Name.every((template) => template.level1Name === smartphone.level1Name));
+
   const byCode = searchCreationIndustryTemplates(smartphone.code, { limit: 5, includeBase: false });
   assert.equal(byCode.length, 1);
   assert.equal(byCode[0].label, smartphone.label);
 
-  assert.deepEqual(searchCreationIndustryTemplates(smartphone.level1Name, { limit: 20, includeBase: false }), []);
-  assert.deepEqual(searchCreationIndustryTemplates(smartphone.level2Name, { limit: 20, includeBase: false }), []);
-  assert.deepEqual(
-    searchCreationIndustryTemplates(`${smartphone.level1Name} ${smartphone.level2Name}`, {
-      limit: 20,
-      includeBase: false,
-    }),
-    [],
+  const byParentPath = searchCreationIndustryTemplates(`${smartphone.level1Name} ${smartphone.level2Name}`, {
+    limit: 60,
+    includeBase: false,
+  });
+  assert.ok(
+    byParentPath.some((template) => template.value === smartphone.value),
+    "combined parent category keywords should search across all category levels",
   );
 });
 

@@ -589,17 +589,17 @@ test("creation listing endpoint merges drafts into latest manifest after upstrea
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({
       output_text: JSON.stringify({
-        title: "1 Pack 3.5 in Blue Fishing Lure for Bass",
+        title: "1 Pack Blue Fishing Lure for Bass 8.89 cm (3.5 in)",
         sellingPoints: ["Blue profile helps organize fishing lure variants."],
-        painPoints: ["Reduces guesswork when selecting a compact lure color."],
+        painPoints: ["Flat lure movement can be ignored in stained water; the blue profile helps the bait stay noticeable."],
         fiveBullets: [
-          "1 Pack 3.5 in size keeps quantity and dimensions visible.",
-          "Blue lure profile supports clear SKU identification.",
-          "Compact design works for bass fishing presentations.",
-          "Product details are based on provided inputs and SKU metadata.",
-          "Keyword-focused copy keeps listing language concise.",
+          "CORE VALUE: 1 Pack 8.89 cm (3.5 in) size keeps quantity and dimensions visible.",
+          "BUILT TO LAST: Blue lure profile supports clear SKU identification.",
+          "REAL-LIFE USE: Compact design works for bass fishing presentations.",
+          "SIZE & FIT: Compact profile keeps size and color details easy to compare.",
+          "PACKAGE SNAPSHOT: Keyword-focused copy keeps listing language concise.",
         ],
-        description: "Blue fishing lure listing draft for US marketplace review.",
+        description: "Blue fishing lure option for US marketplace shoppers comparing compact freshwater tackle.",
         backendSearchTerms: "blue fishing lure bass bait compact lure",
         keywordBuckets: {
           exact: ["blue fishing lure"],

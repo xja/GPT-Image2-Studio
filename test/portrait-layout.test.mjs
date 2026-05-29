@@ -6,6 +6,7 @@ const indexPath = new URL("../public/index.html", import.meta.url);
 const stylesPath = new URL("../public/styles.css", import.meta.url);
 const appPath = new URL("../public/app.js", import.meta.url);
 const accessoryAssetsPath = new URL("../lib/portrait-accessory-assets.mjs", import.meta.url);
+const locationSelectorPath = new URL("../lib/portrait-location-selector.mjs", import.meta.url);
 
 test("portrait mode has independent navigation, routes and DOM refs", async () => {
   const html = await readFile(indexPath, "utf8");
@@ -102,6 +103,30 @@ test("portrait workbench supports shot and action filters, full ratio set, loadi
   assert.match(app, /refs\.portraitDetail\.hidden = true/);
 });
 
+test("portrait mode adds location portrait province city district town controls", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+  const locationSelector = await readFile(locationSelectorPath, "utf8");
+
+  assert.match(html, /id="portraitLocationEnabledInput"[\s\S]*地点写真/);
+  assert.match(html, /id="portraitLocationProvinceInput"[\s\S]*id="portraitLocationCityInput"[\s\S]*id="portraitLocationDistrictInput"[\s\S]*id="portraitLocationTownInput"/);
+  assert.match(html, /id="portraitLocationFeatureText"/);
+
+  assert.match(styles, /\.portrait-location-section\s*\{/);
+  assert.match(styles, /\.portrait-location-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);/);
+  assert.match(styles, /html\[data-ui-layout="tablet"\] \.portrait-location-grid,[\s\S]*html\[data-ui-layout="mobile"\] \.portrait-location-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/);
+
+  assert.match(locationSelector, /portraitLocationEnabledInput:[\s\S]*documentRef\.querySelector\("#portraitLocationEnabledInput"\)/);
+  assert.match(app, /createPortraitLocationSelectorController/);
+  assert.match(locationSelector, /PORTRAIT_LOCATION_DATA_SOURCE/);
+  assert.match(locationSelector, /async function loadProvinces\(\)/);
+  assert.match(locationSelector, /async function loadProvinceDetail\(province\)/);
+  assert.match(app, /portraitLocationController\.appendFormData\(formData\)/);
+  assert.match(locationSelector, /formData\.set\("portraitLocationSelection", JSON\.stringify\(payload\.selection\)\)/);
+  assert.match(locationSelector, /formData\.set\("portraitLocationPrompt", payload\.prompt\)/);
+});
+
 test("portrait action selector uses local PNG preview assets", async () => {
   const standingAsset = await readFile(new URL("../public/assets/portrait-actions/action-standing.png", import.meta.url));
   const walkingAsset = await readFile(new URL("../public/assets/portrait-actions/action-walking.png", import.meta.url));
@@ -173,6 +198,10 @@ test("portrait accessory asset library inserts real image assets into accessory 
 
   assert.match(html, /id="portraitAccessoryAssetButton"/);
   assert.match(html, /id="portraitAccessoryAssetPopover"/);
+  assert.match(
+    html,
+    /<div class="portrait-accessory-title">[\s\S]*服装道具配饰参考图[\s\S]*id="portraitAccessoryReferenceCount">0 \/ 9[\s\S]*<\/div>[\s\S]*<div class="portrait-accessory-head-actions">[\s\S]*id="portraitAccessoryAssetButton"/,
+  );
   assert.match(app, /from "\/lib\/portrait-accessory-assets\.mjs/);
   assert.match(app, /accessoryAssetColors:\s*\{\}/);
   assert.match(app, /data-portrait-accessory-color-id/);
@@ -183,7 +212,7 @@ test("portrait accessory asset library inserts real image assets into accessory 
   assert.match(assetModule, /value:\s*"accessory",\s*label:\s*"配饰"/);
   assert.match(assetModule, /value:\s*"hat",\s*label:\s*"帽子"/);
   assert.match(assetModule, /value:\s*"cosplay",\s*label:\s*"COS"/);
-  assert.match(assetModule, /asset\("bag-tote",\s*"bag",\s*"托特包"\)/);
+  assert.match(assetModule, /asset\("bag-tote",\s*"bag",\s*"托特包"[\s\S]*colors:\s*colorSet\("bag-tote"/);
   assert.match(assetModule, /asset\("cosplay-shrine-miko",\s*"cosplay",\s*"巫女COS"[\s\S]*prompt:\s*"[^"]*cosplay portrait[^"]*costume[^"]*props/);
   assert.match(assetModule, /asset\("cosplay-magical-girl",\s*"cosplay",\s*"魔法少女COS"[\s\S]*prompt:\s*"[^"]*cosplay portrait[^"]*star wand[^"]*props/);
   assert.match(assetModule, /asset\("cosplay-cyber-warrior",\s*"cosplay",\s*"赛博战士COS"[\s\S]*prompt:\s*"[^"]*cosplay portrait[^"]*armor[^"]*props/);
@@ -198,8 +227,30 @@ test("portrait accessory asset library inserts real image assets into accessory 
   assert.match(app, /formData\.set\("notes",\s*\[rawPortraitNotes,\s*getPortraitAccessoryPromptSummary\(\)\]\.filter\(Boolean\)\.join\("\\n\\n"\)\)/);
   assert.match(app, /Math\.min\(canvas\.width \/ image\.naturalWidth, canvas\.height \/ image\.naturalHeight\)/);
   assert.match(styles, /\.portrait-accessory-asset-panel\s*\{/);
+  assert.match(styles, /\.portrait-accessory-head\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto;/);
+  assert.match(styles, /\.portrait-accessory-title\s*\{[\s\S]*display:\s*grid;/);
+  assert.match(styles, /\.portrait-accessory-head-actions\s*\{[\s\S]*justify-self:\s*end;/);
+  assert.match(styles, /\.portrait-accessory-asset-button\s*\{[\s\S]*font-family:\s*"Sora",\s*"Microsoft YaHei",\s*sans-serif;[\s\S]*background:/);
+  assert.match(styles, /\.portrait-accessory-asset-panel\s*\{[\s\S]*font-family:\s*"IBM Plex Sans",\s*"Microsoft YaHei",\s*sans-serif;[\s\S]*background:/);
+  assert.match(
+    styles,
+    /:root\s*\{[\s\S]*--portrait-accessory-asset-panel-bg:\s*linear-gradient\(180deg,\s*rgba\(21,\s*28,\s*48,\s*0\.98\),\s*rgba\(13,\s*18,\s*31,\s*0\.98\)\)/,
+  );
+  assert.match(
+    styles,
+    /html\[data-theme="light"\]\s*\{[\s\S]*--portrait-accessory-asset-panel-bg:\s*linear-gradient\(180deg,\s*#fffaf1 0%,\s*#f4e7d6 52%,\s*#efe1cf 100%\);/,
+  );
+  assert.match(
+    styles,
+    /\.portrait-accessory-asset-panel\s*\{[\s\S]*right:\s*clamp\(16px,\s*3vw,\s*48px\);[\s\S]*left:\s*auto;[\s\S]*width:\s*min\(760px,\s*calc\(100vw - 32px\)\);[\s\S]*background:\s*var\(--portrait-accessory-asset-panel-bg\);/,
+  );
+  assert.match(
+    styles,
+    /html\[data-ui-layout="mobile"\] \.portrait-accessory-asset-panel\s*\{[\s\S]*left:\s*12px;[\s\S]*right:\s*12px;[\s\S]*width:\s*auto;/,
+  );
   assert.match(app, /label\.className = "portrait-accessory-asset-label"/);
-  assert.match(styles, /\.portrait-accessory-asset-list\s*\{[\s\S]*grid-auto-rows:\s*max-content;[\s\S]*align-content:\s*start;/);
+  assert.match(styles, /\.portrait-accessory-asset-panel\s*\{[\s\S]*--portrait-accessory-library-columns:\s*4;/);
+  assert.match(styles, /\.portrait-accessory-asset-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(var\(--portrait-accessory-library-columns\),\s*minmax\(0,\s*1fr\)\);[\s\S]*grid-auto-rows:\s*var\(--portrait-accessory-card-height\);[\s\S]*max-height:\s*calc\(\(var\(--portrait-accessory-card-height\) \* 2\) \+ var\(--portrait-accessory-asset-gap\)\);[\s\S]*overflow:\s*auto;/);
   assert.match(styles, /\.portrait-accessory-asset-item\s*\{[\s\S]*grid-template-rows:\s*auto auto;/);
   assert.match(styles, /\.portrait-accessory-asset-add\s*\{[\s\S]*grid-template-rows:\s*auto auto;/);
   assert.match(styles, /\.portrait-accessory-asset-label\s*\{[\s\S]*display:\s*block;[\s\S]*color:\s*var\(--text\);[\s\S]*white-space:\s*normal;/);

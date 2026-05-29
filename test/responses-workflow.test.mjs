@@ -6,6 +6,7 @@ import {
   buildResponsesInput,
   consumeResponsesSse,
   createResponsesRequestBody,
+  normalizeBaseUrl,
   requestImageGeneration,
 } from "../lib/responses-workflow.mjs";
 
@@ -140,6 +141,12 @@ test("createResponsesRequestBody can disable streaming for fallback requests", (
   });
 
   assert.equal(requestBody.stream, false);
+});
+
+test("normalizeBaseUrl appends v1 when the configured API URL omits it", () => {
+  assert.equal(normalizeBaseUrl("https://example.test"), "https://example.test/v1");
+  assert.equal(normalizeBaseUrl("https://example.test/openai/"), "https://example.test/openai/v1");
+  assert.equal(normalizeBaseUrl("https://example.test/openai/v1/"), "https://example.test/openai/v1");
 });
 
 test("consumeResponsesSse emits partial and final events, and tolerates terminated stream after success", async () => {

@@ -90,17 +90,17 @@ function makeGenerationQueue() {
 
 function makeListingDraft(overrides = {}) {
   return {
-    title: "1 Pack 340.19 g (12 oz) Blue Travel Bottle for Daily Hydration",
-    sellingPoints: ["Compact bottle details are written from provided product metadata."],
-    painPoints: ["Helps shoppers compare a blue bottle variant without extra guessing."],
+    title: "1 Pack Blue Travel Bottle for Daily Hydration 340.19 g (12 oz)",
+    sellingPoints: ["Compact bottle details make the blue travel option easy to compare."],
+    painPoints: ["Bulky bottles can be awkward during commutes; the compact format fits everyday hydration routines."],
     fiveBullets: [
-      "1 Pack 340.19 g (12 oz) format keeps quantity and size easy to review.",
-      "Blue bottle copy uses SKU-specific product information.",
-      "Conservative wording avoids unsupported visual claims.",
-      "Keyword structure supports US marketplace review.",
-      "Each bullet stays within the configured character limit.",
+      "CORE VALUE: 1 Pack 340.19 g (12 oz) format keeps quantity and size easy to review.",
+      "BUILT TO LAST: Blue bottle details keep the selected color easy to identify without extra claims.",
+      "REAL-LIFE USE: Daily hydration positioning supports home, office, travel, and gym routines.",
+      "SIZE & FIT: Compact bottle details keep the offer easy to compare before purchase.",
+      "PACKAGE SNAPSHOT: Concise product information keeps the draft focused on the included bottle.",
     ],
-    description: "Blue travel bottle listing draft for US marketplace review.",
+    description: "Blue travel bottle option for shoppers comparing compact daily hydration bottles.",
     backendSearchTerms: "blue travel bottle daily hydration",
     keywordBuckets: {
       exact: ["blue travel bottle"],
@@ -200,7 +200,7 @@ test("Cloudflare creation listing route uses payload API settings outside mock m
   assert.equal(seenRequests[0].auth, "Bearer payload-key");
   assert.equal(seenRequests[0].body.model, "gpt-payload");
   assert.equal(seenRequests[0].body.reasoning.effort, "high");
-  assert.equal(body.listingDrafts[0].title, "1 Pack 340.19 g (12 oz) Blue Travel Bottle for Daily Hydration");
+  assert.equal(body.listingDrafts[0].title, "1 Pack Blue Travel Bottle for Daily Hydration 340.19 g (12 oz)");
   assert.doesNotMatch(JSON.stringify(body), /payload-key/);
 });
 
@@ -621,7 +621,7 @@ test("Cloudflare portrait local record actions return unsupported capability con
   assert.equal(payload.path, "/api/portrait/sets/paths");
 });
 
-test("Cloudflare creation generation accepts nine set reference images", async () => {
+test("Cloudflare creation generation accepts twelve set reference images", async () => {
   const seenRequests = [];
   const imageBucket = makeImageBucket();
   const formData = new FormData();
@@ -639,7 +639,7 @@ test("Cloudflare creation generation accepts nine set reference images", async (
   formData.set("baseUrl", "https://example.test/v1");
   formData.set("apiKey", "test-browser-key");
   formData.set("responsesModel", "gpt-5.5");
-  for (let index = 1; index <= 9; index += 1) {
+  for (let index = 1; index <= MAX_CREATION_REFERENCE_IMAGES; index += 1) {
     formData.append("referenceImages", new File([`ref-${index}`], `ref-${index}.png`, { type: "image/png" }));
   }
 
@@ -665,8 +665,8 @@ test("Cloudflare creation generation accepts nine set reference images", async (
 
   assert.equal(response.status, 200);
   assert.equal(seenRequests.length, 1);
-  assert.equal(inputImages.length, 9);
-  assert.equal(complete.payload.set.referenceImageNames.length, 9);
+  assert.equal(inputImages.length, MAX_CREATION_REFERENCE_IMAGES);
+  assert.equal(complete.payload.set.referenceImageNames.length, MAX_CREATION_REFERENCE_IMAGES);
   assert.equal(imageBucket.objects.size, 1);
   assert.doesNotMatch(text, /参考图最多支持/);
 });
@@ -1371,7 +1371,7 @@ test("Cloudflare config endpoint never returns a saved API key", async () => {
 test("Cloudflare model list route uses browser API settings without echoing the key", async () => {
   const seenRequests = [];
   const formData = new FormData();
-  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("baseUrl", "https://example.test");
   formData.set("apiKey", "test-browser-key");
   formData.set("responsesModel", "gpt-5.5");
 

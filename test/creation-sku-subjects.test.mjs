@@ -55,6 +55,65 @@ test("creation SKU payload keeps product subjects that include size facts", () =
   assert.deepEqual(subjects.map((subject) => subject.id), ["hero-product"]);
 });
 
+test("creation SKU payload falls back to current product roles when applied analysis collapses multiple subjects", () => {
+  const subjects = buildCreationSkuSubjectsForPayload({
+    analysis: {
+      skuSubjects: [
+        {
+          id: "jointed-lure",
+          title: "分节鱼形发光路亚假饵",
+          filenames: ["blue-lure.png", "yellow-lure.png", "green-lure.png", "silver-lure.png", "detail-lure.png"],
+          note: "五张商品主体被识别为同一类路亚。",
+        },
+      ],
+    },
+    applied: true,
+    dirty: false,
+    referenceRoles: [
+      { filename: "blue-lure.png", role: "product", note: "蓝银色路亚主体。" },
+      { filename: "yellow-lure.png", role: "product", note: "黄绿色路亚主体。" },
+      { filename: "green-lure.png", role: "product", note: "绿色路亚主体。" },
+      { filename: "package-list.png", role: "package", note: "包装清单。" },
+      { filename: "silver-lure.png", role: "product", note: "银灰色路亚主体。" },
+      { filename: "usage-guide.png", role: "usage", note: "充电说明。" },
+      { filename: "size-card.png", role: "dimensions", note: "尺寸规格。" },
+      { filename: "detail-lure.png", role: "product", note: "结构细节主体。" },
+    ],
+  });
+
+  assert.deepEqual(
+    subjects.map((subject) => subject.filenames[0]),
+    ["blue-lure.png", "yellow-lure.png", "green-lure.png", "silver-lure.png", "detail-lure.png"],
+  );
+});
+
+test("creation SKU payload uses product roles when collapsed analysis only names the first subject file", () => {
+  const subjects = buildCreationSkuSubjectsForPayload({
+    analysis: {
+      skuSubjects: [
+        {
+          id: "jointed-lure",
+          title: "分节鱼形发光路亚假饵",
+          filenames: ["blue-lure.png"],
+          note: "多张商品主体被概括成一个 SKU。",
+        },
+      ],
+    },
+    applied: true,
+    dirty: false,
+    referenceRoles: [
+      { filename: "blue-lure.png", role: "product", note: "蓝银色路亚主体。" },
+      { filename: "yellow-lure.png", role: "product", note: "黄绿色路亚主体。" },
+      { filename: "green-lure.png", role: "product", note: "绿色路亚主体。" },
+    ],
+  });
+
+  assert.deepEqual(
+    subjects.map((subject) => subject.filenames[0]),
+    ["blue-lure.png", "yellow-lure.png", "green-lure.png"],
+  );
+});
+
 test("creation SKU payload fallback keeps original reference filenames as subject titles", () => {
   const subjects = buildCreationSkuSubjectsForPayload({
     referenceRoles: [

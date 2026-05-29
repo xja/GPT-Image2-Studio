@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 
+import { normalizeApiBaseUrl } from "./lib/api-base-url.mjs";
 import { DEFAULT_BASE_URL } from "./lib/studio-constants.mjs";
 
 const DEFAULT_PROMPT =
@@ -96,7 +97,7 @@ function parseArgs(argv) {
 }
 
 function normalizeBaseUrl(baseUrl) {
-  return baseUrl.replace(/\/+$/, "");
+  return normalizeApiBaseUrl(baseUrl);
 }
 
 function normalizeBase64(value) {

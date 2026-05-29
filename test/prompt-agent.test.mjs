@@ -326,7 +326,7 @@ test("prompt agent request can identify ecommerce creation reference roles", () 
   });
 
   assert.match(input[0].content[0].text, /套图参考图识别/);
-  assert.match(input[0].content[0].text, /1 到 9 张电商套图参考图/);
+  assert.match(input[0].content[0].text, /1 到 12 张电商套图参考图/);
   assert.match(input[0].content[0].text, /商品主体|包装清单|材质细节/);
   assert.match(input[0].content[0].text, /四级类目/);
   assert.deepEqual(input[0].content.slice(1), [
@@ -355,13 +355,22 @@ test("prompt agent request can identify ecommerce creation reference roles", () 
   assert.deepEqual(requestBody.text.format.schema.properties.visual_language.enum, ["classic-commercial", "reference-style"]);
   assert.ok(requestBody.text.format.schema.properties.reference_roles.items.properties.role.enum.includes("dimensions"));
   assert.ok(requestBody.text.format.schema.properties.reference_roles.items.properties.role.enum.includes("usage"));
-  assert.equal(requestBody.text.format.schema.properties.sku_subjects.maxItems, 9);
+  assert.equal(requestBody.text.format.schema.properties.reference_roles.maxItems, 12);
+  assert.equal(requestBody.text.format.schema.properties.reference_roles.items.properties.index.maximum, 12);
+  assert.equal(requestBody.text.format.schema.properties.sku_subjects.maxItems, 12);
+  assert.equal(
+    requestBody.text.format.schema.properties.sku_subjects.items.properties.reference_indexes.items.maximum,
+    12,
+  );
   assert.match(input[0].content[0].text, /dimensions/);
   assert.match(input[0].content[0].text, /role=dimensions/);
   assert.match(input[0].content[0].text, /role=usage/);
   assert.match(input[0].content[0].text, /充电指南|正负极|使用说明/);
   assert.match(input[0].content[0].text, /型号 F4J16、长度 13cm、重量 42g、钩号 2#/);
+  assert.match(input[0].content[0].text, /Treat text outside the physical product as non-subject overlay/i);
+  assert.match(input[0].content[0].text, /2025 NEW|WHITE EDIT/);
   assert.match(requestBody.text.format.schema.properties.reference_roles.items.properties.note.description, /13cm/);
+  assert.match(requestBody.text.format.schema.properties.sku_subjects.items.properties.note.description, /source-image overlay text/i);
   assert.match(input[0].content[0].text, /SKU/);
 });
 

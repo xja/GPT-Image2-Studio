@@ -19,6 +19,8 @@ test("server exposes independent portrait generation and record endpoints", asyn
   assert.match(server, /selectedActions:\s*formData\.get\("selectedActions"\)/);
   assert.match(server, /selectedShotTypes:\s*plan\.selectedShotTypes/);
   assert.match(server, /selectedActions:\s*plan\.selectedActions/);
+  assert.match(server, /locationSelection:\s*plan\.locationSelection/);
+  assert.match(server, /locationPrompt:\s*plan\.locationPrompt/);
   assert.match(server, /url\.pathname === "\/api\/portrait\/reference\/analyze"/);
   assert.match(server, /url\.pathname === "\/api\/portrait\/plan"/);
   assert.match(server, /url\.pathname === "\/api\/portrait\/generate"/);
@@ -140,6 +142,8 @@ test("cloudflare worker exposes portrait generate routes and unsupported local r
   assert.match(worker, /async function runPortraitGenerate/);
   assert.match(worker, /selectedActions:\s*formData\.get\("selectedActions"\)/);
   assert.match(worker, /selectedActions:\s*plan\.selectedActions/);
+  assert.match(worker, /portraitLocationSelection/);
+  assert.match(worker, /locationName:\s*plan\.locationName/);
   assert.match(worker, /url\.pathname === "\/api\/portrait\/reference\/analyze"/);
   assert.match(worker, /url\.pathname === "\/api\/portrait\/plan"/);
   assert.match(worker, /url\.pathname === "\/api\/portrait\/generate"/);
