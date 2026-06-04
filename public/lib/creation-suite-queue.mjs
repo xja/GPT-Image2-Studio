@@ -10,6 +10,10 @@ export function getActiveCreationQueueJob(creationState = {}) {
   return getCreationQueueJobs(creationState).find((job) => job.status === "running") || null;
 }
 
+export function getRunningCreationQueueJobs(creationState = {}) {
+  return getCreationQueueJobs(creationState).filter((job) => job.status === "running");
+}
+
 export function getSelectedCreationQueueJob(creationState = {}) {
   const queueJobs = getCreationQueueJobs(creationState);
   const selectedId = creationState.selectedQueueId || creationState.activeQueueId;
@@ -65,6 +69,7 @@ export function createCreationQueueJob({ creationState, formData, set, normalize
   const job = {
     id: idFactory("creation-queue"),
     status: "queued",
+    autoRepairAttemptCount: 0,
     createdAt: normalizedSet?.createdAt || nowIso(),
     formData,
     set: normalizedSet,
@@ -103,6 +108,42 @@ const QUEUE_NUMBER_LABELS = ["一", "二", "三", "四", "五", "六", "七", "�
 
 function cleanQueueString(value) {
   return String(value || "").trim();
+}
+
+function isUnfinishedCreationQueueItem(item = {}) {
+  const status = cleanQueueString(item.status).toLowerCase();
+  return status !== "completed" && status !== "failed";
+}
+
+function getCreationQueueJobReservedItemCount(job = {}) {
+  const items = Array.isArray(job.set?.items) ? job.set.items : [];
+  const count = items.filter(isUnfinishedCreationQueueItem).length;
+  return Math.max(1, count);
+}
+
+export function getRunningCreationQueueReservedItemCount(creationState = {}) {
+  return getRunningCreationQueueJobs(creationState).reduce((total, job) => total + getCreationQueueJobReservedItemCount(job), 0);
+}
+
+function getQueueRoleId(value) {
+  return cleanQueueString(value?.role || value);
+}
+
+function draftItemsMatchSelectedRoles(draftItems, selectedRoles) {
+  if (!Array.isArray(draftItems) || draftItems.length === 0 || !Array.isArray(selectedRoles)) {
+    return false;
+  }
+
+  const selectedRoleIds = selectedRoles.map(getQueueRoleId).filter(Boolean);
+  const draftRoleIds = draftItems
+    .map((item) => getQueueRoleId(item?.role))
+    .filter((role) => role && role !== "sku");
+
+  return (
+    selectedRoleIds.length > 0 &&
+    selectedRoleIds.length === draftRoleIds.length &&
+    selectedRoleIds.every((role, index) => role === draftRoleIds[index])
+  );
 }
 
 function formatCreationQueueLabel(index) {
@@ -178,12 +219,15 @@ export function buildCreationQueuedSet({
       : { value: "none", label: "无" };
   const previewSlots = getCreationPreviewSlots();
   const selectedRoles = getCreationSelectedRoles();
-  const imageCount = draftItems?.length || selectedRoles.length || previewSlots.length || getCreationSelectedImageCount();
+  const shouldUseDraftItems = draftItemsMatchSelectedRoles(draftItems, selectedRoles);
+  const baseSlots = shouldUseDraftItems ? draftItems : previewSlots;
+  const baseRoleCount = baseSlots.filter((item) => getQueueRoleId(item?.role) !== "sku").length;
+  const imageCount = selectedRoles.length || baseRoleCount || getCreationSelectedImageCount();
   const rawVisualLanguage = refs.creationVisualLanguageInput?.value;
   const normalizedVisualLanguage = normalizeVisualLanguageForQueue(rawVisualLanguage, normalizeCreationVisualLanguage);
   const skuSubjects = buildCreationSkuSubjectPayload();
-  const baseItems = (draftItems || previewSlots).map((slot, index) => ({ ...slot, slotIndex: index + 1, status: "queued" }));
-  const items = draftItems ? baseItems : [...baseItems, ...buildCreationQueuedSkuItems(skuSubjects, baseItems.length)];
+  const baseItems = baseSlots.map((slot, index) => ({ ...slot, slotIndex: index + 1, status: "queued" }));
+  const items = shouldUseDraftItems ? baseItems : [...baseItems, ...buildCreationQueuedSkuItems(skuSubjects, baseItems.length)];
 
   return normalizeSet({
     setId: createQueueId("creation-local"),
@@ -216,6 +260,33 @@ export function buildCreationQueuedSet({
     status: "queued",
     items,
   });
+}
+
+export function buildCreationQueuedRepairFormData(job = {}, { itemId = "", promptOverride = "", scope = "incomplete", set } = {}) {
+  const formData = new FormData();
+  const sourceFormData = job.formData;
+  if (sourceFormData && typeof sourceFormData.entries === "function") {
+    for (const [key, value] of sourceFormData.entries()) {
+      formData.append(key, value);
+    }
+  }
+
+  formData.set("setId", cleanQueueString(set?.setId || job.set?.setId));
+  if (itemId) {
+    formData.set("itemId", cleanQueueString(itemId));
+    formData.delete("scope");
+    if (promptOverride) {
+      formData.set("promptOverride", cleanQueueString(promptOverride));
+    } else {
+      formData.delete("promptOverride");
+    }
+  } else {
+    formData.set("scope", cleanQueueString(scope) || "incomplete");
+    formData.delete("itemId");
+    formData.delete("promptOverride");
+  }
+
+  return formData;
 }
 
 export function renderCreationQueueStrip({
@@ -281,6 +352,7 @@ export async function runCreationQueuedJob(job, context = {}) {
     normalizeSet,
     nowIso,
     render,
+    runAutoRepairIfNeeded,
     runCreationStream,
     setFeedback,
     showError,
@@ -289,12 +361,19 @@ export async function runCreationQueuedJob(job, context = {}) {
   job.status = "running";
   creationState.generating = true;
   creationState.generationScope = "full";
-  creationState.activeQueueId = job.id;
-  creationState.selectedQueueId = job.id;
-  creationState.autoRepairAttemptCount = 0;
+  if (!creationState.activeQueueId) {
+    creationState.activeQueueId = job.id;
+  }
+  if (!creationState.selectedQueueId) {
+    creationState.selectedQueueId = job.id;
+  }
+  job.autoRepairAttemptCount = 0;
   creationState.editingItemId = "";
-  creationState.currentSet = normalizeSet({ ...job.set, status: "generating", updatedAt: nowIso() });
-  syncActiveCreationQueueSet(creationState, creationState.currentSet, normalizeSet);
+  job.set = normalizeSet({ ...job.set, status: "generating", updatedAt: nowIso() });
+  if (creationState.selectedQueueId === job.id || creationState.activeQueueId === job.id) {
+    creationState.currentSet = job.set;
+  }
+  syncActiveCreationQueueSet(creationState, job.set, normalizeSet);
   render();
 
   try {
@@ -303,55 +382,81 @@ export async function runCreationQueuedJob(job, context = {}) {
       throw new Error("套图生成请求失败");
     }
 
-    await runCreationStream(response);
+    await runCreationStream(response, {
+      queueJob: job,
+      onEventHandled: () => scheduleCreationGenerationQueue(context),
+    });
     await loadCreationSets();
+    if (typeof runAutoRepairIfNeeded === "function") {
+      await runAutoRepairIfNeeded(job);
+      await loadCreationSets();
+    }
     job.status = "completed";
     job.set = normalizeSet({
-      ...(creationState.currentSet || job.set),
+      ...(job.set || creationState.currentSet),
       status: "completed",
       updatedAt: nowIso(),
     });
-    if (creationState.activeQueueId === job.id) {
+    if (creationState.selectedQueueId === job.id || creationState.activeQueueId === job.id) {
       creationState.currentSet = job.set;
     }
   } catch (error) {
     const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "套图生成请求失败");
     job.status = "failed";
-    const currentSet = creationState.currentSet || job.set;
+    const currentSet = job.set || creationState.currentSet;
     const currentItems = Array.isArray(currentSet.items) ? currentSet.items : [];
-    creationState.currentSet = normalizeSet({
+    job.set = normalizeSet({
       ...currentSet,
       status: "failed",
       updatedAt: nowIso(),
       items: currentItems.map((item) => item.status === "completed" ? item : { ...item, status: "failed", error: message }),
     });
-    syncActiveCreationQueueSet(creationState, creationState.currentSet, normalizeSet);
+    if (creationState.selectedQueueId === job.id || creationState.activeQueueId === job.id) {
+      creationState.currentSet = job.set;
+    }
+    syncActiveCreationQueueSet(creationState, job.set, normalizeSet);
     setFeedback(message, "error");
     showError(message);
   } finally {
-    const nextQueuedJob = getCreationQueueJobs(creationState).find((entry) => entry.status === "queued");
-    creationState.generating = false;
-    creationState.generationScope = "";
-    creationState.activeQueueId = "";
-    if (creationState.selectedQueueId === job.id && nextQueuedJob) {
-      creationState.selectedQueueId = nextQueuedJob.id;
+    const runningJobs = getRunningCreationQueueJobs(creationState);
+    if (creationState.activeQueueId === job.id) {
+      creationState.activeQueueId = runningJobs[0]?.id || "";
     }
+    creationState.generating = runningJobs.length > 0;
+    creationState.generationScope = runningJobs.length > 0 ? "full" : "";
     render();
     scheduleCreationGenerationQueue(context);
   }
 }
 
 export function scheduleCreationGenerationQueue(context = {}) {
-  const { creationState, render } = context;
-  if (creationState.generating) {
-    return;
+  const { creationState, getMaxParallelTasks, maxActiveSuites = 2, maxParallelTasks, render } = context;
+  const resolvedMaxParallelTasks = Number(
+    typeof getMaxParallelTasks === "function" ? getMaxParallelTasks() : maxParallelTasks,
+  );
+  const parallelBudget = Number.isFinite(resolvedMaxParallelTasks) && resolvedMaxParallelTasks > 0 ? resolvedMaxParallelTasks : 1;
+  let reservedItemCount = getRunningCreationQueueReservedItemCount(creationState);
+  let runningSuiteCount = getRunningCreationQueueJobs(creationState).length;
+  let startedJob = false;
+
+  while (reservedItemCount < parallelBudget && runningSuiteCount < maxActiveSuites) {
+    const nextJob = getCreationQueueJobs(creationState).find((job) => job.status === "queued");
+    if (!nextJob) {
+      break;
+    }
+
+    const nextReservedCount = getCreationQueueJobReservedItemCount(nextJob);
+    void runCreationQueuedJob(nextJob, context);
+    reservedItemCount += nextReservedCount;
+    runningSuiteCount += 1;
+    startedJob = true;
   }
 
-  const nextJob = getCreationQueueJobs(creationState).find((job) => job.status === "queued");
-  if (!nextJob) {
-    render();
-    return;
+  if (!startedJob && runningSuiteCount === 0) {
+    creationState.generating = false;
+    creationState.generationScope = "";
+    creationState.activeQueueId = "";
   }
 
-  void runCreationQueuedJob(nextJob, context);
+  render();
 }

@@ -161,6 +161,15 @@ test("portrait analysis suggestions auto-collapse after analysis and can be expa
   assert.match(app, /portraitAnalysisToggleButton\.addEventListener\("click", togglePortraitAnalysisPanel\)/);
 });
 
+test("portrait analysis task always submits low reasoning effort", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(
+    app,
+    /async function analyzePortraitReference\(\) \{[\s\S]*const formData = buildPortraitFormData\(\{ includeFiles: true \}\);[\s\S]*formData\.set\("reasoningEffort", "low"\);[\s\S]*fetch\("\/api\/portrait\/reference\/analyze"/,
+  );
+});
+
 test("portrait reference uploads split person and styling accessory limits", async () => {
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");

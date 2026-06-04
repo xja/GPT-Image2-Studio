@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import {
+  CREATION_REFERENCE_ANALYSIS_MODE,
   PORTRAIT_REFERENCE_ANALYSIS_JSON_SCHEMA,
   PORTRAIT_REFERENCE_ANALYSIS_MODE,
   REFERENCE_ORCHESTRATION_JSON_SCHEMA,
@@ -15,6 +16,24 @@ import {
   requestPromptAgentAnalysis,
 } from "../lib/prompt-agent.mjs";
 import { createPromptAgentStore } from "../lib/prompt-agent-store.mjs";
+import { MAX_CREATION_REFERENCE_IMAGES } from "../lib/studio-constants.mjs";
+
+const serverPath = new URL("../server.mjs", import.meta.url);
+const cloudflareWorkerPath = new URL("../cloudflare-pages-worker.mjs", import.meta.url);
+
+test("server runtimes default reference orchestration analysis to low reasoning effort", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+
+  for (const source of [server, worker]) {
+    assert.match(source, /REFERENCE_ORCHESTRATION_MODE/);
+    assert.match(source, /const REFERENCE_ORCHESTRATION_REASONING_EFFORT = "low";/);
+    assert.match(
+      source,
+      /mode === REFERENCE_ORCHESTRATION_MODE[\s\S]*\? REFERENCE_ORCHESTRATION_REASONING_EFFORT[\s\S]*: config\.defaults\?\.reasoningEffort \|\| DEFAULT_REASONING_EFFORT/,
+    );
+  }
+});
 
 test("prompt agent request can analyze portrait person reference images safely", () => {
   const images = [
@@ -326,8 +345,8 @@ test("prompt agent request can identify ecommerce creation reference roles", () 
   });
 
   assert.match(input[0].content[0].text, /套图参考图识别/);
-  assert.match(input[0].content[0].text, /1 到 12 张电商套图参考图/);
-  assert.match(input[0].content[0].text, /商品主体|包装清单|材质细节/);
+  assert.match(input[0].content[0].text, new RegExp(`1 到 ${MAX_CREATION_REFERENCE_IMAGES} 张电商套图参考图`));
+  assert.match(input[0].content[0].text, /商品主体|包装清单|结构细节/);
   assert.match(input[0].content[0].text, /四级类目/);
   assert.deepEqual(input[0].content.slice(1), [
     {
@@ -355,23 +374,82 @@ test("prompt agent request can identify ecommerce creation reference roles", () 
   assert.deepEqual(requestBody.text.format.schema.properties.visual_language.enum, ["classic-commercial", "reference-style"]);
   assert.ok(requestBody.text.format.schema.properties.reference_roles.items.properties.role.enum.includes("dimensions"));
   assert.ok(requestBody.text.format.schema.properties.reference_roles.items.properties.role.enum.includes("usage"));
-  assert.equal(requestBody.text.format.schema.properties.reference_roles.maxItems, 12);
-  assert.equal(requestBody.text.format.schema.properties.reference_roles.items.properties.index.maximum, 12);
-  assert.equal(requestBody.text.format.schema.properties.sku_subjects.maxItems, 12);
+  assert.ok(requestBody.text.format.schema.properties.reference_roles.items.properties.role.enum.includes("reference-product"));
+  assert.match(input[0].content[0].text, /reference-product/);
+  assert.match(input[0].content[0].text, /参考主体/);
+  assert.equal(requestBody.text.format.schema.properties.reference_roles.maxItems, MAX_CREATION_REFERENCE_IMAGES);
+  assert.equal(requestBody.text.format.schema.properties.reference_roles.items.properties.index.maximum, MAX_CREATION_REFERENCE_IMAGES);
+  assert.equal(requestBody.text.format.schema.properties.sku_subjects.maxItems, MAX_CREATION_REFERENCE_IMAGES);
   assert.equal(
     requestBody.text.format.schema.properties.sku_subjects.items.properties.reference_indexes.items.maximum,
-    12,
+    MAX_CREATION_REFERENCE_IMAGES,
   );
+  assert.ok(requestBody.text.format.schema.properties.sku_subjects.items.required.includes("subject_unit_count"));
+  assert.equal(requestBody.text.format.schema.properties.sku_subjects.items.properties.subject_unit_count.type, "integer");
+  assert.equal(requestBody.text.format.schema.properties.sku_subjects.items.properties.subject_unit_count.minimum, 1);
   assert.match(input[0].content[0].text, /dimensions/);
   assert.match(input[0].content[0].text, /role=dimensions/);
   assert.match(input[0].content[0].text, /role=usage/);
   assert.match(input[0].content[0].text, /充电指南|正负极|使用说明/);
+  assert.match(input[0].content[0].text, /role=material/);
+  assert.match(input[0].content[0].text, /外观结构|功能卖点|结构表现/);
+  assert.match(input[0].content[0].text, /包装清单[\s\S]*即使[\s\S]*尺寸|package[\s\S]*even if[\s\S]*size/i);
   assert.match(input[0].content[0].text, /型号 F4J16、长度 13cm、重量 42g、钩号 2#/);
   assert.match(input[0].content[0].text, /Treat text outside the physical product as non-subject overlay/i);
   assert.match(input[0].content[0].text, /2025 NEW|WHITE EDIT/);
+  assert.match(input[0].content[0].text, /If one product-subject reference image contains multiple complete visible product units/i);
+  assert.match(input[0].content[0].text, /subject_unit_count/i);
+  assert.match(input[0].content[0].text, /keep those units together as one sku_subject/i);
+  assert.match(input[0].content[0].text, /do not split them into multiple sku_subjects/i);
   assert.match(requestBody.text.format.schema.properties.reference_roles.items.properties.note.description, /13cm/);
-  assert.match(requestBody.text.format.schema.properties.sku_subjects.items.properties.note.description, /source-image overlay text/i);
+  assert.match(requestBody.text.format.schema.properties.sku_subjects.items.properties.note.description, /visible product unit count/i);
+  assert.match(
+    requestBody.text.format.schema.properties.sku_subjects.items.properties.subject_unit_count.description,
+    /complete visible product units/i,
+  );
+  assert.match(requestBody.text.format.schema.properties.sku_subjects.items.properties.filenames.description, /same grouped sellable product subject/i);
   assert.match(input[0].content[0].text, /SKU/);
+});
+
+test("prompt agent creation reference analysis supports fifteen ordered references", () => {
+  const images = Array.from({ length: MAX_CREATION_REFERENCE_IMAGES }, (_, index) => ({
+    filename: `creation-ref-${index + 1}.png`,
+    mimeType: "image/png",
+    base64: Buffer.from(`ref-${index + 1}`).toString("base64"),
+  }));
+  const input = buildPromptAgentInput({
+    images,
+    mode: CREATION_REFERENCE_ANALYSIS_MODE,
+  });
+  const requestBody = createPromptAgentRequestBody({
+    images,
+    mode: CREATION_REFERENCE_ANALYSIS_MODE,
+    responsesModel: "gpt-5.4",
+  });
+  const result = extractPromptAgentJson(JSON.stringify({
+    reference_roles: images.map((image, index) => ({
+      index: index + 1,
+      filename: image.filename,
+      role: "product",
+      note: `Product subject ${index + 1}`,
+    })),
+    sku_subjects: images.map((image, index) => ({
+      id: `sku-${index + 1}`,
+      title: `SKU ${index + 1}`,
+      reference_indexes: [index + 1],
+      filenames: [image.filename],
+      note: `SKU note ${index + 1}`,
+    })),
+  }));
+
+  assert.equal(input[0].content.filter((item) => item.type === "input_image").length, MAX_CREATION_REFERENCE_IMAGES);
+  assert.equal(requestBody.text.format.schema.properties.reference_roles.maxItems, MAX_CREATION_REFERENCE_IMAGES);
+  assert.equal(requestBody.text.format.schema.properties.sku_subjects.maxItems, MAX_CREATION_REFERENCE_IMAGES);
+  assert.equal(result.reference_roles.length, MAX_CREATION_REFERENCE_IMAGES);
+  assert.equal(result.reference_roles.at(-1).index, MAX_CREATION_REFERENCE_IMAGES);
+  assert.equal(result.reference_roles.at(-1).filename, "creation-ref-15.png");
+  assert.equal(result.sku_subjects.length, MAX_CREATION_REFERENCE_IMAGES);
+  assert.deepEqual(result.sku_subjects.at(-1).reference_indexes, [MAX_CREATION_REFERENCE_IMAGES]);
 });
 
 test("prompt agent normalizes creation reference category hints", () => {
@@ -416,9 +494,9 @@ test("prompt agent normalizes creation SKU subject groups", () => {
                 { index: 4, filename: "hooks.png", role: "package", note: "Accessory pack." },
               ],
               sku_subjects: [
-                { id: "blue", title: "Blue lure", reference_indexes: [1], filenames: ["blue.png"], note: "Blue sellable subject." },
-                { id: "green", title: "Green lure", reference_indexes: [2], filenames: ["green.png"], note: "Green sellable subject." },
-                { id: "red", title: "Red lure", reference_indexes: [3], filenames: ["red.png"], note: "Red sellable subject." },
+                { id: "blue", title: "Blue lure", reference_indexes: [1], filenames: ["blue.png"], subject_unit_count: 1, note: "Blue sellable subject." },
+                { id: "green", title: "Green lure", reference_indexes: [2], filenames: ["green.png"], subject_unit_count: 1, note: "Green sellable subject." },
+                { id: "red", title: "Red lure", reference_indexes: [3], filenames: ["red.png"], subject_unit_count: 1, note: "Red sellable subject." },
               ],
               risks: ["Accessory image is not a distinct SKU subject."],
             }),
@@ -429,11 +507,11 @@ test("prompt agent normalizes creation SKU subject groups", () => {
   });
 
   assert.deepEqual(
-    result.sku_subjects.map((subject) => [subject.id, subject.filenames, subject.reference_indexes]),
+    result.sku_subjects.map((subject) => [subject.id, subject.filenames, subject.reference_indexes, subject.subject_unit_count]),
     [
-      ["blue", ["blue.png"], [1]],
-      ["green", ["green.png"], [2]],
-      ["red", ["red.png"], [3]],
+      ["blue", ["blue.png"], [1], 1],
+      ["green", ["green.png"], [2], 1],
+      ["red", ["red.png"], [3], 1],
     ],
   );
 });
@@ -494,6 +572,7 @@ test("prompt agent keeps original filenames for unnamed creation SKU subjects", 
     title: "blue-silver-lure.png",
     reference_indexes: [1],
     filenames: ["blue-silver-lure.png"],
+    subject_unit_count: 1,
     note: "Blue sellable subject.",
   });
 });
@@ -692,6 +771,84 @@ test("prompt agent retries without structured output when provider rejects stric
   assert.equal(calls[1].body.stream, true);
   assert.equal("text" in calls[1].body, false);
   assert.equal(result.prompt, "白底产品摄影，柔光棚拍，高级商业质感");
+});
+
+test("prompt agent retries creation reference analysis when the model returns prose instead of JSON", async () => {
+  const calls = [];
+  const validAnalysis = {
+    summary: "Fishing lure reference set.",
+    category_hint: "Fishing Lures",
+    category_path: "Sports > Fishing > Fishing Lures",
+    visual_language: "classic-commercial",
+    visual_language_reason: "Product references use clean ecommerce photography.",
+    reference_roles: [
+      {
+        index: 1,
+        filename: "lure.png",
+        role: "product",
+        note: "Preserve the lure body, hooks, scale pattern, and red tail.",
+      },
+    ],
+    sku_subjects: [
+      {
+        id: "lure",
+        title: "Fishing lure",
+        reference_indexes: [1],
+        filenames: ["lure.png"],
+        note: "Sellable lure subject.",
+      },
+    ],
+    risks: [],
+  };
+
+  const result = await requestPromptAgentAnalysis({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    images: [
+      {
+        filename: "lure.png",
+        mimeType: "image/png",
+        base64: "bHVyZQ==",
+      },
+    ],
+    mode: CREATION_REFERENCE_ANALYSIS_MODE,
+    responsesModel: "gpt-5.4",
+    async fetchImpl(url, options) {
+      calls.push({
+        url,
+        body: JSON.parse(options.body),
+      });
+
+      const text =
+        calls.length === 1
+          ? "I analyzed the lure images and they are product photos."
+          : JSON.stringify(validAnalysis);
+      return new Response(
+        [
+          "event: response.output_text.done",
+          `data: {"type":"response.output_text.done","text":${JSON.stringify(text)}}`,
+          "",
+          "",
+          "data: [DONE]",
+          "",
+          "",
+        ].join("\n"),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "text/event-stream",
+          },
+        },
+      );
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].body.text.format.name, "creation_reference_analysis_json");
+  assert.equal(calls[1].body.text.format.name, "creation_reference_analysis_json");
+  assert.match(calls[1].body.input[0].content.at(-1).text, /Return exactly one JSON object/i);
+  assert.equal(result.category_hint, "Fishing Lures");
+  assert.equal(result.reference_roles[0].role, "product");
 });
 
 test("prompt agent returns compact upstream HTTP errors", async () => {

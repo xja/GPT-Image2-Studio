@@ -37,9 +37,20 @@ test("buildParameterText includes reasoning effort and multiple reference image 
   assert.match(result, /图像模型：GPT Image 2.0/);
   assert.match(result, /思考等级：XHigh/);
   assert.match(result, /图片生成耗时：1\.2 秒/);
-  assert.match(result, /参考图：girl-a\.jpeg, girl-b\.jpeg/);
+  assert.match(result, /参考图：有（2 张：girl-a\.jpeg, girl-b\.jpeg）/);
   assert.match(result, /中转：https:\/\/api\.openai\.com\/v1/);
   assert.match(result, /本地文件：C:\/output\/demo\.jpeg/);
+});
+
+test("buildParameterText explicitly shows when no reference image was used", () => {
+  const result = buildParameterText({
+    ratio: "16:9",
+    size: "1536x864",
+    imageModel: "gpt-image-2",
+    hasReferenceImage: false,
+  });
+
+  assert.match(result, /参考图：无/);
 });
 
 test("formatRecentOutputMeta composes canvas and model summary", () => {

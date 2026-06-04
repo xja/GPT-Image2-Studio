@@ -55,6 +55,94 @@ test("creation SKU payload keeps product subjects that include size facts", () =
   assert.deepEqual(subjects.map((subject) => subject.id), ["hero-product"]);
 });
 
+test("creation SKU payload treats reference subjects as product subjects", () => {
+  const subjects = buildCreationSkuSubjectsForPayload({
+    referenceRoles: [
+      {
+        filename: "subject-anchor.png",
+        role: "reference-product",
+        note: "参考主体，作为主体进入生成。",
+      },
+      {
+        filename: "material.png",
+        role: "material",
+        note: "结构细节。",
+      },
+    ],
+  });
+
+  assert.deepEqual(subjects.map((subject) => [subject.id, subject.filenames]), [
+    ["subject-anchor.png", ["subject-anchor.png"]],
+  ]);
+});
+
+test("creation SKU payload keeps multi-unit product references as one SKU subject after role edits", () => {
+  const subjects = buildCreationSkuSubjectsForPayload({
+    analysis: {
+      skuSubjects: [
+        {
+          id: "silver-lure",
+          title: "Silver lure",
+          referenceIndexes: [1],
+          filenames: ["three-lures.png"],
+          note: "Top silver sellable lure subject.",
+        },
+        {
+          id: "gold-lure",
+          title: "Gold lure",
+          referenceIndexes: [1],
+          filenames: ["three-lures.png"],
+          note: "Middle gold sellable lure subject.",
+        },
+        {
+          id: "green-lure",
+          title: "Green lure",
+          referenceIndexes: [1],
+          filenames: ["three-lures.png"],
+          note: "Bottom green sellable lure subject.",
+        },
+      ],
+    },
+    applied: true,
+    dirty: true,
+    referenceRoles: [
+      {
+        filename: "three-lures.png",
+        role: "product",
+        note: "One white-background product reference containing three complete sellable lure colorways.",
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    subjects.map((subject) => [subject.id, subject.title, subject.filenames, subject.referenceIndexes, subject.note]),
+    [
+      [
+        "three-lures.png",
+        "Silver lure / Gold lure / Green lure",
+        ["three-lures.png"],
+        [1],
+        "Top silver sellable lure subject. | Middle gold sellable lure subject. | Bottom green sellable lure subject.",
+      ],
+    ],
+  );
+});
+
+test("creation SKU payload infers visible unit count from Chinese product subject notes", () => {
+  const subjects = buildCreationSkuSubjectsForPayload({
+    referenceRoles: [
+      {
+        filename: "four-lures.png",
+        role: "product",
+        note: "主体图包含4条完整可见路亚鱼饵，银色、绿色、红色、灰色四个色款。",
+      },
+    ],
+  });
+
+  assert.equal(subjects.length, 1);
+  assert.equal(subjects[0].subjectUnitCount, 4);
+});
+
 test("creation SKU payload falls back to current product roles when applied analysis collapses multiple subjects", () => {
   const subjects = buildCreationSkuSubjectsForPayload({
     analysis: {

@@ -18,6 +18,8 @@ export const PUBLIC_LIB_SYNC_TARGETS = [
   "creation-category-templates.mjs",
   "creation-item-repair-queue.mjs",
   "creation-logo-library.mjs",
+  "creation-reference-drag.mjs",
+  "creation-reference-roles.mjs",
   "creation-reference-analysis-view.mjs",
   "creation-listing-view.mjs",
   "creation-suite-queue.mjs",

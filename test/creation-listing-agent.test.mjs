@@ -11,7 +11,7 @@ import {
 
 function makeValidDraft(overrides = {}) {
   return {
-    title: "2 Pack Blue Fishing Lures for Bass 3.5 in",
+    title: "2 Pack Blue Fishing Lures Bass Trout Freshwater Swimbait",
     sellingPoints: ["Bright blue profile helps organize color variants."],
     painPoints: ["Flat lure movement can be ignored in stained water; the bright profile helps the bait stay noticeable."],
     fiveBullets: [
@@ -25,7 +25,7 @@ function makeValidDraft(overrides = {}) {
     backendSearchTerms: "blue fishing lure bass bait compact lure",
     keywordBuckets: {
       exact: ["blue fishing lure"],
-      longTail: ["3.5 in bass lure"],
+      longTail: ["bass fishing lure", "freshwater swimbait"],
       traffic: ["freshwater bait"],
       descriptive: ["compact blue lure"],
     },
@@ -57,6 +57,13 @@ function visibleChineseDisplayText(draft) {
     draft.zhDisplay?.backendSearchTerms,
     ...Object.values(draft.zhDisplay?.keywordBuckets || {}).flat(),
   ].join("\n");
+}
+
+function validateListingAgentDraft(draft, expectedQuantity) {
+  return validateCreationListingDraft(draft, {
+    expectedQuantity,
+    forbidTitleSpecs: true,
+  });
 }
 
 const standardSource = {
@@ -96,7 +103,7 @@ test("listing agent prompt uses dedicated SEO five-point constraints", async () 
     calls.push({ body: JSON.parse(init.body) });
     return new Response(JSON.stringify({
       output_text: JSON.stringify(makeValidDraft({
-        title: "2 Pack Electric Fishing Lure for Bass 3.5 in / 9 cm",
+        title: "2 Pack Electric Fishing Lure Bass Trout Freshwater Swimbait",
       })),
     }), { status: 200 });
   };
@@ -121,10 +128,10 @@ test("listing agent prompt uses dedicated SEO five-point constraints", async () 
   assert.match(prompt, /Title formula/i);
   assert.match(prompt, /quantity first/i);
   assert.match(prompt, /core product keyword/i);
-  assert.match(prompt, /size.*later/i);
-  assert.match(prompt, /Do not put.*size.*directly after quantity/i);
+  assert.match(prompt, /do not include size/i);
+  assert.match(prompt, /search terms/i);
   assert.doesNotMatch(prompt, /place it immediately after quantity/);
-  assert.match(prompt, /metric and imperial units/);
+  assert.doesNotMatch(prompt, /include every expected size unit/i);
   assert.match(prompt, /feature \+ buyer outcome/);
   assert.match(prompt, /fear \+ scene resonance/);
   assert.match(prompt, /not shopping uncertainty/i);
@@ -151,7 +158,7 @@ test("listing agent sends a strict JSON schema request with prompt guardrails", 
     fetchImpl,
   });
 
-  assert.equal(draft.title, "2 Pack Blue Fishing Lures for Bass 3.5 in");
+  assert.equal(draft.title, "2 Pack Blue Fishing Lures Bass Trout Freshwater Swimbait");
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "https://example.test/v1/responses");
   assert.equal(calls[0].headers.Authorization, "Bearer test-key");
@@ -169,8 +176,8 @@ test("listing agent sends a strict JSON schema request with prompt guardrails", 
   assert.match(calls[0].body.input, /Every field and every bullet must be 500 characters or fewer/);
   assert.match(calls[0].body.input, /Title formula: start with 2 Pack/i);
   assert.match(calls[0].body.input, /core product keyword/i);
-  assert.match(calls[0].body.input, /size.*later/i);
-  assert.match(calls[0].body.input, /Do not put.*size.*directly after quantity/i);
+  assert.match(calls[0].body.input, /do not include size/i);
+  assert.match(calls[0].body.input, /search terms/i);
   assert.doesNotMatch(calls[0].body.input, /place it immediately after quantity/);
   assert.match(calls[0].body.input, /Public listing fields must be English only/);
   assert.match(calls[0].body.input, /sellingPoints and painPoints must each be 500 English characters or fewer in total/);
@@ -240,7 +247,7 @@ test("listing agent accepts UI-only Chinese display text alongside English publi
 
   assert.doesNotMatch(visibleDraftText(draft), /[\u3400-\u9fff]/u);
   assert.match(visibleChineseDisplayText(draft), /蓝色路亚鱼饵/u);
-  assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 in" }).ok, true);
+  assert.equal(validateListingAgentDraft(draft, "2 Pack").ok, true);
 });
 
 test("listing agent extracts Responses output content text", async () => {
@@ -262,7 +269,7 @@ test("listing agent extracts Responses output content text", async () => {
     fetchImpl,
   });
 
-  assert.equal(draft.title, "2 Pack Blue Fishing Lures for Bass 3.5 in");
+  assert.equal(draft.title, "2 Pack Blue Fishing Lures Bass Trout Freshwater Swimbait");
 });
 
 test("listing agent retries once after validation failure", async () => {
@@ -287,7 +294,7 @@ test("listing agent retries once after validation failure", async () => {
   assert.equal(callCount, 2);
   assert.match(prompts[1], /Fix these validation errors: title must start with quantity/);
   assert.match(draft.title, /^2 Pack Blue Fishing Lures\b/);
-  assert.match(draft.title, /3\.5 in$/);
+  assert.doesNotMatch(draft.title, /\b3\.5\s*in\b/i);
 });
 
 test("listing agent retries when public listing fields contain Chinese", async () => {
@@ -309,7 +316,7 @@ test("listing agent retries when public listing fields contain Chinese", async (
         backendSearchTerms: "路亚硬饵 product listing",
       })
       : makeValidDraft({
-        title: "2 Pack Electric Fishing Lure for Bass 3.5 in",
+        title: "2 Pack Electric Fishing Lure Bass Trout Freshwater Swimbait",
         backendSearchTerms: "electric fishing lure bass bait",
       });
     return new Response(JSON.stringify({ output_text: JSON.stringify(draft) }), { status: 200 });
@@ -326,7 +333,7 @@ test("listing agent retries when public listing fields contain Chinese", async (
 
   assert.equal(callCount, 2);
   assert.match(prompts[1], /public listing fields must be English/i);
-  assert.equal(draft.title, "2 Pack Electric Fishing Lure for Bass 3.5 in");
+  assert.equal(draft.title, "2 Pack Electric Fishing Lure Bass Trout Freshwater Swimbait");
   assert.doesNotMatch(visibleDraftText(draft), /[\u3400-\u9fff]/u);
 });
 
@@ -398,13 +405,13 @@ test("listing agent rejects after two invalid listing responses", async () => {
   assert.equal(callCount, 2);
 });
 
-test("listing agent accepts compound dimensions after quantity", async () => {
+test("listing agent keeps compound dimensions out of search-focused titles", async () => {
   let callCount = 0;
   const fetchImpl = async () => {
     callCount += 1;
     return new Response(JSON.stringify({
       output_text: JSON.stringify(makeValidDraft({
-        title: "2 Pack Desk Organizer Tray for Office Storage 3.5 x 2 in",
+        title: "2 Pack Desk Organizer Tray Office Storage Desktop Organizer",
         fiveBullets: [
           "CORE VALUE: 2 Pack 3.5 x 2 in size keeps quantity and dimensions visible.",
           "BUILT TO LAST: Compact tray profile supports office storage and desk organization.",
@@ -431,22 +438,18 @@ test("listing agent accepts compound dimensions after quantity", async () => {
 
   assert.equal(callCount, 1);
   assert.match(draft.title, /^2 Pack Desk Organizer Tray\b/);
-  assert.match(draft.title, /3\.5 x 2 in$/);
+  assert.doesNotMatch(draft.title, /3\.5 x 2 in/i);
 });
 
-test("listing agent retries when a metric plus imperial source title omits one unit", async () => {
+test("listing agent accepts titles without dimensions when source dimensions exist", async () => {
   const prompts = [];
   let callCount = 0;
   const fetchImpl = async (_url, init) => {
     callCount += 1;
     prompts.push(JSON.parse(init.body).input);
-    const draft = callCount === 1
-      ? makeValidDraft({
-        title: "2 Pack Blue Fishing Lures for Bass 3.5 in",
-      })
-      : makeValidDraft({
-        title: "2 Pack Blue Fishing Lures for Bass 3.5 in (9 cm)",
-      });
+    const draft = makeValidDraft({
+      title: "2 Pack Blue Fishing Lures Bass Trout Freshwater Swimbait",
+    });
     return new Response(JSON.stringify({ output_text: JSON.stringify(draft) }), { status: 200 });
   };
 
@@ -461,13 +464,13 @@ test("listing agent retries when a metric plus imperial source title omits one u
     fetchImpl,
   });
 
-  assert.equal(callCount, 2);
-  assert.match(prompts[1], /title must include all expected size units/);
+  assert.equal(callCount, 1);
+  assert.match(prompts[0], /do not include size/i);
   assert.match(draft.title, /^2 Pack Blue Fishing Lures\b/);
-  assert.match(draft.title, /3\.5 in \(9 cm\)$/);
+  assert.doesNotMatch(draft.title, /3\.5\s*in|9\s*cm/i);
 });
 
-test("listing agent retries when source title places size immediately after quantity", async () => {
+test("listing agent retries when imperial mode output includes metric equivalents", async () => {
   const prompts = [];
   let callCount = 0;
   const fetchImpl = async (_url, init) => {
@@ -475,10 +478,10 @@ test("listing agent retries when source title places size immediately after quan
     prompts.push(JSON.parse(init.body).input);
     const draft = callCount === 1
       ? makeValidDraft({
-        title: "2 Pack 3.5 in Blue Fishing Lures for Bass",
+        title: "1 Pack Fishing Lure Electric Swimbait 5.12 in / 130 mm 1.23 oz / 35 g",
       })
       : makeValidDraft({
-        title: "2 Pack Blue Fishing Lures for Bass 3.5 in",
+        title: "1 Pack Fishing Lure Electric Swimbait Slow Sinking Bass Bait",
       });
     return new Response(JSON.stringify({ output_text: JSON.stringify(draft) }), { status: 200 });
   };
@@ -487,13 +490,54 @@ test("listing agent retries when source title places size immediately after quan
     baseUrl: "https://example.test/v1",
     apiKey: "test-key",
     responsesModel: "gpt-5.4",
-    source: standardSource,
+    source: {
+      ...standardSource,
+      skuBundleCount: 1,
+      dimensionSpecs: "5.12 in 1.23 oz",
+      dimensionUnitMode: "imperial",
+    },
     fetchImpl,
   });
 
   assert.equal(callCount, 2);
-  assert.match(prompts[1], /title must place size after the product keyword/);
-  assert.equal(draft.title, "2 Pack Blue Fishing Lures for Bass 3.5 in");
+  assert.match(prompts[0], /imperial units only/i);
+  assert.match(prompts[1], /imperial units only/i);
+  assert.equal(draft.title, "1 Pack Fishing Lure Electric Swimbait Slow Sinking Bass Bait");
+});
+
+test("listing agent retries when title includes size and specification values", async () => {
+  const prompts = [];
+  let callCount = 0;
+  const fetchImpl = async (_url, init) => {
+    callCount += 1;
+    prompts.push(JSON.parse(init.body).input);
+    const draft = callCount === 1
+      ? makeValidDraft({
+        title: "3 Pack Electronic Fishing Lure Propeller Swimbait Hook Size 4# 130 mm 35 g",
+      })
+      : makeValidDraft({
+        title: "3 Pack Electronic Fishing Lure Propeller Swimbait Slow Sinking Bass Trout Freshwater Bait",
+      });
+    return new Response(JSON.stringify({ output_text: JSON.stringify(draft) }), { status: 200 });
+  };
+
+  const draft = await requestCreationListingDraft({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    responsesModel: "gpt-5.4",
+    source: {
+      ...standardSource,
+      productName: "Electronic Fishing Lure",
+      skuBundleCount: 3,
+      dimensionSpecs: "Hook Size 4#, 130 mm, 35 g",
+    },
+    fetchImpl,
+  });
+
+  assert.equal(callCount, 2);
+  assert.match(prompts[1], /title must not include size or specification values/);
+  assert.equal(draft.title, "3 Pack Electronic Fishing Lure Propeller Swimbait Slow Sinking Bass Trout Freshwater Bait");
+  assert.doesNotMatch(draft.title, /130\s*mm|35\s*g|hook size|4#/i);
 });
 
 test("generateCreationListingDrafts creates one parent draft for all SKU variants", async () => {
@@ -517,15 +561,14 @@ test("generateCreationListingDrafts creates one parent draft for all SKU variant
   assert.equal(drafts.length, 1);
   assert.equal(drafts[0].status, "completed");
   assert.match(drafts[0].title, /^2 Pack Fishing Lure\b/);
-  assert.match(drafts[0].title, /8\.89 cm \(3\.5 in\)$/);
-  assert.doesNotMatch(drafts[0].title, /^2 Pack 8\.89 cm/);
+  assert.doesNotMatch(drafts[0].title, /8\.89 cm|3\.5 in/i);
   assert.equal(drafts[0].skuSubjectId, "");
   assert.match(drafts[0].fiveBullets.join("\n"), /2 selectable variant options/);
   assert.match(visibleChineseDisplayText(drafts[0]), /可选变体/u);
-  assert.equal(validateCreationListingDraft(drafts[0], { expectedQuantity: "2 Pack", expectedSize: "8.89 cm (3.5 in)" }).ok, true);
+  assert.equal(validateListingAgentDraft(drafts[0], "2 Pack").ok, true);
 });
 
-test("generateCreationListingDrafts includes both metric and imperial units in titles when requested", async () => {
+test("generateCreationListingDrafts keeps metric and imperial specs out of mock titles", async () => {
   const drafts = await generateCreationListingDrafts({
     set: {
       setId: "set-dual-units",
@@ -543,14 +586,93 @@ test("generateCreationListingDrafts includes both metric and imperial units in t
   });
 
   assert.match(drafts[0].title, /^1 Pack Electric Fishing Lure\b/);
-  assert.match(drafts[0].title, /13cm \(5\.12 in\)\/42g \(1\.48 oz\)$/);
-  assert.equal(
-    validateCreationListingDraft(drafts[0], {
-      expectedQuantity: "1 Pack",
-      expectedSize: "13cm (5.12 in)/42g (1.48 oz)",
-    }).ok,
-    true,
-  );
+  assert.doesNotMatch(drafts[0].title, /13cm|5\.12 in|42g|1\.48 oz/i);
+  assert.equal(validateListingAgentDraft(drafts[0], "1 Pack").ok, true);
+});
+
+test("generateCreationListingDrafts uses grouped SKU subject unit count and search terms in titles", async () => {
+  const drafts = await generateCreationListingDrafts({
+    set: {
+      setId: "set-three-lures",
+      productName: "Electronic Fishing Lure",
+      productDescription: "One sellable SKU image contains three complete lure bodies with LED light and propeller action.",
+      sellingPoints: ["auto-activated light", "propeller action", "multi-section swimbait"],
+      dimensionSpecs: "Hook Size 4#, 130 mm, 35 g",
+      skuBundleCount: 1,
+      skuSubjects: [
+        {
+          id: "three-lures.png",
+          title: "Silver lure / Gold lure / Green lure",
+          filenames: ["three-lures.png"],
+          referenceIndexes: [1],
+          subjectUnitCount: 3,
+          note: "One product-subject reference image contains three complete visible lure bodies: silver, gold, and green.",
+        },
+      ],
+    },
+    config: { baseUrl: "https://example.test/v1", apiKey: "test-key", responsesModel: "gpt-5.4" },
+    fetchImpl() {
+      throw new Error("mock mode should not request the network");
+    },
+    mock: true,
+  });
+
+  assert.equal(drafts.length, 1);
+  assert.match(drafts[0].title, /^3 Pack Electronic Fishing Lure\b/);
+  assert.match(drafts[0].title, /\b(?:swimbait|bass|freshwater|bait|propeller|slow sinking)\b/i);
+  assert.doesNotMatch(drafts[0].title, /130\s*mm|35\s*g|hook size|4#/i);
+  assert.match(drafts[0].backendSearchTerms, /\belectronic fishing lure\b/i);
+  assert.match(drafts[0].backendSearchTerms, /\bpropeller swimbait\b/i);
+  assert.match(drafts[0].backendSearchTerms, /\bslow sinking bass trout\b/i);
+  assert.match(drafts[0].backendSearchTerms, /\bfreshwater saltwater hard bait\b/i);
+  assert.deepEqual(drafts[0].keywordBuckets.longTail, [
+    "Electronic Fishing Lure propeller swimbait",
+    "slow sinking bass trout lure",
+    "freshwater saltwater hard bait",
+  ]);
+  assert.deepEqual(drafts[0].keywordBuckets.traffic, [
+    "bass fishing lure",
+    "trout fishing bait",
+    "freshwater swimbait",
+    "saltwater hard bait",
+  ]);
+  assert.equal(validateListingAgentDraft(drafts[0], "3 Pack").ok, true);
+});
+
+test("generateCreationListingDrafts uses visible subject unit count for swimbait titles", async () => {
+  const drafts = await generateCreationListingDrafts({
+    set: {
+      setId: "set-four-swimbaits",
+      productName: "Swimbait Lure",
+      productDescription: "One product subject reference contains four complete lure colorways.",
+      dimensionSpecs: "160 mm, 50.4 g, Hook Size #2",
+      skuBundleCount: 1,
+      skuSubjects: [
+        {
+          id: "four-swimbaits.png",
+          title: "Four swimbait lure colorways",
+          filenames: ["four-swimbaits.png"],
+          referenceIndexes: [1],
+          subjectUnitCount: 4,
+          note: "4 complete visible product units in one grouped SKU subject.",
+        },
+      ],
+    },
+    config: { baseUrl: "https://example.test/v1", apiKey: "test-key", responsesModel: "gpt-5.4" },
+    fetchImpl() {
+      throw new Error("mock mode should not request the network");
+    },
+    mock: true,
+  });
+
+  assert.match(drafts[0].title, /^4 Pack Swimbait Lure\b/);
+  assert.match(drafts[0].title, /\b(?:bass|freshwater|bait|slow sinking|propeller)\b/i);
+  assert.match(drafts[0].title, /\bjointed\b/i);
+  assert.match(drafts[0].title, /\blifelike\b/i);
+  assert.match(drafts[0].title, /\bsaltwater\b/i);
+  assert.match(drafts[0].title, /\bhard bait\b/i);
+  assert.doesNotMatch(drafts[0].title, /160\s*mm|50\.4\s*g|hook size|#2|6\.3 in|1\.78 oz/i);
+  assert.equal(validateListingAgentDraft(drafts[0], "4 Pack").ok, true);
 });
 
 test("mock listing drafts avoid unsupported claims and competitor brand terms", () => {
@@ -564,7 +686,7 @@ test("mock listing drafts avoid unsupported claims and competitor brand terms", 
     warnings: [],
   });
 
-  const validation = validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 in" });
+  const validation = validateListingAgentDraft(draft, "2 Pack");
   assert.equal(validation.ok, true);
   assert.doesNotMatch(visibleDraftText(draft), /\b(?:amazon|walmart|temu|ebay|etsy|target)\b/i);
   assert.doesNotMatch(visibleDraftText(draft), /\b(?:FDA Certified|medical grade|guaranteed|best|warranty)\b/i);
@@ -588,11 +710,11 @@ test("mock mode uses English Amazon-style titles for Chinese source inputs", asy
   const mockDraft = makeMockCreationListingDraft(source);
 
   assert.match(mockDraft.title, /^1 Pack Electric Fishing Lure\b/);
-  assert.match(mockDraft.title, /13cm\/42g$/);
+  assert.doesNotMatch(mockDraft.title, /13cm|42g/i);
   assert.equal(mockDraft.title.includes("Listing Draft"), false);
   assert.equal(mockDraft.title.length <= 200, true);
   assert.doesNotMatch(visibleDraftText(mockDraft), /[\u3400-\u9fff]/u);
-  assert.equal(validateCreationListingDraft(mockDraft, { expectedQuantity: "1 Pack", expectedSize: "13cm/42g" }).ok, true);
+  assert.equal(validateListingAgentDraft(mockDraft, "1 Pack").ok, true);
 });
 
 test("mock listing draft does not infer product keywords from numbered first aid kit contents", () => {
@@ -615,9 +737,9 @@ test("mock listing draft does not infer product keywords from numbered first aid
   const draft = makeMockCreationListingDraft(source);
 
   assert.match(draft.title, /^1 Pack First Aid Kit\b/);
-  assert.match(draft.title, /0\.35kg \(12\.35 oz\)$/);
+  assert.doesNotMatch(draft.title, /0\.35kg|12\.35 oz/i);
   assert.doesNotMatch(visibleDraftText(draft), /\bPBT\b|\bTPE\b|450cm|\*20/);
-  assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "1 Pack", expectedSize: "0.35kg (12.35 oz)" }).ok, true);
+  assert.equal(validateListingAgentDraft(draft, "1 Pack").ok, true);
 });
 
 test("mock listing draft uses product-facing copy instead of internal template commentary", () => {
@@ -641,14 +763,14 @@ test("mock listing draft uses product-facing copy instead of internal template c
   const publicText = visibleDraftText(draft);
 
   assert.match(draft.title, /^1 Pack First Aid Kit\b/);
-  assert.match(draft.title, /8cm \(3\.15 in\)$/);
+  assert.doesNotMatch(draft.title, /8cm|3\.15 in/i);
   assert.match(publicText, /\bFirst Aid Kit\b/);
   assert.match(publicText, /\b(?:home|travel|emergency|compact|portable|quick access)\b/i);
   assert.doesNotMatch(
     publicText,
     /\b(?:Provided product attributes|searchable copy|shopper-ready language|Sellers often struggle|Product details are based on provided inputs|Keyword structure combines|product listing searchable variant comparison|sku specific)\b/i,
   );
-  assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "1 Pack", expectedSize: "8cm (3.15 in)" }).ok, true);
+  assert.equal(validateListingAgentDraft(draft, "1 Pack").ok, true);
 });
 
 test("mock listing draft does not classify single bandage items as a first aid kit", () => {
@@ -666,9 +788,9 @@ test("mock listing draft does not classify single bandage items as a first aid k
   const draft = makeMockCreationListingDraft(source);
 
   assert.match(draft.title, /^1 Pack Bandages\b/);
-  assert.match(draft.title, /10cm$/);
+  assert.doesNotMatch(draft.title, /10cm/i);
   assert.doesNotMatch(draft.title, /\bFirst Aid Kit\b/);
-  assert.equal(validateCreationListingDraft(draft, { expectedQuantity: "1 Pack", expectedSize: "10cm" }).ok, true);
+  assert.equal(validateListingAgentDraft(draft, "1 Pack").ok, true);
 });
 
 test("mock drafts keep long SKU fields under 500 characters", () => {
@@ -692,7 +814,7 @@ test("mock drafts keep long SKU fields under 500 characters", () => {
   ];
   assert.equal(fields.every((value) => value.length <= 500), true);
   assert.equal(
-    validateCreationListingDraft(mockDraft, { expectedQuantity: "2 Pack", expectedSize: "3.5 x 2 in" }).ok,
+    validateListingAgentDraft(mockDraft, "2 Pack").ok,
     true,
   );
 });

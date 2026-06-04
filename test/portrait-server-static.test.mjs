@@ -29,6 +29,19 @@ test("server exposes independent portrait generation and record endpoints", asyn
   assert.doesNotMatch(server, /\/api\/creation\/portrait/);
 });
 
+test("portrait reference analysis defaults to low reasoning effort on server runtimes", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+
+  for (const source of [server, worker]) {
+    assert.match(source, /const PORTRAIT_REFERENCE_ANALYSIS_REASONING_EFFORT = "low";/);
+    assert.match(
+      source,
+      /formData\.get\("reasoningEffort"\)\s*\|\|\s*PORTRAIT_REFERENCE_ANALYSIS_REASONING_EFFORT/,
+    );
+  }
+});
+
 test("portrait runtime keeps person references separate from styling accessory references", async () => {
   const server = await readFile(serverPath, "utf8");
   const worker = await readFile(cloudflareWorkerPath, "utf8");

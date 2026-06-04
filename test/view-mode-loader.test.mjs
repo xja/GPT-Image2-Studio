@@ -13,6 +13,7 @@ const viewModuleCases = [
   ["style-transfer", "studio", "../lib/views/style-transfer-view.mjs"],
   ["reference-analysis", "referenceAnalysis", "../lib/views/reference-analysis-view.mjs"],
   ["image-decomposition", "imageDecomposition", "../lib/views/image-decomposition-view.mjs"],
+  ["quick-blend", "quickBlend", "../lib/views/quick-blend-view.mjs"],
   ["image-compress", "imageCompress", "../lib/views/image-compress-view.mjs"],
   ["article-illustration", "articleIllustration", "../lib/views/article-illustration-view.mjs"],
   ["article-record", "articleRecord", "../lib/views/article-record-view.mjs"],

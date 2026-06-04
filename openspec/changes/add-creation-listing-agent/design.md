@@ -38,7 +38,7 @@ Each Creation set manifest may include `listingDrafts`:
       "skuTitle": "Blue lure",
       "evidenceMode": "image-backed",
       "status": "completed",
-      "title": "2 Pack 3.5 in Blue Fishing Lures ...",
+      "title": "2 Pack Blue Fishing Lures Bass Trout Freshwater Swimbait ...",
       "sellingPoints": [],
       "painPoints": [],
       "fiveBullets": [],
@@ -68,7 +68,7 @@ Each Creation set manifest may include `listingDrafts`:
 
 ### Source Selection
 
-For each SKU listing package, the agent should collect:
+For the parent listing package, the agent should collect:
 
 - SKU subject title, note, filenames, and reference indexes.
 - Product name, product description, selling points, dimension specs, category path, target language, visual language, marketing scenario, and industry template.
@@ -83,7 +83,7 @@ If generated images are missing or failed, the agent must not block listing gene
 
 1. User enables the Listing Agent in Creation Mode or clicks a manual action in Creation records.
 2. The server resolves the Creation set manifest by `setId`.
-3. The system builds one listing request per SKU subject, or one request for the main product when no SKU subjects exist.
+3. The system builds one parent listing request for the Creation set, using SKU subjects as variant metadata and pack-count evidence.
 4. The request asks the model for strict JSON using the listing schema.
 5. The validator normalizes and checks every generated field and bullet.
 6. If validation fails, the system retries once with explicit validation feedback.
@@ -95,20 +95,20 @@ Automatic listing generation after image generation is best-effort. It must not 
 ### Validation Rules
 
 - `title`, `description`, `backendSearchTerms`, each selling point, each pain point, each keyword bucket item, and each five-point bullet must be no longer than 500 characters after trimming whitespace.
-- Title must start with quantity. If quantity is unknown, use `1 Pack`.
-- If `dimensionSpecs` contains a usable size, the title must place the size immediately after quantity.
+- Title must start with quantity. If SKU subject metadata shows multiple complete sellable units, the title must not fall back to `1 Pack`.
+- Title must keep size, dimensions, weight, hook size, model specs, and measurement values out of the title.
 - Title must avoid keyword stuffing, promotional phrases, unverifiable claims, competitor brands, and unsupported certifications.
 - Five bullets must be distinct and must not repeat the title verbatim.
 - Pain points must describe customer problems the product can address without making unsafe claims.
-- Keywords must be deduplicated case-insensitively.
-- Backend search terms must avoid punctuation-heavy stuffing and competitor brand terms.
+- Keywords must be deduplicated case-insensitively while preserving exact, long-tail, traffic, and descriptive buckets.
+- Backend search terms must be non-empty, search-focused, and avoid punctuation-heavy stuffing and competitor brand terms.
 - Claims about material, warranty, certifications, medical outcomes, safety ratings, compatibility, or performance must come from user input or explicit SKU metadata, not from image inference alone.
 
 ### UI Placement
 
 - Creation Mode: add an optional Listing Agent switch near the generation options.
 - Creation record detail: add a Listing section with generate, rewrite, copy, and export controls.
-- Per SKU: show title, five bullets, selling points, pain points, description, keyword buckets, backend search terms, evidence mode, warnings, and missing information.
+- Per listing: show title, five bullets, selling points, pain points, description, keyword buckets, backend search terms, evidence mode, warnings, and missing information.
 - Failed or fallback drafts should remain visible with clear status instead of disappearing.
 
 ### Persistence And Export

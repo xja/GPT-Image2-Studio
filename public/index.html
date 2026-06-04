@@ -98,6 +98,7 @@
                     <a class="mega-menu-link" href="#style-transfer">风格迁移</a>
                     <a class="mega-menu-link" href="#reference-analysis">融图分析</a>
                     <a class="mega-menu-link" href="#image-decomposition">图片拆解</a>
+                    <a class="mega-menu-link" href="#quick-blend">快速溶图</a>
                     <a class="mega-menu-link" href="#creation">套图模式</a>
                     <a class="mega-menu-link" href="#portrait">写真模式</a>
                     <a class="mega-menu-link" href="#article-illustration">文章插图</a>
@@ -658,6 +659,130 @@
           </div>
         </section>
 
+        <section class="view-panel quick-blend-view hidden" data-view-panel="quick-blend">
+          <div class="quick-blend-workspace">
+            <section class="studio-panel quick-blend-upload-panel">
+              <form id="quickBlendForm" class="settings-form quick-blend-form">
+                <div class="quick-blend-upload-grid">
+                  <div class="field-group quick-blend-upload-group">
+                    <div class="field-heading">
+                      <div>
+                        <span>产品图 / A 组</span>
+                      </div>
+                      <small id="quickBlendACount">0 张</small>
+                    </div>
+                    <label class="reference-dropzone quick-blend-dropzone" id="quickBlendADropzone">
+                      <input id="quickBlendAInput" name="quickBlendAImages" type="file" accept="image/*" multiple />
+                      <div class="reference-icon" aria-hidden="true"></div>
+                      <strong>上传产品图</strong>
+                      <span>每个任务使用 1 张产品图 + 1 张 B 组图</span>
+                      <em>支持多选或拖拽，数量不限</em>
+                    </label>
+                    <div class="reference-grid quick-blend-grid hidden" id="quickBlendAGrid"></div>
+                  </div>
+
+                  <div class="field-group quick-blend-upload-group">
+                    <div class="field-heading">
+                      <div>
+                        <span>B 组图片</span>
+                      </div>
+                      <small id="quickBlendBCount">0 张</small>
+                    </div>
+                    <label class="reference-dropzone quick-blend-dropzone" id="quickBlendBDropzone">
+                      <input id="quickBlendBInput" name="quickBlendBImages" type="file" accept="image/*" multiple />
+                      <div class="reference-icon" aria-hidden="true"></div>
+                      <strong>上传 B 组</strong>
+                      <span>数量必须与 A 组一致</span>
+                      <em>支持多选或拖拽，按顺序配对</em>
+                    </label>
+                    <div class="reference-grid quick-blend-grid hidden" id="quickBlendBGrid"></div>
+                  </div>
+                </div>
+
+                <section class="field-group quick-blend-pair-panel">
+                  <div class="field-heading">
+                    <div>
+                      <span>配对预览</span>
+                    </div>
+                    <small id="quickBlendPairCount">0 对</small>
+                  </div>
+                  <div class="quick-blend-pair-list" id="quickBlendPairList"></div>
+                </section>
+
+                <details
+                  class="field-group parameter-settings adaptive-section quick-blend-parameter-settings"
+                  id="quickBlendParameterAdaptiveSection"
+                  data-adaptive-section="quick-blend-parameters"
+                  data-compact-open="true"
+                  open
+                >
+                  <summary class="field-heading adaptive-section-summary">
+                    <div>
+                      <span>参数设置</span>
+                    </div>
+                  </summary>
+                  <div class="ratio-grid" id="quickBlendRatioGrid"></div>
+                  <input id="quickBlendRatioInput" type="hidden" value="1:1" />
+                  <div class="advanced-content">
+                    <div class="advanced-controls">
+                      <label class="compact-field quick-blend-size-field">
+                        <span>分辨率</span>
+                        <select id="quickBlendSizeInput" name="quickBlendSize"></select>
+                      </label>
+                    </div>
+                  </div>
+                </details>
+
+                <button class="generate-button quick-blend-generate-button" id="quickBlendGenerateButton" type="button" disabled>
+                  开始快速溶图
+                </button>
+                <p class="prompt-agent-feedback quick-blend-feedback" id="quickBlendFeedback"></p>
+              </form>
+            </section>
+
+            <section class="studio-panel preview-panel quick-blend-preview-panel">
+              <div class="preview-stage quick-blend-generation" id="quickBlendGenerationPanel">
+                <div class="preview-meta quick-blend-preview-meta">
+                  <span class="model-badge">Quick Blend</span>
+                  <span id="quickBlendGenerationMeta">等待生成</span>
+                </div>
+
+                <div class="preview-canvas quick-blend-generation-canvas" id="quickBlendGenerationCanvas">
+                  <div class="quick-blend-generation-empty preview-placeholder" id="quickBlendGenerationEmpty">
+                    <h3>快速溶图结果会显示在这里</h3>
+                    <span>A/B 配对提交后，最新生成图会显示在画布中。</span>
+                  </div>
+                  <img id="quickBlendGenerationImage" alt="快速溶图生成结果" />
+                </div>
+
+                <div class="preview-toolbar quick-blend-preview-toolbar">
+                  <div class="zoom-controls quick-blend-preview-status" aria-live="polite">
+                    <span id="quickBlendPreviewStatus">等待任务</span>
+                  </div>
+
+                  <div class="preview-actions">
+                    <a class="toolbar-button disabled" id="quickBlendGenerationDownloadButton" href="#" download aria-disabled="true">
+                      下载
+                    </a>
+                    <button class="toolbar-button" id="quickBlendGenerationLightboxButton" type="button" disabled>查看</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="filmstrip-row quick-blend-filmstrip-row">
+                <div
+                  class="filmstrip quick-blend-generation-strip hidden"
+                  id="quickBlendGenerationStrip"
+                  aria-label="快速溶图生成缩略图"
+                ></div>
+                <div class="reference-analysis-thumbnail-empty quick-blend-thumbnail-empty" id="quickBlendThumbnailEmpty">
+                  等待生成结果
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
         <section class="view-panel image-compress-view hidden" data-view-panel="image-compress">
           <div class="image-compress-workspace">
             <section class="studio-panel image-compress-settings-panel">
@@ -1007,7 +1132,12 @@
                     <div>
                       <span>套图参考图</span>
                     </div>
-                    <small id="creationReferenceCount">0 / 12</small>
+                    <div class="creation-reference-head-actions">
+                      <button class="inline-button creation-reference-reset-button" id="creationReferenceResetButton" type="button">
+                        清空参考图
+                      </button>
+                      <small id="creationReferenceCount">0 / 15</small>
+                    </div>
                   </div>
                   <label class="reference-dropzone creation-reference-dropzone" id="creationReferenceDropzone">
                     <input id="creationReferenceInput" name="creationReferenceImages" type="file" accept="image/*" multiple />
@@ -1143,11 +1273,11 @@
                       <option value="4">4 张</option>
                       <option value="6">6 张</option>
                       <option value="8">8 张</option>
-                      <option value="10" selected>10 张</option>
+                      <option value="10">10 张</option>
                       <option value="12">12 张</option>
                       <option value="14">14 张</option>
                       <option value="16">16 张</option>
-                      <option value="18">18 张</option>
+                      <option value="18" selected>18 张</option>
                     </select>
                   </label>
 
@@ -2376,6 +2506,6 @@
       </div>
     </aside>
 
-    <script type="module" src="./app.js?v=20260528-creation-sku-rule-1"></script>
+    <script type="module" src="./app.js?v=20260603-creation-reference-15-drag-1"></script>
   </body>
 </html>

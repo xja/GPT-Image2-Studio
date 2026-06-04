@@ -43,6 +43,94 @@ test("listing sources combine skuSubjects into one parent listing source", () =>
   assert.deepEqual(sources[0].imageItems.map((item) => item.relativePath), ["a/blue.png", "a/green.png"]);
 });
 
+test("listing sources use grouped SKU subject unit count for parent listing quantity", () => {
+  const sources = buildCreationListingSources({
+    setId: "set-three-lures",
+    productName: "Electronic Fishing Lure",
+    productDescription: "A single sellable SKU image shows three complete lure bodies.",
+    dimensionSpecs: "Hook Size 4#, 130 mm, 35 g",
+    skuBundleCount: 1,
+    skuSubjects: [
+      {
+        id: "three-lures.png",
+        title: "Silver lure / Gold lure / Green lure",
+        filenames: ["three-lures.png"],
+        referenceIndexes: [1],
+        subjectUnitCount: 3,
+        note: "Top silver sellable lure subject. | Middle gold sellable lure subject. | Bottom green sellable lure subject.",
+      },
+    ],
+    items: [
+      {
+        itemId: "sku-three-lures",
+        role: "sku",
+        status: "completed",
+        title: "SKU image 1 - three lures",
+        relativePath: "sets/three-lures.png",
+        skuSubject: { id: "three-lures.png" },
+      },
+    ],
+  });
+
+  assert.equal(sources[0].skuBundleCount, 3);
+  assert.equal(sources[0].skuSubjects[0].subjectUnitCount, 3);
+});
+
+test("listing sources infer Chinese visible subject counts before quantity fallback", () => {
+  const sources = buildCreationListingSources({
+    setId: "set-three-subjects-cn",
+    productName: "Electronic Fishing Lure",
+    productDescription: "Grouped SKU product reference for a multi-lure offer.",
+    dimensionSpecs: "Hook Size #2, 130 mm, 35 g",
+    skuBundleCount: 1,
+    skuSubjects: [
+      {
+        id: "three-subjects.png",
+        title: "三色路亚主体",
+        filenames: ["three-subjects.png"],
+        referenceIndexes: [1],
+        note: "主体图包含3个完整可售主体，银色、金色、绿色三个色款。",
+      },
+    ],
+  });
+
+  assert.equal(sources[0].skuBundleCount, 3);
+  assert.equal(sources[0].skuSubjects[0].subjectUnitCount, 3);
+});
+
+test("listing sources multiply visible subject units by SKU pack count", () => {
+  const sources = buildCreationListingSources({
+    setId: "set-four-lures",
+    productName: "Electronic Fishing Lure",
+    productDescription: "One SKU subject reference shows four complete lure colorways.",
+    dimensionSpecs: "Length 160 mm, Weight 50.4 g, Hook Size 2#",
+    skuBundleCount: 1,
+    skuSubjects: [
+      {
+        id: "four-lures.png",
+        title: "Four lure colorways",
+        filenames: ["four-lures.png"],
+        referenceIndexes: [1],
+        subjectUnitCount: 4,
+        bundleCount: 2,
+        note: "4 complete visible product units in one grouped SKU subject.",
+      },
+    ],
+    items: [
+      {
+        itemId: "sku-four-lures",
+        role: "sku",
+        status: "completed",
+        title: "SKU image 1 - four lure colorways",
+        relativePath: "sets/four-lures.png",
+        skuSubject: { id: "four-lures.png" },
+      },
+    ],
+  });
+
+  assert.equal(sources[0].skuBundleCount, 8);
+});
+
 test("listing sources fall back to one input-only product package when no SKU and no image exists", () => {
   const sources = buildCreationListingSources({
     setId: "set-main",
@@ -134,6 +222,27 @@ test("listing sources compact generated items before prompt assembly", () => {
   assert.equal(JSON.stringify(sources[0]).includes("Very long image prompt"), false);
 });
 
+test("listing sources convert reference dimension notes to the selected unit mode", () => {
+  const sources = buildCreationListingSources({
+    setId: "set-imperial-reference",
+    productName: "Electric Fishing Lure",
+    productDescription: "4-segment swimbait with LED and USB charge.",
+    dimensionSpecs: "Length 130 mm, Weight 35 g, Hook Size 4#",
+    dimensionUnitMode: "imperial",
+    referenceImageRoles: [
+      {
+        filename: "size-card.png",
+        role: "dimensions",
+        note: "Length 130 mm, Weight 35 g, Hook Size 4#",
+      },
+    ],
+  });
+
+  assert.equal(sources[0].dimensionSpecs, "Length 5.12 in Weight 1.23 oz Hook Size 4#");
+  assert.equal(sources[0].referenceImageRoles[0].note, "Length 5.12 in Weight 1.23 oz Hook Size 4#");
+  assert.doesNotMatch(JSON.stringify(sources[0]), /130\s*mm|35\s*g/i);
+});
+
 test("listing draft validation rejects fields and bullets over 500 characters", () => {
   const draft = normalizeCreationListingDraft({
     id: "listing-1",
@@ -204,6 +313,46 @@ test("listing draft validation rejects size immediately after quantity", () => {
 
   assert.equal(validation.ok, false);
   assert.match(validation.errors.join("\n"), /title must place size after the product keyword/);
+});
+
+test("listing draft validation rejects title specification values when listing titles should stay search-focused", () => {
+  const draft = normalizeCreationListingDraft({
+    id: "listing-title-specs",
+    title: "3 Pack Electronic Fishing Lure Propeller Swimbait Hook Size 4# 130 mm 35 g",
+    sellingPoints: ["Lifelike action helps the lure stand out during retrieves."],
+    painPoints: ["Dead-looking bait can get ignored during slow freshwater presentations."],
+    fiveBullets: validBullets,
+    description: "Electronic fishing lure for freshwater tackle.",
+    backendSearchTerms: "electronic fishing lure propeller swimbait bass bait",
+  });
+
+  const validation = validateCreationListingDraft(draft, {
+    expectedQuantity: "3 Pack",
+    forbidTitleSpecs: true,
+  });
+
+  assert.equal(validation.ok, false);
+  assert.match(validation.errors.join("\n"), /title must not include size or specification values/);
+});
+
+test("listing draft validation rejects hash-first hook size values in titles", () => {
+  const draft = normalizeCreationListingDraft({
+    id: "listing-title-hook-hash",
+    title: "3 Pack Electronic Fishing Lure Hook Size #2 Propeller Swimbait",
+    sellingPoints: ["Lifelike action helps the lure stand out during retrieves."],
+    painPoints: ["Dead-looking bait can get ignored during slow freshwater presentations."],
+    fiveBullets: validBullets,
+    description: "Electronic fishing lure for freshwater tackle.",
+    backendSearchTerms: "electronic fishing lure propeller swimbait bass bait",
+  });
+
+  const validation = validateCreationListingDraft(draft, {
+    expectedQuantity: "3 Pack",
+    forbidTitleSpecs: true,
+  });
+
+  assert.equal(validation.ok, false);
+  assert.match(validation.errors.join("\n"), /title must not include size or specification values/);
 });
 
 test("listing draft validation requires quantity first and expected size somewhere when dimensions exist", () => {
@@ -334,6 +483,30 @@ test("listing draft validation accepts metric and imperial units from parentheti
   const validation = validateCreationListingDraft(draft, { expectedQuantity: "2 Pack", expectedSize: "3.5 in / 9 cm" });
 
   assert.equal(validation.ok, true);
+});
+
+test("listing draft validation rejects metric units when imperial mode is selected", () => {
+  const draft = normalizeCreationListingDraft({
+    id: "listing-imperial-only",
+    title: "1 Pack Fishing Lure Electric Swimbait 5.12 in / 130 mm 1.23 oz / 35 g",
+    sellingPoints: ["Lifelike segmented body helps the bait move naturally."],
+    painPoints: ["Dead-looking bait can get ignored during slow retrieves; visible action helps create a more natural presentation."],
+    fiveBullets: validBullets,
+    description: "Electric fishing lure for freshwater tackle.",
+    backendSearchTerms: "electric fishing lure swimbait 5.12 in 1.23 oz",
+    zhDisplay: {
+      title: "1 包仿真鱼饵，5.12 英寸 / 130 毫米，1.23 盎司 / 35 克",
+    },
+  });
+
+  const validation = validateCreationListingDraft(draft, {
+    expectedQuantity: "1 Pack",
+    expectedSize: "5.12 in 1.23 oz",
+    dimensionUnitMode: "imperial",
+  });
+
+  assert.equal(validation.ok, false);
+  assert.match(validation.errors.join("\n"), /imperial units only/);
 });
 
 test("listing draft validation rejects Chinese in public English fields", () => {

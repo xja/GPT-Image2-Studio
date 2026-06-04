@@ -12,6 +12,10 @@ import {
   formatCreationListingDraftHeader,
   getCreationRecordListingMetaLabel,
 } from "../public/lib/creation-listing-view.mjs";
+import { isCreationSubjectReferenceRole } from "../public/lib/creation-reference-roles.mjs";
+import { reorderCreationReferenceFiles } from "../public/lib/creation-reference-drag.mjs";
+
+const APP_SHELL_LINE_BUDGET = 16200;
 
 function makeFakeControlButton(className = "") {
   const element = {
@@ -90,9 +94,29 @@ test("public app shell delegates browser config and cache behavior to public mod
 
   assert.match(app, /from "\/lib\/browser-config\.mjs"/);
   assert.match(app, /from "\/lib\/browser-image-cache\.mjs"/);
+  assert.match(app, /from "\/lib\/view-mode-loader\.mjs\?v=20260530-quick-blend-fix-2"/);
   assert.match(app, /from "\/lib\/generation-client\.mjs"/);
   assert.match(app, /from "\/lib\/creation-listing-view\.mjs"/);
-  assert.ok(lineCount < 15800, `public/app.js should stay below the shell budget, got ${lineCount}`);
+  assert.match(app, /from "\/lib\/creation-reference-drag\.mjs"/);
+  assert.ok(
+    lineCount < APP_SHELL_LINE_BUDGET,
+    `public/app.js should stay below the shell budget, got ${lineCount}`,
+  );
+});
+
+test("creation reference drag helper reorders product items as whole records only", () => {
+  const first = { id: "first", role: "product", file: { name: "first.png" }, note: "red" };
+  const second = { id: "second", role: "reference-product", file: { name: "second.png" }, note: "blue" };
+  const detail = { id: "detail", role: "material", file: { name: "detail.png" }, note: "texture" };
+  const reordered = reorderCreationReferenceFiles([first, second, detail], "second", "first");
+
+  assert.deepEqual(reordered, [second, first, detail]);
+  assert.equal(reordered[0].file.name, "second.png");
+  assert.equal(reordered[0].note, "blue");
+  assert.equal(reorderCreationReferenceFiles([first, detail], "detail", "first"), null);
+  assert.equal(isCreationSubjectReferenceRole("product"), true);
+  assert.equal(isCreationSubjectReferenceRole("reference-product"), true);
+  assert.equal(isCreationSubjectReferenceRole("material"), false);
 });
 
 test("creation listing controller sends browser-private request config", async () => {

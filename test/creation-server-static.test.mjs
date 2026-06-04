@@ -348,6 +348,34 @@ test("local creation reference analysis has an independent route and does not wr
   assert.doesNotMatch(handler, /promptAgentStore\.append/);
 });
 
+test("creation reference analysis defaults to low reasoning effort on local and Cloudflare routes", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+  const localHandler =
+    server.match(/async function handleCreationReferenceAnalyze[\s\S]*?\r?\n}\r?\n\r?\nasync function handleCreationPlan/)?.[0] || "";
+  const workerHandler =
+    worker.match(/async function handleCreationReferenceAnalyze[\s\S]*?\r?\n}\r?\n\r?\nasync function handlePortraitReferenceAnalyze/)?.[0] || "";
+
+  assert.match(server, /CREATION_REFERENCE_ANALYSIS_REASONING_EFFORT/);
+  assert.match(worker, /CREATION_REFERENCE_ANALYSIS_REASONING_EFFORT/);
+  assert.match(
+    localHandler,
+    /formData\.get\("reasoningEffort"\) \|\| CREATION_REFERENCE_ANALYSIS_REASONING_EFFORT/,
+  );
+  assert.match(
+    workerHandler,
+    /formData\.get\("reasoningEffort"\) \|\| CREATION_REFERENCE_ANALYSIS_REASONING_EFFORT/,
+  );
+  assert.doesNotMatch(
+    localHandler,
+    /formData\.get\("reasoningEffort"\) \|\| config\.defaults\?\.reasoningEffort \|\| DEFAULT_REASONING_EFFORT/,
+  );
+  assert.doesNotMatch(
+    workerHandler,
+    /formData\.get\("reasoningEffort"\) \|\| config\.defaults\?\.reasoningEffort \|\| DEFAULT_REASONING_EFFORT/,
+  );
+});
+
 test("local creation generation accepts selected creation roles", async () => {
   const server = await readFile(serverPath, "utf8");
 

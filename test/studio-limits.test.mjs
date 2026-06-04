@@ -5,7 +5,6 @@ import { readFile } from "node:fs/promises";
 import {
   MAX_CREATION_REFERENCE_IMAGES,
   MAX_CREATION_STYLE_REFERENCE_IMAGES,
-  MAX_CONCURRENT_TASKS_PER_SESSION,
   MAX_PARALLEL_TASKS_PER_SESSION,
   MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES,
   MAX_PORTRAIT_PERSON_REFERENCE_IMAGES,
@@ -16,19 +15,21 @@ const appPath = new URL("../public/app.js", import.meta.url);
 const indexPath = new URL("../public/index.html", import.meta.url);
 const serverPath = new URL("../server.mjs", import.meta.url);
 
-test("studio task limits keep 25 queued tasks and allow ten parallel tasks", async () => {
-  assert.equal(MAX_CONCURRENT_TASKS_PER_SESSION, 25);
-  assert.equal(MAX_PARALLEL_TASKS_PER_SESSION, 10);
+test("studio task limits keep the local queue unbounded and allow eighteen parallel tasks", async () => {
+  assert.equal(MAX_PARALLEL_TASKS_PER_SESSION, 18);
 
   const app = await readFile(appPath, "utf8");
 
-  assert.match(app, /maxConcurrentTasksPerSession:\s*25/);
-  assert.match(app, /maxParallelTasksPerSession:\s*10/);
+  assert.doesNotMatch(app, /maxConcurrentTasksPerSession/);
+  assert.match(app, /maxParallelTasksPerSession:\s*18/);
+  assert.match(app, /function getMaxQueuedJobCount\(\) \{\s*return Number\.POSITIVE_INFINITY;\s*\}/);
+  assert.doesNotMatch(app, /getQueuedJobCount\(\) >= getMaxQueuedJobCount\(\)/);
+  assert.doesNotMatch(app, /最多排队/);
 });
 
-test("studio reference limits keep standard references at six and creation references at twelve", async () => {
+test("studio reference limits keep standard references at six and creation references at fifteen", async () => {
   assert.equal(MAX_REFERENCE_IMAGES, 6);
-  assert.equal(MAX_CREATION_REFERENCE_IMAGES, 12);
+  assert.equal(MAX_CREATION_REFERENCE_IMAGES, 15);
   assert.equal(MAX_CREATION_STYLE_REFERENCE_IMAGES, 3);
   assert.equal(MAX_PORTRAIT_PERSON_REFERENCE_IMAGES, 3);
   assert.equal(MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES, 9);
@@ -37,11 +38,11 @@ test("studio reference limits keep standard references at six and creation refer
   const index = await readFile(indexPath, "utf8");
 
   assert.match(app, /maxReferenceImages:\s*6/);
-  assert.match(app, /maxCreationReferenceImages:\s*12/);
+  assert.match(app, /maxCreationReferenceImages:\s*15/);
   assert.match(app, /maxCreationStyleReferenceImages:\s*3/);
   assert.match(app, /maxPortraitPersonReferenceImages:\s*3/);
   assert.match(app, /maxPortraitAccessoryReferenceImages:\s*9/);
-  assert.match(index, /id="creationReferenceCount">0 \/ 12<\/small>/);
+  assert.match(index, /id="creationReferenceCount">0 \/ 15<\/small>/);
 });
 
 test("local server counts active generation slots per request mode", async () => {

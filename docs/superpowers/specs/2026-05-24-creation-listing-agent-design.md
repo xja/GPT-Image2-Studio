@@ -6,7 +6,7 @@ Draft for user review. OpenSpec source files live under `openspec/changes/add-cr
 
 ## Scope
 
-Add an optional Listing Agent to Creation Mode. The first version targets Amazon US English listing drafts only. It generates one listing package per SKU subject after Creation Mode image generation, and also supports manual generation or rewrite from Creation records.
+Add an optional Listing Agent to Creation Mode. The first version targets Amazon US English listing drafts only. It generates one parent listing package for the Creation set, uses SKU subjects as variants and quantity evidence, and also supports manual generation or rewrite from Creation records.
 
 ## Confirmed Requirements
 
@@ -14,14 +14,14 @@ Add an optional Listing Agent to Creation Mode. The first version targets Amazon
 - The feature is optional and disabled unless the user enables it or manually runs it.
 - Listing count follows SKU count from `skuSubjects`; if no SKU subjects exist, generate one main product listing.
 - Each generated field and each generated bullet must be no longer than 500 characters.
-- Titles must start with quantity. If a size is available, place size immediately after quantity. Then add core search terms, long-tail terms, traffic terms, and descriptive terms.
+- Titles must start with quantity, must not fall back to `1 Pack` when grouped SKU subject metadata indicates multiple complete sellable units, and must keep size, weight, hook size, model specs, and measurement values out of the title. Then add core search terms, long-tail terms, traffic terms, and descriptive terms.
 - Selling points, pain points, and five bullets should use generated images when available.
 - If image generation fails, automatically degrade to writing listings from typed product inputs, SKU metadata, dimensions, category path, reference-role notes, planned prompts, and saved copy metadata.
 - Fallback listings must clearly mark that they are input-only and avoid visual claims that require generated image evidence.
 
 ## Design
 
-The Listing Agent reads the Creation set manifest and builds one source package per SKU. A source package can be image-backed, mixed, or input-only. Image-backed packages include completed generated images for the SKU or set. Mixed packages include some images plus missing or failed image warnings. Input-only packages are used when generated images failed or are unavailable.
+The Listing Agent reads the Creation set manifest and builds one parent source package for the set. SKU subjects stay in that source as variant metadata and quantity evidence. A source package can be image-backed, mixed, or input-only. Image-backed packages include completed generated images for the SKU subjects or set. Mixed packages include some images plus missing or failed image warnings. Input-only packages are used when generated images failed or are unavailable.
 
 The model returns strict JSON for each SKU. The app validates the JSON before display, retries once with validation feedback if needed, and saves successful drafts into the Creation set manifest as `listingDrafts`.
 
@@ -29,7 +29,7 @@ Each draft contains title, selling points, pain points, five bullets, descriptio
 
 ## UI
 
-Creation Mode gets a compact Listing Agent switch near generation options. Creation record detail gets a Listing section with generate, rewrite, copy, and export actions. Each SKU card shows the listing fields plus evidence mode, warnings, and missing information so the user can judge whether the result is image-backed or input-only.
+Creation Mode gets a compact Listing Agent switch near generation options. Creation record detail gets a Listing section with generate, rewrite, copy, and export actions. Each listing card shows the listing fields plus evidence mode, warnings, and missing information so the user can judge whether the result is image-backed or input-only.
 
 ## Validation
 

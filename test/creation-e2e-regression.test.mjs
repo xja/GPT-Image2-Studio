@@ -589,7 +589,7 @@ test("creation listing endpoint merges drafts into latest manifest after upstrea
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({
       output_text: JSON.stringify({
-        title: "1 Pack Blue Fishing Lure for Bass 8.89 cm (3.5 in)",
+        title: "1 Pack Blue Fishing Lure Bass Freshwater Bait Compact Tackle",
         sellingPoints: ["Blue profile helps organize fishing lure variants."],
         painPoints: ["Flat lure movement can be ignored in stained water; the blue profile helps the bait stay noticeable."],
         fiveBullets: [

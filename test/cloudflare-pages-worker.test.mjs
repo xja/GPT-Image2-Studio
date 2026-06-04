@@ -2,7 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { handleApiRequest, handleGenerationQueue } from "../cloudflare-pages-worker.mjs";
-import { MAX_CREATION_REFERENCE_IMAGES } from "../lib/studio-constants.mjs";
+import {
+  MAX_CREATION_REFERENCE_IMAGES,
+  MAX_CREATION_STYLE_REFERENCE_IMAGES,
+} from "../lib/studio-constants.mjs";
 
 function makeSseResponse(base64 = "ZmluYWw=") {
   return new Response(
@@ -90,7 +93,7 @@ function makeGenerationQueue() {
 
 function makeListingDraft(overrides = {}) {
   return {
-    title: "1 Pack Blue Travel Bottle for Daily Hydration 340.19 g (12 oz)",
+    title: "1 Pack Blue Travel Bottle Daily Hydration Compact Bottle",
     sellingPoints: ["Compact bottle details make the blue travel option easy to compare."],
     painPoints: ["Bulky bottles can be awkward during commutes; the compact format fits everyday hydration routines."],
     fiveBullets: [
@@ -200,7 +203,7 @@ test("Cloudflare creation listing route uses payload API settings outside mock m
   assert.equal(seenRequests[0].auth, "Bearer payload-key");
   assert.equal(seenRequests[0].body.model, "gpt-payload");
   assert.equal(seenRequests[0].body.reasoning.effort, "high");
-  assert.equal(body.listingDrafts[0].title, "1 Pack Blue Travel Bottle for Daily Hydration 340.19 g (12 oz)");
+  assert.equal(body.listingDrafts[0].title, "1 Pack Blue Travel Bottle Daily Hydration Compact Bottle");
   assert.doesNotMatch(JSON.stringify(body), /payload-key/);
 });
 
@@ -301,6 +304,52 @@ test("Cloudflare generation uses browser-provided API settings without echoing t
   assert.equal(imageBucket.objects.size, 1);
   assert.doesNotMatch(text, /data:image\/png;base64,ZmluYWw=/);
   assert.doesNotMatch(text, /test-browser-key/);
+});
+
+test("Cloudflare prompt generation labels uploaded reference images and saves reference metadata", async () => {
+  const seenRequests = [];
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("jobId", "job-prompt-reference");
+  formData.set("prompt", "提升画质");
+  formData.set("ratio", "16:9");
+  formData.set("size", "1536x864");
+  formData.set("format", "png");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("referenceImages", new File(["source-image"], "castle-source.jpg", { type: "image/jpeg" }));
+
+  const response = await handleApiRequest(
+    new Request("https://studio.example/api/generate", {
+      method: "POST",
+      body: formData,
+    }),
+    {
+      imageBucket,
+      async fetchImpl(url, init) {
+        seenRequests.push({
+          url,
+          body: JSON.parse(init.body),
+        });
+        return makeSseResponse();
+      },
+    },
+  );
+
+  const events = parseSseEvents(await response.text());
+  const savedEvent = events.find((event) => event.eventName === "saved");
+  const content = seenRequests[0]?.body.input[0].content || [];
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.match(
+    content.find((item) => item.type === "input_text" && item.text.includes("Prompt mode reference image"))?.text || "",
+    /Prompt mode reference image 1 of 1: castle-source\.jpg/,
+  );
+  assert.equal(content.filter((item) => item.type === "input_image").length, 1);
+  assert.equal(savedEvent.payload.item.hasReferenceImage, true);
+  assert.deepEqual(savedEvent.payload.item.referenceImageNames, ["castle-source.jpg"]);
 });
 
 test("Cloudflare creation filenames use Chinese image type names", async () => {
@@ -601,6 +650,7 @@ test("Cloudflare portrait reference analysis uses complete portrait task referen
   assert.equal(response.status, 200);
   assert.equal(seenRequests.length, 1);
   assert.equal(seenRequests[0].url, "https://example.test/v1/responses");
+  assert.equal(seenRequests[0].body.reasoning?.effort, "low");
   assert.equal(inputContent.filter((item) => item.type === "input_image").length, 3);
   assert.match(requestText, /Portrait person reference 1 of 1/);
   assert.match(requestText, /Portrait action and pose reference 1 of 1/);
@@ -621,7 +671,7 @@ test("Cloudflare portrait local record actions return unsupported capability con
   assert.equal(payload.path, "/api/portrait/sets/paths");
 });
 
-test("Cloudflare creation generation accepts twelve set reference images", async () => {
+test("Cloudflare creation generation accepts fifteen set reference images", async () => {
   const seenRequests = [];
   const imageBucket = makeImageBucket();
   const formData = new FormData();
@@ -669,6 +719,26 @@ test("Cloudflare creation generation accepts twelve set reference images", async
   assert.equal(complete.payload.set.referenceImageNames.length, MAX_CREATION_REFERENCE_IMAGES);
   assert.equal(imageBucket.objects.size, 1);
   assert.doesNotMatch(text, /参考图最多支持/);
+});
+
+test("Cloudflare creation generation rejects reference and style images above the combined limit", async () => {
+  const formData = new FormData();
+  for (let index = 1; index <= MAX_CREATION_REFERENCE_IMAGES - 1; index += 1) {
+    formData.append("referenceImages", new File([`ref-${index}`], `ref-${index}.png`, { type: "image/png" }));
+  }
+  for (let index = 1; index <= MAX_CREATION_STYLE_REFERENCE_IMAGES - 1; index += 1) {
+    formData.append("styleReferenceImages", new File([`style-${index}`], `style-${index}.png`, { type: "image/png" }));
+  }
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/creation/generate", {
+    method: "POST",
+    body: formData,
+  }), { imageBucket: makeImageBucket() });
+  const events = parseSseEvents(await response.text());
+  const error = events.find((event) => event.eventName === "error");
+
+  assert.equal(response.status, 200);
+  assert.equal(error?.payload.message, `套图参考图和参考风格图合计最多支持 ${MAX_CREATION_REFERENCE_IMAGES} 张。`);
 });
 
 test("Cloudflare creation generation labels reference count order roles and excludes logo from the reference list", async () => {
@@ -754,6 +824,58 @@ test("Cloudflare creation generation labels reference count order roles and excl
   assert.match(inputText, /Role: visual style reference\./);
   assert.match(inputText, /Note: silver black finish\./);
   assert.doesNotMatch(inputText, /Uploaded reference files:[^\n]*brand-mark\.png/);
+});
+
+test("Cloudflare creation generation applies edited preview plan overrides", async () => {
+  const seenRequests = [];
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("productName", "Jointed fishing lure");
+  formData.set("productDescription", "Segmented lifelike lure");
+  formData.set("sellingPoints", "realistic swim action");
+  formData.set("targetLanguage", "en");
+  formData.set("imageCount", "4");
+  formData.set("scenario", "standard");
+  formData.set("industryTemplate", "general");
+  formData.set("selectedRoles", JSON.stringify(["hero"]));
+  formData.set("planOverrides", JSON.stringify([
+    {
+      itemId: "1-hero",
+      prompt: "UNIQUE_WORKER_CREATION_OVERRIDE_PROMPT_SENTINEL",
+      marketingCopy: "Edited preview copy",
+    },
+  ]));
+  formData.set("ratio", "1:1");
+  formData.set("size", "1024x1024");
+  formData.set("format", "png");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/creation/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+        body: JSON.parse(init.body),
+      });
+      return makeSseResponse();
+    },
+  });
+
+  const text = await response.text();
+  const complete = parseSseEvents(text).find((event) => event.eventName === "complete");
+  const requestInput = JSON.stringify(seenRequests[0]?.body.input || "");
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.match(requestInput, /UNIQUE_WORKER_CREATION_OVERRIDE_PROMPT_SENTINEL/);
+  assert.equal(complete?.payload?.set?.items?.[0]?.prompt, "UNIQUE_WORKER_CREATION_OVERRIDE_PROMPT_SENTINEL");
+  assert.equal(complete?.payload?.set?.items?.[0]?.marketingCopy, "Edited preview copy");
 });
 
 test("Cloudflare creation style references are style-only generation inputs", async () => {
@@ -1038,6 +1160,117 @@ test("Cloudflare image decomposition uses a single reference image and generated
   assert.doesNotMatch(text, /test-browser-key/);
 });
 
+test("Cloudflare quick blend uses exactly two references, generated prompt, labels, and saved metadata", async () => {
+  const seenRequests = [];
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("jobId", "job-quick-blend");
+  formData.set("mode", "quick-blend");
+  formData.set("quickBlendPairIndex", "3");
+  formData.set("quickBlendAName", "a-chair.png");
+  formData.set("quickBlendBName", "b-table.png");
+  formData.set("ratio", "4:5");
+  formData.set("size", "1024x1280");
+  formData.set("format", "png");
+  formData.set("reasoningEffort", "low");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("referenceImages", new File(["chair"], "a-chair.png", { type: "image/png" }));
+  formData.append("referenceImages", new File(["table"], "b-table.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+        body: JSON.parse(init.body),
+      });
+      return makeSseResponse();
+    },
+  });
+
+  const text = await response.text();
+  const events = parseSseEvents(text);
+  const savedEvent = events.find((event) => event.eventName === "saved");
+  const serverImageEvent = events.find((event) => event.eventName === "server_image");
+  const inputContent = seenRequests[0]?.body?.input?.[0]?.content || [];
+  const inputImages = inputContent.filter((item) => item.type === "input_image");
+  const inputText = inputContent.filter((item) => item.type === "input_text").map((item) => item.text).join("\n");
+  const storedImage = [...imageBucket.objects.values()].find(
+    (object) => object.customMetadata.filename === savedEvent?.payload?.item?.filename,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(seenRequests[0].url, "https://example.test/v1/responses");
+  assert.equal(seenRequests[0].auth, "Bearer test-browser-key");
+  assert.equal(inputImages.length, 2);
+  assert.match(inputText, /Reference image 1: A image/);
+  assert.match(inputText, /Reference image 2: B image/);
+  assert.match(inputText, /A subject group above the B subject group/);
+  assert.ok(savedEvent, "expected saved SSE event");
+  assert.equal(savedEvent.payload.item.generationMode, "quick-blend");
+  assert.equal(savedEvent.payload.item.assetKind, "quick-blend");
+  assert.equal(savedEvent.payload.item.quickBlendPairIndex, "3");
+  assert.equal(savedEvent.payload.item.quickBlendAImageName, "a-chair.png");
+  assert.equal(savedEvent.payload.item.quickBlendBImageName, "b-table.png");
+  assert.match(savedEvent.payload.item.filename, /^a-chair-b-table-cloudflare-\d{4}-\d{2}-\d{2}T/);
+  assert.deepEqual(savedEvent.payload.item.referenceImageNames, ["a-chair.png", "b-table.png"]);
+  assert.match(savedEvent.payload.item.prompt, /A subject group above the B subject group/);
+  assert.ok(serverImageEvent, "expected server_image SSE event");
+  assert.equal(serverImageEvent.payload.item.assetKind, "quick-blend");
+  assert.ok(storedImage, "expected generated image to be stored in R2");
+  assert.equal(storedImage.customMetadata.generationMode, "quick-blend");
+  assert.equal(storedImage.customMetadata.assetKind, "quick-blend");
+  assert.equal(storedImage.customMetadata.quickBlendPairIndex, "3");
+  assert.equal(storedImage.customMetadata.quickBlendAImageName, "a-chair.png");
+  assert.equal(storedImage.customMetadata.quickBlendBImageName, "b-table.png");
+  assert.deepEqual(JSON.parse(storedImage.customMetadata.referenceImageNames), ["a-chair.png", "b-table.png"]);
+  assert.doesNotMatch(JSON.stringify(storedImage.customMetadata), /test-browser-key/);
+  assert.doesNotMatch(text, /test-browser-key/);
+});
+
+test("Cloudflare quick blend rejects malformed reference count", async () => {
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("jobId", "job-quick-blend-invalid");
+  formData.set("mode", "quick-blend");
+  formData.set("quickBlendPairIndex", "1");
+  formData.set("quickBlendAName", "a-chair.png");
+  formData.set("quickBlendBName", "b-table.png");
+  formData.set("ratio", "4:5");
+  formData.set("size", "1024x1280");
+  formData.set("format", "png");
+  formData.set("reasoningEffort", "low");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("referenceImages", new File(["chair"], "a-chair.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl() {
+      throw new Error("quick blend malformed reference count should not call upstream");
+    },
+  });
+
+  const text = await response.text();
+  const events = parseSseEvents(text);
+  const errorEvent = events.find((event) => event.eventName === "error");
+
+  assert.equal(response.status, 200);
+  assert.ok(errorEvent, "expected SSE error event");
+  assert.match(errorEvent.payload.message, /快速溶图模式每个任务必须且只支持两张参考图：一张 A 图和一张 B 图。/);
+});
+
 test("Cloudflare prompt agent analyzes browser reference images without generation tools", async () => {
   const seenRequests = [];
   const formData = new FormData();
@@ -1108,6 +1341,68 @@ test("Cloudflare prompt agent analyzes browser reference images without generati
   assert.equal(payload.item.json.prompts.length, 1);
   assert.equal(payload.item.json.prompt, "让参考人物穿上参考裤装，站在城市街头，自然回望，柔和日光，时尚街拍质感。");
   assert.doesNotMatch(JSON.stringify(payload), /test-browser-key/);
+});
+
+test("Cloudflare reference orchestration defaults to low reasoning effort", async () => {
+  const seenRequests = [];
+  const formData = new FormData();
+  formData.set("mode", "reference-orchestration");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("referenceImages", new File(["person"], "person.png", { type: "image/png" }));
+  formData.append("referenceImages", new File(["pants"], "pants.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(
+    new Request("https://studio.example/api/prompt-agent/analyze", {
+      method: "POST",
+      body: formData,
+    }),
+    {
+      async fetchImpl(url, init) {
+        seenRequests.push({
+          url,
+          body: JSON.parse(init.body),
+        });
+        return new Response(
+          [
+            "event: response.output_text.done",
+            `data: {"type":"response.output_text.done","text":${JSON.stringify(
+              JSON.stringify({
+                title: "Reference blend",
+                summary: "Two references.",
+                image_roles: ["Image 1: person", "Image 2: clothing"],
+                relationship: "Person wears the clothing reference.",
+                prompts: [
+                  {
+                    title: "Street portrait",
+                    intent: "Blend references.",
+                    prompt: "Generate the person wearing the referenced clothing.",
+                  },
+                ],
+                risks: [],
+              }),
+            )}}`,
+            "",
+            "",
+            "data: [DONE]",
+            "",
+            "",
+          ].join("\n"),
+          {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          },
+        );
+      },
+    },
+  );
+
+  await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(seenRequests[0].body.reasoning?.effort, "low");
 });
 
 test("Cloudflare generation reports the server image URL after best-effort R2 storage", async () => {

@@ -21,10 +21,17 @@ import {
 import {
   IMAGE_DECOMPOSITION_ASSET_KIND,
   IMAGE_DECOMPOSITION_MODE,
-  IMAGE_DECOMPOSITION_REFERENCE_LABEL,
   buildImageDecompositionPrompt,
   normalizeImageDecompositionFeatureCards,
 } from "./lib/image-decomposition-prompt.mjs";
+import {
+  QUICK_BLEND_ASSET_KIND,
+  QUICK_BLEND_MODE,
+  buildQuickBlendFilenameToken,
+  buildQuickBlendPrompt,
+  normalizeQuickBlendPairIndex,
+} from "./lib/quick-blend-prompt.mjs";
+import { buildGenerationReferenceImageLabels } from "./lib/generation-reference-labels.mjs";
 import {
   appendReferenceAnalysisLanguageInstruction,
   normalizeReferenceAnalysisLanguage,
@@ -57,7 +64,6 @@ import {
   DEFAULT_REASONING_EFFORT,
   MAX_CREATION_REFERENCE_IMAGES,
   MAX_CREATION_STYLE_REFERENCE_IMAGES,
-  MAX_CONCURRENT_TASKS_PER_SESSION,
   MAX_PARALLEL_TASKS_PER_SESSION,
   MAX_PORTRAIT_ACTION_REFERENCE_IMAGES,
   MAX_PORTRAIT_ACCESSORY_REFERENCE_IMAGES,
@@ -68,6 +74,7 @@ import {
 import {
   CREATION_REFERENCE_ANALYSIS_MODE,
   PORTRAIT_REFERENCE_ANALYSIS_MODE,
+  REFERENCE_ORCHESTRATION_MODE,
   requestPromptAgentAnalysis,
 } from "./lib/prompt-agent.mjs";
 import { createPromptAgentStore } from "./lib/prompt-agent-store.mjs";
@@ -149,6 +156,9 @@ const portraitSetStore = createPortraitSetStore({ outputDir, publicBasePath: "/o
 const articleIllustrationSetStore = createArticleIllustrationSetStore({ outputDir, publicBasePath: "/output" });
 const port = Number(process.env.PORT || 3600);
 const DEFAULT_CREATION_LISTING_REASONING_EFFORT = "medium";
+const CREATION_REFERENCE_ANALYSIS_REASONING_EFFORT = "low";
+const PORTRAIT_REFERENCE_ANALYSIS_REASONING_EFFORT = "low";
+const REFERENCE_ORCHESTRATION_REASONING_EFFORT = "low";
 const SESSION_TASK_SLOT_RETRY_DELAY_MS = 250;
 const sessionTaskSlotLimiter = createSessionTaskSlotLimiter({
   maxParallelTasks: MAX_PARALLEL_TASKS_PER_SESSION,
@@ -162,12 +172,13 @@ const ARTICLE_ILLUSTRATION_FORMAT = "png";
 const MOCK_IMAGE_GENERATION_ENABLED = process.env.IMAGE_STUDIO_MOCK_IMAGE_GENERATION === "1";
 const MOCK_IMAGE_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==";
-const STYLE_TRANSFER_REFERENCE_IMAGE_LABELS = [
-  "Reference image 1: SOURCE image. Preserve content, identity, pose, composition, and layout only. Do not preserve its visual style.",
-  "Reference image 2: STYLE reference. This image is the style authority for final rendering, realism level, lighting, texture, color, and material finish.",
-];
-const STYLE_TRANSFER_SOURCE_IMAGE_LABELS = [STYLE_TRANSFER_REFERENCE_IMAGE_LABELS[0]];
-const GENERATION_MODES = new Set(["style-transfer", "reference-analysis", IMAGE_DECOMPOSITION_MODE, "portrait"]);
+const GENERATION_MODES = new Set([
+  "style-transfer",
+  "reference-analysis",
+  IMAGE_DECOMPOSITION_MODE,
+  QUICK_BLEND_MODE,
+  "portrait",
+]);
 
 function buildPortraitReferenceImageLabels(personReferenceImages = [], actionReferenceImages = [], accessoryReferenceImages = []) {
   const personCount = personReferenceImages.length;
@@ -216,15 +227,8 @@ function getStaticCacheControl(filePath) {
   return isPublicAsset || isLibraryAsset ? "no-store" : null;
 }
 
-function getStyleTransferReferenceImageLabels(generationMode, styleTransferStylePreset) {
-  if (generationMode === IMAGE_DECOMPOSITION_MODE) {
-    return [IMAGE_DECOMPOSITION_REFERENCE_LABEL];
-  }
-  if (generationMode !== "style-transfer") {
-    return [];
-  }
-  const hasStyleTransferPreset = Boolean(styleTransferStylePreset);
-  return hasStyleTransferPreset ? STYLE_TRANSFER_SOURCE_IMAGE_LABELS : STYLE_TRANSFER_REFERENCE_IMAGE_LABELS;
+function getStyleTransferReferenceImageLabels(generationMode, styleTransferStylePreset, referenceImages = []) {
+  return buildGenerationReferenceImageLabels(generationMode, styleTransferStylePreset, referenceImages);
 }
 
 function normalizeGenerationMode(value) {
@@ -1398,9 +1402,11 @@ async function handlePromptAgentAnalyze(request, response) {
     });
   }
 
-  const reasoningEffort = normalizeReasoningEffort(
-    formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
-  );
+  const reasoningFallback =
+    mode === REFERENCE_ORCHESTRATION_MODE
+      ? REFERENCE_ORCHESTRATION_REASONING_EFFORT
+      : config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT;
+  const reasoningEffort = normalizeReasoningEffort(formData.get("reasoningEffort") || reasoningFallback);
   const createdAt = new Date().toISOString();
   const json = await requestPromptAgentAnalysis({
     baseUrl: config.baseUrl,
@@ -1449,6 +1455,9 @@ function buildSavedItem({
   styleTransferSourceImageName = "",
   styleTransferReferenceImageName = "",
   styleTransferStylePreset = "",
+  quickBlendPairIndex = "",
+  quickBlendAImageName = "",
+  quickBlendBImageName = "",
   assetKind = "",
   targetLanguage = "",
   sourceImageName = "",
@@ -1478,6 +1487,9 @@ function buildSavedItem({
     styleTransferSourceImageName,
     styleTransferReferenceImageName,
     styleTransferStylePreset,
+    quickBlendPairIndex,
+    quickBlendAImageName,
+    quickBlendBImageName,
     assetKind,
     targetLanguage,
     sourceImageName,
@@ -2675,7 +2687,7 @@ async function handlePortraitReferenceAnalyze(request, response) {
   }
 
   const reasoningEffort = normalizeReasoningEffort(
-    formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    formData.get("reasoningEffort") || PORTRAIT_REFERENCE_ANALYSIS_REASONING_EFFORT,
   );
   const json = await requestPromptAgentAnalysis({
     baseUrl: config.baseUrl,
@@ -2748,7 +2760,7 @@ async function handleCreationReferenceAnalyze(request, response) {
   }
 
   const reasoningEffort = normalizeReasoningEffort(
-    formData.get("reasoningEffort") || config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT,
+    formData.get("reasoningEffort") || CREATION_REFERENCE_ANALYSIS_REASONING_EFFORT,
   );
   const json = await requestPromptAgentAnalysis({
     baseUrl: config.baseUrl,
@@ -3153,6 +3165,9 @@ async function handleCreationGenerate(request, response) {
     }
     if (styleReferenceImages.length > MAX_CREATION_STYLE_REFERENCE_IMAGES) {
       throw new Error(`参考风格图最多支持 ${MAX_CREATION_STYLE_REFERENCE_IMAGES} 张。`);
+    }
+    if (referenceImages.length + styleReferenceImages.length > MAX_CREATION_REFERENCE_IMAGES) {
+      throw new Error(`套图参考图和参考风格图合计最多支持 ${MAX_CREATION_REFERENCE_IMAGES} 张。`);
     }
     if (styleReferenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
       throw new Error("仅支持图片参考风格文件。");
@@ -4058,6 +4073,9 @@ async function handleCreationRepair(request, response) {
     if (styleReferenceImages.length > MAX_CREATION_STYLE_REFERENCE_IMAGES) {
       throw new Error(`参考风格图最多支持 ${MAX_CREATION_STYLE_REFERENCE_IMAGES} 张。`);
     }
+    if (referenceImages.length + styleReferenceImages.length > MAX_CREATION_REFERENCE_IMAGES) {
+      throw new Error(`套图参考图和参考风格图合计最多支持 ${MAX_CREATION_REFERENCE_IMAGES} 张。`);
+    }
     if (styleReferenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
       throw new Error("仅支持图片参考风格文件。");
     }
@@ -4468,9 +4486,14 @@ async function handleGenerate(request, response) {
     const styleTransferSourceImageName = String(formData.get("styleTransferSourceImageName") || "").trim();
     const styleTransferReferenceImageName = String(formData.get("styleTransferReferenceImageName") || "").trim();
     const styleTransferStylePreset = String(formData.get("styleTransferStylePreset") || "").trim();
+    let quickBlendPairIndex = normalizeQuickBlendPairIndex(formData.get("quickBlendPairIndex") || "1");
+    let quickBlendAImageName = String(formData.get("quickBlendAImageName") || "").trim();
+    let quickBlendBImageName = String(formData.get("quickBlendBImageName") || "").trim();
+    const isQuickBlend = generationMode === QUICK_BLEND_MODE;
     let targetLanguage = "";
     let sourceImageName = "";
     let assetKind = "";
+    let quickBlendFilenameToken = "";
     clientSessionId = getClientSessionId(request, formData);
     const createdAt = new Date().toISOString();
 
@@ -4493,7 +4516,7 @@ async function handleGenerate(request, response) {
 
     recordRunningTask();
 
-    if (!prompt && !isImageDecomposition) {
+    if (!prompt && !isImageDecomposition && !isQuickBlend) {
       generationTaskStore.failTask(clientSessionId, taskId, {
         errorMessage: "提示词不能为空。",
       });
@@ -4526,6 +4549,16 @@ async function handleGenerate(request, response) {
       });
       return;
     }
+    if (isQuickBlend && referenceImages.length !== 2) {
+      const message = "快速溶图模式每个任务必须且只支持两张参考图：一张 A 图和一张 B 图。";
+      generationTaskStore.failTask(clientSessionId, taskId, {
+        errorMessage: message,
+      });
+      writeSseEvent(response, "error", {
+        message,
+      });
+      return;
+    }
 
     if (isImageDecomposition) {
       const decompositionPrompt = buildImageDecompositionPrompt({
@@ -4543,6 +4576,30 @@ async function handleGenerate(request, response) {
         sourceImageName,
         assetKind,
         featureCardsEnabled,
+      });
+    }
+
+    if (isQuickBlend) {
+      const quickBlendPrompt = buildQuickBlendPrompt({
+        pairIndex: quickBlendPairIndex,
+        aImageName: quickBlendAImageName || referenceImages[0]?.filename || "",
+        bImageName: quickBlendBImageName || referenceImages[1]?.filename || "",
+      });
+      prompt = quickBlendPrompt.prompt;
+      assetKind = QUICK_BLEND_ASSET_KIND;
+      quickBlendPairIndex = quickBlendPrompt.pairIndex;
+      quickBlendAImageName = quickBlendPrompt.aImageName;
+      quickBlendBImageName = quickBlendPrompt.bImageName;
+      quickBlendFilenameToken = buildQuickBlendFilenameToken({
+        aImageName: quickBlendAImageName,
+        bImageName: quickBlendBImageName,
+      });
+      generationTaskStore.updateTask(clientSessionId, taskId, {
+        prompt,
+        assetKind,
+        quickBlendPairIndex,
+        quickBlendAImageName,
+        quickBlendBImageName,
       });
     }
 
@@ -4615,6 +4672,9 @@ async function handleGenerate(request, response) {
       styleTransferSourceImageName,
       styleTransferReferenceImageName,
       styleTransferStylePreset,
+      quickBlendPairIndex,
+      quickBlendAImageName,
+      quickBlendBImageName,
       assetKind,
       targetLanguage,
       sourceImageName,
@@ -4627,7 +4687,7 @@ async function handleGenerate(request, response) {
       apiKey: config.apiKey,
       prompt: finalPrompt,
       referenceImages,
-      referenceImageLabels: getStyleTransferReferenceImageLabels(generationMode, styleTransferStylePreset),
+      referenceImageLabels: getStyleTransferReferenceImageLabels(generationMode, styleTransferStylePreset, referenceImages),
       size: finalSize,
       quality: finalQuality,
       format: toApiOutputFormat(finalFormat),
@@ -4695,6 +4755,7 @@ async function handleGenerate(request, response) {
       prompt,
       createdAt,
       idSource: taskId,
+      filenameKeyword: quickBlendFilenameToken,
     });
     const imageBuffer = Buffer.from(normalizeBase64(finalBase64), "base64");
     const saved = await saveGeneratedAsset({
@@ -4719,6 +4780,9 @@ async function handleGenerate(request, response) {
         styleTransferSourceImageName,
         styleTransferReferenceImageName,
         styleTransferStylePreset,
+        quickBlendPairIndex,
+        quickBlendAImageName,
+        quickBlendBImageName,
         assetKind,
         targetLanguage,
         sourceImageName,
@@ -4748,6 +4812,9 @@ async function handleGenerate(request, response) {
       styleTransferSourceImageName,
       styleTransferReferenceImageName,
       styleTransferStylePreset,
+      quickBlendPairIndex,
+      quickBlendAImageName,
+      quickBlendBImageName,
       assetKind,
       targetLanguage,
       sourceImageName,

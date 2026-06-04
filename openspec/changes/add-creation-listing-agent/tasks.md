@@ -7,7 +7,7 @@
 
 - [x] 2.1 Add tests for the Listing Agent output schema, SKU grouping, evidence modes, and 500-character field and bullet limits.
 - [x] 2.2 Implement listing draft normalization and validation helpers.
-- [x] 2.3 Add tests for title ordering: quantity first, size second when available, then search and descriptive terms.
+- [x] 2.3 Add tests for title rules: quantity first, no title size/spec values, grouped SKU subject counts do not fall back to `1 Pack`, then search and descriptive terms.
 - [x] 2.4 Implement keyword de-duplication, warning generation, and one-retry rewrite feedback.
 
 ## 3. Source Assembly And Fallback

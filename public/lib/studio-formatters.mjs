@@ -34,10 +34,14 @@ export function formatGenerationDuration(value) {
 }
 
 export function buildParameterText(item = {}, fallbackConfig = {}) {
-  const referenceNames =
-    item.referenceImageNames && item.referenceImageNames.length > 0
-      ? item.referenceImageNames.join(", ")
-      : item.referenceImageName;
+  const referenceImageNames = Array.isArray(item.referenceImageNames)
+    ? item.referenceImageNames.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+  const referenceNames = referenceImageNames.length > 0 ? referenceImageNames.join(", ") : item.referenceImageName;
+  const hasReferenceImage = Boolean(item.hasReferenceImage || referenceImageNames.length > 0 || item.referenceImageName);
+  const referenceText = hasReferenceImage
+    ? `有（${referenceImageNames.length || 1} 张${referenceNames ? `：${referenceNames}` : ""}）`
+    : "无";
   const generationDuration = formatGenerationDuration(item.generationDurationMs);
 
   const lines = [
@@ -48,7 +52,7 @@ export function buildParameterText(item = {}, fallbackConfig = {}) {
     `思考等级：${REASONING_LABELS[item.reasoningEffort] || item.reasoningEffort || "未记录"}`,
     `图像模型：${formatImageModelLabel(item.imageModel)}`,
     `外层模型：${item.responsesModel || fallbackConfig.responsesModel || "gpt-5.4"}`,
-    `参考图：${item.hasReferenceImage ? referenceNames || "已使用" : "未使用"}`,
+    `参考图：${referenceText}`,
   ];
 
   if (generationDuration) {

@@ -652,7 +652,7 @@ test("creation planner appends distinct SKU images after twelve carousel roles",
   assert.match(skuItems[2].prompt, /red-white-bg\.png/);
 });
 
-test("creation planner defaults suite generation to ten carousel images", () => {
+test("creation planner defaults suite generation to eighteen carousel images", () => {
   const plan = buildCreationPlan({
     productName: "Travel bottle",
     productDescription: "Leakproof travel bottle with carry loop and silicone seal.",
@@ -660,23 +660,9 @@ test("creation planner defaults suite generation to ten carousel images", () => 
     targetLanguage: "en",
   });
 
-  assert.equal(normalizeCreationImageCount("99"), 10);
-  assert.equal(plan.imageCount, 10);
-  assert.deepEqual(
-    plan.items.map((item) => item.role),
-    [
-      "hero",
-      "benefit",
-      "scene",
-      "detail-trust",
-      "comparison",
-      "social-proof",
-      "package",
-      "promotion",
-      "material-closeup",
-      "usage-steps",
-    ],
-  );
+  assert.equal(normalizeCreationImageCount("99"), 18);
+  assert.equal(plan.imageCount, 18);
+  assert.deepEqual(plan.items.map((item) => item.role), CREATION_ITEM_ROLES.map((role) => role.role));
 });
 
 test("creation planner supports additional ecommerce image types with dedicated rules", () => {
@@ -686,23 +672,27 @@ test("creation planner supports additional ecommerce image types with dedicated 
   assert.ok(roleValues.includes("compatibility"));
   assert.ok(roleValues.includes("care-guide"));
   assert.ok(roleValues.includes("brand-story"));
-  assert.ok(roleValues.includes("certification-proof"));
+  assert.ok(roleValues.includes("image-decomposition"));
+  assert.ok(!roleValues.includes("certification-proof"));
+  assert.equal(CREATION_ITEM_ROLES.find((role) => role.role === "image-decomposition")?.title, "图片拆解图");
 
   const plan = buildCreationPlan({
     productName: "Modular desk lamp",
     productDescription: "LED desk lamp with adjustable arm, USB-C power, replaceable diffuser, desk clamp compatibility, factory test card, and maker craft notes.",
     sellingPoints: "stable clamp, three brightness levels, replaceable diffuser, easy cleaning, tested wiring, workshop-built hinge",
     targetLanguage: "en",
-    selectedRoles: ["feature-callout", "variant-matrix", "compatibility", "care-guide", "brand-story", "certification-proof"],
+    selectedRoles: ["feature-callout", "variant-matrix", "compatibility", "care-guide", "brand-story", "image-decomposition"],
   });
 
-  assert.deepEqual(plan.selectedRoles, ["feature-callout", "variant-matrix", "compatibility", "care-guide", "brand-story", "certification-proof"]);
+  assert.deepEqual(plan.selectedRoles, ["feature-callout", "variant-matrix", "compatibility", "care-guide", "brand-story", "image-decomposition"]);
   assert.match(plan.items.find((item) => item.role === "feature-callout").prompt, /exploded feature callout/i);
   assert.match(plan.items.find((item) => item.role === "variant-matrix").prompt, /variant matrix/i);
   assert.match(plan.items.find((item) => item.role === "compatibility").prompt, /compatibility fit/i);
   assert.match(plan.items.find((item) => item.role === "care-guide").prompt, /care and maintenance/i);
   assert.match(plan.items.find((item) => item.role === "brand-story").prompt, /brand story/i);
-  assert.match(plan.items.find((item) => item.role === "certification-proof").prompt, /certification and trust proof/i);
+  assert.match(plan.items.find((item) => item.role === "image-decomposition").prompt, /annotated component breakdown poster/i);
+  assert.doesNotMatch(plan.items.find((item) => item.role === "image-decomposition").prompt, /certification and trust proof/i);
+  assert.doesNotMatch(plan.items.find((item) => item.role === "image-decomposition").prompt, /certification marks|warranty promises|lab-style badges/i);
 });
 
 test("creation planner applies SKU generation rules for package-list content and dimensions", () => {
@@ -829,6 +819,70 @@ test("creation planner SKU filename tokens prefer source filenames over generic 
 
   assert.equal(skuItem.title, "SKU image 1 - SKU image 2");
   assert.equal(skuItem.filenameToken, "sku-1-260526-SKU-151142-5714.png");
+});
+
+test("creation planner preserves multiple units inside one SKU subject reference image", () => {
+  const plan = buildCreationPlan({
+    productName: "Fishing lure assortment",
+    productDescription: "One product-subject reference image shows three complete lure colorways",
+    sellingPoints: "lifelike swim action",
+    targetLanguage: "en",
+    selectedRoles: ["hero"],
+    referenceImageRoles: [
+      { filename: "three-lures.png", role: "product", note: "Product subject image contains three complete visible lure bodies: silver, gold, and green." },
+    ],
+    skuSubjects: [
+      {
+        id: "three-lures.png",
+        title: "Three lure colorways",
+        filenames: ["three-lures.png"],
+        referenceIndexes: [1],
+        note: "One product-subject reference image contains three complete visible lure bodies: silver, gold, and green.",
+      },
+    ],
+  });
+
+  const skuItems = plan.items.filter((item) => item.role === "sku");
+
+  assert.equal(plan.skuImageCount, 1);
+  assert.equal(skuItems.length, 1);
+  assert.match(skuItems[0].prompt, /SKU SUBJECT UNIT COUNT LOCK/);
+  assert.match(skuItems[0].prompt, /preserve the same number of complete visible product units/i);
+  assert.match(skuItems[0].prompt, /do not collapse them into one unit/i);
+  assert.match(skuItems[0].prompt, /do not split them into separate SKU images/i);
+  assert.match(skuItems[0].prompt, /three complete visible lure bodies/i);
+});
+
+test("creation planner infers SKU subject unit count from Chinese product notes", () => {
+  const plan = buildCreationPlan({
+    productName: "Fishing lure assortment",
+    productDescription: "A white-background product subject reference shows four complete lure colorways",
+    sellingPoints: "lifelike swim action",
+    targetLanguage: "en",
+    selectedRoles: ["hero"],
+    referenceImageRoles: [
+      {
+        filename: "four-lures.png",
+        role: "product",
+        note: "主体图包含4条完整可见路亚鱼饵，银色、绿色、红色、灰色四个色款。",
+      },
+    ],
+    skuSubjects: [
+      {
+        id: "four-lures.png",
+        title: "Lure assortment",
+        filenames: ["four-lures.png"],
+        referenceIndexes: [1],
+        note: "主体图包含4条完整可见路亚鱼饵，银色、绿色、红色、灰色四个色款。",
+      },
+    ],
+  });
+
+  const skuItem = plan.items.find((item) => item.role === "sku");
+
+  assert.equal(skuItem.skuSubject.subjectUnitCount, 4);
+  assert.match(skuItem.prompt, /contains 4 complete visible product units/);
+  assert.match(skuItem.prompt, /Preserve the same number of complete visible product units/);
 });
 
 test("creation planner renders same-SKU combination packs without changing the subject", () => {
@@ -1051,13 +1105,46 @@ test("creation planner applies selected unit mode to dimensions recognized from 
 
   assert.equal(plan.dimensionUnitMode, "both");
   assert.match(dimensionsPrompt, /Dimension specifications recognized from reference notes/);
-  assert.match(dimensionsPrompt, /Length 130mm \(5\.12 in\) \/ Weight 35g \(1\.23 oz\) \/ Hook Size 4#/);
+  assert.match(dimensionsPrompt, /Length 130mm \(5\.12 in\) \/ Weight 35g \(1\.23 oz\) \/ Hook Size 4# \/ Sinking Rate slow sinking/);
   assert.match(dimensionsPrompt, /Render each recognized dimension value with metric first and imperial in parentheses/);
-  assert.equal(plan.dimensionSpecs, "Length 130mm (5.12 in)\nWeight 35g (1.23 oz)\nHook Size 4#");
+  assert.equal(plan.dimensionSpecs, "Length 130mm (5.12 in)\nWeight 35g (1.23 oz)\nHook Size 4#\nSinking Rate slow sinking");
   assert.doesNotMatch(
     heroPrompt,
     /130mm|35g|5\.12 in|1\.23 oz|Set-level dimension|Dimension specifications recognized/,
   );
+});
+
+test("creation planner locks decimal backpack weight and Chinese height width depth specs", () => {
+  const plan = buildCreationPlan({
+    productName: "Outdoor Backpack",
+    productDescription: "Outdoor dual-shoulder backpack",
+    sellingPoints: "large capacity, waterproof nylon, handheld shoulder backpack",
+    targetLanguage: "en",
+    selectedRoles: ["hero", "dimensions"],
+    dimensionUnitMode: "both",
+    referenceImageRoles: [
+      {
+        filename: "backpack-spec-card.png",
+        role: "dimensions",
+        note: "尺寸规格影响产品规格信息：品牌、名称户外双肩包、材质防泼水尼龙、功能手挎/单肩/双背、颜色多色可选、适合户外/徒步/登山、尺寸高47cm宽31cm厚21cm，重量0.53kg。",
+      },
+    ],
+  });
+
+  const heroPrompt = plan.items.find((item) => item.role === "hero").prompt;
+  const dimensionsPrompt = plan.items.find((item) => item.role === "dimensions").prompt;
+
+  assert.equal(
+    plan.dimensionSpecs,
+    "Height 47cm (18.5 in)\nWidth 31cm (12.2 in)\nDepth 21cm (8.27 in)\nWeight 0.53kg (1.17 lb)",
+  );
+  assert.match(
+    dimensionsPrompt,
+    /Height 47cm \(18\.5 in\) \/ Width 31cm \(12\.2 in\) \/ Depth 21cm \(8\.27 in\) \/ Weight 0\.53kg \(1\.17 lb\)/,
+  );
+  assert.match(dimensionsPrompt, /EXACT NUMERIC VALUE LOCK:[\s\S]*0\.53kg[\s\S]*1\.17 lb/);
+  assert.match(dimensionsPrompt, /Do not render 0\.53kg as 53 kg, 53kg, 0\.53g, or 530g/);
+  assert.doesNotMatch(heroPrompt, /0\.53kg|1\.17 lb|47cm|31cm|21cm|53 kg/);
 });
 
 test("creation planner dedupes noisy reference-derived dimensions and stores selected units", () => {
@@ -1210,6 +1297,36 @@ test("creation planner carries exact lure specification table values into dimens
   assert.match(dimensionsPrompt, /钩号 2#/);
   assert.match(dimensionsPrompt, /Dimension specifications recognized from reference notes/);
   assert.doesNotMatch(heroPrompt, /型号 F4J16、长度 13cm、重量 42g、钩号 2#/);
+});
+
+test("creation planner forces every recognized lure dimension and action attribute into the dimensions prompt", () => {
+  const plan = buildCreationPlan({
+    productName: "Electric jointed fishing lure",
+    productDescription: "Segmented bionic swim bait with hooks",
+    sellingPoints: "realistic finish",
+    targetLanguage: "en",
+    selectedRoles: ["hero", "dimensions"],
+    dimensionUnitMode: "both",
+    referenceImageRoles: [
+      {
+        filename: "lure-size-card.png",
+        role: "dimensions",
+        note: "\u5c3a\u5bf8\u89c4\u683c\uff1a\u957f\u5ea6 130mm\uff0c\u91cd\u91cf 35g\uff0c\u94a9\u5b504#\uff0c\u5c5e\u6027\u7f13\u6c89\u3002",
+      },
+    ],
+  });
+
+  const heroPrompt = plan.items.find((item) => item.role === "hero").prompt;
+  const dimensionsPrompt = plan.items.find((item) => item.role === "dimensions").prompt;
+
+  assert.equal(
+    plan.dimensionSpecs,
+    "Length 130mm (5.12 in)\nWeight 35g (1.23 oz)\nHook Size 4#\nSinking Rate slow sinking",
+  );
+  assert.match(dimensionsPrompt, /Length 130mm \(5\.12 in\) \/ Weight 35g \(1\.23 oz\) \/ Hook Size 4# \/ Sinking Rate slow sinking/);
+  assert.match(dimensionsPrompt, /Mandatory visible specification labels/);
+  assert.match(dimensionsPrompt, /Do not omit, merge, blur, replace, or paraphrase any listed specification/);
+  assert.doesNotMatch(heroPrompt, /130mm|35g|Hook Size 4#|slow sinking/);
 });
 
 test("creation planner exposes scenario-specific role presets", () => {
@@ -1426,7 +1543,7 @@ test("creation planner normalizes supported scenario and image count options", (
   assert.equal(normalizeCreationImageCount("14"), 14);
   assert.equal(normalizeCreationImageCount("16"), 16);
   assert.equal(normalizeCreationImageCount("18"), 18);
-  assert.equal(normalizeCreationImageCount("99"), 10);
+  assert.equal(normalizeCreationImageCount("99"), 18);
   assert.equal(normalizeCreationScenario("social-seeding").value, "social-seeding");
   assert.equal(normalizeCreationScenario("livestream").value, "livestream");
   assert.equal(normalizeCreationScenario("gift-guide").value, "gift-guide");
@@ -1436,7 +1553,7 @@ test("creation planner normalizes supported scenario and image count options", (
 test("creation planner supports full eighteen-image suites", () => {
   const plan = buildCreationPlan({
     productName: "Modular desk lamp",
-    productDescription: "LED desk lamp with adjustable arm, USB-C power, replaceable diffuser, compatibility notes, care card, brand story, and certification proof.",
+    productDescription: "LED desk lamp with adjustable arm, USB-C power, replaceable diffuser, compatibility notes, care card, brand story, and visible component breakdown notes.",
     sellingPoints: "stable clamp, three brightness levels, replaceable diffuser, easy cleaning, tested wiring, workshop-built hinge",
     targetLanguage: "en",
     imageCount: "18",
@@ -1475,7 +1592,61 @@ test("creation planner injects reference image role guidance", () => {
   assert.ok(plan.items.every((item) => item.prompt.includes("Reference image roles:")));
   assert.ok(plan.items.every((item) => item.prompt.includes("front.png = product subject")));
   assert.ok(plan.items.every((item) => item.prompt.includes("box.png = package-list content and included items")));
-  assert.ok(plan.items.every((item) => item.prompt.includes("texture.png = material and close-up detail")));
+  assert.ok(plan.items.every((item) => item.prompt.includes("texture.png = detail and structure reference")));
+});
+
+test("creation planner normalizes reference subject as a subject role", () => {
+  const roles = normalizeCreationReferenceRoles([
+    { filename: "subject-anchor.png", role: "reference-product", note: "参考主体。" },
+    { filename: "old-anchor.png", role: "product", note: "商品主体。" },
+  ]);
+  const plan = buildCreationPlan({
+    productName: "Reference Subject Probe",
+    productDescription: "Subject identity probe",
+    sellingPoints: "stable product identity",
+    targetLanguage: "en",
+    referenceImageRoles: roles,
+  });
+
+  assert.deepEqual(
+    roles.map((entry) => [entry.filename, entry.role, entry.roleLabel]),
+    [
+      ["subject-anchor.png", "reference-product", "参考主体"],
+      ["old-anchor.png", "product", "商品主体"],
+    ],
+  );
+  assert.ok(plan.items.every((item) => item.prompt.includes("subject-anchor.png = reference subject")));
+});
+
+test("creation planner locks the selected reference subject as the set-wide primary subject", () => {
+  const plan = buildCreationPlan({
+    productName: "Travel backpack",
+    productDescription: "Outdoor backpack image set with multiple color references",
+    sellingPoints: "breathable back panel, waterproof fabric, large capacity",
+    targetLanguage: "en",
+    selectedRoles: ["hero", "feature-callout", "brand-story", "image-decomposition"],
+    referenceImageRoles: [
+      { filename: "blue-backpack.png", role: "product", note: "Blue variant product subject." },
+      { filename: "black-backpack.png", role: "product", note: "Black variant product subject." },
+      { filename: "orange-reference-subject.png", role: "reference-product", note: "Reference subject selected by the user." },
+      { filename: "mesh-detail.png", role: "material", note: "Breathable mesh structure." },
+    ],
+  });
+
+  assert.ok(
+    plan.items.every((item) =>
+      item.prompt.includes(
+        "SET-WIDE PRIMARY SUBJECT LOCK: Use orange-reference-subject.png as the primary visual product subject for every non-SKU image in this creation set.",
+      ),
+    ),
+  );
+  assert.ok(
+    plan.items.every((item) =>
+      item.prompt.includes(
+        "Other product-subject references are secondary comparison or variant context; do not let them replace the selected primary subject.",
+      ),
+    ),
+  );
 });
 
 test("creation reference analysis normalizes role suggestions and prompt notes", () => {
@@ -1507,17 +1678,17 @@ test("creation reference analysis normalizes role suggestions and prompt notes",
     analysis.recommendations.map((entry) => [entry.filename, entry.role, entry.roleLabel, entry.note]),
     [
       ["front.png", "product", "商品主体", "正面主体，保留透明结构"],
-      ["texture.png", "material", "材质细节", "磨砂纹理和边缘细节"],
+      ["texture.png", "material", "结构细节", "磨砂纹理和边缘细节"],
       ["kitchen.png", "scene", "使用场景", "厨房台面使用环境"],
     ],
   );
   assert.deepEqual(analysis.risks, ["包装信息不足"]);
-  assert.ok(plan.items.every((item) => item.prompt.includes("texture.png = material and close-up detail")));
+  assert.ok(plan.items.every((item) => item.prompt.includes("texture.png = detail and structure reference")));
   assert.ok(plan.items.every((item) => item.prompt.includes("Analyst note: 磨砂纹理和边缘细节")));
 });
 
-test("creation reference analysis keeps twelve reference role suggestions", () => {
-  const referenceRoles = Array.from({ length: 12 }, (_, index) => ({
+test("creation reference analysis keeps fifteen reference role suggestions", () => {
+  const referenceRoles = Array.from({ length: 15 }, (_, index) => ({
     index: index + 1,
     filename: `reference-${index + 1}.png`,
     role: index % 2 === 0 ? "product" : "scene",
@@ -1525,16 +1696,16 @@ test("creation reference analysis keeps twelve reference role suggestions", () =
   }));
   const analysis = normalizeCreationReferenceAnalysis(
     {
-      summary: "Twelve ecommerce references.",
+      summary: "Fifteen ecommerce references.",
       reference_roles: referenceRoles,
       risks: [],
     },
     referenceRoles.map((entry) => entry.filename),
   );
 
-  assert.equal(analysis.recommendations.length, 12);
-  assert.equal(analysis.recommendations[11].index, 12);
-  assert.equal(analysis.recommendations[11].filename, "reference-12.png");
+  assert.equal(analysis.recommendations.length, 15);
+  assert.equal(analysis.recommendations[14].index, 15);
+  assert.equal(analysis.recommendations[14].filename, "reference-15.png");
 });
 
 test("creation reference analysis classifies size-spec references as dimensions instead of product", () => {
@@ -1632,6 +1803,103 @@ test("creation reference analysis classifies product-labeled usage guides as usa
   assert.deepEqual(analysis.skuSubjects, []);
 });
 
+test("creation reference analysis treats product-labeled exterior structure callouts as detail references", () => {
+  const analysis = normalizeCreationReferenceAnalysis(
+    {
+      summary: "识别到一张路亚外观结构说明图。",
+      reference_roles: [
+        {
+          index: 1,
+          filename: "lure-structure-callout.png",
+          role: "product",
+          note: "用于锁定四节电动仿真鱼饵的外观结构、金属质感、三本钩配置和鱼眼细节。",
+        },
+      ],
+      sku_subjects: [
+        {
+          id: "lure-structure-callout",
+          title: "外观结构说明图",
+          filenames: ["lure-structure-callout.png"],
+          note: "外观结构、金属质感和鱼眼细节。",
+        },
+      ],
+      risks: [],
+    },
+    ["lure-structure-callout.png"],
+  );
+
+  assert.deepEqual(
+    analysis.recommendations.map((entry) => [entry.filename, entry.role, entry.roleLabel]),
+    [["lure-structure-callout.png", "material", "结构细节"]],
+  );
+  assert.deepEqual(analysis.skuSubjects, []);
+});
+
+test("creation reference analysis treats product-labeled feature selling-point callouts as detail references", () => {
+  const analysis = normalizeCreationReferenceAnalysis(
+    {
+      summary: "识别到一张路亚功能卖点结构说明图。",
+      reference_roles: [
+        {
+          index: 1,
+          filename: "lure-feature-callout.png",
+          role: "product",
+          note: "用于锁定该鱼形分节路亚的功能卖点外观，包括自带钢珠、带充电电池、旋转螺旋桨和内置LED灯的结构表现。",
+        },
+      ],
+      sku_subjects: [
+        {
+          id: "lure-feature-callout",
+          title: "功能卖点图",
+          filenames: ["lure-feature-callout.png"],
+          note: "功能卖点、钢珠、电池、螺旋桨和LED结构。",
+        },
+      ],
+      risks: [],
+    },
+    ["lure-feature-callout.png"],
+  );
+
+  assert.deepEqual(
+    analysis.recommendations.map((entry) => [entry.filename, entry.role, entry.roleLabel]),
+    [["lure-feature-callout.png", "material", "结构细节"]],
+  );
+  assert.deepEqual(analysis.skuSubjects, []);
+});
+
+test("creation reference analysis does not let a product role label override detail-note evidence", () => {
+  const analysis = normalizeCreationReferenceAnalysis(
+    {
+      summary: "识别到一张结构标注说明图。",
+      reference_roles: [
+        {
+          index: 1,
+          filename: "annotated-lure-detail.png",
+          role: "product",
+          roleLabel: "商品主体",
+          note: "用于锁定外观结构和功能卖点，包含部件标注、鱼眼细节和内置LED灯结构表现。",
+        },
+      ],
+      sku_subjects: [
+        {
+          id: "annotated-lure-detail",
+          title: "结构标注说明图",
+          filenames: ["annotated-lure-detail.png"],
+          note: "结构标注和LED灯结构表现。",
+        },
+      ],
+      risks: [],
+    },
+    ["annotated-lure-detail.png"],
+  );
+
+  assert.deepEqual(
+    analysis.recommendations.map((entry) => [entry.filename, entry.role, entry.roleLabel]),
+    [["annotated-lure-detail.png", "material", "结构细节"]],
+  );
+  assert.deepEqual(analysis.skuSubjects, []);
+});
+
 test("creation reference analysis classifies other size-spec references as dimensions", () => {
   const analysis = normalizeCreationReferenceAnalysis(
     {
@@ -1660,6 +1928,39 @@ test("creation reference analysis classifies other size-spec references as dimen
   assert.deepEqual(
     analysis.recommendations.map((entry) => [entry.filename, entry.role, entry.roleLabel]),
     [["lure-size-card.png", "dimensions", "尺寸规格"]],
+  );
+  assert.deepEqual(analysis.skuSubjects, []);
+});
+
+test("creation reference analysis keeps package-content spec cards as package references", () => {
+  const analysis = normalizeCreationReferenceAnalysis(
+    {
+      summary: "识别到一张包装内容参考图。",
+      reference_roles: [
+        {
+          index: 1,
+          filename: "lure-package-contents.png",
+          role: "dimensions",
+          roleLabel: "尺寸规格",
+          note: "型号和规格信息包括：100mm、172mm。底部包装清单包含：USB充电线 x1、螺旋桨叶片 x2、EVA漂浮 x1。",
+        },
+      ],
+      sku_subjects: [
+        {
+          id: "lure-package-contents",
+          title: "包装内容图",
+          filenames: ["lure-package-contents.png"],
+          note: "USB充电线、螺旋桨叶片和EVA漂浮。",
+        },
+      ],
+      risks: [],
+    },
+    ["lure-package-contents.png"],
+  );
+
+  assert.deepEqual(
+    analysis.recommendations.map((entry) => [entry.filename, entry.role, entry.roleLabel]),
+    [["lure-package-contents.png", "package", "包装清单"]],
   );
   assert.deepEqual(analysis.skuSubjects, []);
 });

@@ -37,8 +37,10 @@ test("creation reference labels state uploaded count, file list, image order, an
     /Uploaded reference files: 1\. F2J32257\.png; 2\. F2J32258\.png; 3\. F2J32259\.png; 4\. F2J32260\.png\./,
   );
   assert.match(labels[0], /Role: product subject\. Preserve shape and hardware\./);
+  assert.match(labels[0], /Product identity authority/);
   assert.match(labels[1], /Creation reference image 2 of 4: F2J32258\.png\./);
   assert.match(labels[1], /Role: style reference\. Use this for color and lighting\./);
+  assert.match(labels[1], /Supporting-only reference/);
 });
 
 test("creation reference labels are empty when no images are attached", () => {
@@ -144,6 +146,34 @@ test("creation hero item reference images keep the primary product instead of ev
   ]);
 });
 
+test("creation hero item reference images prefer the selected reference subject", () => {
+  const images = [
+    { filename: "ordinary-product.png" },
+    { filename: "reference-subject.png" },
+    { filename: "lighting-style.png" },
+  ];
+  const roles = [
+    { filename: "ordinary-product.png", role: "product" },
+    { filename: "reference-subject.png", role: "reference-product" },
+    { filename: "lighting-style.png", role: "style" },
+  ];
+
+  assert.deepEqual(
+    buildCreationItemReferenceImages({ role: "hero" }, images, roles).map((image) => image.filename),
+    ["reference-subject.png", "lighting-style.png"],
+  );
+
+  const labels = buildCreationReferenceImageLabels(images, [
+    {
+      filename: "reference-subject.png",
+      role: "reference-product",
+      rolePromptLabel: "reference subject",
+      promptInstruction: "Use this as the subject anchor.",
+    },
+  ]);
+  assert.match(labels[1], /Product identity authority/);
+});
+
 test("creation material item reference images keep primary product plus material details", () => {
   const item = {
     role: "material-closeup",
@@ -243,5 +273,53 @@ test("creation dimensions item keeps the dimensions reference image", () => {
   assert.deepEqual(
     buildCreationItemReferenceImages({ role: "dimensions" }, images, roles).map((image) => image.filename),
     ["lure-main.png", "lure-size-card.png", "joint-detail.png"],
+  );
+});
+
+test("creation expanded suite roles keep the selected reference subject as the subject anchor", () => {
+  const images = [
+    { filename: "blue-backpack.png" },
+    { filename: "black-backpack.png" },
+    { filename: "orange-reference-subject.png" },
+    { filename: "mesh-detail.png" },
+    { filename: "trail-scene.png" },
+    { filename: "size-card.png" },
+    { filename: "usage-guide.png" },
+    { filename: "lighting-style.png" },
+  ];
+  const roles = [
+    { filename: "blue-backpack.png", role: "product" },
+    { filename: "black-backpack.png", role: "product" },
+    { filename: "orange-reference-subject.png", role: "reference-product" },
+    { filename: "mesh-detail.png", role: "material" },
+    { filename: "trail-scene.png", role: "scene" },
+    { filename: "size-card.png", role: "dimensions" },
+    { filename: "usage-guide.png", role: "usage" },
+    { filename: "lighting-style.png", role: "style" },
+  ];
+
+  assert.deepEqual(
+    buildCreationItemReferenceImages({ role: "feature-callout" }, images, roles).map((image) => image.filename),
+    ["orange-reference-subject.png", "mesh-detail.png", "size-card.png", "usage-guide.png", "lighting-style.png"],
+  );
+  assert.deepEqual(
+    buildCreationItemReferenceImages({ role: "compatibility" }, images, roles).map((image) => image.filename),
+    ["orange-reference-subject.png", "mesh-detail.png", "size-card.png", "usage-guide.png", "lighting-style.png"],
+  );
+  assert.deepEqual(
+    buildCreationItemReferenceImages({ role: "care-guide" }, images, roles).map((image) => image.filename),
+    ["orange-reference-subject.png", "mesh-detail.png", "usage-guide.png", "lighting-style.png"],
+  );
+  assert.deepEqual(
+    buildCreationItemReferenceImages({ role: "brand-story" }, images, roles).map((image) => image.filename),
+    ["orange-reference-subject.png", "mesh-detail.png", "trail-scene.png", "lighting-style.png"],
+  );
+  assert.deepEqual(
+    buildCreationItemReferenceImages({ role: "image-decomposition" }, images, roles).map((image) => image.filename),
+    ["orange-reference-subject.png", "mesh-detail.png", "size-card.png", "usage-guide.png", "lighting-style.png"],
+  );
+  assert.deepEqual(
+    buildCreationItemReferenceImages({ role: "variant-matrix" }, images, roles).map((image) => image.filename),
+    ["orange-reference-subject.png", "lighting-style.png"],
   );
 });

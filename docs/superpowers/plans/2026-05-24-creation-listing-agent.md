@@ -2,7 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add an optional Amazon US English Listing Agent to Creation Mode that generates one validated listing draft per SKU and falls back to input-only copy when generated images are missing or failed.
+**Goal:** Add an optional Amazon US English Listing Agent to Creation Mode that generates one validated parent listing draft for the Creation set, uses SKU subjects as variant and quantity evidence, and falls back to input-only copy when generated images are missing or failed.
+
+**2026-06-04 follow-up correction:** Current acceptance for the completed Listing Agent is the OpenSpec change in `openspec/changes/add-creation-listing-agent`. Do not use the older examples below to reintroduce one-draft-per-SKU output, `1 Pack` fallback for grouped multi-subject SKUs, or size/dimension/spec values in titles. Required regression coverage now includes: grouped `skuSubjects` such as three complete sellable subjects must produce a non-`1 Pack` parent listing title; titles must exclude `dimensionSpecs`, weight, hook size, and measurement values; fallback keywords and backend search terms must include stronger exact, long-tail, traffic, and descriptive Amazon search terms.
 
 **Architecture:** Keep listing copy isolated from image planning and generation. Add pure listing draft helpers for schema normalization, source assembly, validation, keyword cleanup, and fallback evidence modes; add a thin model agent for Responses JSON generation and retry; expose one `/api/creation/listings` route that reads and updates Creation set manifests; render listing controls in Creation Mode and Creation record detail.
 

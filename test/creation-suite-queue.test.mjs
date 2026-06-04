@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildCreationQueuedRepairFormData,
   buildCreationQueuedSet,
   createCreationQueueJob,
   getCreationRepairTargetSet,
@@ -165,6 +166,78 @@ test("creation suite queue appends SKU preview cards to queued sets", () => {
   assert.equal(set.items[2].title, "SKU image 1 - 红色");
   assert.equal(set.items[3].itemId, "queued-sku-2");
   assert.equal(set.items[3].status, "queued");
+});
+
+test("creation suite queue rebuilds items when draft roles differ from current selected roles", () => {
+  const staleRoles = [
+    "hero",
+    "benefit",
+    "scene",
+    "detail-trust",
+    "comparison",
+    "social-proof",
+    "package",
+    "promotion",
+    "material-closeup",
+    "usage-steps",
+    "dimensions",
+    "review-qa",
+    "feature-callout",
+    "variant-matrix",
+    "compatibility",
+    "care-guide",
+    "brand-story",
+  ];
+  const selectedRoles = [...staleRoles, "image-decomposition"];
+  const staleDraft = {
+    setId: "creation-draft-stale",
+    items: staleRoles.map((role, index) => ({
+      itemId: `${index + 1}-${role}`,
+      role,
+      title: role,
+      status: "idle",
+    })),
+  };
+
+  const set = buildCreationQueuedSet({
+    buildCreationReferenceRolePayload: () => [],
+    buildCreationSkuSubjectPayload: () => [],
+    createdAt: "2026-05-26T08:00:00.000Z",
+    creationState: { generating: false },
+    formatCreationDimensionUnitModeLabel: (value) => `Unit ${value}`,
+    formatCreationVisualLanguageLabel: (value) => `Visual ${value}`,
+    getCreationCurrentSet: () => staleDraft,
+    getCreationLogoPayload: () => null,
+    getCreationPreviewSlots: () =>
+      selectedRoles.map((role, index) => ({
+        itemId: `${index + 1}-${role}`,
+        role,
+        title: role === "image-decomposition" ? "图片拆解图" : role,
+      })),
+    getCreationSelectedDimensionUnitMode: () => "both",
+    getCreationSelectedImageCount: () => 18,
+    getCreationSelectedIndustryTemplate: () => ({ value: "general", label: "General", categoryPath: "" }),
+    getCreationSelectedLanguage: () => ({ value: "en", label: "English" }),
+    getCreationSelectedRoles: () => selectedRoles,
+    getCreationSelectedScenario: () => ({ value: "standard", label: "Standard" }),
+    getCreationSelectedSkuGenerationRule: () => ({ value: "none", label: "None" }),
+    isCreationDraftSet: () => true,
+    normalizeCreationSkuBundleCountForPayload: (value) => Number(value),
+    normalizeCreationVisualLanguage: (value) => value || "classic-commercial",
+    normalizeSet,
+    productDescription: "Description",
+    productName: "Queued product",
+    refs: {
+      creationDimensionSpecsInput: { value: "" },
+      creationSkuBundleCountInput: { value: "1" },
+      creationVisualLanguageInput: { value: "classic-commercial" },
+    },
+    sellingPoints: [],
+  });
+
+  assert.equal(set.imageCount, 18);
+  assert.deepEqual(set.items.map((item) => item.role), selectedRoles);
+  assert.equal(set.items.at(-1).title, "图片拆解图");
 });
 
 test("creation suite queue falls back to normalized visual language labels", () => {
@@ -411,4 +484,94 @@ test("creation suite queue schedules queued sets serially", async () => {
   assert.equal(creationState.activeQueueId, "");
   assert.equal(creationState.generationScope, "");
   assert.equal(creationState.selectedQueueId, "creation-queue-1");
+});
+
+test("creation suite queue starts the next suite when a running suite frees item capacity", async () => {
+  const creationState = {
+    activeQueueId: "queue-a",
+    autoRepairAttemptCount: 0,
+    currentSet: null,
+    editingItemId: "",
+    generating: true,
+    generationScope: "full",
+    queue: [
+      {
+        id: "queue-a",
+        status: "running",
+        formData: "first-body",
+        set: {
+          setId: "set-a",
+          productName: "A",
+          items: [
+            { itemId: "a-1", status: "completed" },
+            ...Array.from({ length: 17 }, (_, index) => ({ itemId: `a-${index + 2}`, status: "generating" })),
+          ],
+        },
+      },
+      {
+        id: "queue-b",
+        status: "queued",
+        formData: "second-body",
+        set: {
+          setId: "set-b",
+          productName: "B",
+          items: Array.from({ length: 18 }, (_, index) => ({ itemId: `b-${index + 1}`, status: "queued" })),
+        },
+      },
+    ],
+    selectedQueueId: "queue-a",
+  };
+  const streamOptions = [];
+
+  scheduleCreationGenerationQueue({
+    creationState,
+    compactErrorMessage: (message) => message,
+    fetchImpl: async (url, options) => {
+      assert.equal(url, "/api/creation/generate");
+      assert.equal(options.body, "second-body");
+      return { ok: true, body: options.body };
+    },
+    getMaxParallelTasks: () => 18,
+    loadCreationSets: async () => {},
+    normalizeSet,
+    nowIso: () => "2026-05-26T08:00:00.000Z",
+    render: () => {},
+    runCreationStream: async (_response, options) => {
+      streamOptions.push(options);
+    },
+    setFeedback: () => {},
+    showError: () => {},
+  });
+
+  await waitFor(() => creationState.queue[1].status === "completed", "second suite to run after capacity opens");
+  assert.equal(creationState.queue[0].status, "running");
+  assert.equal(creationState.queue[1].status, "completed");
+  assert.equal(streamOptions.length, 1);
+  assert.equal(streamOptions[0].queueJob.id, "queue-b");
+  assert.equal(typeof streamOptions[0].onEventHandled, "function");
+});
+
+test("creation suite queued repair form data keeps the queued suite reference files", () => {
+  const source = new FormData();
+  source.set("productName", "Queued product");
+  source.set("referenceImageRoles", JSON.stringify([{ filename: "queue-a.png", role: "product" }]));
+  source.append("referenceImages", new Blob(["queue-a"], { type: "image/png" }), "queue-a.png");
+  source.append("styleReferenceImages", new Blob(["style-a"], { type: "image/png" }), "style-a.png");
+
+  const repairData = buildCreationQueuedRepairFormData(
+    {
+      formData: source,
+      set: { setId: "set-a" },
+    },
+    {
+      scope: "incomplete",
+      set: { setId: "set-a" },
+    },
+  );
+
+  assert.equal(repairData.get("setId"), "set-a");
+  assert.equal(repairData.get("scope"), "incomplete");
+  assert.equal(repairData.get("productName"), "Queued product");
+  assert.deepEqual(repairData.getAll("referenceImages").map((file) => file.name), ["queue-a.png"]);
+  assert.deepEqual(repairData.getAll("styleReferenceImages").map((file) => file.name), ["style-a.png"]);
 });

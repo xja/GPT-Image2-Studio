@@ -11,7 +11,7 @@ import { cancelQueuedGenerationJob, isQueuedGenerationJob, selectNextQueuedGener
 import { sortGenerationActivityFeed, upsertGenerationActivityEntry } from "/lib/generation-activity-feed.mjs?v=20260504-vercel-static-lib-1";
 import { GENERATION_STREAM_EVENTS, recordFinalImageChunk } from "/lib/generation-stream-protocol.mjs";
 import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260519-topbar-reveal-2";
-import { ensureLazyViewModule, getMountedLazyViewModule } from "/lib/view-mode-loader.mjs";
+import { ensureLazyViewModule, getMountedLazyViewModule } from "/lib/view-mode-loader.mjs?v=20260530-quick-blend-fix-2";
 import { appendBrowserConfigToFormData, getBrowserPrivateConfigRequestPayload, getOrCreateClientSessionId, readBrowserPrivateConfig, saveBrowserPrivateConfig, toPublicBrowserConfig } from "/lib/browser-config.mjs";
 import { cacheBrowserGalleryItem, clearBrowserImageCache, dataUrlToBlob, deleteBrowserCachedGalleryItem, fetchServerImageAsDataUrl, getBrowserCachedImageData, getImageUrl, getServerImageUrl, getServerThumbnailUrl, isCacheableBrowserImageUrl, mergeServerAndBrowserGalleryItems, readBrowserCachedGalleryItems } from "/lib/browser-image-cache.mjs";
 import { createCreationLogoLibraryController } from "/lib/creation-logo-library.mjs";
@@ -20,11 +20,13 @@ import { createConfigModelPickerController } from "/lib/config-model-picker.mjs"
 import { createPptAnalysisController } from "/lib/ppt-analysis-client.mjs?v=20260527-density-overlap-1";
 import { appendPptDeckDownloadLinks } from "/lib/ppt-record-links.mjs";
 import { buildCreationSkuSubjectsForPayload, normalizeCreationSkuBundleCountForPayload, normalizeCreationSkuSubjectForPayload } from "/lib/creation-sku-subjects.mjs";
+import { bindCreationReferenceDrag, reorderCreationReferenceFiles } from "/lib/creation-reference-drag.mjs";
+import { isCreationSubjectReferenceRole } from "/lib/creation-reference-roles.mjs";
 import { appendCreationVisualLanguageSuggestionCard, getCreationReferenceAnalysisVisualLanguageReason, getCreationReferenceAnalysisVisualLanguageSource, syncCreationReferenceVisualLanguageButton } from "/lib/creation-reference-analysis-view.mjs";
 import { createCreationListingController, getCreationRecordListingMetaLabel, getCreationListingSearchValues, normalizeCreationListingDraftForView, renderCreationListingDrafts } from "/lib/creation-listing-view.mjs";
 import { getCreationAutoRepairNotice, getCreationCompletionFeedback, getCreationIncompleteItems, shouldAutoRepairCreationSet } from "/lib/creation-auto-repair.mjs";
 import { canRepairCreationItem as canRepairCreationItemFromQueue, getCreationRepairButtonText as getCreationRepairButtonTextFromQueue, isCreationItemRepairActive as isCreationItemRepairActiveInQueue, queueCreationItemRepair as queueCreationItemRepairInState, removeQueuedCreationItemRepair, shiftNextQueuedCreationItemRepair } from "/lib/creation-item-repair-queue.mjs";
-import { buildCreationQueuedSet as buildCreationQueuedSetFromState, createCreationQueueJob, getActiveCreationQueueJob as getActiveCreationQueueJobFromState, getCreationQueueJobs as getCreationQueueJobsFromState, getCreationRepairTargetSet as getCreationRepairTargetSetFromState, getPendingCreationQueueCount as getPendingCreationQueueCountFromState, getSelectedCreationQueueJob as getSelectedCreationQueueJobFromState, renderCreationQueueStrip as renderCreationQueueStripView, runCreationQueuedJob as runCreationQueuedJobFromQueue, scheduleCreationGenerationQueue as scheduleCreationGenerationQueueFromState, selectCreationQueueJob as selectCreationQueueJobInState, syncActiveCreationQueueSet as syncActiveCreationQueueSetInState } from "/lib/creation-suite-queue.mjs?v=20260528-creation-sku-rule-1";
+import { buildCreationQueuedRepairFormData, buildCreationQueuedSet as buildCreationQueuedSetFromState, createCreationQueueJob, getActiveCreationQueueJob as getActiveCreationQueueJobFromState, getCreationQueueJobs as getCreationQueueJobsFromState, getCreationRepairTargetSet as getCreationRepairTargetSetFromState, getPendingCreationQueueCount as getPendingCreationQueueCountFromState, getSelectedCreationQueueJob as getSelectedCreationQueueJobFromState, renderCreationQueueStrip as renderCreationQueueStripView, runCreationQueuedJob as runCreationQueuedJobFromQueue, scheduleCreationGenerationQueue as scheduleCreationGenerationQueueFromState, selectCreationQueueJob as selectCreationQueueJobInState, syncActiveCreationQueueSet as syncActiveCreationQueueSetInState } from "/lib/creation-suite-queue.mjs?v=20260530-creation-queue-role-sync-1";
 import { DEFAULT_PORTRAIT_ACCESSORY_ASSETS, PORTRAIT_ACCESSORY_ASSET_CATEGORIES, getPortraitAccessoryAssetFileDescriptor } from "/lib/portrait-accessory-assets.mjs?v=20260528-portrait-assets-sort-1";
 import { createDefaultPortraitLocationState, createPortraitLocationSelectorController } from "/lib/portrait-location-selector.mjs?v=20260527-portrait-location-1";
 const SURPRISE_PROMPTS = [
@@ -84,10 +86,9 @@ const REASONING_ESTIMATES = {
   xhigh: "210s+",
 };
 const DEFAULT_LIMITS = {
-  maxConcurrentTasksPerSession: 25,
-  maxParallelTasksPerSession: 10,
+  maxParallelTasksPerSession: 18,
   maxReferenceImages: 6,
-  maxCreationReferenceImages: 12,
+  maxCreationReferenceImages: 15,
   maxCreationStyleReferenceImages: 3,
   maxPortraitPersonReferenceImages: 3,
   maxPortraitActionReferenceImages: 3,
@@ -114,7 +115,10 @@ const ARTICLE_RECORD_COLUMN_PRESETS = [2, 4, 6, 8];
 const DEFAULT_ARTICLE_RECORD_COLUMN_PRESET = 4;
 const DEFAULT_ARTICLE_ILLUSTRATION_STYLE_PRESET = "realist-magazine";
 const DEFAULT_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
+const CREATION_REFERENCE_ANALYSIS_REASONING_EFFORT = "low";
+const REFERENCE_ORCHESTRATION_REASONING_EFFORT = "low";
 const DEFAULT_UI_RATIO = "1:1";
+const DEFAULT_QUICK_BLEND_RATIO = "1:1";
 const DEFAULT_PORTRAIT_RATIO = "4:5";
 const PORTRAIT_ANALYSIS_FEEDBACK_MIN_MS = 520;
 const PORTRAIT_STYLE_LABELS = {
@@ -329,7 +333,7 @@ const TOPBAR_REVEAL_CLASS = "topbar-reveal";
 const TOPBAR_REVEAL_EDGE_PX = 16;
 const WORKSPACE_BOTTOM_GAP_PX = 2;
 const PPT_SOURCE_MODES = new Set(["upload", "text", "topic"]);
-const CREATE_VIEW_IDS = new Set(["studio", "style-transfer", "reference-analysis", "image-decomposition", "image-compress", "creation", "portrait", "article-illustration", "ppt"]);
+const CREATE_VIEW_IDS = new Set(["studio", "style-transfer", "reference-analysis", "image-decomposition", "quick-blend", "image-compress", "creation", "portrait", "article-illustration", "ppt"]);
 const ASSET_VIEW_IDS = new Set(["gallery", "article-record", "ppt-record", "creation-record", "portrait-record"]);
 
 let studioHeightSyncFrame = 0;
@@ -348,6 +352,7 @@ let promptCopyFeedbackTimer = 0;
 let previewLoadingShellNodes = null;
 let referenceAnalysisLoadingShellNodes = null;
 let imageDecompositionLoadingShellNodes = null;
+let quickBlendLoadingShellNodes = null;
 const galleryScrollDrag = {
   active: false,
   pointerId: null,
@@ -507,9 +512,19 @@ const state = {
     generationItems: {},
     previewKey: "",
   },
+  quickBlend: {
+    aFiles: [],
+    bFiles: [],
+    feedback: "",
+    feedbackKind: "",
+    generationKeys: [],
+    generationItems: {},
+    previewKey: "",
+  },
   referenceCompressionRunning: false,
   referenceFiles: [],
   imageDecompositionPreviewItem: null,
+  quickBlendPreviewItem: null,
   referenceAnalysisPreviewItem: null,
   referencePreviewItem: null,
   selectedPromptTemplateId: "",
@@ -530,6 +545,8 @@ const state = {
   uiLanguage: "zh-CN",
   zoom: 1,
 };
+
+let creationReferenceAnalysisRequestToken = 0;
 
 const refs = {
   apiKeyInput: document.querySelector("#apiKeyInput"),
@@ -629,6 +646,7 @@ const refs = {
   creationReferenceDropzone: document.querySelector("#creationReferenceDropzone"),
   creationReferenceGrid: document.querySelector("#creationReferenceGrid"),
   creationReferenceInput: document.querySelector("#creationReferenceInput"),
+  creationReferenceResetButton: document.querySelector("#creationReferenceResetButton"),
   creationReferenceRestoreList: document.querySelector("#creationReferenceRestoreList"),
   creationStyleReferenceCount: document.querySelector("#creationStyleReferenceCount"),
   creationStyleReferenceDropzone: document.querySelector("#creationStyleReferenceDropzone"),
@@ -1633,6 +1651,9 @@ function getViewFromHash() {
   if (window.location.hash === "#image-decomposition") {
     return "image-decomposition";
   }
+  if (window.location.hash === "#quick-blend") {
+    return "quick-blend";
+  }
   if (window.location.hash === "#image-compress") {
     return "image-compress";
   }
@@ -1674,6 +1695,8 @@ function syncHash(view) {
           ? "#reference-analysis"
           : view === "image-decomposition"
             ? "#image-decomposition"
+          : view === "quick-blend"
+            ? "#quick-blend"
           : view === "image-compress"
             ? "#image-compress"
           : view === "article-illustration"
@@ -1718,9 +1741,40 @@ async function ensureActiveViewModule(view) {
   try {
     await ensureLazyViewModule(view, {
       context: {
+        DEFAULT_QUICK_BLEND_RATIO,
+        buildReferenceFingerprint,
+        clearError,
+        closeReferencePreview,
+        compactErrorMessage,
+        createPreviewLoadingShellNodes,
+        createReferenceAddCard,
+        formatCanvasLabel,
+        formatClock,
+        formatFilmstripSizeLabel,
+        formatTime,
+        getDisplayPrompt,
+        getGenerationReferenceFile,
+        getMaxParallelJobCount,
+        getMaxQueuedJobCount,
+        getQueuedJobCount,
+        getRatioOption,
+        makeGalleryPreviewKey,
+        makeJobPreviewKey,
+        nowIso,
+        openLightbox,
+        prepareGenerationReferenceImageFile,
+        recordJobQueued,
+        renderAll,
+        renderRatioGrid,
         renderers: VIEW_RENDERERS,
+        renderSizeOptions,
+        revokeReferencePreview,
+        scheduleGenerationQueue,
+        setActiveView,
         showError,
+        state,
         syncReferenceDropzoneCompact,
+        updatePreviewLoadingShell,
       },
     });
     return true;
@@ -1801,7 +1855,7 @@ function setConnectionState(kind, label, entryLabel = CONNECTION_STATUS_ENTRY_LA
 function syncConnectionState() {
   const queuedCount = getQueuedJobCount();
   if (queuedCount > 0) {
-    setConnectionState("busy", `并发 ${getRunningJobCount()}/${getMaxParallelJobCount()} · 队列 ${queuedCount}/${getMaxQueuedJobCount()}`);
+    setConnectionState("busy", `并发 ${getRunningJobCount()}/${getMaxParallelJobCount()} · 队列 ${queuedCount}`);
     return;
   }
 
@@ -2093,7 +2147,7 @@ function getRunningJobCount() {
 }
 
 function getMaxQueuedJobCount() {
-  return state.limits.maxConcurrentTasksPerSession || DEFAULT_LIMITS.maxConcurrentTasksPerSession;
+  return Number.POSITIVE_INFINITY;
 }
 
 function getMaxParallelJobCount() {
@@ -2101,10 +2155,8 @@ function getMaxParallelJobCount() {
 }
 
 function getCreationMaxReferenceImageCount() { return state.limits.maxCreationReferenceImages || DEFAULT_LIMITS.maxCreationReferenceImages || state.limits.maxReferenceImages || DEFAULT_LIMITS.maxReferenceImages; }
-
-function getCreationMaxStyleReferenceImageCount() {
-  return state.limits.maxCreationStyleReferenceImages || DEFAULT_LIMITS.maxCreationStyleReferenceImages || 3;
-}
+function getCreationMaxProductReferenceImageCount() { return Math.max(0, getCreationMaxReferenceImageCount() - state.creationStyleReferenceFiles.length); }
+function getCreationMaxStyleReferenceImageCount() { return Math.max(0, Math.min(state.limits.maxCreationStyleReferenceImages || DEFAULT_LIMITS.maxCreationStyleReferenceImages || 3, getCreationMaxReferenceImageCount() - state.creationReferenceFiles.length)); }
 
 function getPortraitPersonMaxReferenceImageCount() {
   return (
@@ -2134,16 +2186,15 @@ function getPortraitActionMaxReferenceImageCount() {
 function updateGenerateButton() {
   const runningCount = getRunningJobCount();
   const queuedCount = getQueuedJobCount();
-  const maxQueuedCount = getMaxQueuedJobCount();
   const maxParallelCount = getMaxParallelJobCount();
   const preparingReference =
     state.referenceCompressionRunning ||
     hasPendingReferenceGenerationFiles() ||
     hasPendingStyleTransferGenerationFiles();
-  refs.generateButton.disabled = preparingReference || queuedCount >= maxQueuedCount;
+  refs.generateButton.disabled = preparingReference;
   const idleLabel = state.studioMode === "style-transfer" ? "风格迁移" : "开始生成";
   refs.generateButton.textContent =
-    preparingReference ? "处理参考图..." : queuedCount > 0 ? `队列 ${queuedCount}/${maxQueuedCount}` : idleLabel;
+    preparingReference ? "处理参考图..." : queuedCount > 0 ? `队列 ${queuedCount}` : idleLabel;
   refs.liveCount.textContent = `${runningCount} / ${maxParallelCount}`;
 }
 
@@ -2771,6 +2822,7 @@ function closeReferencePreview() {
   state.creationReferencePreviewItem = null;
   state.referenceAnalysisPreviewItem = null;
   state.imageDecompositionPreviewItem = null;
+  state.quickBlendPreviewItem = null;
   state.styleTransferPreviewItem = null;
   refs.referencePreviewViewer.classList.remove("open");
   refs.referencePreviewViewer.setAttribute("aria-hidden", "true");
@@ -2893,6 +2945,124 @@ function removeReferenceAnalysisFile(referenceId) {
   markReferenceAnalysisDirty();
   renderReferenceAnalysisGrid();
   renderReferenceAnalysis();
+}
+
+function getQuickBlendController() {
+  return getMountedLazyViewModule("quick-blend");
+}
+
+function renderQuickBlendView() {
+  return getQuickBlendController()?.renderQuickBlendView?.() || false;
+}
+
+function setQuickBlendFeedback(message = "", kind = "") {
+  state.quickBlend.feedback = message;
+  state.quickBlend.feedbackKind = kind;
+  getQuickBlendController()?.setQuickBlendFeedback?.(message, kind);
+}
+
+function storeQuickBlendGenerationItem(item) {
+  const controller = getQuickBlendController();
+  if (controller?.storeQuickBlendGenerationItem) {
+    return controller.storeQuickBlendGenerationItem(item);
+  }
+
+  const filename = String(item?.filename || "").trim();
+  if (!filename) {
+    return "";
+  }
+
+  const key = makeGalleryPreviewKey(filename);
+  state.quickBlend.generationItems[key] = {
+    ...(state.quickBlend.generationItems[key] || {}),
+    ...item,
+    mode: "quick-blend",
+    assetKind: item.assetKind || "quick-blend",
+  };
+  return key;
+}
+
+function replaceQuickBlendGenerationKey(oldKey, newKey) {
+  const controller = getQuickBlendController();
+  if (controller?.replaceQuickBlendGenerationKey) {
+    controller.replaceQuickBlendGenerationKey(oldKey, newKey);
+    return;
+  }
+
+  const currentKey = String(oldKey || "").trim();
+  const nextKey = String(newKey || "").trim();
+  if (!nextKey) {
+    return;
+  }
+
+  const keys = state.quickBlend.generationKeys.filter((entry) => entry !== nextKey);
+  const index = keys.indexOf(currentKey);
+  if (index >= 0) {
+    keys[index] = nextKey;
+    state.quickBlend.generationKeys = keys;
+    return;
+  }
+
+  state.quickBlend.generationKeys = [nextKey, ...keys.filter((entry) => entry !== currentKey)];
+}
+
+function removeQuickBlendGenerationKey(key) {
+  const controller = getQuickBlendController();
+  if (controller?.removeQuickBlendGenerationKey) {
+    controller.removeQuickBlendGenerationKey(key);
+    return;
+  }
+
+  const targetKey = String(key || "").trim();
+  if (!targetKey) {
+    return;
+  }
+
+  state.quickBlend.generationKeys = state.quickBlend.generationKeys.filter((entry) => entry !== targetKey);
+  if (state.quickBlend.previewKey === targetKey) {
+    state.quickBlend.previewKey = "";
+  }
+}
+
+async function preserveQuickBlendGenerationItemForDelete(item) {
+  const controller = getQuickBlendController();
+  if (controller?.preserveQuickBlendGenerationItemForDelete) {
+    await controller.preserveQuickBlendGenerationItemForDelete(item);
+    return;
+  }
+
+  if (!item?.filename) {
+    return;
+  }
+
+  const key = makeGalleryPreviewKey(item.filename);
+  const tracked =
+    item.mode === "quick-blend" ||
+    item.generationMode === "quick-blend" ||
+    item.assetKind === "quick-blend" ||
+    state.quickBlend.generationKeys.includes(key) ||
+    Boolean(state.quickBlend.generationItems[key]);
+  if (!tracked) {
+    return;
+  }
+
+  const imageUrl = getImageUrl(item);
+  if (!imageUrl || String(imageUrl).startsWith("data:image/")) {
+    storeQuickBlendGenerationItem(item);
+    return;
+  }
+
+  try {
+    const dataUrl = await fetchServerImageAsDataUrl(imageUrl);
+    if (dataUrl) {
+      storeQuickBlendGenerationItem({ ...item, imageUrl: dataUrl, thumbnailUrl: dataUrl });
+      return;
+    }
+  } catch (_error) {
+    // Keep existing metadata if the image cannot be copied before deletion.
+  }
+
+  storeQuickBlendGenerationItem(item);
 }
 
 function createImageDecompositionItem(file) {
@@ -3058,7 +3228,7 @@ function renderImageDecompositionGenerationLoading(item) {
       imageUrl: "",
       prompt: item ? getDisplayPrompt(item) : "",
       runningCount: state.jobs.length,
-      maxConcurrentTasks: state.limits.maxConcurrentTasksPerSession,
+      maxConcurrentTasks: getMaxParallelJobCount(),
     }),
     eyebrow: "Image Decomposition",
     title: "拆解信息图生成中",
@@ -3402,11 +3572,6 @@ async function startImageDecompositionGeneration() {
     return;
   }
 
-  if (getQueuedJobCount() >= getMaxQueuedJobCount()) {
-    setImageDecompositionFeedback(`同一会话最多排队 ${getMaxQueuedJobCount()} 个生成任务。`, "error");
-    return;
-  }
-
   await ensureImageDecompositionGenerationFilesReady();
   const job = createImageDecompositionJob();
   registerImageDecompositionGenerationKey(makeJobPreviewKey(job.id));
@@ -3425,7 +3590,7 @@ function renderImageDecompositionView() {
   renderImageDecompositionSource();
   renderImageDecompositionGenerationPreview();
   refs.imageDecompositionGenerateButton.disabled =
-    !state.imageDecomposition.file || hasPendingImageDecompositionGenerationFiles() || getQueuedJobCount() >= getMaxQueuedJobCount();
+    !state.imageDecomposition.file || hasPendingImageDecompositionGenerationFiles();
   refs.imageDecompositionGenerateButton.textContent = hasPendingImageDecompositionGenerationFiles()
     ? "处理中..."
     : getQueuedJobCount() > 0
@@ -4137,7 +4302,7 @@ function renderReferenceAnalysisGenerationLoading(item) {
       imageUrl: "",
       prompt: item ? getDisplayPrompt(item) : "",
       runningCount: state.jobs.length,
-      maxConcurrentTasks: state.limits.maxConcurrentTasksPerSession,
+      maxConcurrentTasks: getMaxParallelJobCount(),
     }),
     eyebrow: "Reference Analysis",
     title: "提示词模式生成中",
@@ -4227,7 +4392,7 @@ function renderReferenceAnalysisSelectedPrompt() {
   refs.referenceAnalysisCopyPromptButton.disabled = !promptText;
   const preparingReference = hasPendingReferenceAnalysisGenerationFiles();
   refs.referenceAnalysisGenerateButton.disabled =
-    !promptText || preparingReference || getQueuedJobCount() >= getMaxQueuedJobCount();
+    !promptText || preparingReference;
   refs.referenceAnalysisGenerateButton.textContent = preparingReference
     ? "处理参考图..."
     : getQueuedJobCount() > 0
@@ -4499,7 +4664,7 @@ function syncStudioHeight() {
   const settingsScrollTop = getSettingsFormScrollTop();
 
   const isStudioLikeView =
-    state.activeView === "studio" || state.activeView === "style-transfer" || state.activeView === "image-decomposition";
+    state.activeView === "studio" || state.activeView === "style-transfer" || state.activeView === "image-decomposition" || state.activeView === "quick-blend";
   if (STACKED_STUDIO_LAYOUT_MODES.has(getCurrentStudioLayoutMode()) || !isStudioLikeView) {
     document.documentElement.style.removeProperty("--studio-column-height");
     restoreSettingsFormScrollTop(settingsScrollTop);
@@ -4839,10 +5004,6 @@ function syncConfigUi(config) {
   state.limits = {
     ...DEFAULT_LIMITS,
     ...configLimits,
-    maxConcurrentTasksPerSession:
-      "maxConcurrentTasksPerSession" in configLimits
-        ? configLimits.maxConcurrentTasksPerSession || DEFAULT_LIMITS.maxConcurrentTasksPerSession
-        : DEFAULT_LIMITS.maxConcurrentTasksPerSession,
     maxCreationReferenceImages: "maxCreationReferenceImages" in configLimits ? configLimits.maxCreationReferenceImages || DEFAULT_LIMITS.maxCreationReferenceImages : DEFAULT_LIMITS.maxCreationReferenceImages,
     maxPortraitPersonReferenceImages:
       "maxPortraitPersonReferenceImages" in configLimits
@@ -4874,6 +5035,12 @@ function syncConfigUi(config) {
   if (refs.imageDecompositionSizeInput && !refs.imageDecompositionSizeInput.value) {
     refs.imageDecompositionSizeInput.value = "auto";
   }
+  if (refs.quickBlendRatioInput && !refs.quickBlendRatioInput.value) {
+    refs.quickBlendRatioInput.value = DEFAULT_QUICK_BLEND_RATIO;
+  }
+  if (refs.quickBlendSizeInput && !refs.quickBlendSizeInput.value) {
+    refs.quickBlendSizeInput.value = "auto";
+  }
 
   renderRatioGrid();
   renderReferenceAnalysisRatioGrid();
@@ -4892,6 +5059,7 @@ function syncConfigUi(config) {
   updateGenerateButton();
   renderReferenceGrid();
   renderImageDecompositionView();
+  renderQuickBlendView();
 }
 
 function ensureSelectedPreview() {
@@ -5476,7 +5644,7 @@ function renderPreview() {
     imageUrl,
     prompt: item ? getDisplayPrompt(item) : "",
     runningCount: state.jobs.length,
-    maxConcurrentTasks: state.limits.maxConcurrentTasksPerSession,
+    maxConcurrentTasks: getMaxParallelJobCount(),
   });
 
   refs.zoomLabel.textContent = `${Math.round(state.zoom * 100)}%`;
@@ -5991,6 +6159,7 @@ const VIEW_RENDERERS = Object.freeze({
     renderReferenceAnalysis();
   },
   imageDecomposition: renderImageDecompositionView,
+  quickBlend: renderQuickBlendView,
   articleIllustration: renderArticleIllustrationView,
   articleRecord: renderArticleRecordView,
   creation: renderCreationView,
@@ -6070,6 +6239,13 @@ function upsertGalleryItem(item) {
   }
   if (hydratedItem.mode === "image-decomposition" || hydratedItem.assetKind === "image-decomposition") {
     storeImageDecompositionGenerationItem(hydratedItem);
+  }
+  if (
+    hydratedItem.mode === "quick-blend" ||
+    hydratedItem.generationMode === "quick-blend" ||
+    hydratedItem.assetKind === "quick-blend"
+  ) {
+    storeQuickBlendGenerationItem(hydratedItem);
   }
   resetGalleryHistoryPage();
   syncGalleryMetadataCache(state.gallery);
@@ -6351,6 +6527,13 @@ function applyServerImageToGalleryItem(item) {
   const next = state.gallery.filter((entry) => entry.filename !== filename);
   next.unshift(mergedItem);
   state.gallery = sortGalleryItemsByCreatedAtDesc(next);
+  if (
+    mergedItem.mode === "quick-blend" ||
+    mergedItem.generationMode === "quick-blend" ||
+    mergedItem.assetKind === "quick-blend"
+  ) {
+    storeQuickBlendGenerationItem(mergedItem);
+  }
   syncGalleryMetadataCache(state.gallery);
   void cacheBrowserGalleryItem(mergedItem);
 }
@@ -6930,7 +7113,7 @@ const CREATION_ITEM_STATUS_LABELS = {
   planning: "待开始",
 };
 
-const CREATION_PREVIEW_SLOTS = "1-hero|hero|主图|商品清晰居中，适合作为首图;2-benefit|benefit|卖点图|突出 1-2 个核心卖点;3-scene|scene|场景图|展示真实使用环境、比例和使用方式;4-detail-trust|detail-trust|详情信任图|强调材质、结构、包装或品质证明;5-comparison|comparison|对比图|让商品优势一眼可比;6-social-proof|social-proof|种草图|适合社媒与口碑分享语境;7-package|package|包装清单图|说明包装、配件和到手内容;8-promotion|promotion|活动图|突出优惠、限时和购买理由;9-material-closeup|material-closeup|材质细节图|放大纹理、工艺和品质细节;10-usage-steps|usage-steps|使用步骤图|用步骤降低理解和使用门槛;11-dimensions|dimensions|尺寸规格图|呈现尺寸、容量和兼容信息;12-review-qa|review-qa|口碑问答图|回答购买前常见疑虑;13-feature-callout|feature-callout|功能拆解图|拆解关键功能、结构和购买理由;14-variant-matrix|variant-matrix|变体矩阵图|整理颜色、尺寸、套装或 SKU 选择;15-compatibility|compatibility|适配兼容图|说明适配对象、兼容范围和选择依据;16-care-guide|care-guide|保养维护图|展示清洁、收纳、替换或维护步骤;17-brand-story|brand-story|品牌故事图|呈现品牌理念、工艺来源和使用价值;18-certification-proof|certification-proof|资质背书图|展示明确提供的认证、检测、质保或安全背书".split(";").map((entry) => { const [itemId, role, title, brief] = entry.split("|"); return { itemId, role, title, brief }; });
+const CREATION_PREVIEW_SLOTS = "1-hero|hero|主图|商品清晰居中，适合作为首图;2-benefit|benefit|卖点图|突出 1-2 个核心卖点;3-scene|scene|场景图|展示真实使用环境、比例和使用方式;4-detail-trust|detail-trust|详情信任图|强调材质、结构、包装或品质证明;5-comparison|comparison|对比图|让商品优势一眼可比;6-social-proof|social-proof|种草图|适合社媒与口碑分享语境;7-package|package|包装清单图|说明包装、配件和到手内容;8-promotion|promotion|活动图|突出优惠、限时和购买理由;9-material-closeup|material-closeup|材质细节图|放大纹理、工艺和品质细节;10-usage-steps|usage-steps|使用步骤图|用步骤降低理解和使用门槛;11-dimensions|dimensions|尺寸规格图|呈现尺寸、容量和兼容信息;12-review-qa|review-qa|口碑问答图|回答购买前常见疑虑;13-feature-callout|feature-callout|功能拆解图|拆解关键功能、结构和购买理由;14-variant-matrix|variant-matrix|变体矩阵图|整理颜色、尺寸、套装或 SKU 选择;15-compatibility|compatibility|适配兼容图|说明适配对象、兼容范围和选择依据;16-care-guide|care-guide|保养维护图|展示清洁、收纳、替换或维护步骤;17-brand-story|brand-story|品牌故事图|呈现品牌理念、工艺来源和使用价值;18-image-decomposition|image-decomposition|图片拆解图|按图片拆解模式标注可见结构、部件、材质和外部功能".split(";").map((entry) => { const [itemId, role, title, brief] = entry.split("|"); return { itemId, role, title, brief }; });
 
 const CREATION_SCENARIO_LABELS = { standard: "标准电商", "detail-page": "详情页转化", "social-seeding": "社媒种草", launch: "新品发布", promotion: "活动促销", livestream: "直播电商", "gift-guide": "礼品推荐", "marketplace-search": "平台搜索", "brand-story": "品牌故事" };
 const CREATION_VISUAL_LANGUAGE_LABELS = { "classic-commercial": "经典商业摄影", "premium-studio": "高端棚拍", "reference-style": "参考模式", "clean-marketplace": "平台清爽白底", "lifestyle-editorial": "生活方式杂志", "social-ugc": "社媒实拍", "detail-infographic": "详情页信息图", "macro-material": "微距材质", "outdoor-context": "户外场景", "minimal-luxury": "极简奢华", "bold-campaign": "活动海报", "warm-handcrafted": "手作温度" };
@@ -6988,7 +7171,7 @@ const CREATION_SCENARIO_ROLE_PRESETS = {
     "material-closeup",
     "package",
     "detail-trust",
-    "certification-proof",
+    "image-decomposition",
     "social-proof",
     "usage-steps",
     "review-qa",
@@ -7006,8 +7189,9 @@ const CREATION_INDUSTRY_ROLE_PRESETS = {
 
 const CREATION_REFERENCE_ROLE_OPTIONS = [
   { value: "product", label: "商品主体" },
+  { value: "reference-product", label: "参考主体" },
   { value: "package", label: "包装清单" },
-  { value: "material", label: "材质细节" },
+  { value: "material", label: "结构细节" },
   { value: "dimensions", label: "尺寸规格" },
   { value: "usage", label: "使用说明" },
   { value: "scene", label: "使用场景" },
@@ -7020,8 +7204,8 @@ function getCreationReferenceRoleLabel(role) {
 }
 
 function getCreationSelectedImageCount() {
-  const value = Number.parseInt(refs.creationImageCountInput?.value || "10", 10);
-  return [4, 6, 8, 10, 12, 14, 16, 18].includes(value) ? value : 10;
+  const value = Number.parseInt(refs.creationImageCountInput?.value || "18", 10);
+  return [4, 6, 8, 10, 12, 14, 16, 18].includes(value) ? value : 18;
 }
 
 function createEmptyCreationReferenceAnalysisState() {
@@ -7479,8 +7663,8 @@ function setCreationImageCountValue(count) {
     return;
   }
 
-  const normalizedCount = Number(count) || 10;
-  refs.creationImageCountInput.value = [4, 6, 8, 10, 12, 14, 16, 18].includes(normalizedCount) ? String(normalizedCount) : "10";
+  const normalizedCount = Number(count) || 18;
+  refs.creationImageCountInput.value = [4, 6, 8, 10, 12, 14, 16, 18].includes(normalizedCount) ? String(normalizedCount) : "18";
 }
 
 function getCreationSelectedScenario() {
@@ -8991,6 +9175,32 @@ function renderCreationReferenceRestoreList() {
   });
 }
 
+function hasCreationReferenceInputData() { return state.creationReferenceFiles.length > 0; }
+
+function syncCreationReferenceResetButton() {
+  if (refs.creationReferenceResetButton) refs.creationReferenceResetButton.disabled = !hasCreationReferenceInputData();
+}
+
+function clearCreationReferenceFiles() {
+  if (
+    state.creationReferencePreviewItem &&
+    state.creationReferenceFiles.some((item) => item.id === state.creationReferencePreviewItem.id)
+  ) {
+    closeReferencePreview();
+  }
+  creationReferenceAnalysisRequestToken += 1;
+  state.creationReferenceFiles.forEach((item) => {
+    revokeReferencePreview(item);
+    markCreationReferenceRestoreEntryMissing(item.restoreEntryId);
+  });
+  state.creationReferenceFiles = [];
+  state.creationReferenceAnalysis.running = false;
+  if (refs.creationReferenceInput) {
+    refs.creationReferenceInput.value = "";
+  }
+  renderCreationReferenceGrid();
+}
+
 function resetCreationReferenceFilesForRecordReuse(normalized = null) {
   state.creationReferenceFiles.forEach((item) => {
     if (item.previewUrl) {
@@ -9071,6 +9281,10 @@ function getCreationQueueJobs() { return getCreationQueueJobsFromState(state.cre
 function getPendingCreationQueueCount() { return getPendingCreationQueueCountFromState(state.creation); }
 function getActiveCreationQueueJob() { return getActiveCreationQueueJobFromState(state.creation); }
 function getSelectedCreationQueueJob() { return getSelectedCreationQueueJobFromState(state.creation); }
+function getCreationQueueJobForSet(set = {}) {
+  const setId = String(set?.setId || "");
+  return setId ? getCreationQueueJobs().find((job) => String(job.set?.setId || "") === setId) || null : null;
+}
 function getCreationRepairTargetSet() { return getCreationRepairTargetSetFromState(state.creation, getCreationCurrentSet(), normalizeCreationSetForView); }
 function syncActiveCreationQueueSet(set) { syncActiveCreationQueueSetInState(state.creation, set, normalizeCreationSetForView); }
 function selectCreationQueueJob(queueId) {
@@ -9245,6 +9459,75 @@ function updateCreationCurrentItem(itemId, patch = {}) {
     state.creation.sets = [nextSet, ...state.creation.sets.filter((entry) => entry.setId !== nextSet.setId)];
   }
   syncActiveCreationQueueSet(nextSet);
+  return nextSet;
+}
+
+function shouldShowCreationQueueJob(job = {}) {
+  if (!job?.id) {
+    return false;
+  }
+  const selectedQueueId = state.creation.selectedQueueId || state.creation.activeQueueId;
+  const currentSetId = String(state.creation.currentSet?.setId || "");
+  const jobSetId = String(job.set?.setId || "");
+  return selectedQueueId === job.id || (currentSetId && jobSetId && currentSetId === jobSetId);
+}
+
+function upsertCreationSetForStream(set, { queueJob } = {}) {
+  const normalized = normalizeCreationSetForView(set);
+  if (!normalized.setId) {
+    return null;
+  }
+
+  if (queueJob) {
+    queueJob.set = normalized;
+    state.creation.sets = [normalized, ...state.creation.sets.filter((entry) => entry.setId !== normalized.setId)];
+    if (shouldShowCreationQueueJob(queueJob)) {
+      state.creation.currentSet = normalized;
+    }
+    renderCreationRecordView();
+    return normalized;
+  }
+
+  return upsertCreationSet(normalized);
+}
+
+function getCreationStreamCurrentSet({ queueJob } = {}) {
+  return queueJob?.set ? normalizeCreationSetForView(queueJob.set) : getCreationCurrentSet();
+}
+
+function updateCreationStreamItem(itemId, patch = {}, context = {}) {
+  const { queueJob } = context;
+  if (!queueJob) {
+    return updateCreationCurrentItem(itemId, patch);
+  }
+
+  const currentSet = getCreationStreamCurrentSet(context);
+  if (!currentSet || !itemId) {
+    return null;
+  }
+
+  const nextItems = [...currentSet.items];
+  const index = nextItems.findIndex((item) => item.itemId === itemId);
+  const existing = index >= 0 ? nextItems[index] : { itemId };
+  const nextItem = normalizeCreationItemForView({ ...existing, ...patch, itemId }, index >= 0 ? index : nextItems.length);
+  if (index >= 0) {
+    nextItems[index] = nextItem;
+  } else {
+    nextItems.push(nextItem);
+  }
+
+  const nextSet = normalizeCreationSetForView({
+    ...currentSet,
+    ...patch.set,
+    items: nextItems,
+    updatedAt: patch.updatedAt || nowIso(),
+    status: patch.setStatus || currentSet.status,
+  });
+  queueJob.set = nextSet;
+  state.creation.sets = [nextSet, ...state.creation.sets.filter((entry) => entry.setId !== nextSet.setId)];
+  if (shouldShowCreationQueueJob(queueJob)) {
+    state.creation.currentSet = nextSet;
+  }
   return nextSet;
 }
 
@@ -9983,11 +10266,25 @@ function removeCreationStyleReferenceFile(referenceId) {
 }
 
 function updateCreationReferenceRole(referenceId, role) {
-  state.creationReferenceFiles = state.creationReferenceFiles.map((item) =>
-    item.id === referenceId ? { ...item, role: role || "product" } : item,
-  );
+  state.creationReferenceFiles = state.creationReferenceFiles.map((item) => {
+    const nextRole = CREATION_REFERENCE_ROLE_OPTIONS.some((option) => option.value === role) ? role : "product";
+    return item.id === referenceId
+      ? { ...item, role: nextRole || "product" }
+      : nextRole === "reference-product" && item.role === "reference-product"
+        ? { ...item, role: item.role === "reference-product" ? "product" : item.role }
+        : item;
+  });
   markCreationReferenceAnalysisDirty();
+  resetCreationDraftPreview();
   renderCreationReferenceGrid();
+}
+
+function reorderCreationReferenceFile(referenceId, beforeReferenceId) {
+  const next = reorderCreationReferenceFiles(state.creationReferenceFiles, referenceId, beforeReferenceId);
+  if (!next) return false;
+  state.creationReferenceFiles = next;
+  markCreationReferenceAnalysisDirty(); resetCreationDraftPreview(); renderCreationReferenceGrid(); renderCreationView();
+  return true;
 }
 
 function removeCreationLogoFile() {
@@ -10188,11 +10485,6 @@ function renderCreationLogoBatchSourceGrid() {
     remove.addEventListener("click", () => removeCreationLogoBatchSourceFile(item.id));
     card.appendChild(remove);
 
-    const name = document.createElement("span");
-    name.className = "creation-logo-batch-source-name";
-    name.textContent = item.file?.name || "待处理图片";
-    card.appendChild(name);
-
     refs.creationLogoBatchSourceGrid.appendChild(card);
   });
 
@@ -10213,7 +10505,7 @@ function applyCreationReferenceFiles(fileList) {
     return;
   }
 
-  const maxReferenceImages = getCreationMaxReferenceImageCount();
+  const maxReferenceImages = getCreationMaxProductReferenceImageCount();
   const next = [...state.creationReferenceFiles];
   let restoreQueue = [...state.creationReferenceRestoreQueue];
   const fingerprints = new Set(next.map((item) => item.fingerprint));
@@ -10271,7 +10563,7 @@ function applyCreationReferenceFiles(fileList) {
   renderCreationView();
 
   if (overflowed) {
-    showError(`套图参考图最多支持 ${maxReferenceImages} 张。`);
+    showError(`套图参考图最多支持 ${maxReferenceImages} 张（套图参考图和参考风格图合计最多支持 ${getCreationMaxReferenceImageCount()} 张）。`);
   }
 }
 
@@ -10363,14 +10655,17 @@ function renderCreationReferenceGrid() {
   }
 
   refs.creationReferenceGrid.innerHTML = "";
-  const maxReferenceImages = getCreationMaxReferenceImageCount();
+  const maxReferenceImages = getCreationMaxProductReferenceImageCount();
   refs.creationReferenceCount.textContent = `${state.creationReferenceFiles.length} / ${maxReferenceImages}`;
   syncReferenceDropzoneCompact(refs.creationReferenceDropzone, state.creationReferenceFiles.length > 0);
   refs.creationReferenceGrid.classList.toggle("hidden", state.creationReferenceFiles.length === 0);
 
   state.creationReferenceFiles.forEach((item) => {
     const card = document.createElement("div");
-    card.className = "reference-card";
+    const isProductReference = isCreationSubjectReferenceRole(item.role || "product");
+    card.className = `reference-card creation-reference-card${isProductReference ? " is-draggable" : ""}`;
+    card.dataset.creationReferenceCardId = item.id;
+    card.draggable = isProductReference;
 
     const previewButton = document.createElement("button");
     previewButton.type = "button";
@@ -10448,6 +10743,7 @@ function renderCreationReferenceGrid() {
   }
   renderCreationReferenceRestoreList();
   renderCreationReferenceAnalysis();
+  syncCreationReferenceResetButton();
 }
 
 function renderCreationStyleReferenceGrid() {
@@ -10486,11 +10782,6 @@ function renderCreationStyleReferenceGrid() {
     remove.setAttribute("aria-label", "移除参考风格图");
     remove.addEventListener("click", () => removeCreationStyleReferenceFile(item.id));
     card.appendChild(remove);
-
-    const name = document.createElement("span");
-    name.className = "creation-reference-note";
-    name.textContent = item.file?.name || "参考风格图";
-    card.appendChild(name);
 
     refs.creationStyleReferenceGrid.appendChild(card);
   });
@@ -10576,6 +10867,7 @@ function setCreationReferenceAnalysisFeedback(message, kind = "") {
 
   refs.creationReferenceAnalysisFeedback.textContent = message ? compactErrorMessage(message, "套图参考图识别失败") : "";
   refs.creationReferenceAnalysisFeedback.dataset.state = kind;
+  syncCreationReferenceResetButton();
 }
 
 function markCreationReferenceAnalysisDirty() {
@@ -10591,7 +10883,9 @@ const hasCreationReferenceDimensionSpecIntent = (value) => /dimension(s)?\s*(cha
 const hasCreationReferenceDimensionSpecValue = (value) => { const text = String(value || "").trim().toLowerCase(); return /#\s*\d+|\d+\s*#\s*(?:hook|hooks|钩)?|\d+\s*(?:号|號)\s*钩|size\s*#?\s*\d+\s*hooks?/iu.test(text) || /(^|[^\p{L}\p{N}_])([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*(fl\.?\s*oz|fluid\s*ounces?|inches?|inch|in\.?|ft\.?|feet|foot|yards?|yard|yd\.?|毫米|厘米|英寸|英尺|毫升|液量盎司|千克|克|磅|盎司|升|mm|cm|kg|g|ml|lb|lbs|oz|m|l)(?=$|[^\p{L}\p{N}_])/iu.test(text); };
 const hasCreationReferenceDimensionSignal = (value) => { const text = String(value || "").trim().toLowerCase(); return hasCreationReferenceDimensionSpecIntent(text) || (hasCreationReferenceDimensionSpecValue(text) && /dimension|size|measurement|capacity|length|width|height|weight|hook|尺寸|规格|尺码|容量|长度|宽度|高度|重量|比例|尺度|钩/iu.test(text)); };
 const hasCreationReferenceUsageInstructionSignal = (value) => /usage\s*(guide|manual|instructions?|steps?|diagram|method)|user\s*(guide|manual|instructions?)|operation\s*(guide|manual|instructions?|steps?|method|diagram)|instruction(s)?|manual|tutorial|step[-\s]?by[-\s]?step|how\s*to|setup\s*(guide|instructions?|steps?)|assembly\s*(guide|instructions?|steps?)|install(?:ation)?\s*(guide|instructions?|steps?)|charging\s*(guide|instructions?|steps?|method|connection|diagram)|connection\s*(guide|instructions?|steps?|method|diagram)|polarity|positive\s*(pole|terminal|electrode)|negative\s*(pole|terminal|electrode)|使用\s*(指南|说明|教程|步骤|方法|方式|指引)|操作\s*(指南|说明|教程|步骤|方法|流程)|安装\s*(指南|说明|教程|步骤|方法|流程)|装配\s*(指南|说明|教程|步骤|方法|流程)|充电\s*(指南|说明|教程|步骤|方式|方法|连接|接线)|连接\s*(指南|说明|教程|步骤|方式|方法|示意|接线)|接线|正负极|正极|负极|请按照|注意事项|说明书|教程图|步骤图/iu.test(String(value || "").trim().toLowerCase());
-function inferCreationReferenceAnalysisRole(entry = {}) { const explicitRole = String(entry.role || "").trim(), hasExplicitRole = CREATION_REFERENCE_ROLE_OPTIONS.some((option) => option.value === explicitRole), text = [entry.roleLabel, entry.title, entry.note, entry.description, entry.reason, entry.summary, entry.filename].map((item) => String(item || "").trim()).filter(Boolean).join(" "); const shouldUseDimensionRole = hasCreationReferenceDimensionSignal(text) && (!hasExplicitRole || explicitRole === "other" || (explicitRole === "product" && hasCreationReferenceDimensionSpecIntent(text))); const shouldUseUsageRole = hasCreationReferenceUsageInstructionSignal(text) && (!hasExplicitRole || explicitRole === "other" || explicitRole === "product" || explicitRole === "scene"); return shouldUseDimensionRole ? "dimensions" : shouldUseUsageRole ? "usage" : hasExplicitRole ? explicitRole : "product"; }
+const hasCreationReferenceDetailSignal = (value) => /detail|close.?up|callout|feature\s*(callout|breakdown|point|annotation)|structure\s*(callout|breakdown|detail|annotation|notes?)|component\s*(callout|breakdown|detail|annotation)|material|texture|surface|fabric|finish|seams?|craft|细节|质感|纹理|表面|工艺|外观结构|结构表现|结构说明|结构标注|部件标注|功能卖点|卖点外观|功能拆解|结构拆解/iu.test(String(value || "").trim().toLowerCase());
+const hasCreationReferenceProductSubjectSignal = (value) => /product\s*(subject|photo|main|hero)|hero\s*product|sku\s*subject|sellable\s*(product|sku|subject)|商品主体|主体图|主图|白底主图|正面主体|可售|色款|配色|整体轮廓/iu.test(String(value || "").trim().toLowerCase()), hasCreationReferencePackageSignal = (value) => /package|packaging|box|bundle|included\s*(items?|contents?)?|contents?|accessor(?:y|ies)|in\s+the\s+box|what'?s\s+included|包装|包装清单|清单|套装|配件|盒|到手|收到|内含物/iu.test(String(value || "").trim().toLowerCase()), hasCreationReferencePackageContentSignal = (value) => /included\s*(items?|contents?)?|contents?|accessor(?:y|ies)|in\s+the\s+box|comes?\s+with|what'?s\s+included|包装清单|清单包含|包装内容|到手内容|实际收到|用户实际收到|配件清单|套装内容|内含物|标配清单|附带配件|随附配件|(?:includes?|included|comes?\s+with|包含|内含|含有|附带|随附|标配)[^。.;；\n]{0,40}(?:usb|cables?|charging\s*cable|charger|manual|accessor(?:y|ies)|propeller|eva|float|充电线|数据线|线缆|螺旋桨|叶片|漂浮|浮漂|说明书|配件|收纳袋|备用)/iu.test(String(value || "").trim().toLowerCase());
+function inferCreationReferenceAnalysisRole(entry = {}) { const explicitRole = String(entry.role || "").trim(), hasExplicitRole = CREATION_REFERENCE_ROLE_OPTIONS.some((option) => option.value === explicitRole), text = [entry.roleLabel, entry.title, entry.note, entry.description, entry.reason, entry.summary, entry.filename].map((item) => String(item || "").trim()).filter(Boolean).join(" "), evidenceText = [entry.title, entry.note, entry.description, entry.reason, entry.summary, entry.filename].map((item) => String(item || "").trim()).filter(Boolean).join(" "); const shouldUsePackageRole = (hasCreationReferencePackageContentSignal(evidenceText) && (!hasExplicitRole || explicitRole === "other" || explicitRole === "product" || explicitRole === "dimensions")) || (hasCreationReferencePackageSignal(evidenceText) && (!hasExplicitRole || explicitRole === "other" || explicitRole === "product")); const shouldUseDimensionRole = hasCreationReferenceDimensionSignal(text) && (!hasExplicitRole || explicitRole === "other" || (explicitRole === "product" && hasCreationReferenceDimensionSpecIntent(text))); const shouldUseUsageRole = hasCreationReferenceUsageInstructionSignal(text) && (!hasExplicitRole || explicitRole === "other" || explicitRole === "product" || explicitRole === "scene"); const shouldUseDetailRole = hasCreationReferenceDetailSignal(evidenceText) && (!hasExplicitRole || explicitRole === "other" || (explicitRole === "product" && !hasCreationReferenceProductSubjectSignal(evidenceText))); return shouldUsePackageRole ? "package" : shouldUseDimensionRole ? "dimensions" : shouldUseUsageRole ? "usage" : shouldUseDetailRole ? "material" : hasExplicitRole ? explicitRole : "product"; }
 
 function normalizeCreationReferenceAnalysisRecommendation(entry = {}, index = 0) {
   const filename = String(state.creationReferenceFiles[index]?.file?.name || entry.filename || `reference-image-${index + 1}`).trim();
@@ -10782,6 +11076,7 @@ function renderCreationReferenceAnalysis() {
     refs.creationReferenceAnalysisToggleButton.setAttribute("aria-expanded", "false");
     refs.creationReferenceAnalysisToggleButton.textContent = "折叠建议";
     refs.creationReferenceAnalysisList.classList.remove("hidden");
+    syncCreationReferenceResetButton();
     return;
   }
 
@@ -10830,13 +11125,14 @@ function renderCreationReferenceAnalysis() {
     risk.textContent = riskText;
     refs.creationReferenceAnalysisList.appendChild(risk);
   });
+  syncCreationReferenceResetButton();
 }
 
 async function buildCreationReferenceAnalysisFormData() {
   const formData = new FormData();
   formData.set(
     "reasoningEffort",
-    refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
+    CREATION_REFERENCE_ANALYSIS_REASONING_EFFORT,
   );
   const analysisFiles = await Promise.all(
     state.creationReferenceFiles.map((item) => preparePromptAnalysisImageFile(item.file)),
@@ -10855,6 +11151,8 @@ async function analyzeCreationReferenceImages() {
     return;
   }
 
+  const requestToken = creationReferenceAnalysisRequestToken + 1;
+  creationReferenceAnalysisRequestToken = requestToken;
   state.creationReferenceAnalysis.running = true;
   setCreationReferenceAnalysisFeedback("", "busy");
   renderCreationReferenceAnalysis();
@@ -10865,23 +11163,34 @@ async function analyzeCreationReferenceImages() {
       body: await buildCreationReferenceAnalysisFormData(),
     });
     const payload = await response.json().catch(() => ({}));
+    if (requestToken !== creationReferenceAnalysisRequestToken) {
+      return;
+    }
     if (!response.ok) {
       throw new Error(payload.message || "套图参考图识别失败。");
     }
 
     const matchedTemplate = await applyCreationReferenceAnalysis(payload);
+    if (requestToken !== creationReferenceAnalysisRequestToken) {
+      return;
+    }
     const count = state.creationReferenceAnalysis.result?.recommendations?.length || 0;
     const categoryMessage = matchedTemplate
       ? `，已切换到 ${matchedTemplate.categoryPath || matchedTemplate.label}`
       : "";
     setCreationReferenceAnalysisFeedback(`已识别 ${count} 张参考图用途建议${categoryMessage}，可点击应用建议。`, "success");
   } catch (error) {
+    if (requestToken !== creationReferenceAnalysisRequestToken) {
+      return;
+    }
     const message = error instanceof Error ? error.message : String(error);
     setCreationReferenceAnalysisFeedback(message, "error");
     showError(message);
   } finally {
-    state.creationReferenceAnalysis.running = false;
-    renderCreationReferenceAnalysis();
+    if (requestToken === creationReferenceAnalysisRequestToken) {
+      state.creationReferenceAnalysis.running = false;
+      renderCreationReferenceAnalysis();
+    }
   }
 }
 
@@ -10973,7 +11282,7 @@ function renderCreationView() {
     : state.creation.generating || getPendingCreationQueueCount() > 0
       ? "加入队列"
       : "生成套图";
-  refs.creationGenerateButton.disabled = state.creation.planning || preparingReferences || getPendingCreationQueueCount() >= getMaxQueuedJobCount();
+  refs.creationGenerateButton.disabled = state.creation.planning || preparingReferences;
   if (logoBatchBranch && state.creation.generating) {
     refs.creationGenerateButton.disabled = true;
   }
@@ -11160,48 +11469,49 @@ function buildCreationRepairFormData({ itemId = "", scope = "incomplete", set = 
   return formData;
 }
 
-async function handleCreationStreamEvent(eventName, payload = {}) {
+async function handleCreationStreamEvent(eventName, payload = {}, context = {}) {
   if (eventName === "repair_started") {
-    upsertCreationSet(payload.set);
+    upsertCreationSetForStream(payload.set, context);
     setCreationFeedback("正在补齐套图项...", "busy");
     renderCreationView();
     return;
   }
 
   if (eventName === "set_started") {
-    upsertCreationSet(payload.set);
+    upsertCreationSetForStream(payload.set, context);
     setCreationFeedback(`套图任务已创建，正在生成 ${payload.set?.imageCount || getCreationSelectedImageCount()} 张营销图。`, "busy");
     renderCreationView();
     return;
   }
 
   if (eventName === "plan") {
-    if (payload.setId && state.creation.currentSet?.setId !== payload.setId && Array.isArray(payload.items)) {
-      upsertCreationSet({
-        ...state.creation.currentSet,
+    const currentSet = getCreationStreamCurrentSet(context);
+    if (payload.setId && currentSet?.setId !== payload.setId && Array.isArray(payload.items)) {
+      upsertCreationSetForStream({
+        ...currentSet,
         setId: payload.setId,
         items: payload.items,
-      });
+      }, context);
     }
     renderCreationView();
     return;
   }
 
   if (eventName === "item_started") {
-    updateCreationCurrentItem(payload.itemId, {
+    updateCreationStreamItem(payload.itemId, {
       status: "generating",
       updatedAt: nowIso(),
-    });
+    }, context);
     setCreationFeedback(`正在生成 ${payload.role || payload.itemId}。`, "busy");
     renderCreationView();
     return;
   }
 
   if (eventName === "item_status") {
-    updateCreationCurrentItem(payload.itemId, {
+    updateCreationStreamItem(payload.itemId, {
       status: "generating",
       updatedAt: nowIso(),
-    });
+    }, context);
     if (payload.message) {
       setCreationFeedback(payload.message, "busy");
     }
@@ -11210,36 +11520,36 @@ async function handleCreationStreamEvent(eventName, payload = {}) {
   }
 
   if (eventName === "item_partial_image") {
-    updateCreationCurrentItem(payload.itemId, {
+    updateCreationStreamItem(payload.itemId, {
       status: "generating",
       imageUrl: payload.dataUrl,
       thumbnailUrl: payload.dataUrl,
       updatedAt: nowIso(),
-    });
+    }, context);
     renderCreationView();
     return;
   }
 
   if (eventName === "item_final_image") {
-    updateCreationCurrentItem(payload.itemId, {
+    updateCreationStreamItem(payload.itemId, {
       status: "generating",
       imageUrl: payload.dataUrl,
       thumbnailUrl: payload.dataUrl,
       updatedAt: nowIso(),
-    });
+    }, context);
     renderCreationView();
     return;
   }
 
   if (eventName === "item_saved") {
     if (payload.set) {
-      upsertCreationSet(payload.set);
+      upsertCreationSetForStream(payload.set, context);
     } else if (payload.item) {
-      updateCreationCurrentItem(payload.item.itemId, {
+      updateCreationStreamItem(payload.item.itemId, {
         ...payload.item,
         status: "completed",
         updatedAt: nowIso(),
-      });
+      }, context);
     }
     setCreationFeedback("已生成一张套图。", "success");
     renderCreationView();
@@ -11248,15 +11558,16 @@ async function handleCreationStreamEvent(eventName, payload = {}) {
 
   if (eventName === "item_failed") {
     if (payload.set) {
-      upsertCreationSet(payload.set);
+      upsertCreationSetForStream(payload.set, context);
     } else if (payload.itemId) {
-      updateCreationCurrentItem(payload.itemId, {
+      updateCreationStreamItem(payload.itemId, {
         status: "failed",
         error: payload.message || "",
         updatedAt: nowIso(),
-      });
+      }, context);
     }
-    if (state.creation.generationScope === "full" && state.creation.autoRepairAttemptCount === 0) {
+    const autoRepairAttemptCount = context.queueJob?.autoRepairAttemptCount ?? state.creation.autoRepairAttemptCount;
+    if (state.creation.generationScope === "full" && autoRepairAttemptCount === 0) {
       setCreationFeedback(payload.message ? `${payload.message}，完成后将自动补图。` : "有套图项失败，完成后将自动补图。", "busy");
     } else {
       setCreationFeedback(payload.message || "套图生成失败。", "error");
@@ -11266,9 +11577,10 @@ async function handleCreationStreamEvent(eventName, payload = {}) {
   }
 
   if (eventName === "complete") {
+    let completedSet = payload.set || getCreationStreamCurrentSet(context);
     if (payload.set) {
-      upsertCreationSet(payload.set);
-      if (await runCreationAutoRepairIfNeeded(payload.set)) {
+      completedSet = upsertCreationSetForStream(payload.set, context) || payload.set;
+      if (!context.queueJob && await runCreationAutoRepairIfNeeded(payload.set)) {
         renderCreationView();
         return;
       }
@@ -11284,16 +11596,16 @@ async function handleCreationStreamEvent(eventName, payload = {}) {
         return;
       }
     }
-    const completion = getCreationCompletionFeedback(payload.set || getCreationCurrentSet()); setCreationFeedback(completion.message, completion.tone);
+    const completion = getCreationCompletionFeedback(completedSet); setCreationFeedback(completion.message, completion.tone);
     renderCreationView();
     return;
   }
 
   if (eventName === "error") {
     const message = compactErrorMessage(payload.message, "套图生成请求失败");
-    const currentSet = getCreationCurrentSet();
+    const currentSet = getCreationStreamCurrentSet(context);
     if (currentSet) {
-      state.creation.currentSet = normalizeCreationSetForView({
+      upsertCreationSetForStream({
         ...currentSet,
         status: "failed",
         updatedAt: nowIso(),
@@ -11306,7 +11618,7 @@ async function handleCreationStreamEvent(eventName, payload = {}) {
                 error: message,
               },
         ),
-      });
+      }, context);
     }
     setCreationFeedback(message, "error");
     showError(message);
@@ -11314,18 +11626,66 @@ async function handleCreationStreamEvent(eventName, payload = {}) {
   }
 }
 
-async function runCreationStream(response) {
+async function runCreationStream(response, context = {}) {
   await consumeSse(response.body, async (eventName, payload) => {
-    await handleCreationStreamEvent(eventName, payload);
+    await handleCreationStreamEvent(eventName, payload, context);
+    await context.onEventHandled?.(eventName, payload);
   });
 }
 
-async function runCreationRepairRequest({ itemId = "", scope = "incomplete", set = getCreationRepairTargetSet() } = {}) { await ensureCreationReferenceGenerationFilesReady(); const response = await fetch("/api/creation/repair", { method: "POST", body: buildCreationRepairFormData({ itemId, scope, set }) }); if (response.status === 404) throw new Error("当前部署不支持套图补图。"); if (!response.ok || !response.body) throw new Error("套图补图请求失败"); await runCreationStream(response); await loadCreationSets(); }
+async function runCreationQueuedRepairRequest(queueJob, { itemId = "", scope = "incomplete", set } = {}) {
+  const currentSet = set ? normalizeCreationSetForView(set) : normalizeCreationSetForView(queueJob?.set);
+  const body = buildCreationQueuedRepairFormData(queueJob, { itemId, promptOverride: itemId ? getCreationItemDraft(itemId, currentSet) : "", scope, set: currentSet });
+  const response = await fetch("/api/creation/repair", { method: "POST", body });
+  if (response.status === 404) throw new Error("当前部署不支持套图补图。");
+  if (!response.ok || !response.body) throw new Error("套图补图请求失败");
+  await runCreationStream(response, { queueJob });
+  await loadCreationSets();
+}
+
+async function runCreationRepairRequest({ itemId = "", scope = "incomplete", set = getCreationRepairTargetSet() } = {}) {
+  const currentSet = set ? normalizeCreationSetForView(set) : getCreationRepairTargetSet(), queueJob = getCreationQueueJobForSet(currentSet);
+  if (queueJob?.formData && typeof queueJob.formData.entries === "function") { await runCreationQueuedRepairRequest(queueJob, { itemId, scope, set: currentSet }); return; }
+  await ensureCreationReferenceGenerationFilesReady();
+  const response = await fetch("/api/creation/repair", { method: "POST", body: buildCreationRepairFormData({ itemId, scope, set: currentSet }) });
+  if (response.status === 404) throw new Error("当前部署不支持套图补图。");
+  if (!response.ok || !response.body) throw new Error("套图补图请求失败");
+  await runCreationStream(response);
+  await loadCreationSets();
+}
 async function runCreationAutoRepairIfNeeded(set = getCreationCurrentSet()) {
   const currentSet = set ? normalizeCreationSetForView(set) : getCreationCurrentSet(); if (!shouldAutoRepairCreationSet({ set: currentSet, generationScope: state.creation.generationScope, autoRepairAttemptCount: state.creation.autoRepairAttemptCount, canRepair: canRepairCreationSet(currentSet) })) return false;
   const nextAttempt = state.creation.autoRepairAttemptCount + 1; state.creation.autoRepairAttemptCount = nextAttempt;
   setCreationFeedback(getCreationAutoRepairNotice({ incompleteCount: getCreationIncompleteItems(currentSet).length, attemptCount: nextAttempt }), "busy");
   renderCreationView(); await runCreationRepairRequest({ scope: "incomplete", set: currentSet }); return true;
+}
+
+async function runCreationQueuedAutoRepairIfNeeded(queueJob) {
+  const currentSet = queueJob?.set ? normalizeCreationSetForView(queueJob.set) : null;
+  if (!shouldAutoRepairCreationSet({
+    set: currentSet,
+    generationScope: "full",
+    autoRepairAttemptCount: queueJob?.autoRepairAttemptCount || 0,
+    canRepair: canRepairCreationSet(currentSet),
+  })) {
+    return false;
+  }
+
+  queueJob.autoRepairAttemptCount = (queueJob.autoRepairAttemptCount || 0) + 1;
+  setCreationFeedback(getCreationAutoRepairNotice({
+    incompleteCount: getCreationIncompleteItems(currentSet).length,
+    attemptCount: queueJob.autoRepairAttemptCount,
+  }), "busy");
+  renderCreationView();
+
+  const response = await fetch("/api/creation/repair", {
+    method: "POST",
+    body: buildCreationQueuedRepairFormData(queueJob, { scope: "incomplete", set: currentSet }),
+  });
+  if (response.status === 404) throw new Error("当前部署不支持套图补图。");
+  if (!response.ok || !response.body) throw new Error("套图补图请求失败");
+  await runCreationStream(response, { queueJob, onEventHandled: () => scheduleCreationGenerationQueue() });
+  return true;
 }
 
 async function loadCreationSets() {
@@ -11534,7 +11894,7 @@ function enqueueCreationGeneration({ formData, set }) {
 }
 
 function getCreationQueueContext() {
-  return { creationState: state.creation, compactErrorMessage, loadCreationSets, normalizeSet: normalizeCreationSetForView, nowIso, render: renderCreationView, runCreationStream, setFeedback: setCreationFeedback, showError };
+  return { creationState: state.creation, compactErrorMessage, getMaxParallelTasks: getMaxParallelJobCount, loadCreationSets, normalizeSet: normalizeCreationSetForView, nowIso, render: renderCreationView, runAutoRepairIfNeeded: runCreationQueuedAutoRepairIfNeeded, runCreationStream, setFeedback: setCreationFeedback, showError };
 }
 
 async function runCreationQueuedJob(job) { await runCreationQueuedJobFromQueue(job, getCreationQueueContext()); }
@@ -11559,13 +11919,6 @@ async function startCreationGeneration(event) {
   const sellingPoints = getCreationSellingPoints(refs.creationSellingPointsInput.value);
   if (!productName && !productDescription && sellingPoints.length === 0) {
     const message = "请至少填写商品名称、商品描述或核心卖点。";
-    setCreationFeedback(message, "error");
-    showError(message);
-    return;
-  }
-
-  if (getPendingCreationQueueCount() >= getMaxQueuedJobCount()) {
-    const message = `同一会话最多排队 ${getMaxQueuedJobCount()} 个套图任务。`;
     setCreationFeedback(message, "error");
     showError(message);
     return;
@@ -12205,11 +12558,6 @@ function renderPortraitReferenceGridForBucket(bucket = "person") {
     remove.setAttribute("aria-label", `移除${config.title}`);
     card.appendChild(remove);
 
-    const name = document.createElement("span");
-    name.className = "portrait-reference-name";
-    name.textContent = item.file?.name || `参考图 ${index + 1}`;
-    card.appendChild(name);
-
     config.grid.appendChild(card);
   });
 
@@ -12480,6 +12828,7 @@ async function analyzePortraitReference() {
   renderPortraitView();
   try {
     const formData = buildPortraitFormData({ includeFiles: true });
+    formData.set("reasoningEffort", "low");
     const response = await fetch("/api/portrait/reference/analyze", {
       method: "POST",
       body: formData,
@@ -13558,6 +13907,9 @@ function cancelQueuedJob(jobId) {
   if (canceledJob.mode === "image-decomposition") {
     removeImageDecompositionGenerationKey(makeJobPreviewKey(canceledJob.id));
   }
+  if (canceledJob.mode === "quick-blend") {
+    removeQuickBlendGenerationKey(makeJobPreviewKey(canceledJob.id));
+  }
   handleActivityCanceled(canceledJob);
   scheduleGenerationQueue();
   renderAll();
@@ -13643,38 +13995,56 @@ function applyGenerationTaskSnapshots(tasks, { render = true } = {}) {
   const snapshotIds = new Set(snapshots.map((task) => task.id));
 
   snapshots.forEach((task) => {
+    const taskPreviewKey = makeJobPreviewKey(task.id);
+    const wasSelectedPreview = state.selectedPreviewKey === taskPreviewKey;
+    const wasTrackedQuickBlendJob = task.mode === "quick-blend" && existingJobs.has(task.id);
+
     if (task.status === "completed" && task.item) {
       if (task.mode === "reference-analysis") {
         task.item.mode = "reference-analysis";
         storeReferenceAnalysisGenerationItem(task.item);
-        replaceReferenceAnalysisGenerationKey(makeJobPreviewKey(task.id), makeGalleryPreviewKey(task.item.filename));
-        if (state.referenceAnalysis.previewKey === makeJobPreviewKey(task.id)) {
+        replaceReferenceAnalysisGenerationKey(taskPreviewKey, makeGalleryPreviewKey(task.item.filename));
+        if (state.referenceAnalysis.previewKey === taskPreviewKey) {
           state.referenceAnalysis.previewKey = makeGalleryPreviewKey(task.item.filename);
         }
       }
       if (task.mode === "image-decomposition") {
         task.item.mode = "image-decomposition";
         storeImageDecompositionGenerationItem(task.item);
-        replaceImageDecompositionGenerationKey(makeJobPreviewKey(task.id), makeGalleryPreviewKey(task.item.filename));
-        if (state.imageDecomposition.previewKey === makeJobPreviewKey(task.id)) {
+        replaceImageDecompositionGenerationKey(taskPreviewKey, makeGalleryPreviewKey(task.item.filename));
+        if (state.imageDecomposition.previewKey === taskPreviewKey) {
           state.imageDecomposition.previewKey = makeGalleryPreviewKey(task.item.filename);
         }
       }
+      if (task.mode === "quick-blend") {
+        task.item.mode = "quick-blend";
+        storeQuickBlendGenerationItem(task.item);
+        replaceQuickBlendGenerationKey(taskPreviewKey, makeGalleryPreviewKey(task.item.filename));
+        if (state.quickBlend.previewKey === taskPreviewKey) {
+          state.quickBlend.previewKey = makeGalleryPreviewKey(task.item.filename);
+        }
+      }
       upsertGalleryItem(task.item);
-      if (state.selectedPreviewKey === makeJobPreviewKey(task.id) && task.item.filename) {
+      if (state.selectedPreviewKey === taskPreviewKey && task.item.filename) {
         state.selectedPreviewKey = makeGalleryPreviewKey(task.item.filename);
       }
     }
 
-    if (task.status === "error" && state.selectedPreviewKey === makeJobPreviewKey(task.id)) {
+    if (task.status === "error" && wasSelectedPreview) {
       state.selectedPreviewKey = "";
     }
 
     if (task.status === "error" && task.mode === "reference-analysis") {
-      removeReferenceAnalysisGenerationKey(makeJobPreviewKey(task.id));
+      removeReferenceAnalysisGenerationKey(taskPreviewKey);
     }
     if (task.status === "error" && task.mode === "image-decomposition") {
-      removeImageDecompositionGenerationKey(makeJobPreviewKey(task.id));
+      removeImageDecompositionGenerationKey(taskPreviewKey);
+    }
+    if (task.status === "error" && task.mode === "quick-blend") {
+      removeQuickBlendGenerationKey(taskPreviewKey);
+      if (wasTrackedQuickBlendJob || wasSelectedPreview) {
+        setQuickBlendFeedback(task.errorMessage || "快速溶图任务失败。", "error");
+      }
     }
 
     recordGenerationTaskActivity(task);
@@ -13795,6 +14165,7 @@ async function deleteGalleryItem(item) {
   await Promise.all([
     preserveReferenceAnalysisGenerationItemForDelete(item),
     preserveImageDecompositionGenerationItemForDelete(item),
+    preserveQuickBlendGenerationItemForDelete(item),
   ]);
   const response = await fetch("/api/output/delete", {
     method: "POST",
@@ -13840,6 +14211,7 @@ async function clearHistory() {
     state.gallery.flatMap((item) => [
       preserveReferenceAnalysisGenerationItemForDelete(item),
       preserveImageDecompositionGenerationItemForDelete(item),
+      preserveQuickBlendGenerationItemForDelete(item),
     ]),
   );
   for (const item of [...state.gallery]) {
@@ -13885,7 +14257,9 @@ function buildGenerationFormData(job) {
   }
   appendBrowserConfigToFormData(formData);
 
-  if (job.mode === "style-transfer") {
+  if (job.mode === "quick-blend") {
+    appendQuickBlendReferencesToFormData(formData, job);
+  } else if (job.mode === "style-transfer") {
     appendStyleTransferReferencesToFormData(formData, job);
   } else if (job.mode === "image-decomposition") {
     appendImageDecompositionReferencesToFormData(formData, job);
@@ -13896,6 +14270,19 @@ function buildGenerationFormData(job) {
   }
 
   return formData;
+}
+
+function appendQuickBlendReferencesToFormData(formData, job) {
+  formData.set("mode", "quick-blend");
+  formData.set("quickBlendPairIndex", job.quickBlendPairIndex);
+  formData.set("quickBlendAImageName", job.quickBlendAImageName);
+  formData.set("quickBlendBImageName", job.quickBlendBImageName);
+  if (job.quickBlendAFile) {
+    formData.append("referenceImages", job.quickBlendAFile);
+  }
+  if (job.quickBlendBFile) {
+    formData.append("referenceImages", job.quickBlendBFile);
+  }
 }
 
 function appendImageDecompositionReferencesToFormData(formData, job) {
@@ -13952,7 +14339,7 @@ async function buildReferenceAnalysisFormData() {
   formData.set("targetLanguageLabel", targetLanguage.label);
   formData.set(
     "reasoningEffort",
-    refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
+    REFERENCE_ORCHESTRATION_REASONING_EFFORT,
   );
   const analysisFiles = await Promise.all(
     state.referenceAnalysis.files.map((item) => preparePromptAnalysisImageFile(item.file)),
@@ -14075,11 +14462,6 @@ async function startReferenceAnalysisGeneration() {
     return;
   }
 
-  if (getQueuedJobCount() >= getMaxQueuedJobCount()) {
-    setReferenceAnalysisFeedback(`同一会话最多排队 ${getMaxQueuedJobCount()} 个生成任务。`, "error");
-    return;
-  }
-
   await ensureReferenceAnalysisGenerationFilesReady();
   const job = createReferenceAnalysisJob();
   registerReferenceAnalysisGenerationKey(makeJobPreviewKey(job.id));
@@ -14181,6 +14563,9 @@ async function runGeneration(job) {
         if (job.mode === "image-decomposition") {
           setImageDecompositionFeedback(payload.message || "图片拆解生成中...", "busy");
         }
+        if (job.mode === "quick-blend") {
+          setQuickBlendFeedback(payload.message || "快速溶图生成中...", "busy");
+        }
         renderAll();
         return;
       }
@@ -14245,6 +14630,13 @@ async function runGeneration(job) {
             state.imageDecomposition.previewKey = makeGalleryPreviewKey(payload.item.filename);
             setImageDecompositionFeedback("图片拆解信息图已生成。", "success");
           }
+          if (job.mode === "quick-blend") {
+            payload.item.mode = "quick-blend";
+            storeQuickBlendGenerationItem(payload.item);
+            replaceQuickBlendGenerationKey(makeJobPreviewKey(job.id), makeGalleryPreviewKey(payload.item.filename));
+            state.quickBlend.previewKey = makeGalleryPreviewKey(payload.item.filename);
+            setQuickBlendFeedback("快速溶图已生成。", "success");
+          }
           upsertGalleryItem(payload.item);
           state.selectedPreviewKey = makeGalleryPreviewKey(payload.item.filename);
         }
@@ -14269,6 +14661,9 @@ async function runGeneration(job) {
           statusText: task.statusText || "已提交到服务器队列，等待后台生成",
         });
         handleActivityStatus(job.id, "queued", task.statusText || "已提交到服务器队列，等待后台生成");
+        if (job.mode === "quick-blend") {
+          setQuickBlendFeedback(task.statusText || "快速溶图已提交到后台队列。", "busy");
+        }
         scheduleGenerationTaskPolling();
         renderAll();
         return;
@@ -14286,6 +14681,10 @@ async function runGeneration(job) {
           removeImageDecompositionGenerationKey(makeJobPreviewKey(job.id));
           setImageDecompositionFeedback(message, "error");
         }
+        if (job.mode === "quick-blend") {
+          removeQuickBlendGenerationKey(makeJobPreviewKey(job.id));
+          setQuickBlendFeedback(message, "error");
+        }
         removeJob(job.id);
         renderAll();
       }
@@ -14300,6 +14699,10 @@ async function runGeneration(job) {
       if (job.mode === "image-decomposition") {
         removeImageDecompositionGenerationKey(makeJobPreviewKey(job.id));
         setImageDecompositionFeedback(message, "error");
+      }
+      if (job.mode === "quick-blend") {
+        removeQuickBlendGenerationKey(makeJobPreviewKey(job.id));
+        setQuickBlendFeedback(message, "error");
       }
       removeJob(job.id);
       renderAll();
@@ -14317,6 +14720,10 @@ async function runGeneration(job) {
     if (job.mode === "image-decomposition") {
       removeImageDecompositionGenerationKey(makeJobPreviewKey(job.id));
       setImageDecompositionFeedback(message, "error");
+    }
+    if (job.mode === "quick-blend") {
+      removeQuickBlendGenerationKey(makeJobPreviewKey(job.id));
+      setQuickBlendFeedback(message, "error");
     }
     removeJob(job.id);
     renderAll();
@@ -14344,11 +14751,6 @@ async function startGeneration(event) {
       return;
     }
 
-    if (getQueuedJobCount() >= getMaxQueuedJobCount()) {
-      showError(`同一会话最多排队 ${getMaxQueuedJobCount()} 个生成任务。`);
-      return;
-    }
-
     try {
       await ensureStyleTransferGenerationFilesReady();
       await ensureStyleTransferPresetReferenceFileReady();
@@ -14371,11 +14773,6 @@ async function startGeneration(event) {
   if (!prompt) {
     showError("提示词不能为空。");
     refs.promptInput.focus();
-    return;
-  }
-
-  if (getQueuedJobCount() >= getMaxQueuedJobCount()) {
-    showError(`同一会话最多排队 ${getMaxQueuedJobCount()} 个生成任务。`);
     return;
   }
 
@@ -15060,6 +15457,8 @@ function bindEvents() {
       setCreationFeedback(error.message, "error"),
     );
   });
+  [refs.creationProductNameInput, refs.creationProductDescriptionInput, refs.creationSellingPointsInput, refs.creationDimensionSpecsInput].forEach((input) => input.addEventListener("input", resetCreationDraftPreview));
+  [refs.creationDimensionUnitModeInput, refs.creationTargetLanguageInput, refs.creationVisualLanguageInput].forEach((input) => input.addEventListener("change", resetCreationDraftPreview));
   refs.creationImageCountInput.addEventListener("change", syncCreationSelectedRolesToCount);
   refs.creationSkuBundleCountInput?.addEventListener("input", resetCreationDraftPreview);
   refs.creationSkuGenerationRuleInput?.addEventListener("change", resetCreationDraftPreview);
@@ -15119,6 +15518,7 @@ function bindEvents() {
   });
   refs.creationReferenceInput.addEventListener("change", (event) => applyCreationReferenceFiles(event.target.files));
   refs.creationStyleReferenceInput.addEventListener("change", (event) => applyCreationStyleReferenceFiles(event.target.files));
+  refs.creationReferenceResetButton.addEventListener("click", clearCreationReferenceFiles);
   refs.creationLogoBatchSourceInput.addEventListener("change", (event) => applyCreationLogoBatchSourceFiles(event.target.files));
   refs.creationLogoInput.addEventListener("change", (event) => applyCreationLogoFile(event.target.files));
   refs.creationLogoPlacementInput.addEventListener("change", () => { state.creationLogo.placement = normalizeCreationLogoPlacement(refs.creationLogoPlacementInput.value); renderCreationView(); });
@@ -15156,6 +15556,7 @@ function bindEvents() {
 
     updateCreationReferenceRole(target.dataset.creationReferenceRoleId, target.value);
   });
+  bindCreationReferenceDrag({ grid: refs.creationReferenceGrid, getReferenceFiles: () => state.creationReferenceFiles, reorderReferenceFile: reorderCreationReferenceFile });
   refs.creationReferenceDropzone.addEventListener("dragover", (event) => {
     event.preventDefault();
     refs.creationReferenceDropzone.classList.add("dragover");
@@ -15771,6 +16172,7 @@ async function bootstrap() {
   renderCreationIndustryTemplateBrowser(); void creationLogoLibrary.load();
   updateGenerateButton();
   renderReferenceGrid();
+  renderQuickBlendView();
   renderStyleTransferReferences();
   renderPromptTemplates();
   renderTimeline();
