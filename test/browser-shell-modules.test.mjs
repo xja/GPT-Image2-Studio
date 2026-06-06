@@ -104,6 +104,31 @@ test("browser config module normalizes private config without requiring window g
   assert.equal(formData.get("directImageModel"), "custom-image-model");
 });
 
+test("browser config form data can override saved route with the current UI route", () => {
+  const saved = normalizeBrowserPrivateConfig({
+    imageRoute: "a",
+    baseUrl: "https://saved-route.example.test/",
+    apiKey: "saved-route-key",
+    responsesModel: "gpt-5.5",
+    directBaseUrl: "https://saved-direct.example.test/",
+    directApiKey: "saved-direct-key",
+    directImageModel: "saved-direct-image",
+  });
+  const formData = appendBrowserConfigToFormData(new FormData(), () => saved, {
+    imageRoute: "b",
+    directBaseUrl: "https://live-direct.example.test/",
+    directApiKey: "live-direct-key",
+    directImageModel: "live-direct-image",
+  });
+
+  assert.equal(formData.get("imageRoute"), "b");
+  assert.equal(formData.get("baseUrl"), "https://saved-route.example.test/v1");
+  assert.equal(formData.get("apiKey"), "saved-route-key");
+  assert.equal(formData.get("directBaseUrl"), "https://live-direct.example.test/v1");
+  assert.equal(formData.get("directApiKey"), "live-direct-key");
+  assert.equal(formData.get("directImageModel"), "live-direct-image");
+});
+
 test("public app shell delegates browser config and cache behavior to public modules", async () => {
   const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
   const lineCount = app.split(/\r?\n/).length;

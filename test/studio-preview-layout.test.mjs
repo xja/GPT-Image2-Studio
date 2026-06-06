@@ -1151,6 +1151,19 @@ test("reference analysis generation mode survives task polling snapshots", async
   assert.match(applySnapshotsBody, /mode:\s*snapshot\.mode \|\| existing\?\.mode \|\| "",/);
 });
 
+test("generation form data uses the current route tab instead of only saved browser config", async () => {
+  const app = await readFile(appPath, "utf8");
+  const formDataBody = app.match(/function buildGenerationFormData\(job\) \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(app, /function getCurrentPrivateConfigRequestPayload\(\) \{[\s\S]*imageRoute:\s*getSelectedImageRoute\(\)/);
+  assert.match(
+    app,
+    /function appendCurrentConfigToFormData\(formData\) \{[\s\S]*appendBrowserConfigToFormData\(formData, undefined, getCurrentPrivateConfigRequestPayload\(\)\);/,
+  );
+  assert.match(formDataBody, /appendCurrentConfigToFormData\(formData\);/);
+  assert.doesNotMatch(formDataBody, /appendBrowserConfigToFormData\(formData\);/);
+});
+
 test("prompt field can start generation with Ctrl+Enter", async () => {
   const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
@@ -1984,14 +1997,15 @@ test("studio stores API settings in the browser and sends them with cloud genera
   assert.match(app, /appendBrowserConfigToFormData,\s*[\s\S]*getBrowserPrivateConfigRequestPayload,\s*[\s\S]*readBrowserPrivateConfig,\s*[\s\S]*saveBrowserPrivateConfig,/);
   assert.match(browserConfig, /export const BROWSER_CONFIG_STORAGE_KEY = "image-studio-browser-config-v1";/);
   assert.match(browserConfig, /export function readBrowserPrivateConfig\(storage = getLocalStorage\(\)\) \{/);
-  assert.match(browserConfig, /export function appendBrowserConfigToFormData\(formData, readConfig = readBrowserPrivateConfig\) \{/);
+  assert.match(browserConfig, /export function appendBrowserConfigToFormData\(formData, readConfig = readBrowserPrivateConfig, overrides = \{\}\) \{/);
   assert.match(browserConfig, /export function getBrowserPrivateConfigRequestPayload\(readConfig = readBrowserPrivateConfig\) \{/);
   assert.match(browserConfig, /storage\?\.setItem\?\.\(BROWSER_CONFIG_STORAGE_KEY, JSON\.stringify/);
-  assert.match(browserConfig, /formData\.set\("baseUrl", browserConfig\.baseUrl\);/);
-  assert.match(browserConfig, /formData\.set\("apiKey", browserConfig\.apiKey\);/);
-  assert.match(browserConfig, /formData\.set\("responsesModel", browserConfig\.responsesModel\);/);
-  assert.match(app, /function buildPptFormData\(\) \{[\s\S]*appendBrowserConfigToFormData\(formData\);[\s\S]*return formData;/);
-  assert.match(app, /function buildPptCompletionRequest\(slideNumbers\) \{[\s\S]*\.\.\.getBrowserPrivateConfigRequestPayload\(\),/);
+  assert.match(browserConfig, /\.\.\.\(browserConfig \|\| \{\}\),[\s\S]*\.\.\.overrideConfig,/);
+  assert.match(browserConfig, /formData\.set\("baseUrl", config\.baseUrl\);/);
+  assert.match(browserConfig, /formData\.set\("apiKey", config\.apiKey\);/);
+  assert.match(browserConfig, /formData\.set\("responsesModel", config\.responsesModel\);/);
+  assert.match(app, /function buildPptFormData\(\) \{[\s\S]*appendCurrentConfigToFormData\(formData\);[\s\S]*return formData;/);
+  assert.match(app, /function buildPptCompletionRequest\(slideNumbers\) \{[\s\S]*\.\.\.getCurrentPrivateConfigRequestPayload\(\),/);
 });
 
 test("config drawer can test the connection and reveal fetched models in a picker", async () => {

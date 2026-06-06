@@ -5023,6 +5023,24 @@ function getSelectedImageRoute() {
   return refs.imageRouteInputs.find((input) => input.checked)?.value === "b" ? "b" : "a";
 }
 
+function getCurrentPrivateConfigRequestPayload() {
+  const browserPayload = getBrowserPrivateConfigRequestPayload();
+  return {
+    imageRoute: getSelectedImageRoute(),
+    baseUrl: refs.baseUrlInput.value.trim() || browserPayload.baseUrl || state.config?.baseUrl || "",
+    apiKey: refs.apiKeyInput.value.trim() || browserPayload.apiKey || "",
+    responsesModel: refs.responsesModelInput.value.trim() || browserPayload.responsesModel || state.config?.responsesModel || "gpt-5.5",
+    directBaseUrl: refs.directBaseUrlInput.value.trim() || browserPayload.directBaseUrl || state.config?.directBaseUrl || "",
+    directApiKey: refs.directApiKeyInput.value.trim() || browserPayload.directApiKey || "",
+    directImageModel: refs.directImageModelInput.value.trim() || browserPayload.directImageModel || state.config?.directImageModel || "gpt-image-2",
+  };
+}
+
+function appendCurrentConfigToFormData(formData) {
+  appendBrowserConfigToFormData(formData, undefined, getCurrentPrivateConfigRequestPayload());
+  return formData;
+}
+
 function syncConfigUi(config) {
   refs.baseUrlInput.value = config.baseUrl || "";
   refs.responsesModelInput.value = config.responsesModel || "gpt-5.5";
@@ -6853,7 +6871,7 @@ async function requestPptSlideEditStream() {
   formData.set("reasoningEffort", refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh");
   formData.set("sourceSlideImage", await sourceResponse.blob(), `slide-${slideNumber}-source.png`);
   formData.set("annotatedSlideImage", await buildAnnotatedPptSlideBlob(), `slide-${slideNumber}-annotated.png`);
-  appendBrowserConfigToFormData(formData);
+  appendCurrentConfigToFormData(formData);
 
   const response = await fetch("/api/ppt/slide/edit", {
     method: "POST",
@@ -6902,13 +6920,13 @@ function buildPptFormData() {
   formData.set("transitionSpeed", refs.pptTransitionSpeedInput.value);
   formData.set("autoAdvanceSeconds", refs.pptAutoAdvanceInput.value);
   formData.set("reasoningEffort", refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh");
-  appendBrowserConfigToFormData(formData);
+  appendCurrentConfigToFormData(formData);
   return formData;
 }
 
 function buildPptCompletionRequest(slideNumbers) {
   return {
-    ...getBrowserPrivateConfigRequestPayload(),
+    ...getCurrentPrivateConfigRequestPayload(),
     deckId: state.ppt.deckId,
     outline: state.ppt.outline,
     existingSlides: getCompletedPptSlides(),
@@ -8491,7 +8509,7 @@ function buildArticleIllustrationGenerateFormData({ itemIds = [], regenerate = f
   if (regenerate) {
     formData.set("regenerate", "1");
   }
-  appendBrowserConfigToFormData(formData);
+  appendCurrentConfigToFormData(formData);
   return formData;
 }
 
@@ -11403,7 +11421,7 @@ function buildCreationFormData() {
   if (logoFile) {
     formData.append("logoImage", logoFile);
   }
-  appendBrowserConfigToFormData(formData);
+  appendCurrentConfigToFormData(formData);
 
   return formData;
 }
@@ -11430,7 +11448,7 @@ function buildCreationLogoBatchFormData() {
   if (logoFile) {
     formData.append("logoImage", logoFile);
   }
-  appendBrowserConfigToFormData(formData);
+  appendCurrentConfigToFormData(formData);
 
   return formData;
 }
@@ -11478,7 +11496,7 @@ function buildCreationRepairFormData({ itemId = "", scope = "incomplete", set = 
   if (logoFile) {
     formData.append("logoImage", logoFile);
   }
-  appendBrowserConfigToFormData(formData);
+  appendCurrentConfigToFormData(formData);
 
   return formData;
 }
@@ -12629,7 +12647,7 @@ function buildPortraitFormData({ includeFiles = true, repair = false, includeAct
       });
     }
   }
-  appendBrowserConfigToFormData(formData);
+  appendCurrentConfigToFormData(formData);
   return formData;
 }
 
@@ -14275,7 +14293,7 @@ function buildGenerationFormData(job) {
     formData.set("targetLanguage", job.targetLanguage);
     formData.set("targetLanguageLabel", job.targetLanguageLabel || job.targetLanguage);
   }
-  appendBrowserConfigToFormData(formData);
+  appendCurrentConfigToFormData(formData);
 
   if (job.mode === "quick-blend") {
     appendQuickBlendReferencesToFormData(formData, job);
