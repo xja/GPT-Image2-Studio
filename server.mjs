@@ -498,10 +498,11 @@ async function handleModelListPost(request, response) {
   try {
     const formData = await readFormDataBody(request);
     const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
-    hasApiKey = Boolean(config.apiKey);
+    const generationConfig = getSelectedImageGenerationConfig(config);
+    hasApiKey = Boolean(generationConfig.apiKey);
     const models = await fetchAvailableModels({
-      baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
+      baseUrl: generationConfig.baseUrl,
+      apiKey: generationConfig.apiKey,
       fetchImpl: fetch,
     });
     sendJson(response, 200, { ok: true, models });

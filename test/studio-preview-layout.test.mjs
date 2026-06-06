@@ -187,7 +187,17 @@ function createModelPickerHarness() {
     apiKeyInput: createTestElement("input", documentRef),
     baseUrlInput: createTestElement("input", documentRef),
     configFeedback: createTestElement("p", documentRef),
+    directApiKeyInput: createTestElement("input", documentRef),
+    directBaseUrlInput: createTestElement("input", documentRef),
+    directFetchModelsButton: createTestElement("button", documentRef),
+    directImageModelInput: createTestElement("input", documentRef),
+    directModelOptionsList: createTestElement("div", documentRef),
+    directModelPickerToggle: createTestElement("button", documentRef),
     fetchModelsButton: createTestElement("button", documentRef),
+    imageRouteInputs: [
+      { value: "a", checked: true },
+      { value: "b", checked: false },
+    ],
     modelOptionsList: createTestElement("div", documentRef),
     modelPickerToggle: createTestElement("button", documentRef),
     responsesModelInput: createTestElement("input", documentRef),
@@ -195,6 +205,9 @@ function createModelPickerHarness() {
   };
   refs.apiKeyInput.value = "test-key";
   refs.baseUrlInput.value = "https://api.example.test/v1";
+  refs.directApiKeyInput.value = "direct-key";
+  refs.directBaseUrlInput.value = "https://direct.example.test/v1";
+  refs.directImageModelInput.value = "gpt-image-2";
   refs.responsesModelInput.value = "gpt-5.5";
   return { documentRef, refs };
 }
@@ -204,6 +217,10 @@ class TestFormData {
 
   set(name, value) {
     this.values.set(name, value);
+  }
+
+  get(name) {
+    return this.values.get(name);
   }
 }
 
@@ -1989,20 +2006,29 @@ test("config drawer can test the connection and reveal fetched models in a picke
   assert.match(html, /id="modelOptionsList"[\s\S]*role="listbox"/);
   assert.match(app, /testConnectionButton:\s*document\.querySelector\("#testConnectionButton"\),/);
   assert.match(app, /fetchModelsButton:\s*document\.querySelector\("#fetchModelsButton"\),/);
+  assert.match(app, /directFetchModelsButton:\s*document\.querySelector\("#directFetchModelsButton"\),/);
   assert.match(app, /modelPickerToggle:\s*document\.querySelector\("#modelPickerToggle"\),/);
   assert.match(app, /modelOptionsList:\s*document\.querySelector\("#modelOptionsList"\),/);
+  assert.match(app, /directModelPickerToggle:\s*document\.querySelector\("#directModelPickerToggle"\),/);
+  assert.match(app, /directModelOptionsList:\s*document\.querySelector\("#directModelOptionsList"\),/);
   assert.match(app, /from "\/lib\/config-model-picker\.mjs";/);
   assert.match(app, /const configModelPicker = createConfigModelPickerController\(/);
   assert.match(app, /configModelPicker\.bindEvents\(\);/);
   assert.match(configModelPicker, /async function fetchConfigModels\(/);
   assert.match(configModelPicker, /await fetchImpl\("\/api\/models"/);
-  assert.match(configModelPicker, /getBrowserPrivateConfigRequestPayload\(\)/);
+  assert.match(configModelPicker, /getBrowserPrivateConfigRequestPayload\?\.\(\)/);
+  assert.match(configModelPicker, /formData\.set\("imageRoute", payload\.imageRoute\);/);
+  assert.match(configModelPicker, /formData\.set\("directBaseUrl", payload\.directBaseUrl\);/);
+  assert.match(configModelPicker, /formData\.set\("directApiKey", payload\.directApiKey\);/);
+  assert.match(configModelPicker, /formData\.set\("directImageModel", payload\.directImageModel\);/);
   assert.match(configModelPicker, /function render\(\)/);
-  assert.match(configModelPicker, /function getVisibleModels\(\)/);
-  assert.match(configModelPicker, /refs\.modelPickerToggle\.hidden = !hasModels;/);
-  assert.match(configModelPicker, /fetchConfigModels\(\{ openAfterFetch: true, mode: "models" \}\);/);
-  assert.match(configModelPicker, /refs\.modelPickerToggle\.addEventListener\("click", toggleModelPicker\);/);
-  assert.match(configModelPicker, /state\.configModels\.searchQuery = refs\.responsesModelInput\.value;/);
+  assert.match(configModelPicker, /function renderTarget\(target, activeTarget\)/);
+  assert.match(configModelPicker, /function getVisibleModels\(target = getTargetForSelectedRoute\(\)\)/);
+  assert.match(configModelPicker, /targetRefs\.toggle\.hidden = !hasModels;/);
+  assert.match(configModelPicker, /fetchConfigModels\(\{ openAfterFetch: true, mode: "models", target: MODEL_TARGET_RESPONSES \}\);/);
+  assert.match(configModelPicker, /refs\.directFetchModelsButton\?\.addEventListener\("click"/);
+  assert.match(configModelPicker, /toggleModelPicker\(MODEL_TARGET_DIRECT\)/);
+  assert.match(configModelPicker, /handleModelInput\(MODEL_TARGET_RESPONSES\)/);
   assert.match(styles, /\.config-actions-row\s*\{/);
   assert.match(styles, /\.model-picker-control\s*\{/);
   assert.match(styles, /\.model-picker-toggle\s*\{/);
@@ -2040,6 +2066,86 @@ test("fetch models button opens fetched model options while silent fetches stay 
 
   assert.equal(state.configModels.open, false);
   assert.equal(refs.modelOptionsList.hidden, true);
+});
+
+test("direct mode fetch models uses direct API settings and direct model picker", async () => {
+  const { createConfigModelPickerController } = await import(publicConfigModelPickerPath);
+  const { refs } = createModelPickerHarness();
+  refs.imageRouteInputs[0].checked = false;
+  refs.imageRouteInputs[1].checked = true;
+  const capturedBodies = [];
+  const state = { config: {}, configModels: { items: [], loading: false, loadingMode: "", open: false } };
+  const fetchImpl = async (_url, init) => {
+    capturedBodies.push(init.body);
+    return {
+      ok: true,
+      json: async () => ({ ok: true, models: ["vendor-image-pro", "gpt-image-2"] }),
+    };
+  };
+  const controller = createConfigModelPickerController({
+    refs,
+    state,
+    FormDataCtor: TestFormData,
+    fetchImpl,
+    getBrowserPrivateConfigRequestPayload: () => ({
+      imageRoute: "b",
+      baseUrl: "https://saved-route.example.test/v1",
+      apiKey: "saved-route-key",
+      responsesModel: "gpt-5.4",
+      directBaseUrl: "https://saved-direct.example.test/v1",
+      directApiKey: "saved-direct-key",
+      directImageModel: "saved-direct-image",
+    }),
+  });
+
+  controller.bindEvents();
+  refs.directFetchModelsButton.dispatchEvent({ type: "click" });
+  await waitForAsyncHandlers();
+
+  assert.equal(capturedBodies.length, 1);
+  assert.equal(capturedBodies[0].get("imageRoute"), "b");
+  assert.equal(capturedBodies[0].get("directBaseUrl"), "https://direct.example.test/v1");
+  assert.equal(capturedBodies[0].get("directApiKey"), "direct-key");
+  assert.equal(capturedBodies[0].get("directImageModel"), "gpt-image-2");
+  assert.equal(refs.directModelOptionsList.hidden, false);
+  assert.equal(refs.modelOptionsList.hidden, true);
+  assert.deepEqual(
+    refs.directModelOptionsList.children.map((child) => child.textContent),
+    ["vendor-image-pro", "gpt-image-2"],
+  );
+});
+
+test("test connection uses the currently selected direct mode settings", async () => {
+  const { createConfigModelPickerController } = await import(publicConfigModelPickerPath);
+  const { refs } = createModelPickerHarness();
+  refs.imageRouteInputs[0].checked = false;
+  refs.imageRouteInputs[1].checked = true;
+  const capturedBodies = [];
+  const state = { config: {}, configModels: { items: [], loading: false, loadingMode: "", open: false } };
+  const fetchImpl = async (_url, init) => {
+    capturedBodies.push(init.body);
+    return {
+      ok: true,
+      json: async () => ({ ok: true, models: ["vendor-image-pro"] }),
+    };
+  };
+  const controller = createConfigModelPickerController({
+    refs,
+    state,
+    FormDataCtor: TestFormData,
+    fetchImpl,
+    getBrowserPrivateConfigRequestPayload: () => ({}),
+  });
+
+  controller.bindEvents();
+  refs.testConnectionButton.dispatchEvent({ type: "click" });
+  await waitForAsyncHandlers();
+
+  assert.equal(capturedBodies.length, 1);
+  assert.equal(capturedBodies[0].get("imageRoute"), "b");
+  assert.equal(capturedBodies[0].get("directBaseUrl"), "https://direct.example.test/v1");
+  assert.equal(capturedBodies[0].get("directApiKey"), "direct-key");
+  assert.equal(state.configModels.open, false);
 });
 
 test("model input searches fetched Responses models without collapsing the picker", async () => {

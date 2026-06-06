@@ -911,11 +911,12 @@ async function handleModelList(request, fetchImpl) {
   let hasApiKey = false;
   try {
     const formData = await request.formData();
-    const config = normalizePrivateConfig(formData);
-    hasApiKey = Boolean(config.apiKey);
+    const config = normalizePrivateConfig(formData, { allowDirectImageRoute: true });
+    const generationConfig = getSelectedImageGenerationConfig(config);
+    hasApiKey = Boolean(generationConfig.apiKey);
     const models = await fetchAvailableModels({
-      baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
+      baseUrl: generationConfig.baseUrl,
+      apiKey: generationConfig.apiKey,
       fetchImpl,
     });
     return jsonResponse({ ok: true, models });

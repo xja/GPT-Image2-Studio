@@ -9150,6 +9150,7 @@ html[data-ui-layout="mobile"] .portrait-accessory-asset-panel {
 }
 
 .route-selector label {
+  position: relative;
   min-height: 42px;
   display: flex;
   align-items: center;
@@ -9169,7 +9170,28 @@ html[data-ui-layout="mobile"] .portrait-accessory-asset-panel {
 }
 
 .route-selector input {
-  accent-color: var(--accent);
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.route-selector span {
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.route-config-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.config-form:has(input[name="imageRoute"][value="a"]:checked) [data-route-panel="b"],
+.config-form:has(input[name="imageRoute"][value="b"]:checked) [data-route-panel="a"] {
+  display: none;
 }
 
 .field {

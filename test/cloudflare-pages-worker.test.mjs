@@ -1935,6 +1935,49 @@ test("Cloudflare model list route uses browser API settings without echoing the 
   assert.doesNotMatch(JSON.stringify(payload), /test-browser-key/);
 });
 
+test("Cloudflare model list route uses direct API settings for direct image mode", async () => {
+  const seenRequests = [];
+  const formData = new FormData();
+  formData.set("imageRoute", "b");
+  formData.set("baseUrl", "https://route-a.example.test");
+  formData.set("apiKey", "route-a-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.set("directBaseUrl", "https://direct.example.test");
+  formData.set("directApiKey", "direct-browser-key");
+  formData.set("directImageModel", "vendor-image-pro");
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/models", {
+    method: "POST",
+    body: formData,
+  }), {
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+      });
+      return new Response(JSON.stringify({
+        data: [
+          { id: "vendor-image-pro" },
+          { id: "gpt-image-2" },
+        ],
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(seenRequests[0].url, "https://direct.example.test/v1/models");
+  assert.equal(seenRequests[0].auth, "Bearer direct-browser-key");
+  assert.equal(payload.ok, true);
+  assert.deepEqual(payload.models, ["vendor-image-pro", "gpt-image-2"]);
+  assert.doesNotMatch(JSON.stringify(payload), /direct-browser-key/);
+  assert.doesNotMatch(JSON.stringify(payload), /route-a-key/);
+});
+
 test("Cloudflare model list route returns upstream failures as a gateway error when a key is present", async () => {
   const formData = new FormData();
   formData.set("baseUrl", "https://example.test/v1");

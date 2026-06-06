@@ -120,6 +120,33 @@ test("public app shell delegates browser config and cache behavior to public mod
   );
 });
 
+test("config drawer shows image route settings as exclusive mode tabs", async () => {
+  const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
+
+  assert.match(html, /<fieldset class="route-selector" aria-label="生图调用模式">/);
+  assert.match(html, /<span>路由模式<\/span>/);
+  assert.match(html, /<span>直接调用模式<\/span>/);
+  assert.match(
+    html,
+    /data-route-panel="a"[\s\S]*路由模式 URL[\s\S]*路由模式 API Key[\s\S]*路由模式 Responses 模型/,
+  );
+  assert.match(
+    html,
+    /data-route-panel="b"[\s\S]*直接调用模式 URL[\s\S]*直接调用模式 API Key[\s\S]*直接调用模式生图模型[\s\S]*id="directFetchModelsButton"[\s\S]*获取模型列表/,
+  );
+  assert.doesNotMatch(html, /线路A|线路B/);
+  assert.match(styles, /\.route-config-panel\s*\{[\s\S]*display:\s*grid;/);
+  assert.match(
+    styles,
+    /\.config-form:has\(input\[name="imageRoute"\]\[value="a"\]:checked\)\s*\[data-route-panel="b"\]/,
+  );
+  assert.match(
+    styles,
+    /\.config-form:has\(input\[name="imageRoute"\]\[value="b"\]:checked\)\s*\[data-route-panel="a"\]/,
+  );
+});
+
 test("creation reference drag helper reorders product items as whole records only", () => {
   const first = { id: "first", role: "product", file: { name: "first.png" }, note: "red" };
   const second = { id: "second", role: "reference-product", file: { name: "second.png" }, note: "blue" };
