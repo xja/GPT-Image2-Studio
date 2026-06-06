@@ -76,6 +76,98 @@ test("creation SKU payload treats reference subjects as product subjects", () =>
   ]);
 });
 
+test("creation SKU payload does not append covered product references when analysis already matches by index", () => {
+  const subjects = buildCreationSkuSubjectsForPayload({
+    analysis: {
+      skuSubjects: Array.from({ length: 5 }, (_, index) => ({
+        id: `sku-${index + 1}`,
+        title: `Recognized subject ${index + 1}`,
+        referenceIndexes: [index + 1],
+        filenames: [`recognized-${index + 1}.png`],
+      })),
+    },
+    applied: true,
+    dirty: false,
+    referenceRoles: Array.from({ length: 5 }, (_, index) => ({
+      filename: `product-${index + 1}.png`,
+      role: "product",
+      note: `Product subject ${index + 1}.`,
+    })),
+  });
+
+  assert.equal(subjects.length, 5);
+  assert.deepEqual(
+    subjects.map((subject) => subject.id),
+    ["sku-1", "sku-2", "sku-3", "sku-4", "sku-5"],
+  );
+});
+
+test("creation SKU payload falls back to product roles when collapsed analysis covers multiple references by index", () => {
+  const subjects = buildCreationSkuSubjectsForPayload({
+    analysis: {
+      skuSubjects: [
+        {
+          id: "collapsed-lures",
+          title: "Collapsed lure group",
+          referenceIndexes: [1, 2, 3],
+          filenames: ["recognized-collapsed-group.png"],
+          note: "Distinct products were summarized together.",
+        },
+      ],
+    },
+    applied: true,
+    dirty: false,
+    referenceRoles: Array.from({ length: 3 }, (_, index) => ({
+      filename: `product-${index + 1}.png`,
+      role: "product",
+      note: `Product subject ${index + 1}.`,
+    })),
+  });
+
+  assert.deepEqual(
+    subjects.map((subject) => subject.filenames[0]),
+    ["product-1.png", "product-2.png", "product-3.png"],
+  );
+});
+
+test("creation SKU payload keeps the selected reference subject alongside other product subjects", () => {
+  const subjects = buildCreationSkuSubjectsForPayload({
+    analysis: {
+      skuSubjects: [
+        {
+          id: "gray",
+          title: "Gray lure",
+          filenames: ["gray-main-lure.png"],
+          note: "Regular product reference, not the selected main subject.",
+        },
+        {
+          id: "green",
+          title: "Green lure",
+          filenames: ["green-alt-lure.png"],
+          note: "Another product reference, not the selected main subject.",
+        },
+      ],
+    },
+    applied: true,
+    dirty: false,
+    referenceRoles: [
+      { filename: "gray-main-lure.png", role: "product", note: "Regular product reference." },
+      { filename: "green-alt-lure.png", role: "product", note: "Alternate product reference." },
+      { filename: "selected-main-subject.png", role: "reference-product", note: "Selected subject used by the main image." },
+      { filename: "package-list.png", role: "package", note: "Package content only." },
+    ],
+  });
+
+  assert.deepEqual(
+    subjects.map((subject) => [subject.id, subject.filenames, subject.referenceIndexes]),
+    [
+      ["gray", ["gray-main-lure.png"], [1]],
+      ["green", ["green-alt-lure.png"], [2]],
+      ["selected-main-subject.png", ["selected-main-subject.png"], [3]],
+    ],
+  );
+});
+
 test("creation SKU payload keeps multi-unit product references as one SKU subject after role edits", () => {
   const subjects = buildCreationSkuSubjectsForPayload({
     analysis: {
@@ -125,6 +217,32 @@ test("creation SKU payload keeps multi-unit product references as one SKU subjec
         "Top silver sellable lure subject. | Middle gold sellable lure subject. | Bottom green sellable lure subject.",
       ],
     ],
+  );
+});
+
+test("creation SKU payload keeps multiple photos of one sellable subject grouped", () => {
+  const subjects = buildCreationSkuSubjectsForPayload({
+    analysis: {
+      skuSubjects: [
+        {
+          id: "blue-lure-front-back",
+          title: "Blue lure front and back",
+          filenames: ["blue-front.png", "blue-back.png"],
+          note: "Two photos of the same sellable blue lure SKU subject.",
+        },
+      ],
+    },
+    applied: true,
+    dirty: false,
+    referenceRoles: [
+      { filename: "blue-front.png", role: "product", note: "Front view of the blue lure SKU." },
+      { filename: "blue-back.png", role: "product", note: "Back view of the same blue lure SKU." },
+    ],
+  });
+
+  assert.deepEqual(
+    subjects.map((subject) => [subject.id, subject.filenames]),
+    [["blue-lure-front-back", ["blue-front.png", "blue-back.png"]]],
   );
 });
 
@@ -222,4 +340,32 @@ test("creation SKU payload fallback keeps original reference filenames as subjec
       note: "Blue silver lure SKU subject.",
     },
   ]);
+});
+
+test("creation SKU payload enriches applied subjects from matching reference-product notes", () => {
+  const subjects = buildCreationSkuSubjectsForPayload({
+    analysis: {
+      skuSubjects: [
+        {
+          id: "orange-pair",
+          title: "Orange lure pair",
+          filenames: ["orange-pair.png"],
+        },
+      ],
+    },
+    applied: true,
+    dirty: false,
+    referenceRoles: [
+      {
+        filename: "orange-pair.png",
+        role: "reference-product",
+        note: "One product-subject reference image contains two complete visible lure bodies: orange top and silver bottom.",
+      },
+    ],
+  });
+
+  assert.equal(subjects.length, 1);
+  assert.equal(subjects[0].note, "One product-subject reference image contains two complete visible lure bodies: orange top and silver bottom.");
+  assert.equal(subjects[0].subjectUnitCount, 2);
+  assert.deepEqual(subjects[0].referenceIndexes, [1]);
 });

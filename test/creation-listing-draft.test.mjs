@@ -76,6 +76,33 @@ test("listing sources use grouped SKU subject unit count for parent listing quan
   assert.equal(sources[0].skuSubjects[0].subjectUnitCount, 3);
 });
 
+test("listing sources enrich stale SKU subjects from reference-product notes before quantity fallback", () => {
+  const sources = buildCreationListingSources({
+    setId: "set-two-lures",
+    productName: "Fishing Lure",
+    productDescription: "A grouped SKU reference shows two lure bodies.",
+    skuBundleCount: 1,
+    referenceImageRoles: [
+      {
+        filename: "orange-pair.png",
+        role: "reference-product",
+        note: "One product-subject reference image contains two complete visible lure bodies: orange top and silver bottom.",
+      },
+    ],
+    skuSubjects: [
+      {
+        id: "orange-pair",
+        title: "Orange lure pair",
+        filenames: ["orange-pair.png"],
+      },
+    ],
+  });
+
+  assert.equal(sources[0].skuBundleCount, 2);
+  assert.equal(sources[0].skuSubjects[0].subjectUnitCount, 2);
+  assert.equal(sources[0].skuSubjects[0].note, "One product-subject reference image contains two complete visible lure bodies: orange top and silver bottom.");
+});
+
 test("listing sources infer Chinese visible subject counts before quantity fallback", () => {
   const sources = buildCreationListingSources({
     setId: "set-three-subjects-cn",

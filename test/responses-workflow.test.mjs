@@ -6,6 +6,7 @@ import {
   buildResponsesInput,
   consumeResponsesSse,
   createResponsesRequestBody,
+  formatStatusHeartbeatMessage,
   normalizeBaseUrl,
   requestImageGeneration,
 } from "../lib/responses-workflow.mjs";
@@ -16,6 +17,17 @@ test("buildResponsesInput returns plain text for prompt-only generation", () => 
   });
 
   assert.equal(input, "生成一张图");
+});
+
+test("status heartbeat messages label the 59 second upstream wait", () => {
+  assert.equal(
+    formatStatusHeartbeatMessage("waiting_upstream", 59000),
+    "heartbeat（59 秒）：上游服务仍在处理，请保持页面打开",
+  );
+  assert.equal(
+    formatStatusHeartbeatMessage("waiting_final", 59000),
+    "heartbeat（59 秒）：仍在等待最终图，请保持页面打开",
+  );
 });
 
 test("buildResponsesInput returns multimodal user message with multiple reference images", () => {
@@ -308,6 +320,43 @@ test("consumeResponsesSse surfaces response.failed messages instead of returning
   });
 });
 
+test("consumeResponsesSse surfaces generic upstream error events instead of falling back to missing final image", async () => {
+  const chunks = [
+    [
+      "event: error",
+      'data: {"error":{"code":"upstream_error","message":"Upstream request failed"}}',
+      "",
+      "",
+      "data: [DONE]",
+      "",
+      "",
+    ].join("\n"),
+  ];
+  let index = 0;
+  const fakeStream = {
+    getReader() {
+      return {
+        async read() {
+          if (index >= chunks.length) {
+            return { done: true };
+          }
+
+          const chunk = chunks[index];
+          index += 1;
+          return {
+            done: false,
+            value: new TextEncoder().encode(chunk),
+          };
+        },
+      };
+    },
+  };
+
+  await assert.rejects(() => consumeResponsesSse(fakeStream), {
+    message: "上游生成失败：upstream_error Upstream request failed",
+  });
+});
+
 test("requestImageGeneration falls back to non-streaming when SSE completes without final image", async () => {
   const requests = [];
   const chunks = [
@@ -360,6 +409,138 @@ test("requestImageGeneration falls back to non-streaming when SSE completes with
   assert.equal(requests[1].stream, false);
   assert.equal(result.finalImageBase64, "ZmFsbGJhY2stZmluYWw=");
   assert.equal(result.fallbackUsed, true);
+});
+
+test("requestImageGeneration retries prompt-only generation when an attempt has no final image", async () => {
+  const requests = [];
+  const events = [];
+  const noFinalStream = [
+    "event: response.completed",
+    'data: {"type":"response.completed","response":{"output":[]}}',
+    "",
+    "data: [DONE]",
+    "",
+    "",
+  ].join("\n");
+
+  const result = await requestImageGeneration({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    prompt: "Create a resilient prompt image",
+    size: "1024x1024",
+    quality: "high",
+    responsesModel: "gpt-5.4",
+    transientHttpRetryDelayMs: 0,
+    async fetchImpl(_url, init) {
+      const body = JSON.parse(init.body);
+      requests.push({ stream: body.stream, input: body.input });
+
+      if (requests.length === 1) {
+        return new Response(noFinalStream, {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        });
+      }
+
+      if (requests.length === 2) {
+        return new Response(JSON.stringify({ output: [] }), { status: 200 });
+      }
+
+      return new Response(
+        [
+          "event: response.output_item.done",
+          'data: {"item":{"type":"image_generation_call","result":"cHJvbXB0LXJldHJ5LWZpbmFs"}}',
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"),
+        {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        },
+      );
+    },
+    onEvent(event) {
+      events.push(event);
+    },
+  });
+
+  assert.deepEqual(requests.map((request) => request.stream), [true, false, true]);
+  assert.equal(requests[0].input, "Create a resilient prompt image");
+  assert.equal(requests[2].input, "Create a resilient prompt image");
+  assert.equal(result.finalImageBase64, "cHJvbXB0LXJldHJ5LWZpbmFs");
+  assert.equal(
+    events.filter((event) => event.type === "status" && event.stage === "retrying_upstream").length,
+    1,
+  );
+});
+
+test("requestImageGeneration retries reference-image generation with labels after a missing final image", async () => {
+  const requests = [];
+  const noFinalStream = [
+    "event: response.completed",
+    'data: {"type":"response.completed","response":{"output":[]}}',
+    "",
+    "data: [DONE]",
+    "",
+    "",
+  ].join("\n");
+
+  const result = await requestImageGeneration({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    prompt: "Quick blend A and B into one sorted layout",
+    referenceImages: [
+      { filename: "a.png", mimeType: "image/png", base64: "YQ==" },
+      { filename: "b.png", mimeType: "image/png", base64: "Yg==" },
+    ],
+    referenceImageLabels: [
+      "Reference image A: product group A.",
+      "Reference image B: product group B.",
+    ],
+    size: "1024x1024",
+    quality: "high",
+    responsesModel: "gpt-5.4",
+    transientHttpRetryDelayMs: 0,
+    async fetchImpl(_url, init) {
+      const body = JSON.parse(init.body);
+      requests.push({ stream: body.stream, input: body.input });
+
+      if (requests.length === 1) {
+        return new Response(noFinalStream, {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        });
+      }
+
+      if (requests.length === 2) {
+        return new Response(JSON.stringify({ output: [] }), { status: 200 });
+      }
+
+      return new Response(
+        [
+          "event: response.output_item.done",
+          'data: {"item":{"type":"image_generation_call","result":"cXVpY2stYmxlbmQtcmV0cnk="}}',
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"),
+        {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        },
+      );
+    },
+  });
+
+  assert.deepEqual(requests.map((request) => request.stream), [true, false, true]);
+  assert.deepEqual(
+    requests[2].input[0].content.map((item) => item.type),
+    ["input_text", "input_text", "input_image", "input_text", "input_image"],
+  );
+  assert.equal(requests[2].input[0].content[1].text, "Reference image A: product group A.");
+  assert.equal(requests[2].input[0].content[3].text, "Reference image B: product group B.");
+  assert.equal(result.finalImageBase64, "cXVpY2stYmxlbmQtcmV0cnk=");
 });
 
 test("requestImageGeneration falls back to non-streaming when streaming is blocked upstream", async () => {

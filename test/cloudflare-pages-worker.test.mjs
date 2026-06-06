@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 
 import { handleApiRequest, handleGenerationQueue } from "../cloudflare-pages-worker.mjs";
 import {
@@ -116,6 +117,21 @@ function makeListingDraft(overrides = {}) {
     ...overrides,
   };
 }
+
+test("Cloudflare quick blend queued request snapshot preserves optional group and layout metadata", () => {
+  const source = fs.readFileSync(new URL("../cloudflare-pages-worker.mjs", import.meta.url), "utf8");
+  const start = source.indexOf("await writeJsonObject(imageBucket, requestKey, {");
+  const end = source.indexOf("  await generationQueue.send", start);
+  const snapshotBlock = source.slice(start, end);
+
+  assert.match(snapshotBlock, /quickBlendPairIndex:\s*context\.quickBlendPairIndex/);
+  assert.match(snapshotBlock, /quickBlendAImageName:\s*context\.quickBlendAImageName/);
+  assert.match(snapshotBlock, /quickBlendBImageName:\s*context\.quickBlendBImageName/);
+  assert.match(snapshotBlock, /quickBlendCImageName:\s*context\.quickBlendCImageName/);
+  assert.match(snapshotBlock, /quickBlendDImageName:\s*context\.quickBlendDImageName/);
+  assert.match(snapshotBlock, /quickBlendLayoutOrder:\s*context\.quickBlendLayoutOrder/);
+  assert.match(snapshotBlock, /quickBlendPlacementShape:\s*context\.quickBlendPlacementShape/);
+});
 
 test("Cloudflare creation listing route accepts explicit set metadata and returns input-only drafts", async () => {
   const request = new Request("https://studio.example/api/creation/listings", {
@@ -1213,6 +1229,8 @@ test("Cloudflare quick blend uses exactly two references, generated prompt, labe
   assert.match(inputText, /Reference image 1: A image/);
   assert.match(inputText, /Reference image 2: B image/);
   assert.match(inputText, /A subject group above the B subject group/);
+  assert.match(inputText, /assigned layout slot using contain-style proportional scaling/);
+  assert.match(inputText, /Do not stretch, squash, warp, bend, elongate, compress, crop, or force any subject/);
   assert.ok(savedEvent, "expected saved SSE event");
   assert.equal(savedEvent.payload.item.generationMode, "quick-blend");
   assert.equal(savedEvent.payload.item.assetKind, "quick-blend");
@@ -1222,6 +1240,7 @@ test("Cloudflare quick blend uses exactly two references, generated prompt, labe
   assert.match(savedEvent.payload.item.filename, /^a-chair-b-table-cloudflare-\d{4}-\d{2}-\d{2}T/);
   assert.deepEqual(savedEvent.payload.item.referenceImageNames, ["a-chair.png", "b-table.png"]);
   assert.match(savedEvent.payload.item.prompt, /A subject group above the B subject group/);
+  assert.match(savedEvent.payload.item.prompt, /assigned layout slot using contain-style proportional scaling/);
   assert.ok(serverImageEvent, "expected server_image SSE event");
   assert.equal(serverImageEvent.payload.item.assetKind, "quick-blend");
   assert.ok(storedImage, "expected generated image to be stored in R2");
@@ -1233,6 +1252,166 @@ test("Cloudflare quick blend uses exactly two references, generated prompt, labe
   assert.deepEqual(JSON.parse(storedImage.customMetadata.referenceImageNames), ["a-chair.png", "b-table.png"]);
   assert.doesNotMatch(JSON.stringify(storedImage.customMetadata), /test-browser-key/);
   assert.doesNotMatch(text, /test-browser-key/);
+});
+
+test("Cloudflare quick blend accepts optional C and D groups with layout metadata", async () => {
+  const seenRequests = [];
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("jobId", "job-quick-blend-groups");
+  formData.set("mode", "quick-blend");
+  formData.set("quickBlendPairIndex", "7");
+  formData.set("quickBlendAImageName", "a-chair.png");
+  formData.set("quickBlendBImageName", "b-table.png");
+  formData.set("quickBlendCImageName", "c-lamp.png");
+  formData.set("quickBlendDImageName", "d-rug.png");
+  formData.set("quickBlendLayoutOrder", "horizontal");
+  formData.set("quickBlendPlacementShape", "rectangle");
+  formData.set("ratio", "4:5");
+  formData.set("size", "1024x1280");
+  formData.set("format", "png");
+  formData.set("reasoningEffort", "low");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("referenceImages", new File(["chair"], "a-chair.png", { type: "image/png" }));
+  formData.append("referenceImages", new File(["table"], "b-table.png", { type: "image/png" }));
+  formData.append("referenceImages", new File(["lamp"], "c-lamp.png", { type: "image/png" }));
+  formData.append("referenceImages", new File(["rug"], "d-rug.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        auth: init.headers.Authorization,
+        body: JSON.parse(init.body),
+      });
+      return makeSseResponse();
+    },
+  });
+
+  const text = await response.text();
+  const events = parseSseEvents(text);
+  const savedEvent = events.find((event) => event.eventName === "saved");
+  const serverImageEvent = events.find((event) => event.eventName === "server_image");
+  const inputContent = seenRequests[0]?.body?.input?.[0]?.content || [];
+  const inputImages = inputContent.filter((item) => item.type === "input_image");
+  const inputText = inputContent.filter((item) => item.type === "input_text").map((item) => item.text).join("\n");
+  const storedImage = [...imageBucket.objects.values()].find(
+    (object) => object.customMetadata.filename === savedEvent?.payload?.item?.filename,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(inputImages.length, 4);
+  assert.match(inputText, /Reference image 1: A image/);
+  assert.match(inputText, /Reference image 2: B image/);
+  assert.match(inputText, /Reference image 3: C image/);
+  assert.match(inputText, /Reference image 4: D image/);
+  assert.match(inputText, /Reference image 3 is product group C/);
+  assert.match(inputText, /Reference image 4 is product group D/);
+  assert.match(inputText, /left to right, then continue on the next row/);
+  assert.match(inputText, /rectangular sorting layout/);
+  assert.match(inputText, /use a 2 by 2 matrix inside the rectangular canvas/);
+  assert.match(inputText, /assigned layout slot using contain-style proportional scaling/);
+  assert.doesNotMatch(inputText, /placement zones/);
+  assert.ok(savedEvent, "expected saved SSE event");
+  assert.equal(savedEvent.payload.item.generationMode, "quick-blend");
+  assert.equal(savedEvent.payload.item.assetKind, "quick-blend");
+  assert.equal(savedEvent.payload.item.quickBlendPairIndex, "7");
+  assert.equal(savedEvent.payload.item.quickBlendAImageName, "a-chair.png");
+  assert.equal(savedEvent.payload.item.quickBlendBImageName, "b-table.png");
+  assert.equal(savedEvent.payload.item.quickBlendCImageName, "c-lamp.png");
+  assert.equal(savedEvent.payload.item.quickBlendDImageName, "d-rug.png");
+  assert.equal(savedEvent.payload.item.quickBlendLayoutOrder, "horizontal");
+  assert.equal(savedEvent.payload.item.quickBlendPlacementShape, "rectangle");
+  assert.match(savedEvent.payload.item.filename, /^a-chair-b-table-c-lamp-d-rug-cloudflare-\d{4}-\d{2}-\d{2}T/);
+  assert.deepEqual(savedEvent.payload.item.referenceImageNames, [
+    "a-chair.png",
+    "b-table.png",
+    "c-lamp.png",
+    "d-rug.png",
+  ]);
+  assert.ok(serverImageEvent, "expected server_image SSE event");
+  assert.equal(serverImageEvent.payload.item.quickBlendCImageName, "c-lamp.png");
+  assert.equal(serverImageEvent.payload.item.quickBlendDImageName, "d-rug.png");
+  assert.equal(serverImageEvent.payload.item.quickBlendLayoutOrder, "horizontal");
+  assert.equal(serverImageEvent.payload.item.quickBlendPlacementShape, "rectangle");
+  assert.ok(storedImage, "expected generated image to be stored in R2");
+  assert.equal(storedImage.customMetadata.quickBlendCImageName, "c-lamp.png");
+  assert.equal(storedImage.customMetadata.quickBlendDImageName, "d-rug.png");
+  assert.equal(storedImage.customMetadata.quickBlendLayoutOrder, "horizontal");
+  assert.equal(storedImage.customMetadata.quickBlendPlacementShape, "rectangle");
+  assert.deepEqual(JSON.parse(storedImage.customMetadata.referenceImageNames), [
+    "a-chair.png",
+    "b-table.png",
+    "c-lamp.png",
+    "d-rug.png",
+  ]);
+  assert.doesNotMatch(text, /test-browser-key/);
+});
+
+test("Cloudflare quick blend D-only third reference stays D instead of falling back to C", async () => {
+  const seenRequests = [];
+  const imageBucket = makeImageBucket();
+  const formData = new FormData();
+  formData.set("jobId", "job-quick-blend-d-only");
+  formData.set("mode", "quick-blend");
+  formData.set("quickBlendPairIndex", "4");
+  formData.set("quickBlendAImageName", "a-chair.png");
+  formData.set("quickBlendBImageName", "b-table.png");
+  formData.set("quickBlendDImageName", "d-rug.png");
+  formData.set("quickBlendLayoutOrder", "horizontal");
+  formData.set("quickBlendPlacementShape", "square");
+  formData.set("ratio", "1:1");
+  formData.set("size", "1024x1024");
+  formData.set("format", "png");
+  formData.set("reasoningEffort", "low");
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("referenceImages", new File(["chair"], "a-chair.png", { type: "image/png" }));
+  formData.append("referenceImages", new File(["table"], "b-table.png", { type: "image/png" }));
+  formData.append("referenceImages", new File(["rug"], "d-rug.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(new Request("https://studio.example/api/generate", {
+    method: "POST",
+    body: formData,
+  }), {
+    imageBucket,
+    async fetchImpl(url, init) {
+      seenRequests.push({
+        url,
+        body: JSON.parse(init.body),
+      });
+      return makeSseResponse();
+    },
+  });
+
+  const text = await response.text();
+  const events = parseSseEvents(text);
+  const savedEvent = events.find((event) => event.eventName === "saved");
+  const inputContent = seenRequests[0]?.body?.input?.[0]?.content || [];
+  const inputText = inputContent.filter((item) => item.type === "input_text").map((item) => item.text).join("\n");
+  const inputImages = inputContent.filter((item) => item.type === "input_image");
+  const storedImage = [...imageBucket.objects.values()].find(
+    (object) => object.customMetadata.filename === savedEvent?.payload?.item?.filename,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(inputImages.length, 3);
+  assert.match(inputText, /Reference image 3: D image/);
+  assert.match(inputText, /Reference image 3 is product group D/);
+  assert.doesNotMatch(inputText, /Reference image 3: C image/);
+  assert.doesNotMatch(inputText, /Reference image 3 is product group C/);
+  assert.equal(savedEvent.payload.item.quickBlendCImageName, "");
+  assert.equal(savedEvent.payload.item.quickBlendDImageName, "d-rug.png");
+  assert.equal(storedImage.customMetadata.quickBlendCImageName || "", "");
+  assert.equal(storedImage.customMetadata.quickBlendDImageName, "d-rug.png");
 });
 
 test("Cloudflare quick blend rejects malformed reference count", async () => {
@@ -1268,7 +1447,7 @@ test("Cloudflare quick blend rejects malformed reference count", async () => {
 
   assert.equal(response.status, 200);
   assert.ok(errorEvent, "expected SSE error event");
-  assert.match(errorEvent.payload.message, /快速溶图模式每个任务必须且只支持两张参考图：一张 A 图和一张 B 图。/);
+  assert.match(errorEvent.payload.message, /Quick Blend mode requires 2 to 4 reference images/);
 });
 
 test("Cloudflare prompt agent analyzes browser reference images without generation tools", async () => {
@@ -1403,6 +1582,60 @@ test("Cloudflare reference orchestration defaults to low reasoning effort", asyn
   assert.equal(response.status, 200);
   assert.equal(seenRequests.length, 1);
   assert.equal(seenRequests[0].body.reasoning?.effort, "low");
+});
+
+test("Cloudflare prompt agent image analysis defaults to medium reasoning effort", async () => {
+  const seenRequests = [];
+  const formData = new FormData();
+  formData.set("baseUrl", "https://example.test/v1");
+  formData.set("apiKey", "test-browser-key");
+  formData.set("responsesModel", "gpt-5.5");
+  formData.append("image", new File(["castle"], "castle.png", { type: "image/png" }));
+
+  const response = await handleApiRequest(
+    new Request("https://studio.example/api/prompt-agent/analyze", {
+      method: "POST",
+      body: formData,
+    }),
+    {
+      async fetchImpl(url, init) {
+        seenRequests.push({
+          url,
+          body: JSON.parse(init.body),
+        });
+        return new Response(
+          [
+            "event: response.output_text.done",
+            `data: {"type":"response.output_text.done","text":${JSON.stringify(
+              JSON.stringify({
+                title: "Castle balcony",
+                summary: "A fantasy balcony scene.",
+                prompt: "Generate a detailed fantasy balcony scene.",
+                tags: ["fantasy", "balcony"],
+              }),
+            )}}`,
+            "",
+            "",
+            "data: [DONE]",
+            "",
+            "",
+          ].join("\n"),
+          {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          },
+        );
+      },
+    },
+  );
+
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(seenRequests[0].body.text.format.name, "image_prompt_json");
+  assert.equal(seenRequests[0].body.reasoning?.effort, "medium");
+  assert.equal(payload.item.reasoningEffort, "medium");
 });
 
 test("Cloudflare generation reports the server image URL after best-effort R2 storage", async () => {

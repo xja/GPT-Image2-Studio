@@ -7,6 +7,10 @@ import { shouldReusePreviewLoadingShell } from "../preview-loading-shell.mjs";
 import { createViewRendererController } from "./view-renderer.mjs";
 
 const DEFAULT_QUICK_BLEND_RATIO_VALUE = "1:1";
+const QUICK_BLEND_GROUPS = Object.freeze(["a", "b", "c", "d"]);
+const QUICK_BLEND_REQUIRED_GROUPS = Object.freeze(["a", "b"]);
+const QUICK_BLEND_OPTIONAL_GROUPS = Object.freeze(["c", "d"]);
+const QUICK_BLEND_RESERVED_SLOT_COUNT = 6;
 
 function getQuickBlendRefs() {
   if (typeof document === "undefined") {
@@ -24,6 +28,14 @@ function getQuickBlendRefs() {
     quickBlendBDropzone: document.querySelector("#quickBlendBDropzone"),
     quickBlendBGrid: document.querySelector("#quickBlendBGrid"),
     quickBlendBInput: document.querySelector("#quickBlendBInput"),
+    quickBlendCCount: document.querySelector("#quickBlendCCount"),
+    quickBlendCDropzone: document.querySelector("#quickBlendCDropzone"),
+    quickBlendCGrid: document.querySelector("#quickBlendCGrid"),
+    quickBlendCInput: document.querySelector("#quickBlendCInput"),
+    quickBlendDCount: document.querySelector("#quickBlendDCount"),
+    quickBlendDDropzone: document.querySelector("#quickBlendDDropzone"),
+    quickBlendDGrid: document.querySelector("#quickBlendDGrid"),
+    quickBlendDInput: document.querySelector("#quickBlendDInput"),
     quickBlendFeedback: document.querySelector("#quickBlendFeedback"),
     quickBlendGenerateButton: document.querySelector("#quickBlendGenerateButton"),
     quickBlendGenerationCanvas: document.querySelector("#quickBlendGenerationCanvas"),
@@ -36,6 +48,8 @@ function getQuickBlendRefs() {
     quickBlendPairCount: document.querySelector("#quickBlendPairCount"),
     quickBlendPairList: document.querySelector("#quickBlendPairList"),
     quickBlendPreviewStatus: document.querySelector("#quickBlendPreviewStatus"),
+    quickBlendLayoutOrderInput: document.querySelector("#quickBlendLayoutOrderInput"),
+    quickBlendPlacementShapeInput: document.querySelector("#quickBlendPlacementShapeInput"),
     quickBlendRatioGrid: document.querySelector("#quickBlendRatioGrid"),
     quickBlendRatioInput: document.querySelector("#quickBlendRatioInput"),
     quickBlendSizeInput: document.querySelector("#quickBlendSizeInput"),
@@ -107,11 +121,11 @@ function setQuickBlendFeedback(message = "", kind = "") {
 }
 
 function getQuickBlendGroupKey(group) {
-  return group === "b" ? "bFiles" : "aFiles";
+  return QUICK_BLEND_GROUPS.includes(group) ? `${group}Files` : "aFiles";
 }
 
 function getQuickBlendGroupLabel(group) {
-  return group === "b" ? "B" : "A";
+  return String(group || "a").trim().toUpperCase() || "A";
 }
 
 function getQuickBlendGroupFiles(group) {
@@ -119,11 +133,31 @@ function getQuickBlendGroupFiles(group) {
 }
 
 function getQuickBlendGroupInput(group) {
-  return group === "b" ? refs.quickBlendBInput : refs.quickBlendAInput;
+  const label = getQuickBlendGroupLabel(group);
+  return refs[`quickBlend${label}Input`] || refs.quickBlendAInput;
 }
 
 function getQuickBlendGroupGrid(group) {
-  return group === "b" ? refs.quickBlendBGrid : refs.quickBlendAGrid;
+  const label = getQuickBlendGroupLabel(group);
+  return refs[`quickBlend${label}Grid`] || refs.quickBlendAGrid;
+}
+
+function getQuickBlendGroupDropzone(group) {
+  const label = getQuickBlendGroupLabel(group);
+  return refs[`quickBlend${label}Dropzone`] || null;
+}
+
+function getQuickBlendGroupCountRef(group) {
+  const label = getQuickBlendGroupLabel(group);
+  return refs[`quickBlend${label}Count`] || null;
+}
+
+function getEnabledQuickBlendOptionalGroups() {
+  return QUICK_BLEND_OPTIONAL_GROUPS.filter((group) => getQuickBlendGroupFiles(group).length > 0);
+}
+
+function getQuickBlendPairGroups() {
+  return [...QUICK_BLEND_REQUIRED_GROUPS, ...getEnabledQuickBlendOptionalGroups()];
 }
 
 function createQuickBlendItem(group, file) {
@@ -144,7 +178,7 @@ function getQuickBlendGenerationFile(item) {
 }
 
 function hasPendingQuickBlendGenerationFiles() {
-  return [...state.quickBlend.aFiles, ...state.quickBlend.bFiles].some((item) => item.generationFilePromise);
+  return QUICK_BLEND_GROUPS.flatMap((group) => getQuickBlendGroupFiles(group)).some((item) => item.generationFilePromise);
 }
 
 function startQuickBlendGenerationCompression(item) {
@@ -175,7 +209,7 @@ function startQuickBlendGenerationCompression(item) {
 }
 
 async function ensureQuickBlendGenerationFilesReady() {
-  const pending = [...state.quickBlend.aFiles, ...state.quickBlend.bFiles]
+  const pending = QUICK_BLEND_GROUPS.flatMap((group) => getQuickBlendGroupFiles(group))
     .map((item) => item.generationFilePromise)
     .filter(Boolean);
   if (pending.length === 0) {
@@ -253,8 +287,7 @@ function getQuickBlendDropIntent(event) {
 
 function clearQuickBlendDragState() {
   quickBlendDragState = null;
-  refs.quickBlendAGrid?.classList.remove("is-dragover");
-  refs.quickBlendBGrid?.classList.remove("is-dragover");
+  QUICK_BLEND_GROUPS.forEach((group) => getQuickBlendGroupGrid(group)?.classList.remove("is-dragover"));
 }
 
 function removeQuickBlendFile(group, itemId) {
@@ -291,11 +324,13 @@ function openQuickBlendPreview(group, itemId) {
 }
 
 function getQuickBlendPairs() {
-  const maxCount = Math.max(state.quickBlend.aFiles.length, state.quickBlend.bFiles.length);
+  const maxCount = Math.max(state.quickBlend.aFiles.length, state.quickBlend.bFiles.length, state.quickBlend.cFiles.length, state.quickBlend.dFiles.length);
   return Array.from({ length: maxCount }, (_, index) => ({
     index,
     a: state.quickBlend.aFiles[index] || null,
     b: state.quickBlend.bFiles[index] || null,
+    c: state.quickBlend.cFiles[index] || null,
+    d: state.quickBlend.dFiles[index] || null,
   }));
 }
 
@@ -317,10 +352,36 @@ function validateQuickBlendPairs() {
       pairs,
     };
   }
+  for (const group of getEnabledQuickBlendOptionalGroups()) {
+    const files = getQuickBlendGroupFiles(group);
+    if (files.length !== state.quickBlend.aFiles.length) {
+      return {
+        ok: false,
+        message: `${getQuickBlendGroupLabel(group)} 组数量必须与 A/B 一致：当前 A 组 ${state.quickBlend.aFiles.length} 张，${getQuickBlendGroupLabel(group)} 组 ${files.length} 张。`,
+        pairs,
+      };
+    }
+  }
   return { ok: true, message: `${pairs.length} 对图片已准备。`, pairs };
 }
 
+function normalizeQuickBlendLayoutOrderValue(value = "") {
+  return String(value || "").trim() === "horizontal" ? "horizontal" : "vertical";
+}
+
+function normalizeQuickBlendPlacementShapeValue(value = "") {
+  return String(value || "").trim() === "rectangle" ? "rectangle" : "square";
+}
+
+function syncQuickBlendLayoutOptions() {
+  state.quickBlend.layoutOrder = normalizeQuickBlendLayoutOrderValue(refs.quickBlendLayoutOrderInput?.value || state.quickBlend.layoutOrder);
+  state.quickBlend.placementShape = normalizeQuickBlendPlacementShapeValue(refs.quickBlendPlacementShapeInput?.value || state.quickBlend.placementShape);
+  if (refs.quickBlendLayoutOrderInput) refs.quickBlendLayoutOrderInput.value = state.quickBlend.layoutOrder;
+  if (refs.quickBlendPlacementShapeInput) refs.quickBlendPlacementShapeInput.value = state.quickBlend.placementShape;
+}
+
 function createQuickBlendJobs() {
+  syncQuickBlendLayoutOptions();
   const ratioOption = getRatioOption(refs.quickBlendRatioInput?.value || DEFAULT_QUICK_BLEND_RATIO);
   const ratioValue = ratioOption?.value || DEFAULT_QUICK_BLEND_RATIO;
   const sizeSetting = normalizeGenerationSize(ratioValue, refs.quickBlendSizeInput?.value || "auto");
@@ -349,12 +410,18 @@ function createQuickBlendJobs() {
     quickBlendPairIndex: String(index + 1),
     quickBlendAImageName: pair.a.file.name,
     quickBlendBImageName: pair.b.file.name,
+    quickBlendCImageName: pair.c?.file?.name || "",
+    quickBlendDImageName: pair.d?.file?.name || "",
+    quickBlendLayoutOrder: state.quickBlend.layoutOrder,
+    quickBlendPlacementShape: state.quickBlend.placementShape,
     quickBlendAFile: getQuickBlendGenerationFile(pair.a),
     quickBlendBFile: getQuickBlendGenerationFile(pair.b),
-    referenceFiles: [getQuickBlendGenerationFile(pair.a), getQuickBlendGenerationFile(pair.b)].filter(Boolean),
+    quickBlendCFile: getQuickBlendGenerationFile(pair.c),
+    quickBlendDFile: getQuickBlendGenerationFile(pair.d),
+    referenceFiles: [getQuickBlendGenerationFile(pair.a), getQuickBlendGenerationFile(pair.b), getQuickBlendGenerationFile(pair.c), getQuickBlendGenerationFile(pair.d)].filter(Boolean),
     hasReferenceImage: true,
     referenceImageName: pair.a.file.name,
-    referenceImageNames: [pair.a.file.name, pair.b.file.name],
+    referenceImageNames: [pair.a.file.name, pair.b.file.name, pair.c?.file?.name, pair.d?.file?.name].filter(Boolean),
     isRunning: false,
     started: false,
     statusStage: "queued",
@@ -385,6 +452,7 @@ function syncQuickBlendSize(value) {
 
 function renderQuickBlendPairList() {
   const pairs = getQuickBlendPairs();
+  const pairGroups = getQuickBlendPairGroups();
   refs.quickBlendPairList.replaceChildren();
   refs.quickBlendPairCount.textContent = `${pairs.filter((pair) => pair.a && pair.b).length} 对`;
 
@@ -399,7 +467,8 @@ function renderQuickBlendPairList() {
   pairs.forEach((pair) => {
     const row = document.createElement("div");
     row.className = "quick-blend-pair-row";
-    row.classList.toggle("is-missing", !pair.a || !pair.b);
+    row.classList.toggle("is-missing", pairGroups.some((group) => !pair[group]));
+    row.style.setProperty("--quick-blend-pair-groups", String(pairGroups.length));
     const aLabel = document.createElement("strong");
     aLabel.textContent = `A${pair.index + 1}`;
     const aName = document.createElement("span");
@@ -409,6 +478,14 @@ function renderQuickBlendPairList() {
     const bName = document.createElement("span");
     bName.textContent = pair.b?.file?.name || "缺少 B 图";
     row.append(aLabel, aName, bLabel, bName);
+    for (const group of pairGroups.filter((entry) => entry === "c" || entry === "d")) {
+      const label = getQuickBlendGroupLabel(group);
+      const groupLabel = document.createElement("strong");
+      groupLabel.textContent = `${label}${pair.index + 1}`;
+      const groupName = document.createElement("span");
+      groupName.textContent = pair[group]?.file?.name || `缺少 ${label} 图`;
+      row.append(groupLabel, groupName);
+    }
     refs.quickBlendPairList.appendChild(row);
   });
 }
@@ -423,6 +500,10 @@ function renderQuickBlendFileGrid(group) {
   grid.replaceChildren();
   grid.dataset.quickBlendGroup = group;
   grid.classList.toggle("hidden", files.length === 0);
+
+  if (files.length === 0) {
+    return;
+  }
 
   files.forEach((item, index) => {
     const card = document.createElement("div");
@@ -474,18 +555,32 @@ function renderQuickBlendFileGrid(group) {
       onFiles: (fileList) => applyQuickBlendFiles(group, fileList),
     }),
   );
+
+  while (grid.children.length < QUICK_BLEND_RESERVED_SLOT_COUNT) {
+    const placeholder = document.createElement("div");
+    placeholder.className = "reference-card quick-blend-placeholder-card";
+    placeholder.setAttribute("aria-hidden", "true");
+    grid.appendChild(placeholder);
+  }
 }
 
 function renderQuickBlendSources() {
   refs.quickBlendACount.textContent = `${state.quickBlend.aFiles.length} 张`;
   refs.quickBlendBCount.textContent = `${state.quickBlend.bFiles.length} 张`;
+  if (refs.quickBlendCCount) refs.quickBlendCCount.textContent = `${state.quickBlend.cFiles.length} 张`;
+  if (refs.quickBlendDCount) refs.quickBlendDCount.textContent = `${state.quickBlend.dFiles.length} 张`;
   syncReferenceDropzoneCompact(refs.quickBlendADropzone, state.quickBlend.aFiles.length > 0);
   syncReferenceDropzoneCompact(refs.quickBlendBDropzone, state.quickBlend.bFiles.length > 0);
+  syncReferenceDropzoneCompact(refs.quickBlendCDropzone, state.quickBlend.cFiles.length > 0);
+  syncReferenceDropzoneCompact(refs.quickBlendDDropzone, state.quickBlend.dFiles.length > 0);
   renderQuickBlendFileGrid("a");
   renderQuickBlendFileGrid("b");
+  renderQuickBlendFileGrid("c");
+  renderQuickBlendFileGrid("d");
 }
 
 function renderQuickBlendView() {
+  syncQuickBlendLayoutOptions();
   renderQuickBlendRatioGrid();
   renderQuickBlendSizeOptions();
   renderQuickBlendSources();
@@ -547,6 +642,27 @@ function registerQuickBlendGenerationKey(key) {
   ];
 }
 
+function registerQuickBlendGenerationKeys(keys = []) {
+  const nextKeys = [];
+  const seen = new Set();
+  for (const key of keys) {
+    const nextKey = String(key || "").trim();
+    if (!nextKey || seen.has(nextKey)) {
+      continue;
+    }
+    seen.add(nextKey);
+    nextKeys.push(nextKey);
+  }
+  if (nextKeys.length === 0) {
+    return;
+  }
+
+  state.quickBlend.generationKeys = [
+    ...nextKeys,
+    ...state.quickBlend.generationKeys.filter((entry) => !seen.has(entry)),
+  ];
+}
+
 function replaceQuickBlendGenerationKey(oldKey, newKey) {
   const currentKey = String(oldKey || "").trim();
   const nextKey = String(newKey || "").trim();
@@ -562,7 +678,7 @@ function replaceQuickBlendGenerationKey(oldKey, newKey) {
     return;
   }
 
-  state.quickBlend.generationKeys = [nextKey, ...keys.filter((entry) => entry !== currentKey)];
+  state.quickBlend.generationKeys = [...keys.filter((entry) => entry !== currentKey), nextKey];
 }
 
 function removeQuickBlendGenerationKey(key) {
@@ -851,7 +967,7 @@ async function startQuickBlendGeneration() {
     return;
   }
 
-  jobs.forEach((job) => registerQuickBlendGenerationKey(makeJobPreviewKey(job.id)));
+  registerQuickBlendGenerationKeys(jobs.map((job) => makeJobPreviewKey(job.id)));
   state.jobs.unshift(...jobs);
   state.quickBlend.previewKey = makeJobPreviewKey(jobs[0].id);
   state.selectedPreviewKey = makeJobPreviewKey(jobs[0].id);
@@ -866,11 +982,25 @@ async function startQuickBlendGeneration() {
     refs.quickBlendSizeInput?.addEventListener("change", (event) => {
       syncQuickBlendSize(event.target.value);
     });
+    refs.quickBlendLayoutOrderInput?.addEventListener("change", () => {
+      syncQuickBlendLayoutOptions();
+      renderQuickBlendView();
+    });
+    refs.quickBlendPlacementShapeInput?.addEventListener("change", () => {
+      syncQuickBlendLayoutOptions();
+      renderQuickBlendView();
+    });
     refs.quickBlendAInput?.addEventListener("change", (event) => {
       applyQuickBlendFiles("a", event.target.files);
     });
     refs.quickBlendBInput?.addEventListener("change", (event) => {
       applyQuickBlendFiles("b", event.target.files);
+    });
+    refs.quickBlendCInput?.addEventListener("change", (event) => {
+      applyQuickBlendFiles("c", event.target.files);
+    });
+    refs.quickBlendDInput?.addEventListener("change", (event) => {
+      applyQuickBlendFiles("d", event.target.files);
     });
     refs.quickBlendADropzone?.addEventListener("dragover", (event) => {
       event.preventDefault();
@@ -896,12 +1026,46 @@ async function startQuickBlendGeneration() {
       refs.quickBlendBDropzone.classList.remove("dragover");
       applyQuickBlendFiles("b", event.dataTransfer?.files);
     });
+    refs.quickBlendCDropzone?.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      refs.quickBlendCDropzone.classList.add("dragover");
+    });
+    refs.quickBlendCDropzone?.addEventListener("dragleave", () => {
+      refs.quickBlendCDropzone.classList.remove("dragover");
+    });
+    refs.quickBlendCDropzone?.addEventListener("drop", (event) => {
+      event.preventDefault();
+      refs.quickBlendCDropzone.classList.remove("dragover");
+      applyQuickBlendFiles("c", event.dataTransfer?.files);
+    });
+    refs.quickBlendDDropzone?.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      refs.quickBlendDDropzone.classList.add("dragover");
+    });
+    refs.quickBlendDDropzone?.addEventListener("dragleave", () => {
+      refs.quickBlendDDropzone.classList.remove("dragover");
+    });
+    refs.quickBlendDDropzone?.addEventListener("drop", (event) => {
+      event.preventDefault();
+      refs.quickBlendDDropzone.classList.remove("dragover");
+      applyQuickBlendFiles("d", event.dataTransfer?.files);
+    });
     refs.quickBlendAGrid?.addEventListener("click", (event) => {
       const target = event.target.closest("[data-quick-blend-preview-id]");
       if (!target) return;
       openQuickBlendPreview(target.dataset.quickBlendPreviewGroup, target.dataset.quickBlendPreviewId);
     });
     refs.quickBlendBGrid?.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-quick-blend-preview-id]");
+      if (!target) return;
+      openQuickBlendPreview(target.dataset.quickBlendPreviewGroup, target.dataset.quickBlendPreviewId);
+    });
+    refs.quickBlendCGrid?.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-quick-blend-preview-id]");
+      if (!target) return;
+      openQuickBlendPreview(target.dataset.quickBlendPreviewGroup, target.dataset.quickBlendPreviewId);
+    });
+    refs.quickBlendDGrid?.addEventListener("click", (event) => {
       const target = event.target.closest("[data-quick-blend-preview-id]");
       if (!target) return;
       openQuickBlendPreview(target.dataset.quickBlendPreviewGroup, target.dataset.quickBlendPreviewId);
@@ -928,7 +1092,7 @@ async function startQuickBlendGeneration() {
       if (!target) return;
       setQuickBlendGenerationPreviewKey(target.dataset.quickBlendGenerationKey);
     });
-    [refs.quickBlendAGrid, refs.quickBlendBGrid].forEach((grid) => {
+    [refs.quickBlendAGrid, refs.quickBlendBGrid, refs.quickBlendCGrid, refs.quickBlendDGrid].forEach((grid) => {
       grid?.addEventListener("dragover", (event) => {
         if (!quickBlendDragState || quickBlendDragState.group !== grid.dataset.quickBlendGroup) return;
         event.preventDefault();

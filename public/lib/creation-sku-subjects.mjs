@@ -158,10 +158,14 @@ function isSubjectMissingCurrentReferences(subject = {}, roleMap = new Map()) {
   return normalizeStringArray(subject.filenames).every((filename) => !roleMap.has(filename.toLowerCase()));
 }
 
-function buildProductReferenceSkuSubjects(referenceRoles = []) {
+function getProductReferenceEntriesForSku(referenceRoles = []) {
   return (Array.isArray(referenceRoles) ? referenceRoles : [])
     .map((entry, index) => ({ ...entry, referenceIndex: index + 1 }))
-    .filter((entry) => isCreationSubjectReferenceRole(entry.role))
+    .filter((entry) => isCreationSubjectReferenceRole(entry.role) && cleanString(entry.filename));
+}
+
+function buildProductReferenceSkuSubjects(referenceRoles = []) {
+  return getProductReferenceEntriesForSku(referenceRoles)
     .map((entry, index) => {
       const note = entry.note || "";
       const subjectUnitCount = inferSubjectUnitCount([entry.filename, note].join(" "));
@@ -176,8 +180,171 @@ function buildProductReferenceSkuSubjects(referenceRoles = []) {
     });
 }
 
-function shouldUseProductReferenceSkuSubjects(normalizedSubjects = [], productReferenceSubjects = []) {
-  return normalizedSubjects.length > 0 && productReferenceSubjects.length > normalizedSubjects.length;
+function getMatchingProductReferenceSubjects(subject = {}, productReferenceSubjects = []) {
+  const filenames = new Set(
+    normalizeStringArray(subject.filenames).map((filename) => filename.toLowerCase()),
+  );
+  if (filenames.size === 0) {
+    return [];
+  }
+
+  return (Array.isArray(productReferenceSubjects) ? productReferenceSubjects : []).filter((entry) =>
+    normalizeStringArray(entry.filenames).some((filename) => filenames.has(filename.toLowerCase())),
+  );
+}
+
+function mergeSubjectNotes(baseNote = "", extraNotes = []) {
+  const parts = [];
+  const seen = new Set();
+  const append = (value) => {
+    const text = cleanString(value);
+    if (!text) {
+      return;
+    }
+    const key = text.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    parts.push(text);
+  };
+
+  append(baseNote);
+  extraNotes.forEach(append);
+  return parts.join(" | ");
+}
+
+function enrichSkuSubjectFromProductReferences(subject = {}, productReferenceSubjects = []) {
+  const matchedSubjects = getMatchingProductReferenceSubjects(subject, productReferenceSubjects);
+  if (matchedSubjects.length === 0) {
+    return subject;
+  }
+
+  const referenceIndexes = uniqueNumbers([
+    ...normalizeIndexArray(subject.referenceIndexes),
+    ...matchedSubjects.flatMap((entry) => normalizeIndexArray(entry.referenceIndexes)),
+  ]);
+  const ownNote = cleanString(subject.note);
+  const referenceNote = mergeSubjectNotes("", matchedSubjects.map((entry) => entry.note));
+  const inferenceNote = mergeSubjectNotes(ownNote, referenceNote ? [referenceNote] : []);
+  const note = !ownNote || (referenceNote && referenceNote.length > ownNote.length)
+    ? mergeSubjectNotes(ownNote, referenceNote ? [referenceNote] : [])
+    : ownNote;
+  const subjectUnitCount = Math.max(
+    normalizeSubjectUnitCount(subject.subjectUnitCount),
+    ...matchedSubjects.map((entry) => normalizeSubjectUnitCount(entry.subjectUnitCount)),
+    inferSubjectUnitCount([subject.title, inferenceNote].join(" ")),
+  );
+
+  return {
+    ...subject,
+    ...(referenceIndexes.length > 0 ? { referenceIndexes } : {}),
+    ...(note ? { note } : {}),
+    ...(subjectUnitCount ? { subjectUnitCount } : {}),
+  };
+}
+
+function hasSameSellableSubjectSignal(subject = {}) {
+  const text = [
+    subject.id,
+    subject.title,
+    subject.note,
+    subject.description,
+  ]
+    .map(cleanString)
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return /\b(same|single|one)\s+(?:sellable\s+)?(?:sku|subject|product|item)\b|\b(front|back|side|view|views|angle|angles|photo|photos)\b/.test(text);
+}
+
+function shouldSplitAmbiguousCoveredGroups(normalizedSubjects = [], productReferenceSubjects = []) {
+  if (normalizedSubjects.length === 0 || productReferenceSubjects.length <= normalizedSubjects.length) {
+    return false;
+  }
+
+  const productReferenceFilenames = new Set(
+    productReferenceSubjects.flatMap((subject) =>
+      normalizeStringArray(subject.filenames).map((filename) => filename.toLowerCase()),
+    ),
+  );
+  const productReferenceIndexes = new Set(
+    productReferenceSubjects.flatMap((subject) => normalizeIndexArray(subject.referenceIndexes)),
+  );
+
+  return normalizedSubjects.some((subject) => {
+    const productFilenames = normalizeStringArray(subject.filenames).filter((filename) =>
+      productReferenceFilenames.has(filename.toLowerCase()),
+    );
+    const productIndexes = normalizeIndexArray(subject.referenceIndexes).filter((referenceIndex) =>
+      productReferenceIndexes.has(referenceIndex),
+    );
+    return (productFilenames.length > 1 || productIndexes.length > 1) && !hasSameSellableSubjectSignal(subject);
+  });
+}
+
+function buildSkuSubjectCoverage(subjects = []) {
+  const filenames = new Set();
+  const referenceIndexes = new Set();
+  (Array.isArray(subjects) ? subjects : []).forEach((subject) => {
+    normalizeStringArray(subject.filenames).forEach((filename) => filenames.add(filename.toLowerCase()));
+    normalizeIndexArray(subject.referenceIndexes).forEach((referenceIndex) => referenceIndexes.add(referenceIndex));
+  });
+  return { filenames, referenceIndexes };
+}
+
+function isProductReferenceSubjectCovered(subject = {}, coverage = {}) {
+  const filenames = coverage.filenames instanceof Set ? coverage.filenames : new Set();
+  const referenceIndexes = coverage.referenceIndexes instanceof Set ? coverage.referenceIndexes : new Set();
+  return (
+    normalizeStringArray(subject.filenames).some((filename) => filenames.has(filename.toLowerCase())) ||
+    normalizeIndexArray(subject.referenceIndexes).some((referenceIndex) => referenceIndexes.has(referenceIndex))
+  );
+}
+
+function hydrateProductReferenceIndexes(normalizedSubjects = [], productReferenceSubjects = []) {
+  if (normalizedSubjects.length === 0 || productReferenceSubjects.length === 0) {
+    return normalizedSubjects;
+  }
+
+  const indexByFilename = new Map();
+  productReferenceSubjects.forEach((subject) => {
+    const referenceIndexes = normalizeIndexArray(subject.referenceIndexes);
+    normalizeStringArray(subject.filenames).forEach((filename) => {
+      indexByFilename.set(filename.toLowerCase(), referenceIndexes);
+    });
+  });
+
+  return normalizedSubjects.map((subject) => {
+    if (normalizeIndexArray(subject.referenceIndexes).length > 0) {
+      return subject;
+    }
+    const referenceIndexes = uniqueNumbers(
+      normalizeStringArray(subject.filenames).flatMap((filename) => indexByFilename.get(filename.toLowerCase()) || []),
+    );
+    return referenceIndexes.length > 0 ? { ...subject, referenceIndexes } : subject;
+  });
+}
+
+function appendMissingProductReferenceSubjects(normalizedSubjects = [], productReferenceSubjects = []) {
+  if (normalizedSubjects.length === 0) {
+    return productReferenceSubjects.map((subject) => enrichSkuSubjectFromProductReferences(subject, productReferenceSubjects));
+  }
+  if (productReferenceSubjects.length === 0) {
+    return normalizedSubjects;
+  }
+  if (shouldSplitAmbiguousCoveredGroups(normalizedSubjects, productReferenceSubjects)) {
+    return productReferenceSubjects.map((subject) => enrichSkuSubjectFromProductReferences(subject, productReferenceSubjects));
+  }
+
+  const hydratedSubjects = hydrateProductReferenceIndexes(normalizedSubjects, productReferenceSubjects)
+    .map((subject) => enrichSkuSubjectFromProductReferences(subject, productReferenceSubjects));
+  const coverage = buildSkuSubjectCoverage(hydratedSubjects);
+  const missingProductSubjects = productReferenceSubjects.filter((subject) => !isProductReferenceSubjectCovered(subject, coverage));
+
+  return missingProductSubjects.length > 0
+    ? [...hydratedSubjects, ...missingProductSubjects.map((subject) => enrichSkuSubjectFromProductReferences(subject, productReferenceSubjects))]
+    : hydratedSubjects;
 }
 
 export function normalizeCreationSkuSubjectForPayload(entry = {}, index = 0) {
@@ -274,6 +441,8 @@ export function buildCreationSkuSubjectsForPayload({
   referenceRoles = [],
 } = {}) {
   const roleMap = buildReferenceRoleMap(referenceRoles);
+  const productReferenceSubjects = buildProductReferenceSkuSubjects(referenceRoles);
+
   const appliedSubjects = analysis && applied ? analysis.skuSubjects || [] : [];
   const normalizedSubjects = appliedSubjects
     .map((entry, index) => normalizeCreationSkuSubjectForPayload(entry, index))
@@ -281,12 +450,8 @@ export function buildCreationSkuSubjectsForPayload({
     .filter((subject) => !(dirty && isSubjectMissingCurrentReferences(subject, roleMap)))
     .filter((subject) => !isSubjectBackedOnlyByNonProductReferences(subject, roleMap));
   const groupedSubjects = mergeSameReferenceSubjects(normalizedSubjects, roleMap);
-  const productReferenceSubjects = buildProductReferenceSkuSubjects(referenceRoles);
-  if (
-    groupedSubjects.length > 0 &&
-    !shouldUseProductReferenceSkuSubjects(groupedSubjects, productReferenceSubjects)
-  ) {
-    return groupedSubjects;
+  if (groupedSubjects.length > 0) {
+    return appendMissingProductReferenceSubjects(groupedSubjects, productReferenceSubjects);
   }
 
   return productReferenceSubjects;

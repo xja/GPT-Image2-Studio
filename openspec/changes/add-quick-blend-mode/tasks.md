@@ -26,3 +26,9 @@
 ## 6. Verification
 
 - [x] 6.1 Run focused tests for Quick Blend, full `npm test`, public-lib sync check if a shared browser module is added, `npm run build:pages`, `git diff --check`, and browser verification of upload validation and pair preview.
+
+## 7. A/B/C/D Pairing and Layout Options
+
+- [x] 7.1 Add failing tests for optional C/D group pairing, 2-4 reference validation, dynamic Quick Blend labels, layout option prompt text, and saved metadata.
+- [x] 7.2 Implement shared prompt helpers, local server support, Cloudflare Worker parity, gallery metadata, browser form data, C/D upload UI, pair validation, and layout controls.
+- [x] 7.3 Run focused Quick Blend tests, full `npm test`, public-lib sync check, `npm run build:pages`, `git diff --check`, and browser verification for the updated Quick Blend view.

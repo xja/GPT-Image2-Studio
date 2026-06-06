@@ -15,13 +15,15 @@ const appPath = new URL("../public/app.js", import.meta.url);
 const indexPath = new URL("../public/index.html", import.meta.url);
 const serverPath = new URL("../server.mjs", import.meta.url);
 
-test("studio task limits keep the local queue unbounded and allow eighteen parallel tasks", async () => {
-  assert.equal(MAX_PARALLEL_TASKS_PER_SESSION, 18);
+test("studio task limits keep the local queue unbounded and cap generation at fifteen parallel tasks", async () => {
+  assert.equal(MAX_PARALLEL_TASKS_PER_SESSION, 15);
 
   const app = await readFile(appPath, "utf8");
+  const index = await readFile(indexPath, "utf8");
 
   assert.doesNotMatch(app, /maxConcurrentTasksPerSession/);
-  assert.match(app, /maxParallelTasksPerSession:\s*18/);
+  assert.match(app, /maxParallelTasksPerSession:\s*15/);
+  assert.match(index, /id="liveCount">0 \/ 15<\/span>/);
   assert.match(app, /function getMaxQueuedJobCount\(\) \{\s*return Number\.POSITIVE_INFINITY;\s*\}/);
   assert.doesNotMatch(app, /getQueuedJobCount\(\) >= getMaxQueuedJobCount\(\)/);
   assert.doesNotMatch(app, /最多排队/);

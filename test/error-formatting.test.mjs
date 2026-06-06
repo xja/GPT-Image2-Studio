@@ -24,18 +24,38 @@ test("formatHttpErrorMessage keeps upstream HTTP errors compact", () => {
   assert.doesNotMatch(message, /developers\\.cloudflare\\.com|origin_response_timeout|Proxy Read Timeout/);
 });
 
-test("formatHttpErrorMessage extracts nested provider error codes without exposing long bodies", () => {
+test("formatHttpErrorMessage extracts nested provider error codes with compact 4xx detail", () => {
   const message = formatHttpErrorMessage({
     label: "生成请求失败",
     status: 400,
     body: JSON.stringify({
       error: {
-        message: "This message can be very long and should not be exposed in the compact banner.",
+        message: `Invalid request details. ${"x".repeat(260)}`,
         code: "invalid_request_error",
       },
     }),
   });
 
-  assert.equal(message, "生成请求失败：HTTP 400，错误码 invalid_request_error");
-  assert.doesNotMatch(message, /very long|compact banner/);
+  assert.match(message, /^生成请求失败：HTTP 400，错误码 invalid_request_error，Invalid request details\. x+/);
+  assert.match(message, /\.\.\.$/);
+  assert.ok(message.length < 280);
+});
+
+test("formatHttpErrorMessage keeps OpenAI 400 diagnostic message and param", () => {
+  const message = formatHttpErrorMessage({
+    label: "生成请求失败",
+    status: 400,
+    body: JSON.stringify({
+      error: {
+        message: "Invalid value: '1365x768'. Width and height must be divisible by 16.",
+        code: "invalid_value",
+        param: "tools[0].size",
+      },
+    }),
+  });
+
+  assert.equal(
+    message,
+    "生成请求失败：HTTP 400，错误码 invalid_value，Invalid value: '1365x768'. Width and height must be divisible by 16.（参数 tools[0].size）",
+  );
 });

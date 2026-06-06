@@ -853,6 +853,39 @@ test("creation planner preserves multiple units inside one SKU subject reference
   assert.match(skuItems[0].prompt, /three complete visible lure bodies/i);
 });
 
+test("creation planner enriches SKU prompts from matching reference-product notes", () => {
+  const plan = buildCreationPlan({
+    productName: "Fishing lure assortment",
+    productDescription: "A white-background reference subject shows the sellable SKU pair",
+    sellingPoints: "lifelike swim action",
+    targetLanguage: "en",
+    selectedRoles: ["hero"],
+    referenceImageRoles: [
+      {
+        filename: "orange-pair.png",
+        role: "reference-product",
+        note: "One product-subject reference image contains two complete visible lure bodies: orange top and silver bottom.",
+      },
+    ],
+    skuSubjects: [
+      {
+        id: "orange-pair",
+        title: "Orange lure pair",
+        filenames: ["orange-pair.png"],
+      },
+    ],
+  });
+
+  const skuItem = plan.items.find((item) => item.role === "sku");
+
+  assert.equal(plan.skuImageCount, 1);
+  assert.equal(skuItem.skuSubject.note, "One product-subject reference image contains two complete visible lure bodies: orange top and silver bottom.");
+  assert.equal(skuItem.skuSubject.subjectUnitCount, 2);
+  assert.match(skuItem.prompt, /SKU SUBJECT UNIT COUNT LOCK/);
+  assert.match(skuItem.prompt, /two complete visible lure bodies/i);
+  assert.match(skuItem.prompt, /orange top and silver bottom/i);
+});
+
 test("creation planner infers SKU subject unit count from Chinese product notes", () => {
   const plan = buildCreationPlan({
     productName: "Fishing lure assortment",
@@ -1649,6 +1682,40 @@ test("creation planner locks the selected reference subject as the set-wide prim
   );
 });
 
+test("creation planner creates SKU images for the selected reference subject and other product subjects", () => {
+  const plan = buildCreationPlan({
+    productName: "Jointed fishing lure",
+    productDescription: "A lure set where the user selected one main subject for the hero image.",
+    sellingPoints: "segmented body, realistic finish, treble hooks",
+    targetLanguage: "en",
+    selectedRoles: ["hero"],
+    referenceImageRoles: [
+      { filename: "gray-product.png", role: "product", note: "Regular product reference." },
+      { filename: "green-product.png", role: "product", note: "Alternate product reference." },
+      { filename: "selected-main-subject.png", role: "reference-product", note: "Selected subject used by the main image." },
+      { filename: "package-list.png", role: "package", note: "Package content only." },
+    ],
+    skuSubjects: [
+      { id: "gray", title: "Gray product", filenames: ["gray-product.png"], note: "Old payload subject." },
+      { id: "green", title: "Green product", filenames: ["green-product.png"], note: "Old payload subject." },
+      { id: "selected", title: "Selected main subject", filenames: ["selected-main-subject.png"], note: "Selected payload subject." },
+    ],
+  });
+
+  const skuItems = plan.items.filter((item) => item.role === "sku");
+
+  assert.equal(plan.skuImageCount, 3);
+  assert.deepEqual(plan.skuSubjects.map((subject) => subject.filenames), [
+    ["gray-product.png"],
+    ["green-product.png"],
+    ["selected-main-subject.png"],
+  ]);
+  assert.equal(skuItems.length, 3);
+  assert.match(skuItems[0].prompt, /SKU MAIN SUBJECT LOCK: Use gray-product\.png as the SKU product subject/i);
+  assert.match(skuItems[1].prompt, /SKU MAIN SUBJECT LOCK: Use green-product\.png as the SKU product subject/i);
+  assert.match(skuItems[2].prompt, /SKU MAIN SUBJECT LOCK: Use selected-main-subject\.png as the SKU product subject/i);
+});
+
 test("creation reference analysis normalizes role suggestions and prompt notes", () => {
   const analysis = normalizeCreationReferenceAnalysis(
     {
@@ -1995,6 +2062,42 @@ test("creation reference analysis keeps real product references with size facts 
     [["hero-product.png", "product", "商品主体"]],
   );
   assert.deepEqual(analysis.skuSubjects.map((subject) => subject.id), ["hero-product"]);
+});
+
+test("creation reference analysis treats grouped white-background SKU references as product", () => {
+  const analysis = normalizeCreationReferenceAnalysis(
+    {
+      summary: "识别到一张普通白底 SKU 参考图。",
+      reference_roles: [
+        {
+          index: 1,
+          filename: "orange-silver-pair.png",
+          role: "reference-product",
+          note: "作为橙黄色三节金龙鱼拟饵主体参考，需保留橙黄渐变配色和双钩配置；图中共 1 个完整产品单位。",
+        },
+      ],
+      sku_subjects: [
+        {
+          id: "orange-silver-pair",
+          title: "橙银双路亚 SKU",
+          reference_indexes: [1],
+          filenames: ["orange-silver-pair.png"],
+          subject_unit_count: 2,
+          note: "图中共 2 个完整产品单位，上方橙黄色路亚和下方银色路亚都要保留。",
+        },
+      ],
+      risks: [],
+    },
+    ["orange-silver-pair.png"],
+  );
+
+  assert.deepEqual(
+    analysis.recommendations.map((entry) => [entry.filename, entry.role, entry.roleLabel]),
+    [["orange-silver-pair.png", "product", "商品主体"]],
+  );
+  assert.doesNotMatch(analysis.recommendations[0].note, /图中共\s*1\s*个完整产品单位/);
+  assert.match(analysis.recommendations[0].note, /图中共 2 个完整产品单位/);
+  assert.equal(analysis.skuSubjects[0].subjectUnitCount, 2);
 });
 
 test("creation planner applies one SKU series consistency lock across all SKU prompts", () => {

@@ -186,6 +186,8 @@ test("local generate accepts quick blend without a user prompt and saves pair me
   assert.match(saved.payload.item.filename, /^\d{6}-a-dress-b-shoe-\d{6}-[a-z0-9]{4}\.png$/);
   assert.deepEqual(saved.payload.item.referenceImageNames, ["a-dress.png", "b-shoe.png"]);
   assert.match(saved.payload.item.prompt, /A subject group above the B subject group/i);
+  assert.match(saved.payload.item.prompt, /assigned layout slot using contain-style proportional scaling/i);
+  assert.match(saved.payload.item.prompt, /Do not stretch, squash, warp, bend, elongate, compress, crop, or force any subject/i);
   assert.match(saved.payload.item.relativePath, /quick-blend/);
 
   const jsonFiles = await findJsonFiles(join(outputDir, "json"));
@@ -195,6 +197,88 @@ test("local generate accepts quick blend without a user prompt and saves pair me
     entry.quickBlendPairIndex === "2" &&
     entry.quickBlendAImageName === "a-dress.png" &&
     entry.quickBlendBImageName === "b-shoe.png"
+  ));
+});
+
+test("local generate accepts quick blend optional C and D groups with layout metadata", async (t) => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "quick-blend-groups-"));
+  const outputDir = join(tempRoot, "output");
+  const localDataRootDir = join(tempRoot, "local-data");
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const server = spawn(process.execPath, ["server.mjs"], {
+    cwd: rootDir,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      VERCEL: "1",
+      TMP: tempRoot,
+      TEMP: tempRoot,
+      IMAGE_STUDIO_MOCK_IMAGE_GENERATION: "1",
+      IMAGE_STUDIO_OUTPUT_DIR: outputDir,
+      IMAGE_STUDIO_LOCAL_DATA_DIR: localDataRootDir,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const diagnostics = collectDiagnostics(server);
+
+  t.after(async () => {
+    await stopServer(server);
+    await rm(tempRoot, { recursive: true, force: true });
+  });
+
+  await waitForServer(baseUrl, server, diagnostics);
+
+  const response = await fetch(`${baseUrl}/api/generate`, {
+    method: "POST",
+    body: makeQuickBlendForm({
+      fields: {
+        quickBlendCImageName: "c-compass.png",
+        quickBlendDImageName: "d-bottle.png",
+        quickBlendLayoutOrder: "horizontal",
+        quickBlendPlacementShape: "rectangle",
+      },
+      referenceFiles: [
+        new File(["a"], "a-dress.png", { type: "image/png" }),
+        new File(["b"], "b-shoe.png", { type: "image/png" }),
+        new File(["c"], "c-compass.png", { type: "image/png" }),
+        new File(["d"], "d-bottle.png", { type: "image/png" }),
+      ],
+    }),
+  });
+  const text = await response.text();
+  const events = parseSseEvents(text);
+  const saved = events.find((event) => event.eventName === "saved");
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(events.filter((event) => event.eventName === "error"), [], text);
+  assert.ok(saved, "expected saved SSE event");
+  assert.equal(saved.payload.item.quickBlendCImageName, "c-compass.png");
+  assert.equal(saved.payload.item.quickBlendDImageName, "d-bottle.png");
+  assert.equal(saved.payload.item.quickBlendLayoutOrder, "horizontal");
+  assert.equal(saved.payload.item.quickBlendPlacementShape, "rectangle");
+  assert.deepEqual(saved.payload.item.referenceImageNames, [
+    "a-dress.png",
+    "b-shoe.png",
+    "c-compass.png",
+    "d-bottle.png",
+  ]);
+  assert.match(saved.payload.item.prompt, /Reference image 3 is product group C/i);
+  assert.match(saved.payload.item.prompt, /Reference image 4 is product group D/i);
+  assert.match(saved.payload.item.prompt, /left to right, then continue on the next row/i);
+  assert.match(saved.payload.item.prompt, /rectangular sorting layout/i);
+  assert.match(saved.payload.item.prompt, /use a 2 by 2 matrix inside the rectangular canvas/i);
+  assert.match(saved.payload.item.prompt, /assigned layout slot using contain-style proportional scaling/i);
+  assert.doesNotMatch(saved.payload.item.prompt, /placement zones/i);
+
+  const jsonFiles = await findJsonFiles(join(outputDir, "json"));
+  const metadata = await Promise.all(jsonFiles.map(async (filePath) => JSON.parse(await readFile(filePath, "utf8"))));
+  assert.ok(metadata.some((entry) =>
+    entry.assetKind === "quick-blend" &&
+    entry.quickBlendCImageName === "c-compass.png" &&
+    entry.quickBlendDImageName === "d-bottle.png" &&
+    entry.quickBlendLayoutOrder === "horizontal" &&
+    entry.quickBlendPlacementShape === "rectangle"
   ));
 });
 

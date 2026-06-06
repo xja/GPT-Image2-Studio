@@ -44,6 +44,14 @@ function readCssRuleContaining(styles, selector, text) {
   return matches.find((match) => match[1].includes(text))?.[1] || "";
 }
 
+function extractFunctionBefore(source, functionName, nextFunctionName) {
+  const start = source.indexOf(`function ${functionName}`);
+  const end = source.indexOf(`function ${nextFunctionName}`, start + 1);
+  assert.notEqual(start, -1, `${functionName} should exist`);
+  assert.notEqual(end, -1, `${nextFunctionName} should follow ${functionName}`);
+  return source.slice(start, end).trimEnd();
+}
+
 function createTestClassList() {
   const values = new Set();
   return {
@@ -446,6 +454,16 @@ test("live feed keeps existing task order stable while activity text changes", a
   assert.doesNotMatch(app, /state\.activityFeed\.sort\(\(left, right\) => String\(right\.at\)/);
 });
 
+test("generation status and activity copy share queue heartbeat retry recovery labels", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /buildGenerationTaskStatusText/);
+  assert.match(app, /statusText:\s*buildGenerationTaskStatusText\(\{[\s\S]*statusStage:\s*task\.statusStage \|\| status,[\s\S]*errorMessage:\s*task\.errorMessage/);
+  assert.match(app, /const statusText = buildGenerationTaskStatusText\(\{[\s\S]*statusStage:\s*payload\.stage,[\s\S]*statusText:\s*payload\.message/);
+  assert.match(app, /handleActivityStatus\(job\.id,\s*payload\.stage,\s*statusText\)/);
+  assert.match(app, /buildGenerationTaskActivityDetail\(\{[\s\S]*statusStage:\s*stage,[\s\S]*statusText:\s*message/);
+});
+
 test("scrollable surfaces use subtle themed scrollbars instead of default browser chrome", async () => {
   const styles = await readFile(stylesPath, "utf8");
 
@@ -497,6 +515,16 @@ test("reference upload appears above prompt and generate action below prompt", a
   assert.doesNotMatch(html, /支持最多 20 个任务排队/);
   assert.doesNotMatch(html, /id="generateButton"[\s\S]*id="promptInput"/);
   assert.doesNotMatch(html, /id="promptInput"[\s\S]*id="referenceDropzone"/);
+});
+
+test("studio prompt counter displays character count without a hard limit", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(html, /<span class="field-counter"><span id="promptCounter">0 字<\/span><\/span>/);
+  assert.doesNotMatch(html, /id="promptCounter">0<\/span>\s*\/\s*1000/);
+  assert.match(app, /refs\.promptCounter\.textContent = `\$\{refs\.promptInput\.value\.length\} 字`;/);
+  assert.doesNotMatch(app, /refs\.promptCounter\.textContent = String\(refs\.promptInput\.value\.length\);/);
 });
 
 test("reference preview cards do not render uploaded filenames", async () => {
@@ -787,6 +815,11 @@ test("quick blend mode implements upload pairing queue preview and cleanup contr
   assert.match(html, /id="quickBlendBInput"[^>]*type="file"[^>]*accept="image\/\*"[^>]*multiple/);
   assert.match(styles, /\.quick-blend-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
   assert.match(styles, /\.quick-blend-grid\.is-dragover\s*\{[\s\S]*outline:\s*1px dashed/);
+  const quickBlendPlaceholderRule = styles.match(/\.quick-blend-placeholder-card\s*\{(?<body>[\s\S]*?)\n\}/)?.groups?.body || "";
+  assert.match(quickBlendPlaceholderRule, /aspect-ratio:\s*1\s*\/\s*1;/);
+  assert.match(quickBlendPlaceholderRule, /pointer-events:\s*none;/);
+  assert.match(quickBlendPlaceholderRule, /border-color:\s*transparent;/);
+  assert.match(quickBlendPlaceholderRule, /background:\s*transparent;/);
   assert.match(styles, /\.quick-blend-reference-card\s*\{[\s\S]*cursor:\s*grab;/);
   assert.match(styles, /\.quick-blend-reference-card\.is-dragging\s*\{[\s\S]*opacity:\s*0\.58;[\s\S]*transform:\s*scale\(0\.98\);/);
   assert.match(styles, /\.quick-blend-reference-card\s*>\s*\.reference-remove\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;[\s\S]*z-index:\s*3;/);
@@ -805,20 +838,25 @@ test("quick blend mode implements upload pairing queue preview and cleanup contr
   assert.match(quickBlendView, /function applyQuickBlendFiles\(group, fileList\) \{/);
   assert.match(quickBlendView, /function removeQuickBlendFile\(group, itemId\) \{/);
   assert.match(quickBlendView, /function reorderQuickBlendFile\(group, itemId, targetId = "", placement = "before"\) \{/);
+  assert.match(quickBlendView, /const QUICK_BLEND_RESERVED_SLOT_COUNT = 6;/);
   assert.match(quickBlendView, /grid\.dataset\.quickBlendGroup = group;/);
+  assert.match(quickBlendView, /grid\.classList\.toggle\("hidden", files\.length === 0\);[\s\S]*if \(files\.length === 0\) \{[\s\S]*return;[\s\S]*\}/);
+  assert.match(quickBlendView, /while \(grid\.children\.length < QUICK_BLEND_RESERVED_SLOT_COUNT\) \{[\s\S]*placeholder\.className = "reference-card quick-blend-placeholder-card";[\s\S]*grid\.appendChild\(placeholder\);/);
+  assert.match(quickBlendView, /syncReferenceDropzoneCompact\(refs\.quickBlendADropzone, state\.quickBlend\.aFiles\.length > 0\);/);
+  assert.match(quickBlendView, /syncReferenceDropzoneCompact\(refs\.quickBlendBDropzone, state\.quickBlend\.bFiles\.length > 0\);/);
   assert.match(quickBlendView, /card\.draggable = true;/);
   assert.match(quickBlendView, /card\.dataset\.quickBlendId = item\.id;/);
   assert.match(quickBlendView, /previewButton\.draggable = false;/);
   assert.match(quickBlendView, /image\.draggable = false;/);
   assert.match(quickBlendView, /addEventListener\("dragstart"[\s\S]*quickBlendDragState = \{ group, itemId: item\.id \}/);
   assert.match(quickBlendView, /addEventListener\("drop"[\s\S]*reorderQuickBlendFile\(quickBlendDragState\.group, quickBlendDragState\.itemId, targetId, placement\);/);
-  assert.match(quickBlendView, /function getQuickBlendPairs\(\) \{[\s\S]*Math\.max\(state\.quickBlend\.aFiles\.length, state\.quickBlend\.bFiles\.length\)[\s\S]*a:\s*state\.quickBlend\.aFiles\[index\] \|\| null[\s\S]*b:\s*state\.quickBlend\.bFiles\[index\] \|\| null/);
+  assert.match(quickBlendView, /function getQuickBlendPairs\(\) \{[\s\S]*Math\.max\(state\.quickBlend\.aFiles\.length, state\.quickBlend\.bFiles\.length, state\.quickBlend\.cFiles\.length, state\.quickBlend\.dFiles\.length\)[\s\S]*a:\s*state\.quickBlend\.aFiles\[index\] \|\| null[\s\S]*b:\s*state\.quickBlend\.bFiles\[index\] \|\| null[\s\S]*c:\s*state\.quickBlend\.cFiles\[index\] \|\| null[\s\S]*d:\s*state\.quickBlend\.dFiles\[index\] \|\| null/);
   assert.match(quickBlendView, /function validateQuickBlendPairs\(\) \{[\s\S]*state\.quickBlend\.aFiles\.length === 0 && state\.quickBlend\.bFiles\.length === 0[\s\S]*state\.quickBlend\.aFiles\.length === 0[\s\S]*state\.quickBlend\.bFiles\.length === 0[\s\S]*state\.quickBlend\.aFiles\.length !== state\.quickBlend\.bFiles\.length/);
   assert.match(quickBlendView, /refs\.quickBlendGenerateButton\.disabled = !validation\.ok \|\| preparingReference;/);
   assert.match(quickBlendView, /const hasStoredFeedback = Boolean\(state\.quickBlend\.feedback\);[\s\S]*const fallbackKind = validation\.ok \? "success" : "";[\s\S]*renderQuickBlendFeedback\(message, hasStoredFeedback \? state\.quickBlend\.feedbackKind \|\| fallbackKind : fallbackKind\);/);
   assert.doesNotMatch(quickBlendView, /queuedWouldOverflow|availableSlots|queueMessage/);
   assert.match(quickBlendView, /function createQuickBlendJobs\(\) \{[\s\S]*mode:\s*"quick-blend"[\s\S]*quickBlendPairIndex:\s*String\(index \+ 1\)[\s\S]*quickBlendAImageName:\s*pair\.a\.file\.name[\s\S]*quickBlendBImageName:\s*pair\.b\.file\.name[\s\S]*quickBlendAFile[\s\S]*quickBlendBFile[\s\S]*referenceFiles[\s\S]*referenceImageNames/);
-  assert.match(app, /function appendQuickBlendReferencesToFormData\(formData, job\) \{[\s\S]*formData\.set\("mode", "quick-blend"\);[\s\S]*formData\.set\("quickBlendPairIndex", job\.quickBlendPairIndex\);[\s\S]*formData\.set\("quickBlendAImageName", job\.quickBlendAImageName\);[\s\S]*formData\.set\("quickBlendBImageName", job\.quickBlendBImageName\);[\s\S]*formData\.append\("referenceImages", job\.quickBlendAFile\);[\s\S]*formData\.append\("referenceImages", job\.quickBlendBFile\);/);
+  assert.match(app, /function appendQuickBlendReferencesToFormData\(formData, job\) \{[\s\S]*formData\.set\("mode", "quick-blend"\);[\s\S]*formData\.set\("quickBlendPairIndex", job\.quickBlendPairIndex\);[\s\S]*formData\.set\("quickBlendAImageName", job\.quickBlendAImageName\);[\s\S]*formData\.set\("quickBlendBImageName", job\.quickBlendBImageName\);[\s\S]*job\.referenceFiles\.forEach\(\(file\) => formData\.append\("referenceImages", file\)\);/);
   assert.match(quickBlendView, /async function startQuickBlendGeneration\(\) \{[\s\S]*const jobs = createQuickBlendJobs\(\);[\s\S]*state\.jobs\.unshift\(\.\.\.jobs\);[\s\S]*state\.quickBlend\.previewKey = makeJobPreviewKey\(jobs\[0\]\.id\);[\s\S]*jobs\.forEach\(\(job\) => recordJobQueued\(job\)\);[\s\S]*renderAll\(\);[\s\S]*setActiveView\("quick-blend"\);[\s\S]*scheduleGenerationQueue\(\);/);
 
   assert.match(app, /quickBlend:\s*\{[\s\S]*feedback:\s*"",[\s\S]*feedbackKind:\s*"",[\s\S]*generationKeys:/);
@@ -837,6 +875,105 @@ test("quick blend mode implements upload pairing queue preview and cleanup contr
   assert.match(app, /if \(job\.mode === "quick-blend"\) \{[\s\S]*removeQuickBlendGenerationKey\(makeJobPreviewKey\(job\.id\)\);[\s\S]*setQuickBlendFeedback\(message, "error"\);/);
   assert.match(app, /async function deleteGalleryItem\(item\) \{[\s\S]*preserveQuickBlendGenerationItemForDelete\(item\),[\s\S]*state\.gallery = state\.gallery\.filter/);
   assert.match(app, /async function clearHistory\(\) \{[\s\S]*preserveQuickBlendGenerationItemForDelete\(item\),[\s\S]*state\.gallery = \[\];/);
+});
+
+test("quick blend generation thumbnails keep submitted pair order while completing out of order", async () => {
+  const quickBlendView = await readFile(quickBlendViewPath, "utf8");
+  const registerSource = extractFunctionBefore(
+    quickBlendView,
+    "registerQuickBlendGenerationKey",
+    "registerQuickBlendGenerationKeys",
+  );
+  const registerBatchSource = extractFunctionBefore(
+    quickBlendView,
+    "registerQuickBlendGenerationKeys",
+    "replaceQuickBlendGenerationKey",
+  );
+  const replaceSource = extractFunctionBefore(
+    quickBlendView,
+    "replaceQuickBlendGenerationKey",
+    "removeQuickBlendGenerationKey",
+  );
+  const state = { quickBlend: { generationKeys: ["file:older.png"] } };
+  const { registerQuickBlendGenerationKeys, replaceQuickBlendGenerationKey } = Function(
+    "state",
+    `${registerBatchSource}\n${registerSource}\n${replaceSource}\nreturn { registerQuickBlendGenerationKeys, replaceQuickBlendGenerationKey };`,
+  )(state);
+
+  registerQuickBlendGenerationKeys(["job:pair-1", "job:pair-2", "job:pair-3", "job:pair-4"]);
+
+  assert.deepEqual(state.quickBlend.generationKeys, [
+    "job:pair-1",
+    "job:pair-2",
+    "job:pair-3",
+    "job:pair-4",
+    "file:older.png",
+  ]);
+
+  replaceQuickBlendGenerationKey("job:pair-2", "file:pair-2.png");
+  replaceQuickBlendGenerationKey("job:pair-1", "file:pair-1.png");
+  replaceQuickBlendGenerationKey("job:pair-4", "file:pair-4.png");
+  replaceQuickBlendGenerationKey("job:pair-3", "file:pair-3.png");
+
+  assert.deepEqual(state.quickBlend.generationKeys, [
+    "file:pair-1.png",
+    "file:pair-2.png",
+    "file:pair-3.png",
+    "file:pair-4.png",
+    "file:older.png",
+  ]);
+});
+
+test("quick blend upload groups keep the first pending upload slot full size", async () => {
+  const styles = await readFile(stylesPath, "utf8");
+  const quickBlendView = await readFile(quickBlendViewPath, "utf8");
+
+  assert.match(
+    styles,
+    /\.quick-blend-upload-group:has\(\.quick-blend-grid\.hidden\) \.quick-blend-dropzone\s*\{[\s\S]*min-height:\s*clamp\(220px,\s*30vh,\s*320px\);/,
+  );
+  assert.match(styles, /\.quick-blend-grid\s*\{[\s\S]*min-height:\s*clamp\(220px,\s*30vh,\s*320px\);/);
+  assert.match(
+    quickBlendView,
+    /grid\.classList\.toggle\("hidden", files\.length === 0\);[\s\S]*if \(files\.length === 0\) \{[\s\S]*return;[\s\S]*\}/,
+  );
+  assert.match(quickBlendView, /syncReferenceDropzoneCompact\(refs\.quickBlendADropzone, state\.quickBlend\.aFiles\.length > 0\);/);
+  assert.match(quickBlendView, /syncReferenceDropzoneCompact\(refs\.quickBlendBDropzone, state\.quickBlend\.bFiles\.length > 0\);/);
+  assert.match(quickBlendView, /syncReferenceDropzoneCompact\(refs\.quickBlendCDropzone, state\.quickBlend\.cFiles\.length > 0\);/);
+  assert.match(quickBlendView, /syncReferenceDropzoneCompact\(refs\.quickBlendDDropzone, state\.quickBlend\.dFiles\.length > 0\);/);
+});
+
+test("quick blend mode supports optional C/D groups and layout metadata", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const app = await readFile(appPath, "utf8");
+  const quickBlendView = await readFile(quickBlendViewPath, "utf8");
+
+  assert.match(html, /id="quickBlendCInput"[^>]*type="file"[^>]*accept="image\/\*"[^>]*multiple/);
+  assert.match(html, /id="quickBlendDInput"[^>]*type="file"[^>]*accept="image\/\*"[^>]*multiple/);
+  assert.match(html, /id="quickBlendLayoutOrderInput"/);
+  assert.match(html, /id="quickBlendPlacementShapeInput"/);
+  assert.match(html, /<span>队形<\/span>[\s\S]*id="quickBlendPlacementShapeInput"[\s\S]*<option value="square">正方形排序<\/option>[\s\S]*<option value="rectangle">矩形排序<\/option>/);
+  assert.doesNotMatch(html, /<span>区域<\/span>[\s\S]*id="quickBlendPlacementShapeInput"/);
+  assert.match(app, /quickBlend:\s*\{[\s\S]*cFiles:\s*\[\],[\s\S]*dFiles:\s*\[\],[\s\S]*layoutOrder:\s*"vertical",[\s\S]*placementShape:\s*"square"/);
+
+  assert.match(quickBlendView, /quickBlendCInput:\s*document\.querySelector\("#quickBlendCInput"\)/);
+  assert.match(quickBlendView, /quickBlendDInput:\s*document\.querySelector\("#quickBlendDInput"\)/);
+  assert.match(quickBlendView, /quickBlendLayoutOrderInput:\s*document\.querySelector\("#quickBlendLayoutOrderInput"\)/);
+  assert.match(quickBlendView, /quickBlendPlacementShapeInput:\s*document\.querySelector\("#quickBlendPlacementShapeInput"\)/);
+  assert.match(quickBlendView, /function getEnabledQuickBlendOptionalGroups\(\) \{/);
+  assert.match(quickBlendView, /function getQuickBlendPairGroups\(\) \{/);
+  assert.match(quickBlendView, /function syncQuickBlendLayoutOptions\(\) \{/);
+  assert.match(quickBlendView, /quickBlendCImageName:\s*pair\.c\?\.file\?\.name \|\| ""/);
+  assert.match(quickBlendView, /quickBlendDImageName:\s*pair\.d\?\.file\?\.name \|\| ""/);
+  assert.match(quickBlendView, /quickBlendLayoutOrder:\s*state\.quickBlend\.layoutOrder/);
+  assert.match(quickBlendView, /quickBlendPlacementShape:\s*state\.quickBlend\.placementShape/);
+  assert.match(quickBlendView, /referenceFiles:\s*\[getQuickBlendGenerationFile\(pair\.a\), getQuickBlendGenerationFile\(pair\.b\), getQuickBlendGenerationFile\(pair\.c\), getQuickBlendGenerationFile\(pair\.d\)\]\.filter\(Boolean\)/);
+
+  assert.match(app, /formData\.set\("quickBlendCImageName", job\.quickBlendCImageName \|\| ""\);/);
+  assert.match(app, /formData\.set\("quickBlendDImageName", job\.quickBlendDImageName \|\| ""\);/);
+  assert.match(app, /formData\.set\("quickBlendLayoutOrder", job\.quickBlendLayoutOrder \|\| "vertical"\);/);
+  assert.match(app, /formData\.set\("quickBlendPlacementShape", job\.quickBlendPlacementShape \|\| "square"\);/);
+  assert.match(app, /job\.referenceFiles\.forEach\(\(file\) => formData\.append\("referenceImages", file\)\);/);
 });
 
 test("quick blend defaults to square output and reads shared generation controls safely", async () => {
@@ -925,7 +1062,7 @@ test("style transfer generation builds a preservation prompt and submits both im
     /startGeneration[\s\S]*if \(state\.studioMode === "style-transfer"\) \{[\s\S]*await ensureStyleTransferGenerationFilesReady\(\);[\s\S]*const job = createStyleTransferJob\(\);/,
   );
   assert.match(server, /buildGenerationReferenceImageLabels/);
-  assert.match(server, /getStyleTransferReferenceImageLabels\(generationMode,\s*styleTransferStylePreset,\s*referenceImages\)/);
+  assert.match(server, /getStyleTransferReferenceImageLabels\(generationMode,\s*styleTransferStylePreset,\s*referenceImages = \[\],\s*options = \{\}\)/);
 });
 
 test("reference analysis generation uploads prepared reference images", async () => {
@@ -1088,15 +1225,32 @@ test("studio panels start without redundant title blocks and merge parameters un
 });
 
 test("ratio picker renders every configured aspect ratio instead of a featured subset", async () => {
+  const html = await readFile(indexPath, "utf8");
   const app = await readFile(appPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
 
   assert.match(app, /function getVisibleRatios\(\) \{[\s\S]*return \[\.\.\.state\.aspectRatios\];[\s\S]*\}/);
+  assert.match(app, /const RATIO_ORIENTATION_LABELS = \{[\s\S]*landscape: "\\u6a2a\\u5411",[\s\S]*portrait: "\\u7ad6\\u5411",[\s\S]*square: "\\u65b9\\u5f62",[\s\S]*\};/);
+  assert.match(app, /function getRatioOrientationLabel\(orientation\) \{[\s\S]*return RATIO_ORIENTATION_LABELS\[orientation\] \|\| RATIO_ORIENTATION_LABELS\.square;[\s\S]*\}/);
   assert.doesNotMatch(app, /FEATURED_RATIOS/);
   assert.doesNotMatch(app, /state\.aspectRatios\.slice\(0,\s*5\)/);
   assert.doesNotMatch(app, /subtitle\.textContent = option\.label/);
   assert.doesNotMatch(app, /button\.appendChild\(subtitle\)/);
+  assert.match(html, /<summary class="field-heading adaptive-section-summary">[\s\S]*<span>参数设置<\/span>[\s\S]*<span class="ratio-orientation-summary" id="ratioOrientationSummary" aria-live="polite"><\/span>[\s\S]*<\/summary>/);
+  assert.match(app, /ratioOrientationSummary:\s*document\.querySelector\("#ratioOrientationSummary"\)/);
+  assert.match(app, /function syncRatioOrientationSummary\(\) \{[\s\S]*const ratioOption = getRatioOption\(refs\.ratioInput\.value \|\| DEFAULT_UI_RATIO\);[\s\S]*refs\.ratioOrientationSummary\.textContent = getRatioOrientationLabel\(ratioOption\?\.orientation\);[\s\S]*refs\.ratioOrientationSummary\.dataset\.orientation = ratioOption\?\.orientation \|\| "square";[\s\S]*\}/);
+  assert.match(app, /syncGenerationRatio\(value\) \{[\s\S]*renderRatioGrid\(\);[\s\S]*syncRatioOrientationSummary\(\);[\s\S]*renderReferenceAnalysisRatioGrid\(\);/);
+  assert.match(app, /const orientationLabel = getRatioOrientationLabel\(option\.orientation\);[\s\S]*button\.dataset\.orientation = option\.orientation \|\| "square";[\s\S]*button\.setAttribute\("aria-label", `\$\{option\.value\} \$\{orientationLabel\}`\);/);
+  assert.doesNotMatch(app, /orientationBubble/);
   assert.doesNotMatch(styles, /\.ratio-chip span\s*\{/);
+  assert.match(
+    styles,
+    /\.ratio-orientation-summary\s*\{[\s\S]*margin-left:\s*auto;[\s\S]*border-radius:\s*999px;[\s\S]*text-shadow:\s*0 0 12px rgba\(119,\s*255,\s*214,\s*0\.58\);/,
+  );
+  assert.match(styles, /\.field-heading \.ratio-orientation-summary\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*font-size:\s*11px;[\s\S]*font-weight:\s*800;/);
+  assert.match(styles, /\.ratio-orientation-summary\[data-orientation="landscape"\]\s*\{[\s\S]*color:\s*#a8ffdf;/);
+  assert.match(styles, /\.ratio-orientation-summary\[data-orientation="portrait"\]\s*\{[\s\S]*color:\s*#b8f7ff;/);
+  assert.doesNotMatch(styles, /\.ratio-chip-orientation/);
 });
 
 test("studio output format can be selected as png or jpg", async () => {
@@ -1173,10 +1327,11 @@ test("top navigation groups functions into an Apple-style global mega menu", asy
   assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.brand-cluster,[\s\S]*\.topbar-api-check,[\s\S]*\.topbar-ghost-actions,[\s\S]*\.nav-tab-note\s*\{[\s\S]*display:\s*none;/);
   assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.global-nav\s*\{[\s\S]*position:\s*static;[\s\S]*width:\s*auto;[\s\S]*transform:\s*none;/);
   assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.view-tabs\s*\{[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;/);
-  assert.match(styles, /--nav-tab-bg:\s*rgba\(15,\s*23,\s*42,\s*0\.84\);[\s\S]*--nav-tab-active:\s*#34c759;/);
-  assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.view-tab\s*\{[\s\S]*border:\s*1px solid var\(--nav-tab-border\);[\s\S]*border-radius:\s*8px;[\s\S]*background:\s*var\(--nav-tab-bg\);/);
-  assert.match(styles, /\.view-tab\.active\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--nav-tab-active\)\s*14%,\s*var\(--nav-tab-bg\)\);[\s\S]*color:\s*var\(--nav-tab-active\);/);
+  assert.match(styles, /--nav-tab-bg:\s*rgba\(15,\s*23,\s*42,\s*0\.84\);[\s\S]*--nav-tab-active:\s*#34c759;[\s\S]*--nav-tab-idle:\s*#6f7cff;/);
+  assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.view-tab\s*\{[\s\S]*min-width:\s*92px;[\s\S]*min-height:\s*30px;[\s\S]*border-radius:\s*10px;[\s\S]*var\(--nav-tab-idle\)\s*22%,\s*var\(--nav-tab-bg\)/);
+  assert.match(styles, /\.view-tab\.active\s*\{[\s\S]*var\(--nav-tab-active\)\s*28%,\s*var\(--nav-tab-bg\)[\s\S]*var\(--nav-tab-active\)\s*12%,\s*var\(--nav-tab-bg\)[\s\S]*color:\s*var\(--nav-tab-active\);/);
   assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.view-tab\.active::after\s*\{[\s\S]*background:\s*var\(--nav-tab-active\);/);
+  assert.match(styles, /html:not\(\[data-ui-layout="tablet"\]\):not\(\[data-ui-layout="mobile"\]\) \.view-tab::after\s*\{[\s\S]*height:\s*4px;[\s\S]*background:\s*var\(--nav-tab-idle\);[\s\S]*opacity:\s*0\.86;/);
   assert.match(styles, /--flyout-bg:\s*rgba\(8,\s*13,\s*26,\s*0\.96\);[\s\S]*--flyout-text:\s*var\(--text\);/);
   assert.match(styles, /html\[data-theme="light"\]\s*\{[\s\S]*--flyout-bg:\s*rgba\(251,\s*251,\s*253,\s*0\.96\);[\s\S]*--flyout-text:\s*var\(--text\);/);
   assert.match(styles, /\.nav-flyout\.mega-menu\s*\{[\s\S]*width:\s*min\(680px,\s*calc\(100vw - 32px\)\);[\s\S]*padding:\s*24px;/);
@@ -1403,13 +1558,17 @@ test("prompt agent analysis also keeps JSON prompts in prompt templates", async 
 test("prompt image analysis compresses large browser uploads before posting to Vercel", async () => {
   const app = await readFile(appPath, "utf8");
 
+  assert.match(app, /const PROMPT_AGENT_ANALYSIS_REASONING_EFFORT = "medium";/);
   assert.match(app, /PROMPT_ANALYSIS_IMAGE_MAX_EDGE = 1024/);
   assert.match(app, /PROMPT_ANALYSIS_IMAGE_COMPRESS_THRESHOLD_BYTES = 900 \* 1024/);
   assert.match(app, /async function preparePromptAnalysisImageFile\(file\) \{/);
   assert.match(app, /createImageBitmap\(file\)/);
   assert.match(app, /canvasToBlob\([\s\S]*"image\/jpeg"[\s\S]*PROMPT_ANALYSIS_IMAGE_JPEG_QUALITY/);
   assert.match(app, /new File\(\[blob\], makePromptAnalysisImageName\(file\.name\)/);
-  assert.match(app, /formData\.set\("image", await preparePromptAnalysisImageFile\(state\.promptAgent\.file\)\);/);
+  assert.match(
+    app,
+    /async function buildPromptAgentFormData\(\) \{[\s\S]*formData\.set\("image", await preparePromptAnalysisImageFile\(state\.promptAgent\.file\)\);[\s\S]*formData\.set\(\s*"reasoningEffort",\s*PROMPT_AGENT_ANALYSIS_REASONING_EFFORT,?\s*\);/,
+  );
   assert.match(app, /body: await buildPromptAgentFormData\(\),/);
 });
 
@@ -1627,6 +1786,8 @@ test("studio error surfaces compact long upstream HTTP failures before rendering
 
   assert.match(html, /<div class="error-banner hidden" id="errorBanner" role="alert" aria-live="assertive"><\/div>/);
   assert.match(app, /function compactErrorMessage\(message, fallbackLabel = "请求失败"\)/);
+  assert.match(app, /payload\?\.error\?\.message \|\| payload\?\.message \|\| payload\?\.detail/);
+  assert.match(app, /payload\?\.error\?\.param \|\| payload\?\.param/);
   assert.match(
     app,
     /function showError\(message\) \{\s*refs\.errorBanner\.classList\.remove\("hidden"\);\s*refs\.errorBanner\.textContent = compactErrorMessage\(message\);/,
@@ -1634,6 +1795,8 @@ test("studio error surfaces compact long upstream HTTP failures before rendering
   assert.match(app, /refs\.errorBanner\.textContent = compactErrorMessage\(message\);/);
   assert.match(app, /compactErrorMessage\(message, "生成请求失败"\)/);
   assert.match(app, /compactErrorMessage\(message, "图片分析请求失败"\)/);
+  assert.match(app, /JSON\.parse\(text\)/);
+  assert.match(app, /detail\.length > 220/);
   assert.match(app, /"error_code"\\s\*:\\s\*"\?\(\[A-Za-z0-9_\.-\]\+\)"\?/);
 });
 
@@ -2472,6 +2635,13 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /hasCreationReferenceDetailSignal/);
   assert.match(app, /hasCreationReferenceProductSubjectSignal/);
   assert.match(app, /shouldUseUsageRole/);
+  assert.match(creationReferenceAnalysisView, /export function getCreationReferenceAnalysisGroupedSubjectUnitCount\(entry = \{\}, skuSubjects = \[\]\) \{/);
+  assert.match(creationReferenceAnalysisView, /export function shouldDowngradeReferenceProductAnalysisRole\(entry = \{\}, subjectUnitCount = 0\) \{/);
+  assert.match(creationReferenceAnalysisView, /export function normalizeCreationReferenceAnalysisUnitCountNote\(note = "", subjectUnitCount = 0\) \{/);
+  assert.match(app, /getCreationReferenceAnalysisGroupedSubjectUnitCount/);
+  assert.match(app, /shouldDowngradeReferenceProductAnalysisRole/);
+  assert.match(app, /normalizeCreationReferenceAnalysisUnitCountNote/);
+  assert.match(app, /normalizeCreationReferenceAnalysisRecommendation\(entry = \{\}, index = 0, skuSubjects = \[\]\)/);
   assert.match(app, /setCreationSelectValue\(refs\.creationVisualLanguageInput,\s*analysis\.visualLanguage,\s*"classic-commercial"\)/);
   assert.match(creationReferenceAnalysisView, /export function syncCreationReferenceVisualLanguageButton/);
   assert.match(

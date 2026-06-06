@@ -265,7 +265,7 @@
                       rows="5"
                       placeholder="写下你要生成的画面，也可以先上传参考图说明修改方向。"
                     ></textarea>
-                    <span class="field-counter"><span id="promptCounter">0</span> / 1000</span>
+                    <span class="field-counter"><span id="promptCounter">0 字</span></span>
                   </label>
                 </div>
 
@@ -313,6 +313,7 @@
                     <div>
                       <span>参数设置</span>
                     </div>
+                    <span class="ratio-orientation-summary" id="ratioOrientationSummary" aria-live="polite"></span>
                   </summary>
                   <div class="ratio-grid" id="ratioGrid"></div>
                   <input id="ratioInput" name="ratio" type="hidden" value="1:1" />
@@ -697,6 +698,38 @@
                     </label>
                     <div class="reference-grid quick-blend-grid hidden" id="quickBlendBGrid"></div>
                   </div>
+                  <div class="field-group quick-blend-upload-group">
+                    <div class="field-heading">
+                      <div>
+                        <span>C 组图片</span>
+                      </div>
+                      <small id="quickBlendCCount">0 张</small>
+                    </div>
+                    <label class="reference-dropzone quick-blend-dropzone" id="quickBlendCDropzone">
+                      <input id="quickBlendCInput" name="quickBlendCImages" type="file" accept="image/*" multiple />
+                      <div class="reference-icon" aria-hidden="true"></div>
+                      <strong>上传 C 组</strong>
+                      <span>可选，数量需与 A/B 一致</span>
+                      <em>为空时不参与配对</em>
+                    </label>
+                    <div class="reference-grid quick-blend-grid hidden" id="quickBlendCGrid"></div>
+                  </div>
+                  <div class="field-group quick-blend-upload-group">
+                    <div class="field-heading">
+                      <div>
+                        <span>D 组图片</span>
+                      </div>
+                      <small id="quickBlendDCount">0 张</small>
+                    </div>
+                    <label class="reference-dropzone quick-blend-dropzone" id="quickBlendDDropzone">
+                      <input id="quickBlendDInput" name="quickBlendDImages" type="file" accept="image/*" multiple />
+                      <div class="reference-icon" aria-hidden="true"></div>
+                      <strong>上传 D 组</strong>
+                      <span>可选，数量需与 A/B 一致</span>
+                      <em>为空时不参与配对</em>
+                    </label>
+                    <div class="reference-grid quick-blend-grid hidden" id="quickBlendDGrid"></div>
+                  </div>
                 </div>
 
                 <section class="field-group quick-blend-pair-panel">
@@ -728,6 +761,20 @@
                       <label class="compact-field quick-blend-size-field">
                         <span>分辨率</span>
                         <select id="quickBlendSizeInput" name="quickBlendSize"></select>
+                      </label>
+                      <label class="compact-field quick-blend-layout-field">
+                        <span>排列</span>
+                        <select id="quickBlendLayoutOrderInput" name="quickBlendLayoutOrder">
+                          <option value="vertical">上下</option>
+                          <option value="horizontal">左右</option>
+                        </select>
+                      </label>
+                      <label class="compact-field quick-blend-shape-field">
+                        <span>队形</span>
+                        <select id="quickBlendPlacementShapeInput" name="quickBlendPlacementShape">
+                          <option value="square">正方形排序</option>
+                          <option value="rectangle">矩形排序</option>
+                        </select>
                       </label>
                     </div>
                   </div>
@@ -2403,7 +2450,7 @@
             <div>
               <h2>生成日志</h2>
             </div>
-            <span class="count-pill small" id="liveCount">0 / 5</span>
+            <span class="count-pill small" id="liveCount">0 / 15</span>
           </div>
 
           <div class="error-banner hidden" id="errorBanner" role="alert" aria-live="assertive"></div>

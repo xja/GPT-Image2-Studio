@@ -8,7 +8,7 @@ import { normalizeReferenceAnalysisLanguage, } from "/lib/reference-analysis-lan
 import { getPreviewLoadingShellTheme, shouldReusePreviewLoadingShell } from "/lib/preview-loading-shell.mjs";
 import { isGenerationRequestRetryMessage, } from "/lib/generation-request-retry.mjs";
 import { cancelQueuedGenerationJob, isQueuedGenerationJob, selectNextQueuedGenerationJobs } from "/lib/generation-queue.mjs?v=20260504-vercel-static-lib-1";
-import { sortGenerationActivityFeed, upsertGenerationActivityEntry } from "/lib/generation-activity-feed.mjs?v=20260504-vercel-static-lib-1";
+import { buildCanceledGenerationActivityDetail, buildGenerationTaskActivityDetail, buildGenerationTaskStatusText, sanitizeGenerationActivityDetail, sortGenerationActivityFeed, upsertGenerationActivityEntry } from "/lib/generation-activity-feed.mjs?v=20260504-vercel-static-lib-1";
 import { GENERATION_STREAM_EVENTS, recordFinalImageChunk } from "/lib/generation-stream-protocol.mjs";
 import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260519-topbar-reveal-2";
 import { ensureLazyViewModule, getMountedLazyViewModule } from "/lib/view-mode-loader.mjs?v=20260530-quick-blend-fix-2";
@@ -22,7 +22,7 @@ import { appendPptDeckDownloadLinks } from "/lib/ppt-record-links.mjs";
 import { buildCreationSkuSubjectsForPayload, normalizeCreationSkuBundleCountForPayload, normalizeCreationSkuSubjectForPayload } from "/lib/creation-sku-subjects.mjs";
 import { bindCreationReferenceDrag, reorderCreationReferenceFiles } from "/lib/creation-reference-drag.mjs";
 import { isCreationSubjectReferenceRole } from "/lib/creation-reference-roles.mjs";
-import { appendCreationVisualLanguageSuggestionCard, getCreationReferenceAnalysisVisualLanguageReason, getCreationReferenceAnalysisVisualLanguageSource, syncCreationReferenceVisualLanguageButton } from "/lib/creation-reference-analysis-view.mjs";
+import { appendCreationVisualLanguageSuggestionCard, getCreationReferenceAnalysisGroupedSubjectUnitCount, getCreationReferenceAnalysisVisualLanguageReason, getCreationReferenceAnalysisVisualLanguageSource, normalizeCreationReferenceAnalysisUnitCountNote, shouldDowngradeReferenceProductAnalysisRole, syncCreationReferenceVisualLanguageButton } from "/lib/creation-reference-analysis-view.mjs";
 import { createCreationListingController, getCreationRecordListingMetaLabel, getCreationListingSearchValues, normalizeCreationListingDraftForView, renderCreationListingDrafts } from "/lib/creation-listing-view.mjs";
 import { getCreationAutoRepairNotice, getCreationCompletionFeedback, getCreationIncompleteItems, shouldAutoRepairCreationSet } from "/lib/creation-auto-repair.mjs";
 import { canRepairCreationItem as canRepairCreationItemFromQueue, getCreationRepairButtonText as getCreationRepairButtonTextFromQueue, isCreationItemRepairActive as isCreationItemRepairActiveInQueue, queueCreationItemRepair as queueCreationItemRepairInState, removeQueuedCreationItemRepair, shiftNextQueuedCreationItemRepair } from "/lib/creation-item-repair-queue.mjs";
@@ -86,7 +86,7 @@ const REASONING_ESTIMATES = {
   xhigh: "210s+",
 };
 const DEFAULT_LIMITS = {
-  maxParallelTasksPerSession: 18,
+  maxParallelTasksPerSession: 15,
   maxReferenceImages: 6,
   maxCreationReferenceImages: 15,
   maxCreationStyleReferenceImages: 3,
@@ -116,10 +116,16 @@ const DEFAULT_ARTICLE_RECORD_COLUMN_PRESET = 4;
 const DEFAULT_ARTICLE_ILLUSTRATION_STYLE_PRESET = "realist-magazine";
 const DEFAULT_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
 const CREATION_REFERENCE_ANALYSIS_REASONING_EFFORT = "low";
+const PROMPT_AGENT_ANALYSIS_REASONING_EFFORT = "medium";
 const REFERENCE_ORCHESTRATION_REASONING_EFFORT = "low";
 const DEFAULT_UI_RATIO = "1:1";
 const DEFAULT_QUICK_BLEND_RATIO = "1:1";
 const DEFAULT_PORTRAIT_RATIO = "4:5";
+const RATIO_ORIENTATION_LABELS = {
+  landscape: "\u6a2a\u5411",
+  portrait: "\u7ad6\u5411",
+  square: "\u65b9\u5f62",
+};
 const PORTRAIT_ANALYSIS_FEEDBACK_MIN_MS = 520;
 const PORTRAIT_STYLE_LABELS = {
   "business-profile": "商务形象",
@@ -319,7 +325,7 @@ const PROMPT_ANALYSIS_IMAGE_JPEG_QUALITY = 0.82;
 const GENERATION_REFERENCE_IMAGE_MAX_EDGE = 1024;
 const GENERATION_REFERENCE_IMAGE_COMPRESS_THRESHOLD_BYTES = 900 * 1024;
 const GENERATION_REFERENCE_IMAGE_JPEG_QUALITY = 0.82;
-const GENERATION_TASK_POLL_INTERVAL_MS = 2500;
+const GENERATION_TASK_POLL_INTERVAL_MS = 10000;
 const GENERATION_TASK_STATUS_LABELS = { running: "生成中", completed: "生成完成", error: "错误" };
 const GENERATION_TASK_TIMELINE_STATUS = { running: "active", completed: "done", error: "error" };
 const GALLERY_WINDOW_LABELS = { today: "今天", recent: "近 7 天", older: "更早" };
@@ -515,6 +521,8 @@ const state = {
   quickBlend: {
     aFiles: [],
     bFiles: [],
+    cFiles: [], dFiles: [],
+    layoutOrder: "vertical", placementShape: "square",
     feedback: "",
     feedbackKind: "",
     generationKeys: [],
@@ -880,6 +888,7 @@ const refs = {
   promptTemplateTextInput: document.querySelector("#promptTemplateTextInput"),
   ratioGrid: document.querySelector("#ratioGrid"),
   ratioInput: document.querySelector("#ratioInput"),
+  ratioOrientationSummary: document.querySelector("#ratioOrientationSummary"),
   reasoningEffortInput: document.querySelector("#reasoningEffortInput"),
   recentEmpty: document.querySelector("#recentEmpty"),
   recentList: document.querySelector("#recentList"),
@@ -1345,15 +1354,6 @@ function formatFilmstripSizeLabel(item) {
   return formatCompactSizeLabel(item?.size);
 }
 
-function compactTimelineText(value, fallback = "未命名任务") {
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return fallback;
-  }
-
-  return raw.length > 34 ? `${raw.slice(0, 34)}...` : raw;
-}
-
 function normalizeGenerationTaskStatus(status) {
   return status === "completed" || status === "error" ? status : "running";
 }
@@ -1361,7 +1361,7 @@ function normalizeGenerationTaskStatus(status) {
 function normalizeActivityEntry(entry) {
   const key = String(entry?.key || "").trim();
   const title = String(entry?.title || "").trim();
-  const detail = String(entry?.detail || "");
+  const detail = sanitizeGenerationActivityDetail(entry?.detail);
   if (!key || !title) {
     return null;
   }
@@ -1596,6 +1596,20 @@ function getVisibleRatios() {
   return [...state.aspectRatios];
 }
 
+function getRatioOrientationLabel(orientation) {
+  return RATIO_ORIENTATION_LABELS[orientation] || RATIO_ORIENTATION_LABELS.square;
+}
+
+function syncRatioOrientationSummary() {
+  if (!refs.ratioOrientationSummary) {
+    return;
+  }
+
+  const ratioOption = getRatioOption(refs.ratioInput.value || DEFAULT_UI_RATIO);
+  refs.ratioOrientationSummary.textContent = getRatioOrientationLabel(ratioOption?.orientation);
+  refs.ratioOrientationSummary.dataset.orientation = ratioOption?.orientation || "square";
+}
+
 function normalizeUiTheme(theme) {
   return theme === "light" ? "light" : "dark";
 }
@@ -1805,7 +1819,7 @@ function compactErrorMessage(message, fallbackLabel = "请求失败") {
     label = "生成请求失败";
   }
 
-  return `${label}：${[httpStatus ? `HTTP ${httpStatus}` : "", errorCode ? `错误码 ${errorCode}` : ""]
+  return `${label}：${[httpStatus ? `HTTP ${httpStatus}` : "", errorCode ? `错误码 ${errorCode}` : "", Number(httpStatus) >= 500 || !errorCode ? "" : (() => { const text = String(raw || "").trim(); const codeMarker = `错误码 ${errorCode}`; let payload = null; if (text.startsWith("{")) { try { payload = JSON.parse(text); } catch {} } const messageText = String(payload?.error?.message || payload?.message || payload?.detail || (text.includes(codeMarker) ? text.slice(text.indexOf(codeMarker) + codeMarker.length).replace(/^[，,：:\s]+/, "") : "")).replace(/\s+/g, " ").trim(); const param = String(payload?.error?.param || payload?.param || "").replace(/\s+/g, " ").trim(); const detail = messageText ? (param ? `${messageText}（参数 ${param}）` : messageText) : param ? `参数 ${param}` : ""; return detail.length > 220 ? `${detail.slice(0, 217)}...` : detail; })()]
     .filter(Boolean)
     .join("，")}`;
 }
@@ -2135,7 +2149,7 @@ async function setActiveView(view) {
 }
 
 function updatePromptCounter() {
-  refs.promptCounter.textContent = String(refs.promptInput.value.length);
+  refs.promptCounter.textContent = `${refs.promptInput.value.length} 字`;
 }
 
 function getQueuedJobCount() {
@@ -3003,7 +3017,7 @@ function replaceQuickBlendGenerationKey(oldKey, newKey) {
     return;
   }
 
-  state.quickBlend.generationKeys = [nextKey, ...keys.filter((entry) => entry !== currentKey)];
+  state.quickBlend.generationKeys = [...keys.filter((entry) => entry !== currentKey), nextKey];
 }
 
 function removeQuickBlendGenerationKey(key) {
@@ -3552,7 +3566,7 @@ function createImageDecompositionJob() {
     isRunning: false,
     started: false,
     statusStage: "queued",
-    statusText: "等待排队",
+    statusText: buildGenerationTaskStatusText({ statusStage: "queued", statusText: "等待排队" }),
     previewUrl: "",
   };
 }
@@ -4549,6 +4563,7 @@ function syncGenerationRatio(value) {
     refs.referenceAnalysisRatioInput.value = nextValue;
   }
   renderRatioGrid();
+  syncRatioOrientationSummary();
   renderReferenceAnalysisRatioGrid();
   renderSizeOptions();
   renderReferenceAnalysisSizeOptions();
@@ -4970,9 +4985,12 @@ function renderRatioGrid(ratioGrid = refs.ratioGrid, ratioInput = refs.ratioInpu
   ratioGrid.innerHTML = "";
 
   getVisibleRatios().forEach((option) => {
+    const orientationLabel = getRatioOrientationLabel(option.orientation);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "ratio-chip";
+    button.dataset.orientation = option.orientation || "square";
+    button.setAttribute("aria-label", `${option.value} ${orientationLabel}`);
     if (ratioInput.value === option.value) {
       button.classList.add("active");
     }
@@ -5043,6 +5061,7 @@ function syncConfigUi(config) {
   }
 
   renderRatioGrid();
+  syncRatioOrientationSummary();
   renderReferenceAnalysisRatioGrid();
   renderImageDecompositionRatioGrid();
   renderReasoningOptions();
@@ -5183,7 +5202,7 @@ function recordActivity({ key, title, detail, ratio, size, status, at }) {
   state.activityFeed = upsertGenerationActivityEntry(state.activityFeed, {
     key,
     title,
-    detail,
+    detail: sanitizeGenerationActivityDetail(detail),
     ratio: nextRatio || existing?.ratio || "",
     size: nextSize || existing?.size || "",
     status,
@@ -5210,7 +5229,7 @@ function recordJobQueued(job) {
   recordActivity({
     key: `${job.id}:task`,
     title: GENERATION_TASK_STATUS_LABELS.running,
-    detail: "等待资源分配",
+    detail: buildGenerationTaskActivityDetail({ statusStage: "queued", statusText: "等待资源分配" }),
     ratio: job.ratio,
     size: job.size,
     status: "active",
@@ -5218,63 +5237,38 @@ function recordJobQueued(job) {
   });
 }
 
+function recordJobTaskActivity(jobId, { title = GENERATION_TASK_STATUS_LABELS.running, detail, status = "active" }) {
+  recordActivity({ key: `${jobId}:task`, title, detail, ratio: getJobActivityRatio(jobId), size: getJobActivitySize(jobId), status, at: nowIso() });
+}
+
 function handleActivityStatus(jobId, stage, message) {
-  recordActivity({
-    key: `${jobId}:task`,
-    title: GENERATION_TASK_STATUS_LABELS.running,
-    detail: message || (stage === "saving" ? "正在保存到本地图片目录" : "正在生成图片"),
-    ratio: getJobActivityRatio(jobId),
-    size: getJobActivitySize(jobId),
-    status: "active",
-    at: nowIso(),
+  recordJobTaskActivity(jobId, {
+    detail: buildGenerationTaskActivityDetail({ statusStage: stage, statusText: message, fallback: stage === "saving" ? "正在保存到本地图片目录" : "正在生成图片" }),
   });
 }
 
 function handleActivityPartial(jobId) {
-  recordActivity({
-    key: `${jobId}:task`,
-    title: GENERATION_TASK_STATUS_LABELS.running,
-    detail: "已收到中途预览",
-    ratio: getJobActivityRatio(jobId),
-    size: getJobActivitySize(jobId),
-    status: "active",
-    at: nowIso(),
-  });
+  recordJobTaskActivity(jobId, { detail: "已收到中途预览" });
 }
 
 function handleActivityFinal(jobId) {
-  recordActivity({
-    key: `${jobId}:task`,
-    title: GENERATION_TASK_STATUS_LABELS.running,
-    detail: "正在写入本地 output",
-    ratio: getJobActivityRatio(jobId),
-    size: getJobActivitySize(jobId),
-    status: "active",
-    at: nowIso(),
-  });
+  recordJobTaskActivity(jobId, { detail: "正在写入本地 output" });
 }
 
 function handleActivitySuccess(jobId) {
-  recordActivity({
-    key: `${jobId}:task`,
+  recordJobTaskActivity(jobId, {
     title: GENERATION_TASK_STATUS_LABELS.completed,
     detail: "图像已成功生成",
-    ratio: getJobActivityRatio(jobId),
-    size: getJobActivitySize(jobId),
     status: "done",
-    at: nowIso(),
   });
 }
 
 function handleActivityFailure(jobId, message) {
-  recordActivity({
-    key: `${jobId}:task`,
+  const detail = compactErrorMessage(message, "生成请求失败");
+  recordJobTaskActivity(jobId, {
     title: GENERATION_TASK_STATUS_LABELS.error,
-    detail: compactErrorMessage(message, "生成请求失败"),
-    ratio: getJobActivityRatio(jobId),
-    size: getJobActivitySize(jobId),
+    detail: buildGenerationTaskActivityDetail({ status: "error", statusStage: "error", statusText: detail, errorMessage: detail }),
     status: "error",
-    at: nowIso(),
   });
 }
 
@@ -5282,7 +5276,7 @@ function handleActivityCanceled(job) {
   recordActivity({
     key: `${job.id}:task`,
     title: "已取消",
-    detail: `已取消排队任务 · ${compactTimelineText(job.prompt)}`,
+    detail: buildCanceledGenerationActivityDetail(job),
     ratio: job.ratio,
     size: job.size,
     status: "pending",
@@ -5292,12 +5286,11 @@ function handleActivityCanceled(job) {
 
 function recordGenerationTaskActivity(task) {
   const status = normalizeGenerationTaskStatus(task?.status);
-  const statusText =
+  const rawStatusText =
     status === "error"
       ? compactErrorMessage(task?.errorMessage || task?.statusText, "生成请求失败")
       : String(task?.statusText || "").trim();
-  const promptText = compactTimelineText(task?.prompt);
-  const detail = statusText ? `${statusText} · ${promptText}` : promptText;
+  const detail = buildGenerationTaskActivityDetail({ status, statusStage: task?.statusStage || status, statusText: rawStatusText, errorMessage: task?.errorMessage, prompt: task?.prompt });
 
   recordActivity({
     key: `${task.id}:task`,
@@ -10887,20 +10880,22 @@ const hasCreationReferenceDetailSignal = (value) => /detail|close.?up|callout|fe
 const hasCreationReferenceProductSubjectSignal = (value) => /product\s*(subject|photo|main|hero)|hero\s*product|sku\s*subject|sellable\s*(product|sku|subject)|商品主体|主体图|主图|白底主图|正面主体|可售|色款|配色|整体轮廓/iu.test(String(value || "").trim().toLowerCase()), hasCreationReferencePackageSignal = (value) => /package|packaging|box|bundle|included\s*(items?|contents?)?|contents?|accessor(?:y|ies)|in\s+the\s+box|what'?s\s+included|包装|包装清单|清单|套装|配件|盒|到手|收到|内含物/iu.test(String(value || "").trim().toLowerCase()), hasCreationReferencePackageContentSignal = (value) => /included\s*(items?|contents?)?|contents?|accessor(?:y|ies)|in\s+the\s+box|comes?\s+with|what'?s\s+included|包装清单|清单包含|包装内容|到手内容|实际收到|用户实际收到|配件清单|套装内容|内含物|标配清单|附带配件|随附配件|(?:includes?|included|comes?\s+with|包含|内含|含有|附带|随附|标配)[^。.;；\n]{0,40}(?:usb|cables?|charging\s*cable|charger|manual|accessor(?:y|ies)|propeller|eva|float|充电线|数据线|线缆|螺旋桨|叶片|漂浮|浮漂|说明书|配件|收纳袋|备用)/iu.test(String(value || "").trim().toLowerCase());
 function inferCreationReferenceAnalysisRole(entry = {}) { const explicitRole = String(entry.role || "").trim(), hasExplicitRole = CREATION_REFERENCE_ROLE_OPTIONS.some((option) => option.value === explicitRole), text = [entry.roleLabel, entry.title, entry.note, entry.description, entry.reason, entry.summary, entry.filename].map((item) => String(item || "").trim()).filter(Boolean).join(" "), evidenceText = [entry.title, entry.note, entry.description, entry.reason, entry.summary, entry.filename].map((item) => String(item || "").trim()).filter(Boolean).join(" "); const shouldUsePackageRole = (hasCreationReferencePackageContentSignal(evidenceText) && (!hasExplicitRole || explicitRole === "other" || explicitRole === "product" || explicitRole === "dimensions")) || (hasCreationReferencePackageSignal(evidenceText) && (!hasExplicitRole || explicitRole === "other" || explicitRole === "product")); const shouldUseDimensionRole = hasCreationReferenceDimensionSignal(text) && (!hasExplicitRole || explicitRole === "other" || (explicitRole === "product" && hasCreationReferenceDimensionSpecIntent(text))); const shouldUseUsageRole = hasCreationReferenceUsageInstructionSignal(text) && (!hasExplicitRole || explicitRole === "other" || explicitRole === "product" || explicitRole === "scene"); const shouldUseDetailRole = hasCreationReferenceDetailSignal(evidenceText) && (!hasExplicitRole || explicitRole === "other" || (explicitRole === "product" && !hasCreationReferenceProductSubjectSignal(evidenceText))); return shouldUsePackageRole ? "package" : shouldUseDimensionRole ? "dimensions" : shouldUseUsageRole ? "usage" : shouldUseDetailRole ? "material" : hasExplicitRole ? explicitRole : "product"; }
 
-function normalizeCreationReferenceAnalysisRecommendation(entry = {}, index = 0) {
+function normalizeCreationReferenceAnalysisRecommendation(entry = {}, index = 0, skuSubjects = []) {
   const filename = String(state.creationReferenceFiles[index]?.file?.name || entry.filename || `reference-image-${index + 1}`).trim();
   if (!filename) return null;
-  const role = inferCreationReferenceAnalysisRole(entry);
+  const subjectUnitCount = getCreationReferenceAnalysisGroupedSubjectUnitCount({ ...entry, filename, index: Number(entry.index) || index + 1 }, skuSubjects);
+  const role = shouldDowngradeReferenceProductAnalysisRole(entry, subjectUnitCount) ? "product" : inferCreationReferenceAnalysisRole(entry);
   const suppliedRole = String(entry.role || "").trim();
-  return { index: Number(entry.index) || index + 1, filename, role, roleLabel: String(role !== suppliedRole ? getCreationReferenceRoleLabel(role) : entry.roleLabel || getCreationReferenceRoleLabel(role)), note: String(entry.note || "").trim() };
+  return { index: Number(entry.index) || index + 1, filename, role, roleLabel: String(role !== suppliedRole ? getCreationReferenceRoleLabel(role) : entry.roleLabel || getCreationReferenceRoleLabel(role)), note: normalizeCreationReferenceAnalysisUnitCountNote(entry.note, subjectUnitCount) };
 }
 
 function normalizeCreationReferenceAnalysisPayload(payload = {}) {
   const analysis = payload.analysis || payload;
   const rawRecommendations = Array.isArray(analysis?.recommendations) ? analysis.recommendations : Array.isArray(analysis?.reference_roles) ? analysis.reference_roles : [];
-  const recommendations = rawRecommendations.length > 0 ? rawRecommendations.map((entry, index) => normalizeCreationReferenceAnalysisRecommendation(entry, index)).filter(Boolean)
-    : [];
   const rawSkuSubjects = Array.isArray(analysis?.skuSubjects) ? analysis.skuSubjects : Array.isArray(analysis?.sku_subjects) ? analysis.sku_subjects : [];
+  const skuSubjects = rawSkuSubjects.map((entry, index) => normalizeCreationSkuSubjectForPayload(entry, index)).filter(Boolean);
+  const recommendations = rawRecommendations.length > 0 ? rawRecommendations.map((entry, index) => normalizeCreationReferenceAnalysisRecommendation(entry, index, skuSubjects)).filter(Boolean)
+    : [];
   const visualLanguage = normalizeCreationVisualLanguage(getCreationReferenceAnalysisVisualLanguageSource(analysis));
 
   return {
@@ -10911,7 +10906,7 @@ function normalizeCreationReferenceAnalysisPayload(payload = {}) {
     visualLanguageLabel: formatCreationVisualLanguageLabel(visualLanguage),
     visualLanguageReason: getCreationReferenceAnalysisVisualLanguageReason(analysis),
     recommendations,
-    skuSubjects: rawSkuSubjects.map((entry, index) => normalizeCreationSkuSubjectForPayload(entry, index)).filter(Boolean),
+    skuSubjects,
     risks: Array.isArray(analysis?.risks) ? analysis.risks.map((item) => String(item).trim()).filter(Boolean) : [],
   };
 }
@@ -13781,7 +13776,7 @@ function createJob() {
     isRunning: false,
     started: false,
     statusStage: "queued",
-    statusText: "等待并发槽位",
+    statusText: buildGenerationTaskStatusText({ statusStage: "queued", statusText: "等待并发槽位" }),
     previewUrl: "",
   };
 }
@@ -13822,7 +13817,7 @@ function createStyleTransferJob() {
     isRunning: false,
     started: false,
     statusStage: "queued",
-    statusText: "等待并发槽位",
+    statusText: buildGenerationTaskStatusText({ statusStage: "queued", statusText: "等待并发槽位" }),
     previewUrl: "",
   };
 }
@@ -13871,7 +13866,7 @@ function createReferenceAnalysisJob() {
     isRunning: false,
     started: false,
     statusStage: "queued",
-    statusText: "等待并发槽位",
+    statusText: buildGenerationTaskStatusText({ statusStage: "queued", statusText: "等待并发槽位" }),
     previewUrl: "",
   };
 }
@@ -13960,6 +13955,7 @@ function normalizeGenerationTaskSnapshot(task) {
   }
 
   const status = normalizeGenerationTaskStatus(task.status);
+  const statusStage = String(task.statusStage || status);
   const mode = String(task.mode || task.generationMode || "").trim();
   return {
     ...task,
@@ -13970,12 +13966,12 @@ function normalizeGenerationTaskSnapshot(task) {
     createdAt: String(task.createdAt || nowIso()),
     updatedAt: String(task.updatedAt || task.createdAt || nowIso()),
     prompt: String(task.prompt || ""),
-    statusText: String(task.statusText || ""),
     errorMessage: String(task.errorMessage || ""),
+    statusText: buildGenerationTaskStatusText({ status, statusStage: task.statusStage || status, statusText: task.statusText, errorMessage: task.errorMessage }),
     referenceFiles: [],
     started: status === "running",
     isRunning: status === "running",
-    statusStage: String(task.statusStage || status),
+    statusStage,
   };
 }
 
@@ -14277,12 +14273,11 @@ function appendQuickBlendReferencesToFormData(formData, job) {
   formData.set("quickBlendPairIndex", job.quickBlendPairIndex);
   formData.set("quickBlendAImageName", job.quickBlendAImageName);
   formData.set("quickBlendBImageName", job.quickBlendBImageName);
-  if (job.quickBlendAFile) {
-    formData.append("referenceImages", job.quickBlendAFile);
-  }
-  if (job.quickBlendBFile) {
-    formData.append("referenceImages", job.quickBlendBFile);
-  }
+  formData.set("quickBlendCImageName", job.quickBlendCImageName || "");
+  formData.set("quickBlendDImageName", job.quickBlendDImageName || "");
+  formData.set("quickBlendLayoutOrder", job.quickBlendLayoutOrder || "vertical");
+  formData.set("quickBlendPlacementShape", job.quickBlendPlacementShape || "square");
+  job.referenceFiles.forEach((file) => formData.append("referenceImages", file));
 }
 
 function appendImageDecompositionReferencesToFormData(formData, job) {
@@ -14323,10 +14318,7 @@ function applyPromptAgentFile(fileList) {
 async function buildPromptAgentFormData() {
   const formData = new FormData();
   formData.set("image", await preparePromptAnalysisImageFile(state.promptAgent.file));
-  formData.set(
-    "reasoningEffort",
-    refs.reasoningEffortInput.value || state.config?.defaults?.reasoningEffort || "xhigh",
-  );
+  formData.set("reasoningEffort", PROMPT_AGENT_ANALYSIS_REASONING_EFFORT);
   appendBrowserConfigToFormData(formData);
   return formData;
 }
@@ -14555,16 +14547,17 @@ async function runGeneration(job) {
 
     await consumeSse(response.body, async (eventName, payload) => {
       if (eventName === GENERATION_STREAM_EVENTS.STATUS) {
+        const statusText = buildGenerationTaskStatusText({ status: "running", statusStage: payload.stage, statusText: payload.message });
         updateJob(job.id, {
           statusStage: payload.stage,
-          statusText: payload.message,
+          statusText,
         });
-        handleActivityStatus(job.id, payload.stage, payload.message);
+        handleActivityStatus(job.id, payload.stage, statusText);
         if (job.mode === "image-decomposition") {
-          setImageDecompositionFeedback(payload.message || "图片拆解生成中...", "busy");
+          setImageDecompositionFeedback(statusText || "图片拆解生成中...", "busy");
         }
         if (job.mode === "quick-blend") {
-          setQuickBlendFeedback(payload.message || "快速溶图生成中...", "busy");
+          setQuickBlendFeedback(statusText || "快速溶图生成中...", "busy");
         }
         renderAll();
         return;
@@ -14655,14 +14648,15 @@ async function runGeneration(job) {
       if (eventName === GENERATION_STREAM_EVENTS.QUEUED) {
         queuedForPolling = true;
         const task = payload.task || {};
+        const statusText = buildGenerationTaskStatusText({ status: "running", statusStage: task.statusStage || "queued", statusText: task.statusText || "已提交到服务器队列，等待后台生成" });
         updateJob(job.id, {
           status: "running",
           statusStage: task.statusStage || "queued",
-          statusText: task.statusText || "已提交到服务器队列，等待后台生成",
+          statusText,
         });
-        handleActivityStatus(job.id, "queued", task.statusText || "已提交到服务器队列，等待后台生成");
+        handleActivityStatus(job.id, "queued", statusText);
         if (job.mode === "quick-blend") {
-          setQuickBlendFeedback(task.statusText || "快速溶图已提交到后台队列。", "busy");
+          setQuickBlendFeedback(statusText || "快速溶图已提交到后台队列。", "busy");
         }
         scheduleGenerationTaskPolling();
         renderAll();
@@ -16165,6 +16159,7 @@ async function bootstrap() {
   syncGalleryLayoutMode();
   updatePromptCounter();
   renderRatioGrid();
+  syncRatioOrientationSummary();
   renderReasoningOptions();
   renderSizeOptions();
   renderReferenceAnalysisRatioGrid();

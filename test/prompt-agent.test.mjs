@@ -21,16 +21,32 @@ import { MAX_CREATION_REFERENCE_IMAGES } from "../lib/studio-constants.mjs";
 const serverPath = new URL("../server.mjs", import.meta.url);
 const cloudflareWorkerPath = new URL("../cloudflare-pages-worker.mjs", import.meta.url);
 
-test("server runtimes default reference orchestration analysis to low reasoning effort", async () => {
+test("server runtimes default prompt-agent image analysis to medium reasoning effort", async () => {
   const server = await readFile(serverPath, "utf8");
   const worker = await readFile(cloudflareWorkerPath, "utf8");
 
   for (const source of [server, worker]) {
-    assert.match(source, /REFERENCE_ORCHESTRATION_MODE/);
+    assert.match(source, /const PROMPT_AGENT_ANALYSIS_REASONING_EFFORT = "medium";/);
+    assert.match(
+      source,
+      /mode === REFERENCE_ORCHESTRATION_MODE[\s\S]*\? REFERENCE_ORCHESTRATION_REASONING_EFFORT[\s\S]*: PROMPT_AGENT_ANALYSIS_REASONING_EFFORT/,
+    );
+    assert.doesNotMatch(
+      source,
+      /mode === REFERENCE_ORCHESTRATION_MODE[\s\S]*\? REFERENCE_ORCHESTRATION_REASONING_EFFORT[\s\S]*: config\.defaults\?\.reasoningEffort \|\| DEFAULT_REASONING_EFFORT/,
+    );
+  }
+});
+
+test("server runtimes keep reference orchestration analysis on low reasoning effort", async () => {
+  const server = await readFile(serverPath, "utf8");
+  const worker = await readFile(cloudflareWorkerPath, "utf8");
+
+  for (const source of [server, worker]) {
     assert.match(source, /const REFERENCE_ORCHESTRATION_REASONING_EFFORT = "low";/);
     assert.match(
       source,
-      /mode === REFERENCE_ORCHESTRATION_MODE[\s\S]*\? REFERENCE_ORCHESTRATION_REASONING_EFFORT[\s\S]*: config\.defaults\?\.reasoningEffort \|\| DEFAULT_REASONING_EFFORT/,
+      /mode === REFERENCE_ORCHESTRATION_MODE[\s\S]*\? REFERENCE_ORCHESTRATION_REASONING_EFFORT[\s\S]*: PROMPT_AGENT_ANALYSIS_REASONING_EFFORT/,
     );
   }
 });
@@ -401,6 +417,8 @@ test("prompt agent request can identify ecommerce creation reference roles", () 
   assert.match(input[0].content[0].text, /subject_unit_count/i);
   assert.match(input[0].content[0].text, /keep those units together as one sku_subject/i);
   assert.match(input[0].content[0].text, /do not split them into multiple sku_subjects/i);
+  assert.match(input[0].content[0].text, /ordinary white-background SKU\/colorway images[\s\S]*role=product[\s\S]*not role=reference-product/i);
+  assert.match(input[0].content[0].text, /reference_roles\[\]\.note[\s\S]*same exact visible product unit count/i);
   assert.match(requestBody.text.format.schema.properties.reference_roles.items.properties.note.description, /13cm/);
   assert.match(requestBody.text.format.schema.properties.sku_subjects.items.properties.note.description, /visible product unit count/i);
   assert.match(
@@ -514,6 +532,46 @@ test("prompt agent normalizes creation SKU subject groups", () => {
       ["red", ["red.png"], [3], 1],
     ],
   );
+});
+
+test("prompt agent lifts grouped SKU subject unit count from note evidence", () => {
+  const result = extractPromptAgentJson({
+    output: [
+      {
+        content: [
+          {
+            type: "output_text",
+            text: JSON.stringify({
+              summary: "One white-background SKU reference shows a paired lure subject.",
+              category_hint: "Fishing lure",
+              category_path: "Sports > Fishing > Lures > Hard bait",
+              reference_roles: [
+                {
+                  index: 1,
+                  filename: "orange-silver-pair.png",
+                  role: "product",
+                  note: "White-background SKU product subject.",
+                },
+              ],
+              sku_subjects: [
+                {
+                  id: "orange-silver-pair",
+                  title: "Orange and silver lure pair",
+                  reference_indexes: [1],
+                  filenames: ["orange-silver-pair.png"],
+                  subject_unit_count: 1,
+                  note: "This SKU reference shows two complete visible lure bodies: orange top and silver bottom.",
+                },
+              ],
+              risks: [],
+            }),
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(result.sku_subjects[0].subject_unit_count, 2);
 });
 
 test("prompt agent normalizes creation reference visual language recommendation", () => {

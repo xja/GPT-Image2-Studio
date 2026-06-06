@@ -18,6 +18,7 @@ import {
   QUICK_BLEND_MODE,
   buildQuickBlendFilenameToken,
   buildQuickBlendPrompt,
+  buildQuickBlendReferenceLabels,
 } from "./lib/quick-blend-prompt.mjs";
 import { buildGenerationReferenceImageLabels } from "./lib/generation-reference-labels.mjs";
 import {
@@ -91,7 +92,7 @@ import { buildUnsupportedRuntimeCapabilityPayload } from "./lib/api-contract.mjs
 const DEFAULT_RESPONSES_MODEL = "gpt-5.5";
 const PPT_SLIDE_SIZE = "2048x1152";
 const PPT_SLIDE_FORMAT = "png";
-const UPSTREAM_STATUS_HEARTBEAT_MS = 15000;
+const UPSTREAM_STATUS_HEARTBEAT_MS = 59000;
 const PPTX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const PPT_SOURCE_EXTENSIONS = new Set([".pdf", ".docx", ".pptx", ".txt", ".md", ".csv"]);
 const SERVER_IMAGE_ROUTE_PREFIX = "/api/images/";
@@ -99,7 +100,8 @@ const SERVER_IMAGE_STORAGE_PREFIX = "images/";
 const GENERATION_TASK_STORAGE_PREFIX = "generation-tasks/";
 const GENERATION_REQUEST_STORAGE_PREFIX = "generation-requests/";
 const SERVER_IMAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
-const QUICK_BLEND_REFERENCE_COUNT_MESSAGE = "快速溶图模式每个任务必须且只支持两张参考图：一张 A 图和一张 B 图。";
+const QUICK_BLEND_REFERENCE_COUNT_MESSAGE =
+  "Quick Blend mode requires 2 to 4 reference images: A and B are required; C and D are optional.";
 
 function buildPortraitReferenceImageLabels(personReferenceImages = [], actionReferenceImages = [], accessoryReferenceImages = []) {
   const personCount = personReferenceImages.length;
@@ -126,6 +128,7 @@ const GENERATION_QUEUE_MISSING_MESSAGE = "服务器异步生成队列未配置 G
 const DEFAULT_CREATION_LISTING_REASONING_EFFORT = "medium";
 const CREATION_REFERENCE_ANALYSIS_REASONING_EFFORT = "low";
 const PORTRAIT_REFERENCE_ANALYSIS_REASONING_EFFORT = "low";
+const PROMPT_AGENT_ANALYSIS_REASONING_EFFORT = "medium";
 const REFERENCE_ORCHESTRATION_REASONING_EFFORT = "low";
 const DEFAULT_CONFIG = {
   baseUrl: DEFAULT_BASE_URL,
@@ -190,6 +193,18 @@ function getStyleTransferReferenceImageLabels(generationMode, styleTransferStyle
   return buildGenerationReferenceImageLabels(generationMode, styleTransferStylePreset, referenceImages);
 }
 
+function getGenerationReferenceImageLabels(
+  generationMode,
+  styleTransferStylePreset,
+  referenceImages = [],
+  quickBlendGroups = [],
+) {
+  if (generationMode === QUICK_BLEND_MODE) {
+    return buildQuickBlendReferenceLabels({ groups: quickBlendGroups });
+  }
+  return getStyleTransferReferenceImageLabels(generationMode, styleTransferStylePreset, referenceImages);
+}
+
 function normalizeGenerationMode(value) {
   const mode = String(value || "").trim();
   return GENERATION_MODES.has(mode) ? mode : "";
@@ -226,7 +241,7 @@ async function handlePromptAgentAnalyze(request, fetchImpl) {
   const reasoningFallback =
     mode === REFERENCE_ORCHESTRATION_MODE
       ? REFERENCE_ORCHESTRATION_REASONING_EFFORT
-      : config.defaults?.reasoningEffort || DEFAULT_REASONING_EFFORT;
+      : PROMPT_AGENT_ANALYSIS_REASONING_EFFORT;
   const reasoningEffort = normalizeReasoningEffort(formData.get("reasoningEffort") || reasoningFallback);
   const json = await requestPromptAgentAnalysis({
     baseUrl: config.baseUrl,
@@ -435,6 +450,10 @@ function toPublicGenerationTask(task = {}) {
     quickBlendPairIndex: String(task.quickBlendPairIndex || ""),
     quickBlendAImageName: String(task.quickBlendAImageName || ""),
     quickBlendBImageName: String(task.quickBlendBImageName || ""),
+    quickBlendCImageName: String(task.quickBlendCImageName || ""),
+    quickBlendDImageName: String(task.quickBlendDImageName || ""),
+    quickBlendLayoutOrder: String(task.quickBlendLayoutOrder || ""),
+    quickBlendPlacementShape: String(task.quickBlendPlacementShape || ""),
     targetLanguage: String(task.targetLanguage || ""),
     sourceImageName: String(task.sourceImageName || ""),
     featureCardsEnabled: normalizeImageDecompositionFeatureCards(task.featureCardsEnabled),
@@ -546,6 +565,10 @@ function buildStoredImageMetadata({ filename, createdAt, expiresAt, item = {} })
     "quickBlendPairIndex",
     "quickBlendAImageName",
     "quickBlendBImageName",
+    "quickBlendCImageName",
+    "quickBlendDImageName",
+    "quickBlendLayoutOrder",
+    "quickBlendPlacementShape",
     "referenceImageName",
     "ratio",
     "ratioLabel",
@@ -620,6 +643,10 @@ function buildGalleryItem({
   quickBlendPairIndex = "",
   quickBlendAImageName = "",
   quickBlendBImageName = "",
+  quickBlendCImageName = "",
+  quickBlendDImageName = "",
+  quickBlendLayoutOrder = "",
+  quickBlendPlacementShape = "",
   targetLanguage = "",
   sourceImageName = "",
   featureCardsEnabled = false,
@@ -647,6 +674,10 @@ function buildGalleryItem({
     quickBlendPairIndex,
     quickBlendAImageName,
     quickBlendBImageName,
+    quickBlendCImageName,
+    quickBlendDImageName,
+    quickBlendLayoutOrder,
+    quickBlendPlacementShape,
     targetLanguage,
     sourceImageName,
     featureCardsEnabled,
@@ -680,6 +711,10 @@ async function buildGenerationRequestContext(request, formData) {
   let quickBlendPairIndex = String(formData.get("quickBlendPairIndex") || "1").trim();
   let quickBlendAImageName = String(formData.get("quickBlendAImageName") || formData.get("quickBlendAName") || "").trim();
   let quickBlendBImageName = String(formData.get("quickBlendBImageName") || formData.get("quickBlendBName") || "").trim();
+  let quickBlendCImageName = String(formData.get("quickBlendCImageName") || formData.get("quickBlendCName") || "").trim();
+  let quickBlendDImageName = String(formData.get("quickBlendDImageName") || formData.get("quickBlendDName") || "").trim();
+  let quickBlendLayoutOrder = String(formData.get("quickBlendLayoutOrder") || "").trim();
+  let quickBlendPlacementShape = String(formData.get("quickBlendPlacementShape") || "").trim();
   const config = normalizePrivateConfig(formData);
   const createdAt = new Date().toISOString();
   const sessionId = getClientSessionIdFromRequest(request, formData);
@@ -696,7 +731,7 @@ async function buildGenerationRequestContext(request, formData) {
     ...formData.getAll("referenceImages"),
     ...formData.getAll("referenceImage"),
   ]);
-  if (isQuickBlend && referenceImages.length !== 2) {
+  if (isQuickBlend && (referenceImages.length < 2 || referenceImages.length > 4)) {
     throw new Error(QUICK_BLEND_REFERENCE_COUNT_MESSAGE);
   }
   if (referenceImages.length > MAX_REFERENCE_IMAGES) {
@@ -717,19 +752,31 @@ async function buildGenerationRequestContext(request, formData) {
     assetKind = IMAGE_DECOMPOSITION_ASSET_KIND;
   }
   if (isQuickBlend) {
+    const inferredQuickBlendCImageName = quickBlendCImageName || (quickBlendDImageName ? "" : referenceImages[2]?.filename || "");
+    const inferredQuickBlendDImageName = quickBlendDImageName || (referenceImages.length > 3 ? referenceImages[3]?.filename || "" : "");
     const quickBlendPrompt = buildQuickBlendPrompt({
       pairIndex: quickBlendPairIndex,
       aImageName: quickBlendAImageName || referenceImages[0]?.filename || "",
       bImageName: quickBlendBImageName || referenceImages[1]?.filename || "",
+      cImageName: inferredQuickBlendCImageName,
+      dImageName: inferredQuickBlendDImageName,
+      layoutOrder: quickBlendLayoutOrder,
+      placementShape: quickBlendPlacementShape,
     });
     prompt = quickBlendPrompt.prompt;
     assetKind = QUICK_BLEND_ASSET_KIND;
     quickBlendPairIndex = quickBlendPrompt.pairIndex;
     quickBlendAImageName = quickBlendPrompt.aImageName;
     quickBlendBImageName = quickBlendPrompt.bImageName;
+    quickBlendCImageName = quickBlendPrompt.cImageName;
+    quickBlendDImageName = quickBlendPrompt.dImageName;
+    quickBlendLayoutOrder = quickBlendPrompt.layoutOrder;
+    quickBlendPlacementShape = quickBlendPrompt.placementShape;
     filenameToken = buildQuickBlendFilenameToken({
       aImageName: quickBlendAImageName,
       bImageName: quickBlendBImageName,
+      cImageName: quickBlendCImageName,
+      dImageName: quickBlendDImageName,
     });
   }
   if (isReferenceAnalysis) {
@@ -766,6 +813,10 @@ async function buildGenerationRequestContext(request, formData) {
     quickBlendPairIndex,
     quickBlendAImageName,
     quickBlendBImageName,
+    quickBlendCImageName,
+    quickBlendDImageName,
+    quickBlendLayoutOrder,
+    quickBlendPlacementShape,
     filenameToken,
     targetLanguage,
     sourceImageName,
@@ -796,6 +847,11 @@ function buildQueuedGenerationTask(context) {
     quickBlendPairIndex: context.quickBlendPairIndex,
     quickBlendAImageName: context.quickBlendAImageName,
     quickBlendBImageName: context.quickBlendBImageName,
+    quickBlendCImageName: context.quickBlendCImageName,
+    quickBlendDImageName: context.quickBlendDImageName,
+    quickBlendLayoutOrder: context.quickBlendLayoutOrder,
+    quickBlendPlacementShape: context.quickBlendPlacementShape,
+    filenameToken: context.filenameToken,
     targetLanguage: context.targetLanguage,
     sourceImageName: context.sourceImageName,
     featureCardsEnabled: context.featureCardsEnabled,
@@ -1309,6 +1365,10 @@ async function enqueueGenerate(request, writer, { imageBucket, generationQueue }
     quickBlendPairIndex: context.quickBlendPairIndex,
     quickBlendAImageName: context.quickBlendAImageName,
     quickBlendBImageName: context.quickBlendBImageName,
+    quickBlendCImageName: context.quickBlendCImageName,
+    quickBlendDImageName: context.quickBlendDImageName,
+    quickBlendLayoutOrder: context.quickBlendLayoutOrder,
+    quickBlendPlacementShape: context.quickBlendPlacementShape,
     targetLanguage: context.targetLanguage,
     sourceImageName: context.sourceImageName,
     featureCardsEnabled: context.featureCardsEnabled,
@@ -1358,6 +1418,10 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
   let quickBlendPairIndex = String(formData.get("quickBlendPairIndex") || "1").trim();
   let quickBlendAImageName = String(formData.get("quickBlendAImageName") || formData.get("quickBlendAName") || "").trim();
   let quickBlendBImageName = String(formData.get("quickBlendBImageName") || formData.get("quickBlendBName") || "").trim();
+  let quickBlendCImageName = String(formData.get("quickBlendCImageName") || formData.get("quickBlendCName") || "").trim();
+  let quickBlendDImageName = String(formData.get("quickBlendDImageName") || formData.get("quickBlendDName") || "").trim();
+  let quickBlendLayoutOrder = String(formData.get("quickBlendLayoutOrder") || "").trim();
+  let quickBlendPlacementShape = String(formData.get("quickBlendPlacementShape") || "").trim();
   const config = normalizePrivateConfig(formData);
   const createdAt = new Date().toISOString();
   let targetLanguage = "";
@@ -1381,7 +1445,7 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     ...formData.getAll("referenceImages"),
     ...formData.getAll("referenceImage"),
   ]);
-  if (isQuickBlend && referenceImages.length !== 2) {
+  if (isQuickBlend && (referenceImages.length < 2 || referenceImages.length > 4)) {
     await writeSseEvent(writer, "error", {
       message: QUICK_BLEND_REFERENCE_COUNT_MESSAGE,
     });
@@ -1411,19 +1475,31 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     assetKind = IMAGE_DECOMPOSITION_ASSET_KIND;
   }
   if (isQuickBlend) {
+    const inferredQuickBlendCImageName = quickBlendCImageName || (quickBlendDImageName ? "" : referenceImages[2]?.filename || "");
+    const inferredQuickBlendDImageName = quickBlendDImageName || (referenceImages.length > 3 ? referenceImages[3]?.filename || "" : "");
     const quickBlendPrompt = buildQuickBlendPrompt({
       pairIndex: quickBlendPairIndex,
       aImageName: quickBlendAImageName || referenceImages[0]?.filename || "",
       bImageName: quickBlendBImageName || referenceImages[1]?.filename || "",
+      cImageName: inferredQuickBlendCImageName,
+      dImageName: inferredQuickBlendDImageName,
+      layoutOrder: quickBlendLayoutOrder,
+      placementShape: quickBlendPlacementShape,
     });
     prompt = quickBlendPrompt.prompt;
     assetKind = QUICK_BLEND_ASSET_KIND;
     quickBlendPairIndex = quickBlendPrompt.pairIndex;
     quickBlendAImageName = quickBlendPrompt.aImageName;
     quickBlendBImageName = quickBlendPrompt.bImageName;
+    quickBlendCImageName = quickBlendPrompt.cImageName;
+    quickBlendDImageName = quickBlendPrompt.dImageName;
+    quickBlendLayoutOrder = quickBlendPrompt.layoutOrder;
+    quickBlendPlacementShape = quickBlendPrompt.placementShape;
     filenameToken = buildQuickBlendFilenameToken({
       aImageName: quickBlendAImageName,
       bImageName: quickBlendBImageName,
+      cImageName: quickBlendCImageName,
+      dImageName: quickBlendDImageName,
     });
   }
   const hasStyleTransferPreset = Boolean(styleTransferStylePreset);
@@ -1455,7 +1531,14 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     apiKey: config.apiKey,
     prompt: finalPrompt,
     referenceImages,
-    referenceImageLabels: getStyleTransferReferenceImageLabels(generationMode, styleTransferStylePreset, referenceImages),
+    referenceImageLabels: getGenerationReferenceImageLabels(
+      generationMode,
+      styleTransferStylePreset,
+      referenceImages,
+      [quickBlendAImageName, quickBlendBImageName, quickBlendCImageName, quickBlendDImageName]
+        .map((value, index) => (value ? ["A", "B", "C", "D"][index] : ""))
+        .filter(Boolean),
+    ),
     size: finalSize,
     quality: finalQuality,
     format: toApiOutputFormat(finalFormat),
@@ -1522,6 +1605,10 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     quickBlendPairIndex,
     quickBlendAImageName,
     quickBlendBImageName,
+    quickBlendCImageName,
+    quickBlendDImageName,
+    quickBlendLayoutOrder,
+    quickBlendPlacementShape,
     filenameToken,
     targetLanguage,
     sourceImageName,
@@ -2637,10 +2724,18 @@ async function processQueuedGenerationMessage(messageBody, { imageBucket, fetchI
       apiKey: storedRequest.config.apiKey,
       prompt: storedRequest.finalPrompt,
       referenceImages: storedRequest.referenceImages || [],
-      referenceImageLabels: getStyleTransferReferenceImageLabels(
+      referenceImageLabels: getGenerationReferenceImageLabels(
         storedRequest.generationMode,
         storedRequest.styleTransferStylePreset,
         storedRequest.referenceImages || [],
+        [
+          storedRequest.quickBlendAImageName,
+          storedRequest.quickBlendBImageName,
+          storedRequest.quickBlendCImageName,
+          storedRequest.quickBlendDImageName,
+        ]
+          .map((value, index) => (value ? ["A", "B", "C", "D"][index] : ""))
+          .filter(Boolean),
       ),
       size: storedRequest.finalSize,
       quality: storedRequest.finalQuality,
@@ -2704,6 +2799,10 @@ async function processQueuedGenerationMessage(messageBody, { imageBucket, fetchI
       quickBlendPairIndex: storedRequest.quickBlendPairIndex,
       quickBlendAImageName: storedRequest.quickBlendAImageName,
       quickBlendBImageName: storedRequest.quickBlendBImageName,
+      quickBlendCImageName: storedRequest.quickBlendCImageName,
+      quickBlendDImageName: storedRequest.quickBlendDImageName,
+      quickBlendLayoutOrder: storedRequest.quickBlendLayoutOrder,
+      quickBlendPlacementShape: storedRequest.quickBlendPlacementShape,
       filenameToken: storedRequest.filenameToken,
       targetLanguage: storedRequest.targetLanguage,
       sourceImageName: storedRequest.sourceImageName,

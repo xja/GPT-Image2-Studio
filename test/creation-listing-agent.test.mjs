@@ -142,6 +142,95 @@ test("listing agent prompt uses dedicated SEO five-point constraints", async () 
   assert.match(prompt, /Do not write gift/i);
 });
 
+test("listing agent derives 2 Pack from grouped subject units when bundle count is one", async () => {
+  const calls = [];
+  const groupedPairSource = {
+    ...standardSource,
+    skuBundleCount: 1,
+    skuSubjects: [
+      {
+        id: "orange-pair",
+        title: "Orange lure pair",
+        filenames: ["orange-pair.png"],
+        bundleCount: 1,
+        subjectUnitCount: 2,
+        note: "One product-subject reference image contains two complete visible lure bodies: orange top and silver bottom.",
+      },
+    ],
+  };
+  const fetchImpl = async (_url, init) => {
+    const prompt = JSON.parse(init.body).input;
+    calls.push(prompt);
+    const usesTwoPack = /Title formula: start with 2 Pack/i.test(prompt);
+    return new Response(JSON.stringify({
+      output_text: JSON.stringify(makeValidDraft({
+        title: usesTwoPack
+          ? "2 Pack Fishing Lure Jointed Swimbait Bass Trout Freshwater Bait"
+          : "1 Pack Fishing Lure Jointed Swimbait Bass Trout Freshwater Bait",
+        description: usesTwoPack
+          ? "This listing covers two complete visible lure bodies from the grouped SKU subject."
+          : "This listing covers one lure body.",
+      })),
+    }), { status: 200 });
+  };
+
+  const draft = await requestCreationListingDraft({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    responsesModel: "gpt-5.4",
+    source: groupedPairSource,
+    fetchImpl,
+  });
+
+  assert.match(calls[0], /Title formula: start with 2 Pack/i);
+  assert.match(calls[0], /Description must explicitly mention.*two complete visible lure bodies/is);
+  assert.match(draft.title, /^2 Pack Fishing Lure\b/);
+  assert.match(draft.description, /two complete visible lure bodies/i);
+});
+
+test("listing agent retries when grouped subject description omits unit count", async () => {
+  const prompts = [];
+  let callCount = 0;
+  const groupedPairSource = {
+    ...standardSource,
+    skuBundleCount: 1,
+    skuSubjects: [
+      {
+        id: "orange-pair",
+        title: "Orange lure pair",
+        filenames: ["orange-pair.png"],
+        bundleCount: 1,
+        subjectUnitCount: 2,
+        note: "One product-subject reference image contains two complete visible lure bodies: orange top and silver bottom.",
+      },
+    ],
+  };
+  const fetchImpl = async (_url, init) => {
+    callCount += 1;
+    prompts.push(JSON.parse(init.body).input);
+    return new Response(JSON.stringify({
+      output_text: JSON.stringify(makeValidDraft({
+        title: "2 Pack Fishing Lure Jointed Swimbait Bass Trout Freshwater Bait",
+        description: callCount === 1
+          ? "This listing covers one lure body for freshwater fishing."
+          : "This listing covers two complete visible lure bodies from the grouped SKU subject.",
+      })),
+    }), { status: 200 });
+  };
+
+  const draft = await requestCreationListingDraft({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    responsesModel: "gpt-5.4",
+    source: groupedPairSource,
+    fetchImpl,
+  });
+
+  assert.equal(callCount, 2);
+  assert.match(prompts[1], /Fix these validation errors: description must mention grouped SKU subject quantity/i);
+  assert.match(draft.description, /two complete visible lure bodies/i);
+});
+
 test("listing agent sends a strict JSON schema request with prompt guardrails", async () => {
   const calls = [];
   const fetchImpl = async (url, init) => {
@@ -673,6 +762,31 @@ test("generateCreationListingDrafts uses visible subject unit count for swimbait
   assert.match(drafts[0].title, /\bhard bait\b/i);
   assert.doesNotMatch(drafts[0].title, /160\s*mm|50\.4\s*g|hook size|#2|6\.3 in|1\.78 oz/i);
   assert.equal(validateListingAgentDraft(drafts[0], "4 Pack").ok, true);
+});
+
+test("mock listing drafts describe grouped two-unit subjects", () => {
+  const draft = makeMockCreationListingDraft({
+    setId: "set-two-lure-pair",
+    productName: "Fishing Lure",
+    productDescription: "One product-subject reference image contains two complete visible lure bodies.",
+    skuBundleCount: 1,
+    dimensionSpecs: "3.5 in",
+    evidenceMode: "input-only",
+    skuSubjects: [
+      {
+        id: "orange-pair",
+        title: "Orange lure pair",
+        filenames: ["orange-pair.png"],
+        bundleCount: 1,
+        subjectUnitCount: 2,
+        note: "One product-subject reference image contains two complete visible lure bodies: orange top and silver bottom.",
+      },
+    ],
+  });
+
+  assert.match(draft.title, /^2 Pack Fishing Lure\b/);
+  assert.match(draft.description, /two complete visible lure bodies/i);
+  assert.equal(validateListingAgentDraft(draft, "2 Pack").ok, true);
 });
 
 test("mock listing drafts avoid unsupported claims and competitor brand terms", () => {
