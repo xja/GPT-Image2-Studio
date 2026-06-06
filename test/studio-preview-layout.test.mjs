@@ -2601,6 +2601,7 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(styles, /\.creation-reference-analyze-spinner\s*\{[\s\S]*animation:\s*creation-reference-analyze-spin 1800ms linear infinite;/);
   assert.match(styles, /@keyframes creation-reference-analyze-spin/);
   assert.match(styles, /\.creation-reference-analysis-actions #creationReferenceApplyAnalysisButton\s*\{[\s\S]*background:[\s\S]*color-mix\(in srgb, var\(--success\) 24%, var\(--control-bg\)\)/);
+  assert.match(styles, /\.creation-reference-analysis-role-correction\s*\{/);
   assert.match(styles, /\.creation-reference-note\s*\{/);
   assert.match(styles, /\.creation-template-search\s*\{/);
   assert.match(styles, /\.creation-industry-browser\s*\{/);
@@ -2757,11 +2758,17 @@ test("creation mode has independent references count and scenario controls", asy
   assert.match(app, /shouldUseUsageRole/);
   assert.match(creationReferenceAnalysisView, /export function getCreationReferenceAnalysisGroupedSubjectUnitCount\(entry = \{\}, skuSubjects = \[\]\) \{/);
   assert.match(creationReferenceAnalysisView, /export function shouldDowngradeReferenceProductAnalysisRole\(entry = \{\}, subjectUnitCount = 0\) \{/);
+  assert.match(creationReferenceAnalysisView, /export function getCreationReferenceAnalysisRoleCorrectionReason\(entry = \{\}, subjectUnitCount = 0\) \{/);
+  assert.match(creationReferenceAnalysisView, /export function summarizeCreationReferenceAnalysisRoleCorrections\(recommendations = \[\]\) \{/);
   assert.match(creationReferenceAnalysisView, /export function normalizeCreationReferenceAnalysisUnitCountNote\(note = "", subjectUnitCount = 0\) \{/);
   assert.match(app, /getCreationReferenceAnalysisGroupedSubjectUnitCount/);
   assert.match(app, /shouldDowngradeReferenceProductAnalysisRole/);
+  assert.match(app, /getCreationReferenceAnalysisRoleCorrectionReason/);
+  assert.match(app, /summarizeCreationReferenceAnalysisRoleCorrections/);
   assert.match(app, /normalizeCreationReferenceAnalysisUnitCountNote/);
   assert.match(app, /normalizeCreationReferenceAnalysisRecommendation\(entry = \{\}, index = 0, skuSubjects = \[\]\)/);
+  assert.match(app, /roleCorrectionReason:\s*roleCorrectionReason/);
+  assert.match(app, /const roleCorrectionSummary = summarizeCreationReferenceAnalysisRoleCorrections\(analysis\.recommendations\);/);
   assert.match(app, /setCreationSelectValue\(refs\.creationVisualLanguageInput,\s*analysis\.visualLanguage,\s*"classic-commercial"\)/);
   assert.match(creationReferenceAnalysisView, /export function syncCreationReferenceVisualLanguageButton/);
   assert.match(
@@ -2778,6 +2785,8 @@ test("creation mode has independent references count and scenario controls", asy
   );
   assert.match(app, /state\.creationReferenceAnalysis\.applied = false;/);
   assert.match(app, /state\.creationReferenceAnalysis\.applied = true;/);
+  assert.match(app, /correction\.className = "creation-reference-analysis-role-correction";/);
+  assert.match(app, /correction\.textContent = entry\.roleCorrectionReason;/);
   assert.match(app, /function toggleCreationReferenceAnalysisPanel\(\) \{/);
   assert.match(app, /state\.creationReferenceAnalysis\.collapsed = !state\.creationReferenceAnalysis\.collapsed;/);
   assert.match(app, /function renderCreationReferenceAnalysis\(\) \{/);

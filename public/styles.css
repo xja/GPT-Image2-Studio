@@ -5202,6 +5202,14 @@ textarea {
   font-size: var(--type-body-size);
 }
 
+.creation-reference-analysis-role-correction {
+  padding: 8px 9px;
+  border: 1px solid color-mix(in srgb, var(--success) 22%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  color: var(--text);
+}
+
 .reference-analysis-card .inline-button {
   justify-self: start;
 }

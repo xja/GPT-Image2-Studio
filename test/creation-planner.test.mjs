@@ -2097,6 +2097,8 @@ test("creation reference analysis treats grouped white-background SKU references
   );
   assert.doesNotMatch(analysis.recommendations[0].note, /图中共\s*1\s*个完整产品单位/);
   assert.match(analysis.recommendations[0].note, /图中共 2 个完整产品单位/);
+  assert.match(analysis.recommendations[0].roleCorrectionReason, /reference-product 调整为 product/);
+  assert.match(analysis.recommendations[0].roleCorrectionReason, /2 个完整产品单位/);
   assert.equal(analysis.skuSubjects[0].subjectUnitCount, 2);
 });
 

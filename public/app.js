@@ -22,7 +22,7 @@ import { appendPptDeckDownloadLinks } from "/lib/ppt-record-links.mjs";
 import { buildCreationSkuSubjectsForPayload, normalizeCreationSkuBundleCountForPayload, normalizeCreationSkuSubjectForPayload } from "/lib/creation-sku-subjects.mjs";
 import { bindCreationReferenceDrag, reorderCreationReferenceFiles } from "/lib/creation-reference-drag.mjs";
 import { isCreationSubjectReferenceRole } from "/lib/creation-reference-roles.mjs";
-import { appendCreationVisualLanguageSuggestionCard, getCreationReferenceAnalysisGroupedSubjectUnitCount, getCreationReferenceAnalysisVisualLanguageReason, getCreationReferenceAnalysisVisualLanguageSource, normalizeCreationReferenceAnalysisUnitCountNote, shouldDowngradeReferenceProductAnalysisRole, syncCreationReferenceVisualLanguageButton } from "/lib/creation-reference-analysis-view.mjs";
+import { appendCreationVisualLanguageSuggestionCard, getCreationReferenceAnalysisGroupedSubjectUnitCount, getCreationReferenceAnalysisRoleCorrectionReason, getCreationReferenceAnalysisVisualLanguageReason, getCreationReferenceAnalysisVisualLanguageSource, normalizeCreationReferenceAnalysisUnitCountNote, shouldDowngradeReferenceProductAnalysisRole, summarizeCreationReferenceAnalysisRoleCorrections, syncCreationReferenceVisualLanguageButton } from "/lib/creation-reference-analysis-view.mjs";
 import { createCreationListingController, getCreationRecordListingMetaLabel, getCreationListingSearchValues, normalizeCreationListingDraftForView, renderCreationListingDrafts } from "/lib/creation-listing-view.mjs";
 import { getCreationAutoRepairNotice, getCreationCompletionFeedback, getCreationIncompleteItems, shouldAutoRepairCreationSet } from "/lib/creation-auto-repair.mjs";
 import { canRepairCreationItem as canRepairCreationItemFromQueue, getCreationRepairButtonText as getCreationRepairButtonTextFromQueue, isCreationItemRepairActive as isCreationItemRepairActiveInQueue, queueCreationItemRepair as queueCreationItemRepairInState, removeQueuedCreationItemRepair, shiftNextQueuedCreationItemRepair } from "/lib/creation-item-repair-queue.mjs";
@@ -10920,10 +10920,13 @@ function inferCreationReferenceAnalysisRole(entry = {}) { const explicitRole = S
 function normalizeCreationReferenceAnalysisRecommendation(entry = {}, index = 0, skuSubjects = []) {
   const filename = String(state.creationReferenceFiles[index]?.file?.name || entry.filename || `reference-image-${index + 1}`).trim();
   if (!filename) return null;
-  const subjectUnitCount = getCreationReferenceAnalysisGroupedSubjectUnitCount({ ...entry, filename, index: Number(entry.index) || index + 1 }, skuSubjects);
-  const role = shouldDowngradeReferenceProductAnalysisRole(entry, subjectUnitCount) ? "product" : inferCreationReferenceAnalysisRole(entry);
+  const normalizedEntry = { ...entry, filename, index: Number(entry.index) || index + 1 };
+  const subjectUnitCount = getCreationReferenceAnalysisGroupedSubjectUnitCount(normalizedEntry, skuSubjects);
+  const roleCorrectionReason = getCreationReferenceAnalysisRoleCorrectionReason(normalizedEntry, subjectUnitCount);
+  const shouldCorrectRole = Boolean(roleCorrectionReason) || shouldDowngradeReferenceProductAnalysisRole(normalizedEntry, subjectUnitCount);
+  const role = shouldCorrectRole ? "product" : inferCreationReferenceAnalysisRole(normalizedEntry);
   const suppliedRole = String(entry.role || "").trim();
-  return { index: Number(entry.index) || index + 1, filename, role, roleLabel: String(role !== suppliedRole ? getCreationReferenceRoleLabel(role) : entry.roleLabel || getCreationReferenceRoleLabel(role)), note: normalizeCreationReferenceAnalysisUnitCountNote(entry.note, subjectUnitCount) };
+  return { index: Number(entry.index) || index + 1, filename, role, roleLabel: String(role !== suppliedRole ? getCreationReferenceRoleLabel(role) : entry.roleLabel || getCreationReferenceRoleLabel(role)), roleCorrectionReason: roleCorrectionReason, note: normalizeCreationReferenceAnalysisUnitCountNote(entry.note, subjectUnitCount) };
 }
 
 function normalizeCreationReferenceAnalysisPayload(payload = {}) {
@@ -11053,12 +11056,14 @@ function applyCreationReferenceAnalysisRecommendations() {
       : item;
   });
   const productNameApplied = applyCreationReferenceAnalysisProductNameSuggestion(analysis);
+  const roleCorrectionSummary = summarizeCreationReferenceAnalysisRoleCorrections(analysis.recommendations);
   state.creationReferenceAnalysis.applied = true;
   state.creationReferenceAnalysis.collapsed = true;
+  const appliedMessage = productNameApplied
+    ? `已应用 ${analysis.recommendations.length} 张参考图用途建议，商品名称已填入四级类目。`
+    : `已应用 ${analysis.recommendations.length} 张参考图用途建议。`;
   setCreationReferenceAnalysisFeedback(
-    productNameApplied
-      ? `已应用 ${analysis.recommendations.length} 张参考图用途建议，商品名称已填入四级类目。`
-      : `已应用 ${analysis.recommendations.length} 张参考图用途建议。`,
+    roleCorrectionSummary ? `${appliedMessage}${roleCorrectionSummary}` : appliedMessage,
     "success",
   );
   setCreationSelectValue(refs.creationVisualLanguageInput, previousVisualLanguage, "classic-commercial");
@@ -11147,6 +11152,13 @@ function renderCreationReferenceAnalysis() {
     const note = document.createElement("p");
     note.textContent = entry.note || "可应用到参考图用途。";
     item.appendChild(note);
+
+    if (entry.roleCorrectionReason) {
+      const correction = document.createElement("p");
+      correction.className = "creation-reference-analysis-role-correction";
+      correction.textContent = entry.roleCorrectionReason;
+      item.appendChild(correction);
+    }
 
     refs.creationReferenceAnalysisList.appendChild(item);
   });
