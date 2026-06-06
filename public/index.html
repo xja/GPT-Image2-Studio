@@ -2408,14 +2408,25 @@
         </div>
 
         <form class="config-form" id="configForm">
+          <fieldset class="route-selector" aria-label="当前生图线路">
+            <legend>当前生图线路</legend>
+            <label>
+              <input name="imageRoute" type="radio" value="a" checked />
+              <span>线路A</span>
+            </label>
+            <label>
+              <input name="imageRoute" type="radio" value="b" />
+              <span>线路B</span>
+            </label>
+          </fieldset>
           <label class="field">
-            <span>中转 URL</span>
+            <span>线路A URL</span>
             <input id="baseUrlInput" name="baseUrl" type="url" placeholder="https://api.openai.com/v1" required />
           </label>
 
           <label class="field">
             <div class="field-heading inline">
-              <span>API Key</span>
+              <span>线路A API Key</span>
               <small id="savedKeyMask">未保存</small>
             </div>
             <input id="apiKeyInput" name="apiKey" type="password" placeholder="留空则保持当前浏览器已保存的 key" />
@@ -2423,7 +2434,7 @@
 
           <div class="field model-field">
             <div class="field-heading inline">
-              <label for="responsesModelInput">Responses 模型</label>
+              <label for="responsesModelInput">线路A Responses 模型</label>
               <button class="inline-button" id="fetchModelsButton" type="button">获取模型列表</button>
             </div>
             <div class="model-picker-control">
@@ -2432,6 +2443,24 @@
               <div class="model-options-list" id="modelOptionsList" role="listbox" hidden></div>
             </div>
           </div>
+
+          <label class="field">
+            <span>线路B URL</span>
+            <input id="directBaseUrlInput" name="directBaseUrl" type="url" placeholder="https://api.openai.com/v1" required />
+          </label>
+
+          <label class="field">
+            <div class="field-heading inline">
+              <span>线路B API Key</span>
+              <small id="directSavedKeyMask">未保存</small>
+            </div>
+            <input id="directApiKeyInput" name="directApiKey" type="password" placeholder="留空则保持当前浏览器已保存的 key" />
+          </label>
+
+          <label class="field">
+            <span>线路B 生图模型</span>
+            <input id="directImageModelInput" name="directImageModel" type="text" placeholder="gpt-image-2" autocomplete="off" />
+          </label>
 
           <label class="field ui-language-field">
             <span>界面语言</span>

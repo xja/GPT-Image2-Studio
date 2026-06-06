@@ -33,6 +33,7 @@ export const PUBLIC_LIB_SYNC_TARGETS = [
   "generation-size-options.mjs",
   "generation-stream-protocol.mjs",
   "image-compress-browser.mjs",
+  "image-route-config.mjs",
   "output-format-options.mjs",
   "preview-loading-shell.mjs",
   "preview-placeholder-state.mjs",

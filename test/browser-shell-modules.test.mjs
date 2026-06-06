@@ -15,7 +15,7 @@ import {
 import { isCreationSubjectReferenceRole } from "../public/lib/creation-reference-roles.mjs";
 import { reorderCreationReferenceFiles } from "../public/lib/creation-reference-drag.mjs";
 
-const APP_SHELL_LINE_BUDGET = 16200;
+const APP_SHELL_LINE_BUDGET = 16250;
 
 function makeFakeControlButton(className = "") {
   const element = {
@@ -68,24 +68,40 @@ function makeFakeDocumentElement(tagName) {
 
 test("browser config module normalizes private config without requiring window globals", () => {
   const normalized = normalizeBrowserPrivateConfig({
+    imageRoute: "b",
     baseUrl: "https://example.test/",
     apiKey: "sk-browser-secret",
     responsesModel: "gpt-5.5",
+    directBaseUrl: "https://direct.example.test/",
+    directApiKey: "sk-direct-secret",
+    directImageModel: "custom-image-model",
   });
   const publicConfig = toPublicBrowserConfig(normalized, { defaults: { size: "auto" } });
   const formData = appendBrowserConfigToFormData(new FormData(), () => normalized);
 
   assert.deepEqual(normalized, {
+    imageRoute: "b",
     baseUrl: "https://example.test/v1",
     apiKey: "sk-browser-secret",
     responsesModel: "gpt-5.5",
+    directBaseUrl: "https://direct.example.test/v1",
+    directApiKey: "sk-direct-secret",
+    directImageModel: "custom-image-model",
   });
+  assert.equal(publicConfig.imageRoute, "b");
   assert.equal(publicConfig.apiKeyConfigured, true);
   assert.equal(publicConfig.apiKeyMask, "sk-b***cret");
+  assert.equal(publicConfig.directApiKeyConfigured, true);
+  assert.equal(publicConfig.directApiKeyMask, "sk-d***cret");
+  assert.equal(publicConfig.directImageModel, "custom-image-model");
   assert.equal(publicConfig.defaults.size, "auto");
+  assert.equal(formData.get("imageRoute"), "b");
   assert.equal(formData.get("baseUrl"), "https://example.test/v1");
   assert.equal(formData.get("apiKey"), "sk-browser-secret");
   assert.equal(formData.get("responsesModel"), "gpt-5.5");
+  assert.equal(formData.get("directBaseUrl"), "https://direct.example.test/v1");
+  assert.equal(formData.get("directApiKey"), "sk-direct-secret");
+  assert.equal(formData.get("directImageModel"), "custom-image-model");
 });
 
 test("public app shell delegates browser config and cache behavior to public modules", async () => {

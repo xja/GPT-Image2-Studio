@@ -5,9 +5,11 @@ import {
   DEFAULT_TRANSIENT_HTTP_RETRY_DELAY_MS,
   buildResponsesInput,
   consumeResponsesSse,
+  createDirectImageRequestBody,
   createResponsesRequestBody,
   formatStatusHeartbeatMessage,
   normalizeBaseUrl,
+  requestDirectImageGeneration,
   requestImageGeneration,
 } from "../lib/responses-workflow.mjs";
 
@@ -153,6 +155,64 @@ test("createResponsesRequestBody can disable streaming for fallback requests", (
   });
 
   assert.equal(requestBody.stream, false);
+});
+
+test("createDirectImageRequestBody targets the image model without Responses routing fields", () => {
+  const requestBody = createDirectImageRequestBody({
+    prompt: "Create a direct image",
+    size: "1024x1024",
+    quality: "high",
+    format: "png",
+    imageModel: "vendor-image-pro",
+  });
+
+  assert.equal(requestBody.model, "vendor-image-pro");
+  assert.equal(requestBody.prompt, "Create a direct image");
+  assert.equal(requestBody.size, "1024x1024");
+  assert.equal(requestBody.quality, "high");
+  assert.equal(requestBody.response_format, "b64_json");
+  assert.equal("stream" in requestBody, false);
+  assert.equal("tools" in requestBody, false);
+  assert.equal("tool_choice" in requestBody, false);
+});
+
+test("requestDirectImageGeneration posts once to image generations and emits the final image", async () => {
+  const requests = [];
+  const events = [];
+
+  const result = await requestDirectImageGeneration({
+    baseUrl: "https://route-b.example.test/v1",
+    apiKey: "route-b-key",
+    prompt: "Direct model image",
+    size: "1024x1024",
+    quality: "high",
+    format: "png",
+    imageModel: "vendor-image-pro",
+    async fetchImpl(url, init) {
+      requests.push({ url, init, body: JSON.parse(init.body) });
+      return new Response(
+        JSON.stringify({
+          data: [{ b64_json: "ZGlyZWN0LWZpbmFs" }],
+        }),
+        { status: 200 },
+      );
+    },
+    onEvent(event) {
+      events.push(event);
+    },
+  });
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "https://route-b.example.test/v1/images/generations");
+  assert.equal(requests[0].init.headers.Accept, "application/json");
+  assert.equal(requests[0].body.model, "vendor-image-pro");
+  assert.equal("stream" in requests[0].body, false);
+  assert.equal("tools" in requests[0].body, false);
+  assert.equal(result.finalImageBase64, "ZGlyZWN0LWZpbmFs");
+  assert.deepEqual(events.at(-1), {
+    type: "final_image",
+    base64: "ZGlyZWN0LWZpbmFs",
+  });
 });
 
 test("normalizeBaseUrl appends v1 when the configured API URL omits it", () => {

@@ -59,7 +59,8 @@ import {
   normalizePptCompletionRequest,
 } from "./lib/ppt-completion.mjs";
 import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
-import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
+import { normalizeBase64, requestDirectImageGeneration, requestImageGeneration } from "./lib/responses-workflow.mjs";
+import { IMAGE_ROUTE_B, getSelectedImageGenerationConfig, normalizeImageRouteConfig } from "./lib/image-route-config.mjs";
 import { fetchAvailableModels } from "./lib/model-list-client.mjs";
 import { normalizeApiBaseUrl } from "./lib/api-base-url.mjs";
 import { runWithConcurrency } from "./lib/limited-concurrency.mjs";
@@ -133,6 +134,9 @@ const REFERENCE_ORCHESTRATION_REASONING_EFFORT = "low";
 const DEFAULT_CONFIG = {
   baseUrl: DEFAULT_BASE_URL,
   responsesModel: DEFAULT_RESPONSES_MODEL,
+  imageRoute: "a",
+  directBaseUrl: DEFAULT_BASE_URL,
+  directImageModel: "gpt-image-2",
   defaults: {
     size: "896x1120",
     quality: "high",
@@ -169,11 +173,22 @@ async function writeSseEvent(writer, type, payload) {
   await writeWorkerSseEvent(writer, type, payload);
 }
 
+function requestCloudImageGeneration(options) {
+  if (options.imageRoute === IMAGE_ROUTE_B) {
+    return requestDirectImageGeneration(options);
+  }
+  return requestImageGeneration(options);
+}
+
 function buildPublicConfig() {
   return {
     baseUrl: DEFAULT_CONFIG.baseUrl,
     apiKeyConfigured: false,
     responsesModel: DEFAULT_CONFIG.responsesModel,
+    imageRoute: DEFAULT_CONFIG.imageRoute,
+    directBaseUrl: DEFAULT_CONFIG.directBaseUrl,
+    directApiKeyConfigured: false,
+    directImageModel: DEFAULT_CONFIG.directImageModel,
     defaults: { ...DEFAULT_CONFIG.defaults },
     limits: {
       maxParallelTasksPerSession: MAX_PARALLEL_TASKS_PER_SESSION,
@@ -282,19 +297,30 @@ function normalizeReasoningEffort(value, fallback = DEFAULT_REASONING_EFFORT) {
   return normalized;
 }
 
-function normalizePrivateConfig(formData) {
-  const baseUrl = normalizeApiBaseUrl(formData.get("baseUrl"), { defaultBaseUrl: DEFAULT_CONFIG.baseUrl });
-  const apiKey = String(formData.get("apiKey") || "").trim();
-  const responsesModel = String(formData.get("responsesModel") || DEFAULT_CONFIG.responsesModel).trim();
+function normalizePrivateConfig(formData, { allowDirectImageRoute = false } = {}) {
+  const routeConfig = normalizeImageRouteConfig(
+    {
+      imageRoute: formData.get("imageRoute"),
+      baseUrl: formData.get("baseUrl"),
+      apiKey: formData.get("apiKey"),
+      responsesModel: formData.get("responsesModel"),
+      directBaseUrl: formData.get("directBaseUrl"),
+      directApiKey: formData.get("directApiKey"),
+      directImageModel: formData.get("directImageModel"),
+    },
+    {
+      defaultBaseUrl: DEFAULT_CONFIG.baseUrl,
+      defaultResponsesModel: DEFAULT_CONFIG.responsesModel,
+    },
+  );
+  const generationConfig = getSelectedImageGenerationConfig(routeConfig);
 
-  if (!apiKey) {
+  if (!routeConfig.apiKey && (!allowDirectImageRoute || !generationConfig.apiKey)) {
     throw new Error("当前浏览器未保存 API Key，请先在配置中保存。");
   }
 
   return {
-    baseUrl: baseUrl || DEFAULT_CONFIG.baseUrl,
-    apiKey,
-    responsesModel: responsesModel || DEFAULT_CONFIG.responsesModel,
+    ...routeConfig,
     defaults: { ...DEFAULT_CONFIG.defaults },
   };
 }
@@ -632,6 +658,7 @@ function buildGalleryItem({
   prompt,
   dataUrl,
   config,
+  generationConfig = getSelectedImageGenerationConfig(config),
   ratioOption,
   size,
   quality,
@@ -663,9 +690,10 @@ function buildGalleryItem({
     thumbnailUrl: "",
     createdAt,
     prompt,
-    baseUrl: config.baseUrl,
+    baseUrl: generationConfig.baseUrl,
     responsesModel: config.responsesModel,
-    imageModel: "gpt-image-2",
+    imageRoute: generationConfig.imageRoute,
+    imageModel: generationConfig.imageModel,
     hasReferenceImage: referenceImages.length > 0,
     referenceImageNames: referenceImages.map((image) => image.filename),
     referenceImageName: referenceImages[0]?.filename || "",
@@ -715,7 +743,8 @@ async function buildGenerationRequestContext(request, formData) {
   let quickBlendDImageName = String(formData.get("quickBlendDImageName") || formData.get("quickBlendDName") || "").trim();
   let quickBlendLayoutOrder = String(formData.get("quickBlendLayoutOrder") || "").trim();
   let quickBlendPlacementShape = String(formData.get("quickBlendPlacementShape") || "").trim();
-  const config = normalizePrivateConfig(formData);
+  const config = normalizePrivateConfig(formData, { allowDirectImageRoute: true });
+  const generationConfig = getSelectedImageGenerationConfig(config);
   const createdAt = new Date().toISOString();
   const sessionId = getClientSessionIdFromRequest(request, formData);
   let targetLanguage = "";
@@ -806,6 +835,7 @@ async function buildGenerationRequestContext(request, formData) {
     taskId,
     prompt,
     config,
+    generationConfig,
     createdAt,
     generationMode,
     styleTransferStylePreset,
@@ -861,7 +891,8 @@ function buildQueuedGenerationTask(context) {
     quality: context.finalQuality,
     format: context.finalFormat,
     reasoningEffort: context.reasoningEffort,
-    imageModel: "gpt-image-2",
+    imageRoute: context.generationConfig.imageRoute,
+    imageModel: context.generationConfig.imageModel,
     hasReferenceImage: context.referenceImages.length > 0,
     referenceImageNames: context.referenceImages.map((image) => image.filename),
     referenceImageName: context.referenceImages[0]?.filename || "",
@@ -1007,15 +1038,18 @@ async function generateCloudflarePptSlide({
   });
 
   let finalBase64 = "";
-  await requestImageGeneration({
-    baseUrl: config.baseUrl,
-    apiKey: config.apiKey,
+  const generationConfig = getSelectedImageGenerationConfig(config);
+  await requestCloudImageGeneration({
+    baseUrl: generationConfig.baseUrl,
+    apiKey: generationConfig.apiKey,
     prompt: slidePrompt.prompt,
     referenceImages,
     size: PPT_SLIDE_SIZE,
     quality: config.defaults?.quality || "high",
     format: toApiOutputFormat(PPT_SLIDE_FORMAT),
     responsesModel: config.responsesModel,
+    imageRoute: generationConfig.imageRoute,
+    imageModel: generationConfig.imageModel,
     reasoningEffort,
     statusHeartbeatMs: UPSTREAM_STATUS_HEARTBEAT_MS,
     fetchImpl,
@@ -1359,6 +1393,7 @@ async function enqueueGenerate(request, writer, { imageBucket, generationQueue }
     taskId: context.taskId,
     prompt: context.prompt,
     config: context.config,
+    generationConfig: context.generationConfig,
     generationMode: context.generationMode,
     styleTransferStylePreset: context.styleTransferStylePreset,
     assetKind: context.assetKind,
@@ -1422,7 +1457,8 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
   let quickBlendDImageName = String(formData.get("quickBlendDImageName") || formData.get("quickBlendDName") || "").trim();
   let quickBlendLayoutOrder = String(formData.get("quickBlendLayoutOrder") || "").trim();
   let quickBlendPlacementShape = String(formData.get("quickBlendPlacementShape") || "").trim();
-  const config = normalizePrivateConfig(formData);
+  const config = normalizePrivateConfig(formData, { allowDirectImageRoute: true });
+  const generationConfig = getSelectedImageGenerationConfig(config);
   const createdAt = new Date().toISOString();
   let targetLanguage = "";
   let sourceImageName = "";
@@ -1526,9 +1562,9 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
   const generationStartedAt = new Date().toISOString();
   const generationStartedAtMs = Date.now();
 
-  const generationResult = await requestImageGeneration({
-    baseUrl: config.baseUrl,
-    apiKey: config.apiKey,
+  const generationResult = await requestCloudImageGeneration({
+    baseUrl: generationConfig.baseUrl,
+    apiKey: generationConfig.apiKey,
     prompt: finalPrompt,
     referenceImages,
     referenceImageLabels: getGenerationReferenceImageLabels(
@@ -1543,6 +1579,8 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     quality: finalQuality,
     format: toApiOutputFormat(finalFormat),
     responsesModel: config.responsesModel,
+    imageRoute: generationConfig.imageRoute,
+    imageModel: generationConfig.imageModel,
     reasoningEffort,
     statusHeartbeatMs: UPSTREAM_STATUS_HEARTBEAT_MS,
     fetchImpl,
@@ -1594,6 +1632,7 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     prompt,
     dataUrl: "",
     config,
+    generationConfig,
     ratioOption,
     size: savedSize,
     quality: finalQuality,
@@ -1982,7 +2021,8 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
     logoOptions: buildCreationLogoOptionsFromFormData(formData, logoImage),
   });
   plan = applyCreationPlanOverrides(plan, formData.get("planOverrides"));
-  const config = normalizePrivateConfig(formData);
+  const config = normalizePrivateConfig(formData, { allowDirectImageRoute: true });
+  const generationConfig = getSelectedImageGenerationConfig(config);
   const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || "1:1"));
   const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
   const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
@@ -2031,9 +2071,9 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
       const itemReferenceImages = buildCreationItemReferenceImages(item, referenceImages, plan.referenceImageRoles);
       const itemGenerationReferenceImages = appendCreationStyleReferences(itemReferenceImages, styleReferenceImages);
       const itemGenerationReferenceImagesWithLogo = appendCreationLogoReference(itemGenerationReferenceImages, logoImage);
-      const generationResult = await requestImageGeneration({
-        baseUrl: config.baseUrl,
-        apiKey: config.apiKey,
+      const generationResult = await requestCloudImageGeneration({
+        baseUrl: generationConfig.baseUrl,
+        apiKey: generationConfig.apiKey,
         prompt: appendRatioHintToPrompt(item.prompt, ratioOption),
         referenceImages: itemGenerationReferenceImagesWithLogo,
         referenceImageLabels: buildCreationGenerationReferenceImageLabels(
@@ -2045,6 +2085,8 @@ async function runCreationGenerate(request, writer, { fetchImpl, imageBucket } =
         quality: finalQuality,
         format: toApiOutputFormat(finalFormat),
         responsesModel: config.responsesModel,
+        imageRoute: generationConfig.imageRoute,
+        imageModel: generationConfig.imageModel,
         reasoningEffort,
         statusHeartbeatMs: UPSTREAM_STATUS_HEARTBEAT_MS,
         fetchImpl,
@@ -2204,7 +2246,8 @@ async function runPortraitGenerate(request, writer, { fetchImpl, imageBucket } =
   const referenceImageNames = referenceImages.map((image) => image.filename).filter(Boolean);
   let plan = buildPortraitPlanFromFormData(formData);
   plan = applyPortraitPlanOverrides(plan, formData.get("planOverrides"));
-  const config = normalizePrivateConfig(formData);
+  const config = normalizePrivateConfig(formData, { allowDirectImageRoute: true });
+  const generationConfig = getSelectedImageGenerationConfig(config);
   const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || plan.ratio || "4:5"));
   const requestedSizeInput = String(formData.get("size") || plan.size || "auto").trim().toLowerCase();
   const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
@@ -2250,9 +2293,9 @@ async function runPortraitGenerate(request, writer, { fetchImpl, imageBucket } =
       );
       await writeSseEvent(writer, "item_started", { setId, itemId: item.itemId, shotType: item.shotType });
 
-      const generationResult = await requestImageGeneration({
-        baseUrl: config.baseUrl,
-        apiKey: config.apiKey,
+      const generationResult = await requestCloudImageGeneration({
+        baseUrl: generationConfig.baseUrl,
+        apiKey: generationConfig.apiKey,
         prompt: appendRatioHintToPrompt(item.prompt, ratioOption),
         referenceImages,
         referenceImageLabels,
@@ -2260,6 +2303,8 @@ async function runPortraitGenerate(request, writer, { fetchImpl, imageBucket } =
         quality: finalQuality,
         format: toApiOutputFormat(finalFormat),
         responsesModel: config.responsesModel,
+        imageRoute: generationConfig.imageRoute,
+        imageModel: generationConfig.imageModel,
         reasoningEffort,
         statusHeartbeatMs: UPSTREAM_STATUS_HEARTBEAT_MS,
         fetchImpl,
@@ -2407,7 +2452,8 @@ async function runCreationLogoBatchGenerate(request, writer, { fetchImpl, imageB
     logoOptions: buildCreationLogoOptionsFromFormData(formData, logoImage),
   });
   const referenceImageNames = plan.referenceImageNames || sourceImages.map((image) => image.filename).filter(Boolean);
-  const config = normalizePrivateConfig(formData);
+  const config = normalizePrivateConfig(formData, { allowDirectImageRoute: true });
+  const generationConfig = getSelectedImageGenerationConfig(config);
   const ratioOption = resolveAspectRatioOption(String(formData.get("ratio") || "1:1"));
   const requestedSizeInput = String(formData.get("size") || "auto").trim().toLowerCase();
   const requestedSize = normalizeGenerationSize(ratioOption.value, requestedSizeInput);
@@ -2458,9 +2504,9 @@ async function runCreationLogoBatchGenerate(request, writer, { fetchImpl, imageB
       );
       await writeSseEvent(writer, "item_started", { setId, itemId: item.itemId, role: item.role });
 
-      const generationResult = await requestImageGeneration({
-        baseUrl: config.baseUrl,
-        apiKey: config.apiKey,
+      const generationResult = await requestCloudImageGeneration({
+        baseUrl: generationConfig.baseUrl,
+        apiKey: generationConfig.apiKey,
         prompt: appendRatioHintToPrompt(item.prompt, ratioOption),
         referenceImages: [sourceImage, logoImage],
         referenceImageLabels: CREATION_LOGO_BATCH_REFERENCE_LABELS,
@@ -2468,6 +2514,8 @@ async function runCreationLogoBatchGenerate(request, writer, { fetchImpl, imageB
         quality: finalQuality,
         format: toApiOutputFormat(finalFormat),
         responsesModel: config.responsesModel,
+        imageRoute: generationConfig.imageRoute,
+        imageModel: generationConfig.imageModel,
         reasoningEffort,
         statusHeartbeatMs: UPSTREAM_STATUS_HEARTBEAT_MS,
         fetchImpl,
@@ -2706,6 +2754,8 @@ async function processQueuedGenerationMessage(messageBody, { imageBucket, fetchI
   }
 
   const baseTask = storedRequest.task || { id: taskId, createdAt: storedRequest.createdAt };
+  const generationConfig =
+    storedRequest.generationConfig || getSelectedImageGenerationConfig(storedRequest.config || {});
   let finalBase64 = "";
   const generationStartedAt = new Date().toISOString();
   const generationStartedAtMs = Date.now();
@@ -2719,9 +2769,9 @@ async function processQueuedGenerationMessage(messageBody, { imageBucket, fetchI
       generationStartedAt,
     });
 
-    const generationResult = await requestImageGeneration({
-      baseUrl: storedRequest.config.baseUrl,
-      apiKey: storedRequest.config.apiKey,
+    const generationResult = await requestCloudImageGeneration({
+      baseUrl: generationConfig.baseUrl,
+      apiKey: generationConfig.apiKey,
       prompt: storedRequest.finalPrompt,
       referenceImages: storedRequest.referenceImages || [],
       referenceImageLabels: getGenerationReferenceImageLabels(
@@ -2741,6 +2791,8 @@ async function processQueuedGenerationMessage(messageBody, { imageBucket, fetchI
       quality: storedRequest.finalQuality,
       format: toApiOutputFormat(storedRequest.finalFormat),
       responsesModel: storedRequest.config.responsesModel,
+      imageRoute: generationConfig.imageRoute,
+      imageModel: generationConfig.imageModel,
       reasoningEffort: storedRequest.reasoningEffort,
       statusHeartbeatMs: UPSTREAM_STATUS_HEARTBEAT_MS,
       fetchImpl,
@@ -2788,6 +2840,7 @@ async function processQueuedGenerationMessage(messageBody, { imageBucket, fetchI
       prompt: storedRequest.prompt,
       dataUrl: "",
       config: storedRequest.config,
+      generationConfig,
       ratioOption,
       size: savedSize,
       quality: storedRequest.finalQuality,

@@ -1,4 +1,5 @@
 import { normalizeApiBaseUrl } from "./api-base-url.mjs";
+import { DEFAULT_DIRECT_IMAGE_MODEL, normalizeImageRouteConfig } from "./image-route-config.mjs";
 
 export const BROWSER_CONFIG_STORAGE_KEY = "image-studio-browser-config-v1";
 export const CLIENT_SESSION_STORAGE_KEY = "image-studio-client-session-id";
@@ -33,14 +34,19 @@ export function maskBrowserApiKey(apiKey) {
 }
 
 export function normalizeBrowserPrivateConfig(source = {}) {
-  const baseUrl = normalizeApiBaseUrl(source.baseUrl, { defaultBaseUrl: DEFAULT_BROWSER_BASE_URL });
-  const apiKey = String(source.apiKey || "").trim();
-  const responsesModel = String(source.responsesModel || DEFAULT_BROWSER_RESPONSES_MODEL).trim();
+  const routeConfig = normalizeImageRouteConfig(source, {
+    defaultBaseUrl: DEFAULT_BROWSER_BASE_URL,
+    defaultResponsesModel: DEFAULT_BROWSER_RESPONSES_MODEL,
+  });
 
   return {
-    baseUrl: baseUrl || DEFAULT_BROWSER_BASE_URL,
-    apiKey,
-    responsesModel: responsesModel || DEFAULT_BROWSER_RESPONSES_MODEL,
+    imageRoute: routeConfig.imageRoute,
+    baseUrl: normalizeApiBaseUrl(routeConfig.baseUrl, { defaultBaseUrl: DEFAULT_BROWSER_BASE_URL }) || DEFAULT_BROWSER_BASE_URL,
+    apiKey: routeConfig.apiKey,
+    responsesModel: routeConfig.responsesModel || DEFAULT_BROWSER_RESPONSES_MODEL,
+    directBaseUrl: normalizeApiBaseUrl(routeConfig.directBaseUrl, { defaultBaseUrl: DEFAULT_BROWSER_BASE_URL }) || DEFAULT_BROWSER_BASE_URL,
+    directApiKey: routeConfig.directApiKey,
+    directImageModel: routeConfig.directImageModel || DEFAULT_DIRECT_IMAGE_MODEL,
   };
 }
 
@@ -65,6 +71,11 @@ export function toPublicBrowserConfig(privateConfig, baseConfig = {}) {
     apiKeyConfigured: Boolean(normalized.apiKey),
     apiKeyMask: maskBrowserApiKey(normalized.apiKey),
     responsesModel: normalized.responsesModel,
+    imageRoute: normalized.imageRoute,
+    directBaseUrl: normalized.directBaseUrl,
+    directApiKeyConfigured: Boolean(normalized.directApiKey),
+    directApiKeyMask: maskBrowserApiKey(normalized.directApiKey),
+    directImageModel: normalized.directImageModel,
   };
 }
 
@@ -75,6 +86,10 @@ export function saveBrowserPrivateConfig(payload, storage = getLocalStorage()) {
     baseUrl: payload.baseUrl,
     apiKey: payload.apiKey ? payload.apiKey : current.apiKey,
     responsesModel: payload.responsesModel,
+    imageRoute: payload.imageRoute || current.imageRoute,
+    directBaseUrl: payload.directBaseUrl || current.directBaseUrl,
+    directApiKey: payload.directApiKey ? payload.directApiKey : current.directApiKey,
+    directImageModel: payload.directImageModel || current.directImageModel,
   });
 
   storage?.setItem?.(BROWSER_CONFIG_STORAGE_KEY, JSON.stringify(next));
@@ -90,6 +105,10 @@ export function appendBrowserConfigToFormData(formData, readConfig = readBrowser
   formData.set("baseUrl", browserConfig.baseUrl);
   formData.set("apiKey", browserConfig.apiKey);
   formData.set("responsesModel", browserConfig.responsesModel);
+  formData.set("imageRoute", browserConfig.imageRoute);
+  formData.set("directBaseUrl", browserConfig.directBaseUrl);
+  formData.set("directApiKey", browserConfig.directApiKey);
+  formData.set("directImageModel", browserConfig.directImageModel);
   return formData;
 }
 
@@ -100,6 +119,10 @@ export function getBrowserPrivateConfigRequestPayload(readConfig = readBrowserPr
         baseUrl: browserConfig.baseUrl,
         apiKey: browserConfig.apiKey,
         responsesModel: browserConfig.responsesModel,
+        imageRoute: browserConfig.imageRoute,
+        directBaseUrl: browserConfig.directBaseUrl,
+        directApiKey: browserConfig.directApiKey,
+        directImageModel: browserConfig.directImageModel,
       }
     : {};
 }

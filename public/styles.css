@@ -9134,6 +9134,44 @@ html[data-ui-layout="mobile"] .portrait-accessory-asset-panel {
   flex-wrap: wrap;
 }
 
+.route-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+
+.route-selector legend {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: var(--type-body-size);
+}
+
+.route-selector label {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--control-bg);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.route-selector label:has(input:checked) {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--border));
+  background: color-mix(in srgb, var(--accent) 18%, var(--control-bg));
+}
+
+.route-selector input {
+  accent-color: var(--accent);
+}
+
 .field {
   display: grid;
   gap: 8px;

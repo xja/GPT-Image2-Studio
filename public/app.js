@@ -559,6 +559,11 @@ let creationReferenceAnalysisRequestToken = 0;
 const refs = {
   apiKeyInput: document.querySelector("#apiKeyInput"),
   baseUrlInput: document.querySelector("#baseUrlInput"),
+  directApiKeyInput: document.querySelector("#directApiKeyInput"),
+  directBaseUrlInput: document.querySelector("#directBaseUrlInput"),
+  directImageModelInput: document.querySelector("#directImageModelInput"),
+  directSavedKeyMask: document.querySelector("#directSavedKeyMask"),
+  imageRouteInputs: [...document.querySelectorAll('input[name="imageRoute"]')],
   clearHistoryButton: document.querySelector("#clearHistoryButton"),
   closeConfigBackdrop: document.querySelector("#closeConfigBackdrop"),
   closeConfigButton: document.querySelector("#closeConfigButton"),
@@ -5011,11 +5016,22 @@ function renderReferenceAnalysisRatioGrid() {
   renderRatioGrid(refs.referenceAnalysisRatioGrid, refs.referenceAnalysisRatioInput);
 }
 
+function getSelectedImageRoute() {
+  return refs.imageRouteInputs.find((input) => input.checked)?.value === "b" ? "b" : "a";
+}
+
 function syncConfigUi(config) {
   refs.baseUrlInput.value = config.baseUrl || "";
   refs.responsesModelInput.value = config.responsesModel || "gpt-5.5";
+  refs.directBaseUrlInput.value = config.directBaseUrl || config.baseUrl || "";
+  refs.directImageModelInput.value = config.directImageModel || "gpt-image-2";
+  refs.imageRouteInputs.forEach((input) => {
+    input.checked = input.value === (config.imageRoute === "b" ? "b" : "a");
+  });
   refs.savedKeyMask.textContent = config.apiKeyConfigured ? `已保存 ${config.apiKeyMask || ""}` : "未保存";
-  refs.configStatus.textContent = config.apiKeyConfigured ? "配置已保存" : "配置未保存";
+  refs.directSavedKeyMask.textContent = config.directApiKeyConfigured ? `已保存 ${config.directApiKeyMask || ""}` : "未保存";
+  const activeRouteConfigured = config.imageRoute === "b" ? config.directApiKeyConfigured : config.apiKeyConfigured;
+  refs.configStatus.textContent = activeRouteConfigured ? "配置已保存" : "配置未保存";
   configModelPicker.render();
   state.aspectRatios = config.aspectRatios || [];
   const configLimits = config.limits || {};
@@ -14126,14 +14142,19 @@ async function saveConfig(event) {
   clearError();
 
   const payload = {
+    imageRoute: getSelectedImageRoute(),
     baseUrl: refs.baseUrlInput.value.trim(),
     apiKey: refs.apiKeyInput.value.trim(),
     responsesModel: refs.responsesModelInput.value.trim() || "gpt-5.5",
+    directBaseUrl: refs.directBaseUrlInput.value.trim(),
+    directApiKey: refs.directApiKeyInput.value.trim(),
+    directImageModel: refs.directImageModelInput.value.trim() || "gpt-image-2",
   };
 
   const browserConfig = saveBrowserPrivateConfig(payload);
   state.config = toPublicBrowserConfig(browserConfig, state.config || {});
   refs.apiKeyInput.value = "";
+  refs.directApiKeyInput.value = "";
   configModelPicker.setFeedback("配置已保存到当前浏览器，本项目不会把 API Key 写入源码或 Cloudflare 环境变量。", "success");
   syncConfigUi(state.config);
 }

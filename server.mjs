@@ -56,8 +56,9 @@ import {
   repairGeneratedAssetMetadata,
   saveGeneratedAsset,
 } from "./lib/gallery-store.mjs";
-import { normalizeBase64, requestImageGeneration } from "./lib/responses-workflow.mjs";
+import { normalizeBase64, requestDirectImageGeneration, requestImageGeneration } from "./lib/responses-workflow.mjs";
 import { mergeRequestPrivateConfig } from "./lib/request-private-config.mjs";
+import { IMAGE_ROUTE_B, getSelectedImageGenerationConfig } from "./lib/image-route-config.mjs";
 import { fetchAvailableModels } from "./lib/model-list-client.mjs";
 import { createGenerationTaskStore } from "./lib/generation-task-store.mjs";
 import { createSessionTaskSlotLimiter } from "./lib/generation-task-slots.mjs";
@@ -264,6 +265,9 @@ function sendText(response, statusCode, message) {
 
 async function requestStudioImageGeneration(options) {
   if (!MOCK_IMAGE_GENERATION_ENABLED) {
+    if (options.imageRoute === IMAGE_ROUTE_B) {
+      return requestDirectImageGeneration(options);
+    }
     return requestImageGeneration(options);
   }
 
@@ -807,15 +811,21 @@ async function generateAndSavePptSlide({
   });
 
   let finalBase64 = "";
+  const generationConfig = getSelectedImageGenerationConfig(config);
+  if (!generationConfig.apiKey) {
+    throw new Error("Missing API key for the selected image generation route.");
+  }
   const generationResult = await requestStudioImageGeneration({
-    baseUrl: config.baseUrl,
-    apiKey: config.apiKey,
+    baseUrl: generationConfig.baseUrl,
+    apiKey: generationConfig.apiKey,
     prompt: slidePrompt.prompt,
     referenceImages,
     size: PPT_SLIDE_SIZE,
     quality: config.defaults?.quality || "high",
     format: toApiOutputFormat(PPT_SLIDE_FORMAT),
     responsesModel: config.responsesModel,
+    imageRoute: generationConfig.imageRoute,
+    imageModel: generationConfig.imageModel,
     reasoningEffort,
     async onEvent(event) {
       if (event.type === "partial_image") {
@@ -853,9 +863,10 @@ async function generateAndSavePptSlide({
     metadata: {
       prompt: slidePrompt.prompt,
       createdAt,
-      baseUrl: config.baseUrl,
+      baseUrl: generationConfig.baseUrl,
       responsesModel: config.responsesModel,
-      imageModel: "gpt-image-2",
+      imageRoute: generationConfig.imageRoute,
+      imageModel: generationConfig.imageModel,
       ratio: "16:9",
       ratioLabel: "PPT 16:9",
       size: savedSize,
@@ -1448,6 +1459,8 @@ function buildSavedItem({
   prompt,
   baseUrl,
   responsesModel,
+  imageRoute = "a",
+  imageModel = "gpt-image-2",
   ratioOption,
   size,
   quality,
@@ -1486,7 +1499,8 @@ function buildSavedItem({
     prompt,
     baseUrl,
     responsesModel,
-    imageModel: "gpt-image-2",
+    imageRoute,
+    imageModel,
     hasReferenceImage: referenceImages.length > 0,
     referenceImageNames: referenceImages.map((image) => image.filename),
     referenceImageName: referenceImages[0]?.filename || "",
@@ -2078,7 +2092,8 @@ async function handleArticleIllustrationGenerate(request, response, { referenceO
     });
 
     const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
-    if (!config.apiKey) {
+    const generationConfig = getSelectedImageGenerationConfig(config);
+    if (!generationConfig.apiKey) {
       writeSseEvent(response, "error", {
         message: "当前未保存 API Key，请先在配置中保存。",
       });
@@ -2170,8 +2185,8 @@ async function handleArticleIllustrationGenerate(request, response, { referenceO
           ratioOption,
         );
         const generationResult = await requestStudioImageGeneration({
-          baseUrl: config.baseUrl,
-          apiKey: config.apiKey,
+          baseUrl: generationConfig.baseUrl,
+          apiKey: generationConfig.apiKey,
           prompt,
           referenceImages,
           referenceImageLabels: buildArticleReferenceImageLabels(referenceImages),
@@ -2179,6 +2194,8 @@ async function handleArticleIllustrationGenerate(request, response, { referenceO
           quality: finalQuality,
           format: toApiOutputFormat(finalFormat),
           responsesModel: config.responsesModel,
+          imageRoute: generationConfig.imageRoute,
+          imageModel: generationConfig.imageModel,
           reasoningEffort,
           async onEvent(event) {
             if (event.type === "status") {
@@ -2231,9 +2248,10 @@ async function handleArticleIllustrationGenerate(request, response, { referenceO
           metadata: {
             prompt,
             createdAt,
-            baseUrl: config.baseUrl,
+            baseUrl: generationConfig.baseUrl,
             responsesModel: config.responsesModel,
-            imageModel: "gpt-image-2",
+            imageRoute: generationConfig.imageRoute,
+            imageModel: generationConfig.imageModel,
             ratio: ratioOption.value,
             ratioLabel: ratioOption.label,
             size: savedSize,
@@ -2880,7 +2898,8 @@ async function handlePortraitGenerate(request, response) {
     plan = applyPortraitPlanOverrides(plan, formData.get("planOverrides"));
 
     const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
-    if (!config.apiKey) {
+    const generationConfig = getSelectedImageGenerationConfig(config);
+    if (!generationConfig.apiKey) {
       writeSseEvent(response, "error", {
         message: "当前未保存 API Key，请先在配置中保存。",
       });
@@ -2951,8 +2970,8 @@ async function handlePortraitGenerate(request, response) {
 
         const finalPrompt = appendRatioHintToPrompt(item.prompt, ratioOption);
         const generationResult = await requestStudioImageGeneration({
-          baseUrl: config.baseUrl,
-          apiKey: config.apiKey,
+          baseUrl: generationConfig.baseUrl,
+          apiKey: generationConfig.apiKey,
           prompt: finalPrompt,
           referenceImages,
           referenceImageLabels,
@@ -2960,6 +2979,8 @@ async function handlePortraitGenerate(request, response) {
           quality: finalQuality,
           format: toApiOutputFormat(finalFormat),
           responsesModel: config.responsesModel,
+          imageRoute: generationConfig.imageRoute,
+          imageModel: generationConfig.imageModel,
           reasoningEffort,
           async onEvent(event) {
             if (event.type === "status") {
@@ -3007,9 +3028,10 @@ async function handlePortraitGenerate(request, response) {
           metadata: {
             prompt: item.prompt,
             createdAt,
-            baseUrl: config.baseUrl,
+            baseUrl: generationConfig.baseUrl,
             responsesModel: config.responsesModel,
-            imageModel: "gpt-image-2",
+            imageRoute: generationConfig.imageRoute,
+            imageModel: generationConfig.imageModel,
             generationMode: "portrait",
             ratio: ratioOption.value,
             ratioLabel: ratioOption.label,
@@ -3207,7 +3229,8 @@ async function handleCreationGenerate(request, response) {
     plan = applyCreationPlanOverrides(plan, formData.get("planOverrides"));
 
     const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
-    if (!config.apiKey) {
+    const generationConfig = getSelectedImageGenerationConfig(config);
+    if (!generationConfig.apiKey) {
       writeSseEvent(response, "error", {
         message: "当前未保存 API Key，请先在配置中保存。",
       });
@@ -3281,8 +3304,8 @@ async function handleCreationGenerate(request, response) {
         const itemGenerationReferenceImages = appendCreationStyleReferences(itemReferenceImages, styleReferenceImages);
         const itemGenerationReferenceImagesWithLogo = appendCreationLogoReference(itemGenerationReferenceImages, logoImage);
         const generationResult = await requestStudioImageGeneration({
-          baseUrl: config.baseUrl,
-          apiKey: config.apiKey,
+          baseUrl: generationConfig.baseUrl,
+          apiKey: generationConfig.apiKey,
           prompt: finalPrompt,
           referenceImages: itemGenerationReferenceImagesWithLogo,
           referenceImageLabels: buildCreationGenerationReferenceImageLabels(
@@ -3294,6 +3317,8 @@ async function handleCreationGenerate(request, response) {
           quality: finalQuality,
           format: toApiOutputFormat(finalFormat),
           responsesModel: config.responsesModel,
+          imageRoute: generationConfig.imageRoute,
+          imageModel: generationConfig.imageModel,
           reasoningEffort,
           async onEvent(event) {
             if (event.type === "status") {
@@ -3346,9 +3371,10 @@ async function handleCreationGenerate(request, response) {
           metadata: {
             prompt: item.prompt,
             createdAt,
-            baseUrl: config.baseUrl,
+            baseUrl: generationConfig.baseUrl,
             responsesModel: config.responsesModel,
-            imageModel: "gpt-image-2",
+            imageRoute: generationConfig.imageRoute,
+            imageModel: generationConfig.imageModel,
             ratio: ratioOption.value,
             ratioLabel: ratioOption.label,
             size: savedSize,
@@ -3521,7 +3547,8 @@ async function handleCreationLogoBatchGenerate(request, response) {
     referenceImageNames = plan.referenceImageNames || sourceImages.map((image) => image.filename).filter(Boolean);
 
     const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
-    if (!config.apiKey) {
+    const generationConfig = getSelectedImageGenerationConfig(config);
+    if (!generationConfig.apiKey) {
       writeSseEvent(response, "error", {
         message: "当前未保存 API Key，请先在配置中保存。",
       });
@@ -3596,8 +3623,8 @@ async function handleCreationLogoBatchGenerate(request, response) {
 
         const finalPrompt = appendRatioHintToPrompt(item.prompt, ratioOption);
         const generationResult = await requestStudioImageGeneration({
-          baseUrl: config.baseUrl,
-          apiKey: config.apiKey,
+          baseUrl: generationConfig.baseUrl,
+          apiKey: generationConfig.apiKey,
           prompt: finalPrompt,
           referenceImages: [sourceImage, logoImage],
           referenceImageLabels: CREATION_LOGO_BATCH_REFERENCE_LABELS,
@@ -3605,6 +3632,8 @@ async function handleCreationLogoBatchGenerate(request, response) {
           quality: finalQuality,
           format: toApiOutputFormat(finalFormat),
           responsesModel: config.responsesModel,
+          imageRoute: generationConfig.imageRoute,
+          imageModel: generationConfig.imageModel,
           reasoningEffort,
           async onEvent(event) {
             if (event.type === "status") {
@@ -3657,9 +3686,10 @@ async function handleCreationLogoBatchGenerate(request, response) {
           metadata: {
             prompt: item.prompt,
             createdAt,
-            baseUrl: config.baseUrl,
+            baseUrl: generationConfig.baseUrl,
             responsesModel: config.responsesModel,
-            imageModel: "gpt-image-2",
+            imageRoute: generationConfig.imageRoute,
+            imageModel: generationConfig.imageModel,
             ratio: ratioOption.value,
             ratioLabel: ratioOption.label,
             size: savedSize,
@@ -3845,7 +3875,8 @@ async function handlePortraitRepair(request, response) {
     }
 
     const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
-    if (!config.apiKey) {
+    const generationConfig = getSelectedImageGenerationConfig(config);
+    if (!generationConfig.apiKey) {
       throw new Error("当前未保存 API Key，请先在配置中保存。");
     }
 
@@ -3892,8 +3923,8 @@ async function handlePortraitRepair(request, response) {
 
         const finalPrompt = appendRatioHintToPrompt(item.prompt, ratioOption);
         const generationResult = await requestStudioImageGeneration({
-          baseUrl: config.baseUrl,
-          apiKey: config.apiKey,
+          baseUrl: generationConfig.baseUrl,
+          apiKey: generationConfig.apiKey,
           prompt: finalPrompt,
           referenceImages,
           referenceImageLabels,
@@ -3901,6 +3932,8 @@ async function handlePortraitRepair(request, response) {
           quality: finalQuality,
           format: toApiOutputFormat(finalFormat),
           responsesModel: config.responsesModel,
+          imageRoute: generationConfig.imageRoute,
+          imageModel: generationConfig.imageModel,
           reasoningEffort,
           async onEvent(event) {
             if (event.type === "status") {
@@ -3946,9 +3979,10 @@ async function handlePortraitRepair(request, response) {
           metadata: {
             prompt: item.prompt,
             createdAt,
-            baseUrl: config.baseUrl,
+            baseUrl: generationConfig.baseUrl,
             responsesModel: config.responsesModel,
-            imageModel: "gpt-image-2",
+            imageRoute: generationConfig.imageRoute,
+            imageModel: generationConfig.imageModel,
             generationMode: "portrait",
             ratio: ratioOption.value,
             ratioLabel: ratioOption.label,
@@ -4106,7 +4140,8 @@ async function handleCreationRepair(request, response) {
     const generationReferenceImages = appendCreationLogoReference(referenceImages, logoImage);
 
     const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
-    if (!config.apiKey) {
+    const generationConfig = getSelectedImageGenerationConfig(config);
+    if (!generationConfig.apiKey) {
       writeSseEvent(response, "error", {
         message: "当前未保存 API Key，请先在配置中保存。",
       });
@@ -4258,8 +4293,8 @@ async function handleCreationRepair(request, response) {
         const itemGenerationReferenceImages = appendCreationStyleReferences(itemReferenceImages, styleReferenceImages);
         const itemGenerationReferenceImagesWithLogo = appendCreationLogoReference(itemGenerationReferenceImages, logoImage);
         const generationResult = await requestStudioImageGeneration({
-          baseUrl: config.baseUrl,
-          apiKey: config.apiKey,
+          baseUrl: generationConfig.baseUrl,
+          apiKey: generationConfig.apiKey,
           prompt: finalPrompt,
           referenceImages: itemGenerationReferenceImagesWithLogo,
           referenceImageLabels: buildCreationGenerationReferenceImageLabels(
@@ -4271,6 +4306,8 @@ async function handleCreationRepair(request, response) {
           quality: finalQuality,
           format: toApiOutputFormat(finalFormat),
           responsesModel: config.responsesModel,
+          imageRoute: generationConfig.imageRoute,
+          imageModel: generationConfig.imageModel,
           reasoningEffort,
           async onEvent(event) {
             if (event.type === "status") {
@@ -4326,9 +4363,10 @@ async function handleCreationRepair(request, response) {
           metadata: {
             prompt: repairItem.prompt,
             createdAt: generationCompletedAt,
-            baseUrl: config.baseUrl,
+            baseUrl: generationConfig.baseUrl,
             responsesModel: config.responsesModel,
-            imageModel: "gpt-image-2",
+            imageRoute: generationConfig.imageRoute,
+            imageModel: generationConfig.imageModel,
             ratio: ratioOption.value,
             ratioLabel: ratioOption.label,
             size: savedSize,
@@ -4658,7 +4696,8 @@ async function handleGenerate(request, response) {
     }
 
     const config = mergeRequestPrivateConfig(formData, await configStore.readPrivateConfig());
-    if (!config.apiKey) {
+    const generationConfig = getSelectedImageGenerationConfig(config);
+    if (!generationConfig.apiKey) {
       generationTaskStore.failTask(clientSessionId, taskId, {
         errorMessage: "当前未保存 API Key，请先在配置中保存。",
       });
@@ -4696,7 +4735,8 @@ async function handleGenerate(request, response) {
       quality: finalQuality,
       format: finalFormat,
       responsesModel: config.responsesModel,
-      imageModel: "gpt-image-2",
+      imageRoute: generationConfig.imageRoute,
+      imageModel: generationConfig.imageModel,
       hasReferenceImage: referenceImages.length > 0,
       referenceImageNames: referenceImages.map((image) => image.filename),
       referenceImageName: referenceImages[0]?.filename || "",
@@ -4720,8 +4760,8 @@ async function handleGenerate(request, response) {
     });
 
     const generationResult = await requestStudioImageGeneration({
-      baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
+      baseUrl: generationConfig.baseUrl,
+      apiKey: generationConfig.apiKey,
       prompt: finalPrompt,
       referenceImages,
       referenceImageLabels: getStyleTransferReferenceImageLabels(generationMode, styleTransferStylePreset, referenceImages, {
@@ -4731,6 +4771,8 @@ async function handleGenerate(request, response) {
       quality: finalQuality,
       format: toApiOutputFormat(finalFormat),
       responsesModel: config.responsesModel,
+      imageRoute: generationConfig.imageRoute,
+      imageModel: generationConfig.imageModel,
       reasoningEffort,
       async onEvent(event) {
         if (event.type === "status") {
@@ -4804,9 +4846,10 @@ async function handleGenerate(request, response) {
       metadata: {
         prompt,
         createdAt,
-        baseUrl: config.baseUrl,
+        baseUrl: generationConfig.baseUrl,
         responsesModel: config.responsesModel,
-        imageModel: "gpt-image-2",
+        imageRoute: generationConfig.imageRoute,
+        imageModel: generationConfig.imageModel,
         ratio: ratioOption.value,
         ratioLabel: ratioOption.label,
         size: savedSize,
@@ -4843,8 +4886,10 @@ async function handleGenerate(request, response) {
       relativePath: saved.relativePath,
       createdAt: saved.createdAt,
       prompt,
-      baseUrl: config.baseUrl,
+      baseUrl: generationConfig.baseUrl,
       responsesModel: config.responsesModel,
+      imageRoute: generationConfig.imageRoute,
+      imageModel: generationConfig.imageModel,
       ratioOption,
       size: savedSize,
       quality: finalQuality,

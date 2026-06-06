@@ -16,6 +16,11 @@ test("config store returns empty public config before any save", async () => {
   assert.equal(config.apiKeyConfigured, false);
   assert.equal(config.apiKeyMask, undefined);
   assert.equal(config.responsesModel, "gpt-5.4");
+  assert.equal(config.imageRoute, "a");
+  assert.equal(config.directBaseUrl, "https://api.openai.com/v1");
+  assert.equal(config.directApiKeyConfigured, false);
+  assert.equal(config.directApiKeyMask, undefined);
+  assert.equal(config.directImageModel, "gpt-image-2");
   assert.deepEqual(config.defaults, {
     size: "896x1120",
     quality: "high",
@@ -72,4 +77,42 @@ test("config store persists private config and only exposes masked api key publi
   assert.equal(privateConfig.baseUrl, "https://example.com/v1");
   assert.equal(raw.apiKey, "placeholder-test-key-1234567890");
   assert.equal(raw.baseUrl, "https://example.com/v1");
+});
+
+test("config store keeps route A and route B image API settings independent", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "responses-config-"));
+  const store = createConfigStore({ rootDir });
+
+  await store.saveConfig({
+    baseUrl: "https://route-a.example.com",
+    apiKey: "route-a-key-1234567890",
+    responsesModel: "gpt-5.4",
+    imageRoute: "b",
+    directBaseUrl: "https://route-b.example.com",
+    directApiKey: "route-b-key-1234567890",
+    directImageModel: "vendor-image-pro",
+  });
+
+  await store.saveConfig({
+    directBaseUrl: "https://route-b-2.example.com/v1",
+    directImageModel: "vendor-image-ultra",
+  });
+
+  const publicConfig = await store.readPublicConfig();
+  const privateConfig = await store.readPrivateConfig();
+
+  assert.equal(publicConfig.imageRoute, "b");
+  assert.equal(publicConfig.baseUrl, "https://route-a.example.com/v1");
+  assert.equal(publicConfig.apiKeyConfigured, true);
+  assert.match(publicConfig.apiKeyMask, /^rout.*7890$/);
+  assert.equal(publicConfig.responsesModel, "gpt-5.4");
+  assert.equal(publicConfig.directBaseUrl, "https://route-b-2.example.com/v1");
+  assert.equal(publicConfig.directApiKeyConfigured, true);
+  assert.match(publicConfig.directApiKeyMask, /^rout.*7890$/);
+  assert.equal(publicConfig.directImageModel, "vendor-image-ultra");
+
+  assert.equal(privateConfig.apiKey, "route-a-key-1234567890");
+  assert.equal(privateConfig.directApiKey, "route-b-key-1234567890");
+  assert.equal(privateConfig.directBaseUrl, "https://route-b-2.example.com/v1");
+  assert.equal(privateConfig.directImageModel, "vendor-image-ultra");
 });
