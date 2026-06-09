@@ -210,6 +210,7 @@ a {
 .ppt-form,
 .ppt-slide-list,
 .image-decomposition-form,
+.image-edit-form,
 .timeline-list,
 .recent-list,
 .filmstrip,
@@ -240,6 +241,7 @@ textarea {
 .ppt-form,
 .ppt-slide-list,
 .image-decomposition-form,
+.image-edit-form,
 .timeline-list,
 .recent-list,
 .drawer-panel,
@@ -265,6 +267,7 @@ textarea {
 .ppt-form::-webkit-scrollbar,
 .ppt-slide-list::-webkit-scrollbar,
 .image-decomposition-form::-webkit-scrollbar,
+.image-edit-form::-webkit-scrollbar,
 .timeline-list::-webkit-scrollbar,
 .recent-list::-webkit-scrollbar,
 .filmstrip::-webkit-scrollbar,
@@ -293,6 +296,7 @@ textarea::-webkit-scrollbar {
 .ppt-form::-webkit-scrollbar-track,
 .ppt-slide-list::-webkit-scrollbar-track,
 .image-decomposition-form::-webkit-scrollbar-track,
+.image-edit-form::-webkit-scrollbar-track,
 .timeline-list::-webkit-scrollbar-track,
 .recent-list::-webkit-scrollbar-track,
 .filmstrip::-webkit-scrollbar-track,
@@ -321,6 +325,7 @@ textarea::-webkit-scrollbar-track {
 .ppt-form::-webkit-scrollbar-thumb,
 .ppt-slide-list::-webkit-scrollbar-thumb,
 .image-decomposition-form::-webkit-scrollbar-thumb,
+.image-edit-form::-webkit-scrollbar-thumb,
 .timeline-list::-webkit-scrollbar-thumb,
 .recent-list::-webkit-scrollbar-thumb,
 .filmstrip::-webkit-scrollbar-thumb,
@@ -352,6 +357,7 @@ textarea::-webkit-scrollbar-thumb {
 .ppt-form::-webkit-scrollbar-thumb:hover,
 .ppt-slide-list::-webkit-scrollbar-thumb:hover,
 .image-decomposition-form::-webkit-scrollbar-thumb:hover,
+.image-edit-form::-webkit-scrollbar-thumb:hover,
 .timeline-list::-webkit-scrollbar-thumb:hover,
 .recent-list::-webkit-scrollbar-thumb:hover,
 .filmstrip::-webkit-scrollbar-thumb:hover,
@@ -382,6 +388,7 @@ textarea::-webkit-scrollbar-thumb:hover {
 .ppt-form::-webkit-scrollbar-thumb:active,
 .ppt-slide-list::-webkit-scrollbar-thumb:active,
 .image-decomposition-form::-webkit-scrollbar-thumb:active,
+.image-edit-form::-webkit-scrollbar-thumb:active,
 .timeline-list::-webkit-scrollbar-thumb:active,
 .recent-list::-webkit-scrollbar-thumb:active,
 .filmstrip::-webkit-scrollbar-thumb:active,
@@ -409,6 +416,7 @@ textarea::-webkit-scrollbar-thumb:active {
 .ppt-form::-webkit-scrollbar-track:hover,
 .ppt-slide-list::-webkit-scrollbar-track:hover,
 .image-decomposition-form::-webkit-scrollbar-track:hover,
+.image-edit-form::-webkit-scrollbar-track:hover,
 .timeline-list::-webkit-scrollbar-track:hover,
 .recent-list::-webkit-scrollbar-track:hover,
 .filmstrip::-webkit-scrollbar-track:hover,
@@ -436,6 +444,7 @@ textarea::-webkit-scrollbar-track:hover {
 .ppt-form::-webkit-scrollbar-corner,
 .ppt-slide-list::-webkit-scrollbar-corner,
 .image-decomposition-form::-webkit-scrollbar-corner,
+.image-edit-form::-webkit-scrollbar-corner,
 .timeline-list::-webkit-scrollbar-corner,
 .recent-list::-webkit-scrollbar-corner,
 .filmstrip::-webkit-scrollbar-corner,
@@ -6018,6 +6027,387 @@ html[data-ui-layout="mobile"] .image-decomposition-generation-canvas {
   border-radius: 14px;
 }
 
+.image-edit-view {
+  height: 100%;
+  overflow: hidden;
+}
+
+.image-edit-workspace {
+  display: grid;
+  grid-template-columns: var(--studio-grid-left, 392px) minmax(0, 1fr);
+  gap: var(--studio-grid-gap, 14px);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.image-edit-upload-panel,
+.image-edit-preview-panel {
+  min-width: 0;
+}
+
+.image-edit-upload-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.image-edit-form {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.image-edit-source-field > .image-edit-dropzone {
+  min-height: var(--reference-dropzone-min-height, 140px);
+}
+
+.image-edit-source-grid {
+  min-width: 0;
+}
+
+.image-edit-local-mask-panel {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.image-edit-local-mask-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.055) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.055) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.055) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.055) 75%),
+    #111827;
+  background-position:
+    0 0,
+    0 12px,
+    12px -12px,
+    -12px 0;
+  background-size: 24px 24px;
+  touch-action: none;
+}
+
+.image-edit-source-canvas,
+.image-edit-mask-overlay-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+.image-edit-mask-overlay-canvas {
+  cursor: crosshair;
+}
+
+.image-edit-local-mask-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.image-edit-brush-size-field {
+  min-width: 160px;
+}
+
+.image-edit-strategy-field {
+  min-width: 160px;
+}
+
+.image-edit-brush-size-field input {
+  min-width: 120px;
+}
+
+.image-edit-region-list {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.image-edit-region-card {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.image-edit-region-card.is-active {
+  border-color: rgba(122, 201, 255, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(122, 201, 255, 0.2);
+}
+
+.image-edit-region-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.image-edit-region-title,
+.image-edit-region-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.image-edit-region-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.image-edit-region-swatch {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 999px;
+}
+
+.image-edit-region-select {
+  min-width: 118px;
+  max-width: 100%;
+}
+
+.image-edit-region-instruction {
+  min-height: 4.5rem;
+  resize: vertical;
+}
+
+.image-edit-local-mask-status {
+  min-height: 1.25rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-subtitle-size);
+  line-height: 1.45;
+}
+
+.image-edit-instruction-field {
+  min-width: 0;
+}
+
+.image-edit-instruction-field textarea {
+  resize: vertical;
+  min-height: 132px;
+}
+
+.image-edit-parameter-settings > .ratio-grid,
+.image-edit-parameter-settings .ratio-chip {
+  min-width: 0;
+}
+
+.image-edit-parameter-settings .ratio-chip strong {
+  font-size: min(var(--type-small-title-size), 18px);
+}
+
+.image-edit-size-field,
+.image-edit-format-field {
+  min-width: 0;
+}
+
+.image-edit-generate-button {
+  width: 100%;
+}
+
+.image-edit-feedback {
+  margin: 0;
+}
+
+.image-edit-preview-panel {
+  height: var(--studio-column-height, auto);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.image-edit-generation {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.image-edit-generation-canvas {
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.image-edit-generation-canvas.has-image {
+  background: rgba(12, 14, 18, 0.86);
+}
+
+.image-edit-generation-canvas[role="button"] {
+  cursor: zoom-in;
+}
+
+.image-edit-generation-canvas:focus-visible {
+  outline: 2px solid rgba(122, 201, 255, 0.78);
+  outline-offset: 3px;
+}
+
+.image-edit-generation-canvas img {
+  display: none;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 18px;
+  box-shadow: 0 18px 64px rgba(0, 0, 0, 0.26);
+  opacity: 0;
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
+}
+
+.image-edit-generation-canvas img.is-mounted {
+  display: block;
+}
+
+.image-edit-generation-canvas img.is-visible {
+  opacity: 1;
+}
+
+.image-edit-generation-placeholder {
+  max-width: 480px;
+}
+
+.image-edit-preview-toolbar {
+  justify-content: space-between;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.image-edit-preview-status {
+  color: var(--muted);
+  font-size: var(--type-subtitle-size);
+}
+
+.image-edit-filmstrip-row {
+  margin-top: 4px;
+}
+
+.image-edit-generation-strip {
+  min-width: 0;
+}
+
+.image-edit-generation-thumb {
+  position: relative;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.image-edit-generation-thumb:hover,
+.image-edit-generation-thumb:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(122, 201, 255, 0.72);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+  outline: none;
+}
+
+.image-edit-generation-thumb.active {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.image-edit-generation-thumb img {
+  object-fit: cover;
+}
+
+.image-edit-generation-thumb.is-running {
+  cursor: wait;
+}
+
+.image-edit-generation-thumb.is-running::after {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-top-color: rgba(122, 201, 255, 0.92);
+  animation: image-edit-spin 900ms linear infinite;
+}
+
+.filmstrip .image-edit-generation-thumb {
+  width: 100%;
+  aspect-ratio: auto;
+  overflow: visible;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.filmstrip .image-edit-generation-thumb:hover,
+.filmstrip .image-edit-generation-thumb:focus-visible {
+  transform: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.filmstrip .image-edit-generation-thumb.is-running::after {
+  display: none;
+}
+
+.image-edit-thumbnail-empty {
+  min-height: 84px;
+}
+
+@keyframes image-edit-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-edit-generation-thumb,
+  .image-edit-generation-thumb.is-running::after {
+    transition: none;
+    animation: none;
+  }
+}
+
+html[data-ui-layout="tablet"] .image-edit-workspace,
+html[data-ui-layout="mobile"] .image-edit-workspace {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+}
+
+html[data-ui-layout="mobile"] .image-edit-workspace {
+  gap: 12px;
+}
+
+html[data-ui-layout="tablet"] .image-edit-view .image-edit-preview-panel,
+html[data-ui-layout="mobile"] .image-edit-view .image-edit-preview-panel {
+  grid-area: auto;
+}
+
+html[data-ui-layout="mobile"] .image-edit-generation-canvas {
+  border-radius: 14px;
+}
+
 .quick-blend-view {
   height: 100%;
   overflow: hidden;
@@ -8138,6 +8528,23 @@ html[data-ui-layout="mobile"] .image-compress-result-ghost {
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.quick-blend-clear-button {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.quick-blend-clear-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .gallery-pagination {

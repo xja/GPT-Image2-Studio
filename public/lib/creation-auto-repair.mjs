@@ -6,7 +6,7 @@ function hasCompletedCreationAsset(item = {}) {
 
 export function getCreationIncompleteItems(set = {}) {
   const items = Array.isArray(set?.items) ? set.items : [];
-  return items.filter((item) => item.status !== "completed" || !item.filename || !hasCompletedCreationAsset(item));
+  return items.filter((item) => item.missingAsset || item.missing_asset || item.status !== "completed" || !item.filename || !hasCompletedCreationAsset(item));
 }
 
 export function shouldAutoRepairCreationSet({

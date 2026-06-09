@@ -51,3 +51,19 @@ test("creation auto repair selects failed and pathless items only once after ful
     tone: "error",
   });
 });
+
+test("creation auto repair treats reconciled missing assets as incomplete", () => {
+  const set = {
+    items: [
+      {
+        itemId: "missing-file",
+        status: "completed",
+        filename: "missing-file.png",
+        relativePath: "creation/missing-file.png",
+        missingAsset: true,
+      },
+    ],
+  };
+
+  assert.deepEqual(getCreationIncompleteItems(set).map((item) => item.itemId), ["missing-file"]);
+});

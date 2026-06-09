@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, readFile, stat } from "node:fs/promises";
+﻿import { copyFile, mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -33,6 +33,8 @@ export const PUBLIC_LIB_SYNC_TARGETS = [
   "generation-size-options.mjs",
   "generation-stream-protocol.mjs",
   "image-compress-browser.mjs",
+  "image-edit-local-mask.mjs",
+  "image-edit-shell-bridge.mjs",
   "image-route-config.mjs",
   "output-format-options.mjs",
   "preview-loading-shell.mjs",

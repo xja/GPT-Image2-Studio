@@ -231,6 +231,90 @@ test("listing agent retries when grouped subject description omits unit count", 
   assert.match(draft.description, /two complete visible lure bodies/i);
 });
 
+test("listing agent repairs grouped subject description quantity after retry budget", async () => {
+  const prompts = [];
+  let callCount = 0;
+  const groupedPairSource = {
+    ...standardSource,
+    skuBundleCount: 1,
+    skuSubjects: [
+      {
+        id: "orange-pair",
+        title: "Orange lure pair",
+        filenames: ["orange-pair.png"],
+        bundleCount: 1,
+        subjectUnitCount: 2,
+        note: "One product-subject reference image contains two complete visible lure bodies: orange top and silver bottom.",
+      },
+    ],
+  };
+  const fetchImpl = async (_url, init) => {
+    callCount += 1;
+    prompts.push(JSON.parse(init.body).input);
+    return new Response(JSON.stringify({
+      output_text: JSON.stringify(makeValidDraft({
+        title: "2 Pack Fishing Lure Jointed Swimbait Bass Trout Freshwater Bait",
+        description: "This fishing lure option helps shoppers compare freshwater bait details.",
+      })),
+    }), { status: 200 });
+  };
+
+  const draft = await requestCreationListingDraft({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    responsesModel: "gpt-5.4",
+    source: groupedPairSource,
+    fetchImpl,
+  });
+
+  assert.equal(callCount, 2);
+  assert.match(prompts[1], /Fix these validation errors: description must mention grouped SKU subject quantity/i);
+  assert.match(draft.description, /^This offer includes two complete visible lure bodies/i);
+  assert.equal(validateListingAgentDraft(draft, "2 Pack").ok, true);
+});
+
+test("listing agent repairs grouped subject quantity from Chinese source notes in English", async () => {
+  let callCount = 0;
+  const groupedChineseSource = {
+    ...standardSource,
+    productName: "仿真鱼饵",
+    skuTitle: "四节电动仿真鱼饵-银灰/银蓝双款",
+    skuBundleCount: 2,
+    skuSubjects: [
+      {
+        id: "sku1",
+        title: "四节电动仿真鱼饵-银灰/银蓝双款",
+        filenames: ["sku1.png"],
+        bundleCount: 1,
+        subjectUnitCount: 2,
+        note: "该源图包含2个完整可售产品单位：上方银灰鱼纹款1个、下方银蓝鱼纹款1个；图中共 2 个完整产品单位。",
+      },
+    ],
+  };
+  const fetchImpl = async () => {
+    callCount += 1;
+    return new Response(JSON.stringify({
+      output_text: JSON.stringify(makeValidDraft({
+        title: "2 Pack Electric Fishing Lure Jointed Swimbait Bass Trout Freshwater Bait",
+        description: "This electric fishing lure option helps shoppers compare freshwater bait details.",
+      })),
+    }), { status: 200 });
+  };
+
+  const draft = await requestCreationListingDraft({
+    baseUrl: "https://example.test/v1",
+    apiKey: "test-key",
+    responsesModel: "gpt-5.4",
+    source: groupedChineseSource,
+    fetchImpl,
+  });
+
+  assert.equal(callCount, 2);
+  assert.match(draft.description, /^This offer includes two complete visible product units/i);
+  assert.doesNotMatch(draft.description, /[\u3400-\u9fff]/u);
+  assert.equal(validateListingAgentDraft(draft, "2 Pack").ok, true);
+});
+
 test("listing agent sends a strict JSON schema request with prompt guardrails", async () => {
   const calls = [];
   const fetchImpl = async (url, init) => {
@@ -298,6 +382,41 @@ test("listing agent times out stalled upstream requests", async () => {
     }),
     /Listing request timed out after 5ms/,
   );
+});
+
+test("listing agent uses a ten-minute default upstream timeout", async () => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const timeoutDelays = [];
+  const clearedTimeouts = [];
+
+  globalThis.setTimeout = (_callback, delay) => {
+    timeoutDelays.push(delay);
+    return { delay };
+  };
+  globalThis.clearTimeout = (timeout) => {
+    clearedTimeouts.push(timeout);
+  };
+
+  try {
+    const fetchImpl = async () => new Response(JSON.stringify({
+      output_text: JSON.stringify(makeValidDraft()),
+    }));
+
+    await requestCreationListingDraft({
+      baseUrl: "https://example.test/v1",
+      apiKey: "test-key",
+      responsesModel: "gpt-5.4",
+      source: standardSource,
+      fetchImpl,
+    });
+
+    assert.deepEqual(timeoutDelays, [600000]);
+    assert.equal(clearedTimeouts.length, 1);
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
 });
 
 test("listing agent accepts UI-only Chinese display text alongside English public copy", async () => {

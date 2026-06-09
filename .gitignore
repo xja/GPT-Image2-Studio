@@ -9,6 +9,7 @@ dist/
 .local/
 .playwright-cli/
 .playwright-mcp/
+.superpowers/
 
 *.log
 *-after.png

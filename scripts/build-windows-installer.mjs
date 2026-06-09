@@ -22,6 +22,7 @@ const payloadZip = join(installerDir, "payload.zip");
 const installCmd = join(installerDir, "install.cmd");
 const sedPath = join(installerDir, "installer.sed");
 const setupExe = join(buildRoot, `${appName}-Setup-v${version}.exe`);
+const IEXPRESS_TIMEOUT_MS = 600000;
 
 const includePaths = [
   ".env.example",
@@ -275,7 +276,7 @@ async function main() {
 
   run("tar.exe", ["-a", "-cf", payloadZip, "-C", stageRoot, appName]);
   await writeFile(sedPath, buildSedFile(), "utf8");
-  run("iexpress.exe", ["/N", sedPath], { timeout: 120000 });
+  run("iexpress.exe", ["/N", sedPath], { timeout: IEXPRESS_TIMEOUT_MS });
 
   console.log(`${appName} installer created:`);
   console.log(setupExe);

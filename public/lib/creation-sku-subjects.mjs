@@ -258,6 +258,17 @@ function hasSameSellableSubjectSignal(subject = {}) {
   return /\b(same|single|one)\s+(?:sellable\s+)?(?:sku|subject|product|item)\b|\b(front|back|side|view|views|angle|angles|photo|photos)\b/.test(text);
 }
 
+function hasGroupedSubjectUnitCount(subject = {}) {
+  return (
+    normalizeSubjectUnitCount(subject.subjectUnitCount) ||
+    inferSubjectUnitCount([subject.title, subject.note, subject.description].join(" "))
+  ) > 1;
+}
+
+function shouldPreserveAppliedGroupedSubjects(subjects = []) {
+  return (Array.isArray(subjects) ? subjects : []).some((subject) => hasGroupedSubjectUnitCount(subject));
+}
+
 function shouldSplitAmbiguousCoveredGroups(normalizedSubjects = [], productReferenceSubjects = []) {
   if (normalizedSubjects.length === 0 || productReferenceSubjects.length <= normalizedSubjects.length) {
     return false;
@@ -273,6 +284,9 @@ function shouldSplitAmbiguousCoveredGroups(normalizedSubjects = [], productRefer
   );
 
   return normalizedSubjects.some((subject) => {
+    if (hasGroupedSubjectUnitCount(subject)) {
+      return false;
+    }
     const productFilenames = normalizeStringArray(subject.filenames).filter((filename) =>
       productReferenceFilenames.has(filename.toLowerCase()),
     );
@@ -339,6 +353,9 @@ function appendMissingProductReferenceSubjects(normalizedSubjects = [], productR
 
   const hydratedSubjects = hydrateProductReferenceIndexes(normalizedSubjects, productReferenceSubjects)
     .map((subject) => enrichSkuSubjectFromProductReferences(subject, productReferenceSubjects));
+  if (shouldPreserveAppliedGroupedSubjects(hydratedSubjects)) {
+    return hydratedSubjects;
+  }
   const coverage = buildSkuSubjectCoverage(hydratedSubjects);
   const missingProductSubjects = productReferenceSubjects.filter((subject) => !isProductReferenceSubjectCovered(subject, coverage));
 

@@ -115,6 +115,28 @@ test("creation repair treats completed items without filenames as incomplete", (
   );
 });
 
+test("creation repair treats reconciled missing assets as incomplete", () => {
+  const items = selectCreationRepairItems(
+    {
+      items: [
+        {
+          itemId: "missing-file",
+          status: "completed",
+          filename: "missing-file.png",
+          relativePath: "2026-05/05-06/2026-05-06-creation/demo/missing-file.png",
+          missingAsset: true,
+        },
+      ],
+    },
+    { scope: "incomplete" },
+  );
+
+  assert.deepEqual(
+    items.map((item) => item.itemId),
+    ["missing-file"],
+  );
+});
+
 test("creation repair applies non-empty prompt and copy overrides", () => {
   const item = applyCreationRepairOverrides(
     {

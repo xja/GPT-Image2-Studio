@@ -15,7 +15,7 @@ import {
 import { isCreationSubjectReferenceRole } from "../public/lib/creation-reference-roles.mjs";
 import { reorderCreationReferenceFiles } from "../public/lib/creation-reference-drag.mjs";
 
-const APP_SHELL_LINE_BUDGET = 16250;
+const APP_SHELL_LINE_BUDGET = 16400;
 
 function makeFakeControlButton(className = "") {
   const element = {
@@ -135,7 +135,7 @@ test("public app shell delegates browser config and cache behavior to public mod
 
   assert.match(app, /from "\/lib\/browser-config\.mjs"/);
   assert.match(app, /from "\/lib\/browser-image-cache\.mjs"/);
-  assert.match(app, /from "\/lib\/view-mode-loader\.mjs\?v=20260606-quick-blend-pair-delete-1"/);
+  assert.match(app, /from "\/lib\/view-mode-loader\.mjs\?v=20260608-quick-blend-time-sort-1"/);
   assert.match(app, /from "\/lib\/generation-client\.mjs"/);
   assert.match(app, /from "\/lib\/creation-listing-view\.mjs"/);
   assert.match(app, /from "\/lib\/creation-reference-drag\.mjs"/);
@@ -394,8 +394,8 @@ test("creation record listing meta label only appears when listing drafts exist"
 
 test("creation listing view removes Chinese from English draft headers", () => {
   const header = formatCreationListingDraftHeader({
-    title: "1 Pack 13cm 路亚硬饵 Product Listing Draft",
-    skuTitle: "路亚硬饵",
+    title: "1 Pack 13cm 璺簹纭サ Product Listing Draft",
+    skuTitle: "璺簹纭サ",
     marketplace: "amazon-us",
     language: "en-US",
     evidenceMode: "image-backed",

@@ -15,10 +15,10 @@ import {
 
 test("buildResponsesInput returns plain text for prompt-only generation", () => {
   const input = buildResponsesInput({
-    prompt: "生成一张图",
+    prompt: "鐢熸垚涓€寮犲浘",
   });
 
-  assert.equal(input, "生成一张图");
+  assert.equal(input, "鐢熸垚涓€寮犲浘");
 });
 
 test("status heartbeat messages label the 59 second upstream wait", () => {
@@ -34,7 +34,7 @@ test("status heartbeat messages label the 59 second upstream wait", () => {
 
 test("buildResponsesInput returns multimodal user message with multiple reference images", () => {
   const input = buildResponsesInput({
-    prompt: "给这些图统一换成夜景氛围",
+    prompt: "缁欒繖浜涘浘缁熶竴鎹㈡垚澶滄櫙姘涘洿",
     referenceImages: [
       {
         mimeType: "image/png",
@@ -55,7 +55,7 @@ test("buildResponsesInput returns multimodal user message with multiple referenc
       content: [
         {
           type: "input_text",
-          text: "给这些图统一换成夜景氛围",
+          text: "缁欒繖浜涘浘缁熶竴鎹㈡垚澶滄櫙姘涘洿",
         },
         {
           type: "input_image",
@@ -117,7 +117,7 @@ test("buildResponsesInput can label reference images before each image", () => {
 
 test("createResponsesRequestBody keeps gpt-5.4 on the outer model and passes reasoning effort", () => {
   const requestBody = createResponsesRequestBody({
-    prompt: "生成一张图",
+    prompt: "鐢熸垚涓€寮犲浘",
     size: "1024x1536",
     quality: "high",
     format: "jpeg",
@@ -135,7 +135,7 @@ test("createResponsesRequestBody keeps gpt-5.4 on the outer model and passes rea
 
 test("createResponsesRequestBody defaults to png output and leaves compression unset", () => {
   const requestBody = createResponsesRequestBody({
-    prompt: "生成一张图",
+    prompt: "鐢熸垚涓€寮犲浘",
     size: "1024x1536",
     quality: "high",
     responsesModel: "gpt-5.4",
@@ -147,7 +147,7 @@ test("createResponsesRequestBody defaults to png output and leaves compression u
 
 test("createResponsesRequestBody can disable streaming for fallback requests", () => {
   const requestBody = createResponsesRequestBody({
-    prompt: "生成一张图",
+    prompt: "鐢熸垚涓€寮犲浘",
     size: "1024x1536",
     quality: "high",
     responsesModel: "gpt-5.4",
@@ -438,7 +438,7 @@ test("requestImageGeneration falls back to non-streaming when SSE completes with
   const result = await requestImageGeneration({
     baseUrl: "https://example.test/v1",
     apiKey: "test-key",
-    prompt: "生成一张图",
+    prompt: "鐢熸垚涓€寮犲浘",
     size: "1024x1536",
     quality: "high",
     responsesModel: "gpt-5.4",

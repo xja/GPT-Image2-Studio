@@ -1,6 +1,6 @@
 import { buildParameterText, formatImageModelLabel, formatRecentOutputMeta } from "/lib/studio-formatters.mjs";
 import { getPreviewPlaceholderState } from "/lib/preview-placeholder-state.mjs?v=20260510-activity-log-1";
-import { buildGalleryReferenceFilterOptions, buildGallerySections, buildGallerySizeFilterOptions, buildGalleryTimeFilterOptions, distributeGalleryItemsIntoColumns, filterGalleryItems, getGalleryLayoutModeForWidth, getRecentGalleryItems, normalizeGalleryFilters, paginateGallerySections, sortGalleryItemsByCreatedAtDesc } from "/lib/gallery-organizer.mjs";
+import { buildGalleryReferenceFilterOptions, buildGallerySections, buildGallerySizeFilterOptions, buildGalleryTimeFilterOptions, distributeGalleryItemsIntoColumns, filterGalleryItems, getGalleryLayoutModeForWidth, getPromptGenerationGalleryItems, getRecentGalleryItems, normalizeGalleryFilters, paginateGallerySections, sortGalleryItemsByCreatedAtDesc } from "/lib/gallery-organizer.mjs";
 import { buildGalleryMetadataCacheEntry, collectGalleryMetadataRepairPatch, mergeGalleryItemWithCachedMetadata, pruneGalleryMetadataCache } from "/lib/gallery-metadata-recovery.mjs";
 import { getDefaultGenerationSize, getGenerationSizeOptions, normalizeGenerationSize } from "/lib/generation-size-options.mjs?v=20260512-one-megapixel-sizes-4";
 import { getOutputFormatOptions, normalizeOutputFormat, } from "/lib/output-format-options.mjs?v=20260504-vercel-static-lib-1";
@@ -11,9 +11,10 @@ import { cancelQueuedGenerationJob, isQueuedGenerationJob, selectNextQueuedGener
 import { buildCanceledGenerationActivityDetail, buildGenerationTaskActivityDetail, buildGenerationTaskStatusText, formatGenerationActivityModeLabel, getGenerationActivityDisplayText, sanitizeGenerationActivityDetail, sortGenerationActivityFeed, upsertGenerationActivityEntry } from "/lib/generation-activity-feed.mjs?v=20260504-vercel-static-lib-1";
 import { GENERATION_STREAM_EVENTS, recordFinalImageChunk } from "/lib/generation-stream-protocol.mjs";
 import { getStudioDensitySettings, getStudioLayoutMode, ALL_VARIABLE_NAMES } from "/lib/studio-density.mjs?v=20260519-topbar-reveal-2";
-import { ensureLazyViewModule, getMountedLazyViewModule } from "/lib/view-mode-loader.mjs?v=20260606-quick-blend-pair-delete-1";
+import { ensureLazyViewModule, getMountedLazyViewModule } from "/lib/view-mode-loader.mjs?v=20260608-quick-blend-time-sort-1";
 import { appendBrowserConfigToFormData, getBrowserPrivateConfigRequestPayload, getOrCreateClientSessionId, readBrowserPrivateConfig, saveBrowserPrivateConfig, toPublicBrowserConfig } from "/lib/browser-config.mjs";
 import { cacheBrowserGalleryItem, clearBrowserImageCache, dataUrlToBlob, deleteBrowserCachedGalleryItem, fetchServerImageAsDataUrl, getBrowserCachedImageData, getImageUrl, getServerImageUrl, getServerThumbnailUrl, isCacheableBrowserImageUrl, mergeServerAndBrowserGalleryItems, readBrowserCachedGalleryItems } from "/lib/browser-image-cache.mjs";
+import { createImageEditShellBridge } from "/lib/image-edit-shell-bridge.mjs";
 import { createCreationLogoLibraryController } from "/lib/creation-logo-library.mjs";
 import { consumeSse, requestGenerationStream } from "/lib/generation-client.mjs";
 import { createConfigModelPickerController } from "/lib/config-model-picker.mjs";
@@ -339,7 +340,7 @@ const TOPBAR_REVEAL_CLASS = "topbar-reveal";
 const TOPBAR_REVEAL_EDGE_PX = 16;
 const WORKSPACE_BOTTOM_GAP_PX = 2;
 const PPT_SOURCE_MODES = new Set(["upload", "text", "topic"]);
-const CREATE_VIEW_IDS = new Set(["studio", "style-transfer", "reference-analysis", "image-decomposition", "quick-blend", "image-compress", "creation", "portrait", "article-illustration", "ppt"]);
+const CREATE_VIEW_IDS = new Set(["studio", "style-transfer", "reference-analysis", "image-decomposition", "image-edit", "quick-blend", "image-compress", "creation", "portrait", "article-illustration", "ppt"]);
 const ASSET_VIEW_IDS = new Set(["gallery", "article-record", "ppt-record", "creation-record", "portrait-record"]);
 
 let studioHeightSyncFrame = 0;
@@ -519,6 +520,23 @@ const state = {
     generationItems: {},
     previewKey: "",
   },
+  imageEdit: {
+    source: null,
+    feedback: "",
+    feedbackKind: "",
+    generationKeys: [],
+    generationItems: {},
+    localEdit: {
+      enabled: false,
+      activeRegionId: "",
+      brushSize: 48,
+      tool: "brush",
+      executionStrategy: "merge",
+      nextRegionIndex: 1,
+      regions: [],
+    },
+    previewKey: "",
+  },
   quickBlend: {
     aFiles: [],
     bFiles: [],
@@ -533,6 +551,7 @@ const state = {
   referenceCompressionRunning: false,
   referenceFiles: [],
   imageDecompositionPreviewItem: null,
+  imageEditPreviewItem: null,
   quickBlendPreviewItem: null,
   referenceAnalysisPreviewItem: null,
   referencePreviewItem: null,
@@ -1676,6 +1695,9 @@ function getViewFromHash() {
   if (window.location.hash === "#image-decomposition") {
     return "image-decomposition";
   }
+  if (window.location.hash === "#image-edit") {
+    return "image-edit";
+  }
   if (window.location.hash === "#quick-blend") {
     return "quick-blend";
   }
@@ -1720,6 +1742,8 @@ function syncHash(view) {
           ? "#reference-analysis"
           : view === "image-decomposition"
             ? "#image-decomposition"
+          : view === "image-edit"
+            ? "#image-edit"
           : view === "quick-blend"
             ? "#quick-blend"
           : view === "image-compress"
@@ -3089,6 +3113,19 @@ async function preserveQuickBlendGenerationItemForDelete(item) {
 
   storeQuickBlendGenerationItem(item);
 }
+
+const {
+  preserveImageEditGenerationItemForDelete,
+  removeImageEditGenerationKey,
+  renderImageEditView,
+  replaceImageEditGenerationKey,
+  setImageEditFeedback,
+  storeImageEditGenerationItem,
+} = createImageEditShellBridge({
+  getMountedLazyViewModule,
+  state,
+  makeGalleryPreviewKey,
+});
 
 function createImageDecompositionItem(file) {
   return {
@@ -5582,6 +5619,7 @@ function createPreviewLoadingShellNodes() {
     jobMetric,
     progressMetric,
     status,
+    missingAsset: Boolean(item.missingAsset || item.missing_asset),
     detail,
     steps,
     state: null,
@@ -5748,7 +5786,7 @@ function getFilmstripItems() {
     label: formatFilmstripSizeLabel(job) || job.statusText || formatClock(job.createdAt),
   }));
 
-  const recentGallery = sortGalleryItemsByCreatedAtDesc(state.gallery).slice(0, 12).map((item) => ({
+  const recentGallery = getPromptGenerationGalleryItems(state.gallery).slice(0, 12).map((item) => ({
     key: makeGalleryPreviewKey(item.filename),
     item,
     label: formatFilmstripSizeLabel(item) || formatClock(item.createdAt),
@@ -5925,10 +5963,12 @@ function renderRecentOutputs() {
     return;
   }
 
-  refs.recentList.innerHTML = "";
-  refs.recentEmpty.classList.toggle("hidden", state.gallery.length > 0);
+  const promptGalleryItems = getPromptGenerationGalleryItems(state.gallery);
 
-  getRecentGalleryItems(state.gallery).forEach((item) => {
+  refs.recentList.innerHTML = "";
+  refs.recentEmpty.classList.toggle("hidden", promptGalleryItems.length > 0);
+
+  getRecentGalleryItems(promptGalleryItems).forEach((item) => {
     refs.recentList.appendChild(createRecentOutputItem(item));
   });
 }
@@ -6189,6 +6229,7 @@ const VIEW_RENDERERS = Object.freeze({
     renderReferenceAnalysis();
   },
   imageDecomposition: renderImageDecompositionView,
+  imageEdit: renderImageEditView,
   quickBlend: renderQuickBlendView,
   articleIllustration: renderArticleIllustrationView,
   articleRecord: renderArticleRecordView,
@@ -6269,6 +6310,13 @@ function upsertGalleryItem(item) {
   }
   if (hydratedItem.mode === "image-decomposition" || hydratedItem.assetKind === "image-decomposition") {
     storeImageDecompositionGenerationItem(hydratedItem);
+  }
+  if (
+    hydratedItem.mode === "image-edit" ||
+    hydratedItem.generationMode === "image-edit" ||
+    hydratedItem.assetKind === "image-edit"
+  ) {
+    storeImageEditGenerationItem(hydratedItem);
   }
   if (
     hydratedItem.mode === "quick-blend" ||
@@ -6557,6 +6605,13 @@ function applyServerImageToGalleryItem(item) {
   const next = state.gallery.filter((entry) => entry.filename !== filename);
   next.unshift(mergedItem);
   state.gallery = sortGalleryItemsByCreatedAtDesc(next);
+  if (
+    mergedItem.mode === "image-edit" ||
+    mergedItem.generationMode === "image-edit" ||
+    mergedItem.assetKind === "image-edit"
+  ) {
+    storeImageEditGenerationItem(mergedItem);
+  }
   if (
     mergedItem.mode === "quick-blend" ||
     mergedItem.generationMode === "quick-blend" ||
@@ -7823,6 +7878,10 @@ function getCreationStatusLabel(status) {
   return CREATION_ITEM_STATUS_LABELS[String(status || "")] || "处理中";
 }
 
+function getCreationItemStatusLabel(item = {}) {
+  return getCreationStatusLabel(item.status);
+}
+
 function getCreationSellingPoints(value) {
   return String(value || "")
     .split(/[\n,，;；、]+/)
@@ -9014,6 +9073,14 @@ function normalizeCreationSetForView(set = {}) {
   };
 }
 
+function isCreationMissingAssetItem(item = {}) {
+  return Boolean(item.missingAsset || item.missing_asset);
+}
+
+function getCreationRecordRepairButtonLabel(recordIncompleteItems = []) {
+  return recordIncompleteItems.length > 0 ? `补齐未生成图像 ${recordIncompleteItems.length}` : "补齐未生成图像";
+}
+
 function buildCreationReferenceRestoreQueue(set = {}) {
   const normalized = normalizeCreationSetForView(set);
   const roles = Array.isArray(normalized.referenceImageRoles) ? normalized.referenceImageRoles : [];
@@ -9629,7 +9696,7 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
 
   const status = document.createElement("span");
   status.className = "creation-card-status";
-  status.textContent = getCreationStatusLabel(item.status);
+  status.textContent = getCreationItemStatusLabel(item);
   head.appendChild(status);
 
   card.appendChild(head);
@@ -9662,7 +9729,7 @@ function createCreationCard(item = {}, fallbackIndex = 0, options = {}) {
       media.classList.add("is-waiting");
       media.setAttribute("aria-busy", "true");
     }
-    placeholder.textContent = item.status === "failed" ? item.error || "生成失败" : "等待生成";
+    placeholder.textContent = isCreationMissingAssetItem(item) ? "历史图片文件缺失，可一键补图" : item.status === "failed" ? item.error || "生成失败" : "等待生成";
     media.appendChild(placeholder);
   }
   card.appendChild(media);
@@ -10154,7 +10221,7 @@ function reuseCreationRecordSet() {
   renderCreationView();
 }
 
-async function repairCreationRecordIncompleteImages() { if (state.creation.generating) return; const selectedSet = getCreationRecordSelectedSet(); if (!canRepairCreationSet(selectedSet)) { setCreationRecordFeedback("请先选择一个已保存的套图记录。", "error"); return; } const targetItems = getCreationIncompleteItems(selectedSet); if (targetItems.length === 0) { setCreationRecordFeedback("当前套图没有需要补齐的图像。", "success"); renderCreationRecordView(); return; } clearError(); applyCreationSetToForm(selectedSet); state.creation.currentSet = normalizeCreationSetForView(selectedSet); state.creation.recordSetId = selectedSet.setId; state.creation.generating = true; state.creation.generationScope = "repair"; state.creation.editingItemId = ""; targetItems.forEach((item) => updateCreationCurrentItem(item.itemId, { status: "generating", error: "", updatedAt: nowIso() })); setCreationRecordFeedback(`正在补齐未生成图像 ${targetItems.length} 张...`, "busy"); renderCreationView(); renderCreationRecordView(); try { await runCreationRepairRequest({ scope: "incomplete", set: selectedSet }); const refreshedSet = getCreationRecordSelectedSet(); const remainingCount = getCreationIncompleteItems(refreshedSet).length; setCreationRecordFeedback(remainingCount > 0 ? `仍有 ${remainingCount} 张图像未生成。` : "未生成图像已补齐。", remainingCount > 0 ? "error" : "success"); } catch (error) { const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "套图补图请求失败"); setCreationRecordFeedback(message, "error"); showError(message); } finally { state.creation.generating = false; state.creation.generationScope = ""; renderCreationView(); renderCreationRecordView(); } }
+async function repairCreationRecordIncompleteImages() { if (state.creation.generating) return; const selectedSet = getCreationRecordSelectedSet(); if (!canRepairCreationSet(selectedSet)) { setCreationRecordFeedback("请先选择一个已保存的套图记录。", "error"); return; } const targetItems = getCreationIncompleteItems(selectedSet); const missingAssetCount = targetItems.filter(isCreationMissingAssetItem).length; if (targetItems.length === 0) { setCreationRecordFeedback("当前套图没有需要补齐的图像。", "success"); renderCreationRecordView(); return; } clearError(); applyCreationSetToForm(selectedSet); state.creation.currentSet = normalizeCreationSetForView(selectedSet); state.creation.recordSetId = selectedSet.setId; state.creation.generating = true; state.creation.generationScope = "repair"; state.creation.editingItemId = ""; targetItems.forEach((item) => updateCreationCurrentItem(item.itemId, { status: "generating", error: "", updatedAt: nowIso() })); setCreationRecordFeedback(missingAssetCount > 0 ? `正在补齐缺失的历史图像文件 ${missingAssetCount} 张...` : `正在补齐未生成图像 ${targetItems.length} 张...`, "busy"); renderCreationView(); renderCreationRecordView(); try { await runCreationRepairRequest({ scope: "incomplete", set: selectedSet }); const refreshedSet = getCreationRecordSelectedSet(); const remainingCount = getCreationIncompleteItems(refreshedSet).length; setCreationRecordFeedback(remainingCount > 0 ? `仍有 ${remainingCount} 张图像未生成。` : missingAssetCount > 0 ? "缺失图像文件已补齐。" : "未生成图像已补齐。", remainingCount > 0 ? "error" : "success"); } catch (error) { const message = compactErrorMessage(error instanceof Error ? error.message : String(error), "套图补图请求失败"); setCreationRecordFeedback(message, "error"); showError(message); } finally { state.creation.generating = false; state.creation.generationScope = ""; renderCreationView(); renderCreationRecordView(); } }
 
 function toggleCreationRecordArchiveDetail() { state.creation.recordDetailExpanded = !state.creation.recordDetailExpanded; renderCreationRecordView(); }
 
@@ -10216,7 +10283,7 @@ function renderCreationRecordView() {
   if (refs.creationRecordExportManifestButton) {
     refs.creationRecordExportManifestButton.disabled = !selectedSet;
   }
-  if (refs.creationRecordRepairIncompleteButton) { refs.creationRecordRepairIncompleteButton.disabled = state.creation.generating || !canRepairCreationSet(selectedSet) || recordIncompleteItems.length === 0; refs.creationRecordRepairIncompleteButton.textContent = recordIncompleteItems.length > 0 ? `补齐未生成图像 ${recordIncompleteItems.length}` : "补齐未生成图像"; }
+  if (refs.creationRecordRepairIncompleteButton) { refs.creationRecordRepairIncompleteButton.disabled = state.creation.generating || !canRepairCreationSet(selectedSet) || recordIncompleteItems.length === 0; refs.creationRecordRepairIncompleteButton.textContent = getCreationRecordRepairButtonLabel(recordIncompleteItems); }
   creationListingController.syncRecordControls(selectedSet);
 
   renderCreationRecordSetList();
@@ -10892,6 +10959,7 @@ function setCreationReferenceAnalysisFeedback(message, kind = "") {
 }
 
 function markCreationReferenceAnalysisDirty() {
+  invalidateCreationReferenceAnalysisRequest();
   if (state.creationReferenceAnalysis.result) {
     state.creationReferenceAnalysis.applied = false;
     state.creationReferenceAnalysis.dirty = true;
@@ -11184,6 +11252,7 @@ async function analyzeCreationReferenceImages() {
     return;
   }
 
+  const referenceSnapshot = getCreationReferenceAnalysisSnapshot();
   const requestToken = creationReferenceAnalysisRequestToken + 1;
   creationReferenceAnalysisRequestToken = requestToken;
   state.creationReferenceAnalysis.running = true;
@@ -11196,7 +11265,7 @@ async function analyzeCreationReferenceImages() {
       body: await buildCreationReferenceAnalysisFormData(),
     });
     const payload = await response.json().catch(() => ({}));
-    if (requestToken !== creationReferenceAnalysisRequestToken) {
+    if (requestToken !== creationReferenceAnalysisRequestToken || referenceSnapshot !== getCreationReferenceAnalysisSnapshot()) {
       return;
     }
     if (!response.ok) {
@@ -11204,7 +11273,7 @@ async function analyzeCreationReferenceImages() {
     }
 
     const matchedTemplate = await applyCreationReferenceAnalysis(payload);
-    if (requestToken !== creationReferenceAnalysisRequestToken) {
+    if (requestToken !== creationReferenceAnalysisRequestToken || referenceSnapshot !== getCreationReferenceAnalysisSnapshot()) {
       return;
     }
     const count = state.creationReferenceAnalysis.result?.recommendations?.length || 0;
@@ -11213,7 +11282,7 @@ async function analyzeCreationReferenceImages() {
       : "";
     setCreationReferenceAnalysisFeedback(`已识别 ${count} 张参考图用途建议${categoryMessage}，可点击应用建议。`, "success");
   } catch (error) {
-    if (requestToken !== creationReferenceAnalysisRequestToken) {
+    if (requestToken !== creationReferenceAnalysisRequestToken || referenceSnapshot !== getCreationReferenceAnalysisSnapshot()) {
       return;
     }
     const message = error instanceof Error ? error.message : String(error);
@@ -13940,6 +14009,9 @@ function cancelQueuedJob(jobId) {
   if (canceledJob.mode === "image-decomposition") {
     removeImageDecompositionGenerationKey(makeJobPreviewKey(canceledJob.id));
   }
+  if (canceledJob.mode === "image-edit") {
+    removeImageEditGenerationKey(makeJobPreviewKey(canceledJob.id));
+  }
   if (canceledJob.mode === "quick-blend") {
     removeQuickBlendGenerationKey(makeJobPreviewKey(canceledJob.id));
   }
@@ -14032,6 +14104,7 @@ function applyGenerationTaskSnapshots(tasks, { render = true } = {}) {
     const taskPreviewKey = makeJobPreviewKey(task.id);
     const wasSelectedPreview = state.selectedPreviewKey === taskPreviewKey;
     const wasTrackedQuickBlendJob = task.mode === "quick-blend" && existingJobs.has(task.id);
+    const wasTrackedImageEditJob = task.mode === "image-edit" && existingJobs.has(task.id);
 
     if (task.status === "completed" && task.item) {
       if (task.mode === "reference-analysis") {
@@ -14048,6 +14121,14 @@ function applyGenerationTaskSnapshots(tasks, { render = true } = {}) {
         replaceImageDecompositionGenerationKey(taskPreviewKey, makeGalleryPreviewKey(task.item.filename));
         if (state.imageDecomposition.previewKey === taskPreviewKey) {
           state.imageDecomposition.previewKey = makeGalleryPreviewKey(task.item.filename);
+        }
+      }
+      if (task.mode === "image-edit") {
+        task.item.mode = "image-edit";
+        storeImageEditGenerationItem(task.item);
+        replaceImageEditGenerationKey(taskPreviewKey, makeGalleryPreviewKey(task.item.filename));
+        if (state.imageEdit.previewKey === taskPreviewKey) {
+          state.imageEdit.previewKey = makeGalleryPreviewKey(task.item.filename);
         }
       }
       if (task.mode === "quick-blend") {
@@ -14073,6 +14154,12 @@ function applyGenerationTaskSnapshots(tasks, { render = true } = {}) {
     }
     if (task.status === "error" && task.mode === "image-decomposition") {
       removeImageDecompositionGenerationKey(taskPreviewKey);
+    }
+    if (task.status === "error" && task.mode === "image-edit") {
+      removeImageEditGenerationKey(taskPreviewKey);
+      if (wasTrackedImageEditJob || wasSelectedPreview) {
+        setImageEditFeedback(task.errorMessage || "图片编辑任务失败。", "error");
+      }
     }
     if (task.status === "error" && task.mode === "quick-blend") {
       removeQuickBlendGenerationKey(taskPreviewKey);
@@ -14204,6 +14291,7 @@ async function deleteGalleryItem(item) {
   await Promise.all([
     preserveReferenceAnalysisGenerationItemForDelete(item),
     preserveImageDecompositionGenerationItemForDelete(item),
+    preserveImageEditGenerationItemForDelete(item),
     preserveQuickBlendGenerationItemForDelete(item),
   ]);
   const response = await fetch("/api/output/delete", {
@@ -14250,6 +14338,7 @@ async function clearHistory() {
     state.gallery.flatMap((item) => [
       preserveReferenceAnalysisGenerationItemForDelete(item),
       preserveImageDecompositionGenerationItemForDelete(item),
+      preserveImageEditGenerationItemForDelete(item),
       preserveQuickBlendGenerationItemForDelete(item),
     ]),
   );
@@ -14298,6 +14387,8 @@ function buildGenerationFormData(job) {
 
   if (job.mode === "quick-blend") {
     appendQuickBlendReferencesToFormData(formData, job);
+  } else if (job.mode === "image-edit") {
+    appendImageEditReferencesToFormData(formData, job);
   } else if (job.mode === "style-transfer") {
     appendStyleTransferReferencesToFormData(formData, job);
   } else if (job.mode === "image-decomposition") {
@@ -14332,6 +14423,37 @@ function appendImageDecompositionReferencesToFormData(formData, job) {
     formData.append("referenceImages", file);
   });
 }
+
+function appendImageEditReferencesToFormData(formData, job) {
+  formData.set("mode", "image-edit");
+  formData.set("sourceImageName", job.sourceImageName || job.referenceImageName || "");
+  formData.set("editInstruction", job.editInstruction || job.prompt || "");
+  job.referenceFiles.slice(0, 1).forEach((file) => {
+    formData.append("referenceImages", file);
+  });
+  if (job.editMode === "local-mask") {
+    formData.set("editMode", "local-mask");
+    formData.set("executionStrategy", job.executionStrategy || "merge");
+    formData.set("regionInstructions", JSON.stringify(job.regionInstructions || []));
+    if (job.localMask?.mask) {
+      formData.set("mask", job.localMask.mask);
+    }
+    for (const mask of job.localMask?.masks || []) {
+      formData.append("masks[]", mask);
+    }
+  }
+}
+
+function getCreationReferenceAnalysisSnapshot() {
+  return JSON.stringify(state.creationReferenceFiles.map((item) => ({
+    name: item?.file?.name || item?.name || "",
+    size: item?.file?.size || item?.size || 0,
+    type: item?.file?.type || item?.type || "",
+    lastModified: item?.file?.lastModified || item?.lastModified || 0,
+  })));
+}
+
+function invalidateCreationReferenceAnalysisRequest() { creationReferenceAnalysisRequestToken += 1; state.creationReferenceAnalysis.running = false; }
 
 function appendStyleTransferReferencesToFormData(formData, job) {
   formData.set("mode", "style-transfer");
@@ -14599,6 +14721,9 @@ async function runGeneration(job) {
         if (job.mode === "image-decomposition") {
           setImageDecompositionFeedback(statusText || "图片拆解生成中...", "busy");
         }
+        if (job.mode === "image-edit") {
+          setImageEditFeedback(statusText || "图片编辑生成中...", "busy");
+        }
         if (job.mode === "quick-blend") {
           setQuickBlendFeedback(statusText || "快速溶图生成中...", "busy");
         }
@@ -14666,6 +14791,13 @@ async function runGeneration(job) {
             state.imageDecomposition.previewKey = makeGalleryPreviewKey(payload.item.filename);
             setImageDecompositionFeedback("图片拆解信息图已生成。", "success");
           }
+          if (job.mode === "image-edit") {
+            payload.item.mode = "image-edit";
+            storeImageEditGenerationItem(payload.item);
+            replaceImageEditGenerationKey(makeJobPreviewKey(job.id), makeGalleryPreviewKey(payload.item.filename));
+            state.imageEdit.previewKey = makeGalleryPreviewKey(payload.item.filename);
+            setImageEditFeedback("图片编辑结果已生成。", "success");
+          }
           if (job.mode === "quick-blend") {
             payload.item.mode = "quick-blend";
             storeQuickBlendGenerationItem(payload.item);
@@ -14701,6 +14833,9 @@ async function runGeneration(job) {
         if (job.mode === "quick-blend") {
           setQuickBlendFeedback(statusText || "快速溶图已提交到后台队列。", "busy");
         }
+        if (job.mode === "image-edit") {
+          setImageEditFeedback(statusText || "图片编辑已提交到后台队列。", "busy");
+        }
         scheduleGenerationTaskPolling();
         renderAll();
         return;
@@ -14717,6 +14852,10 @@ async function runGeneration(job) {
         if (job.mode === "image-decomposition") {
           removeImageDecompositionGenerationKey(makeJobPreviewKey(job.id));
           setImageDecompositionFeedback(message, "error");
+        }
+        if (job.mode === "image-edit") {
+          removeImageEditGenerationKey(makeJobPreviewKey(job.id));
+          setImageEditFeedback(message, "error");
         }
         if (job.mode === "quick-blend") {
           removeQuickBlendGenerationKey(makeJobPreviewKey(job.id));
@@ -14736,6 +14875,10 @@ async function runGeneration(job) {
       if (job.mode === "image-decomposition") {
         removeImageDecompositionGenerationKey(makeJobPreviewKey(job.id));
         setImageDecompositionFeedback(message, "error");
+      }
+      if (job.mode === "image-edit") {
+        removeImageEditGenerationKey(makeJobPreviewKey(job.id));
+        setImageEditFeedback(message, "error");
       }
       if (job.mode === "quick-blend") {
         removeQuickBlendGenerationKey(makeJobPreviewKey(job.id));
@@ -14757,6 +14900,10 @@ async function runGeneration(job) {
     if (job.mode === "image-decomposition") {
       removeImageDecompositionGenerationKey(makeJobPreviewKey(job.id));
       setImageDecompositionFeedback(message, "error");
+    }
+    if (job.mode === "image-edit") {
+      removeImageEditGenerationKey(makeJobPreviewKey(job.id));
+      setImageEditFeedback(message, "error");
     }
     if (job.mode === "quick-blend") {
       removeQuickBlendGenerationKey(makeJobPreviewKey(job.id));

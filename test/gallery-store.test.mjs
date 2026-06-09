@@ -1,4 +1,4 @@
-import test from "node:test";
+﻿import test from "node:test";
 import assert from "node:assert/strict";
 import { access, mkdtemp, mkdir, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -33,6 +33,19 @@ test("gallery store falls back to a compact generic keyword when prompt is not f
   });
 
   assert.equal(filename, "260426-未命名-090807-xyz9.png");
+});
+
+test("gallery store can create hour-minute prefixed filenames with month-year before the id", () => {
+  const filename = createTimestampedFilename({
+    format: "png",
+    prompt: "Quick Blend pair 2",
+    createdAt: "2026-04-26T15:42:33",
+    idSource: "task-demo-a1b2c3d4",
+    filenameKeyword: "a-dress-b-shoe",
+    omitDatePrefix: true,
+  });
+
+  assert.equal(filename, "1542-a-dress-b-shoe-0426-c3d4.png");
 });
 
 test("gallery store prefixes the prompt image folder with the image date", async () => {
@@ -148,7 +161,7 @@ test("gallery store can save PPT slide images inside a named PPT deck folder", a
 
   const saved = await saveGeneratedAsset({
     outputDir,
-    relativeDir: "2026-04/04-22/2026-04-22-ppt/产品发布-a1b2c3d4",
+    relativeDir: "2026-04/04-22/2026-04-22-ppt/浜у搧鍙戝竷-a1b2c3d4",
     filename: "slide-1.png",
     imageBuffer: Buffer.from("slide-image"),
     metadata: {
@@ -162,9 +175,9 @@ test("gallery store can save PPT slide images inside a named PPT deck folder", a
     },
   });
 
-  assert.equal(saved.relativePath, "2026-04/04-22/2026-04-22-ppt/产品发布-a1b2c3d4/slide-1.png");
-  await access(join(outputDir, "2026-04", "04-22", "2026-04-22-ppt", "产品发布-a1b2c3d4", "slide-1.png"));
-  await access(join(outputDir, "json", "2026-04", "04-22", "2026-04-22-ppt", "产品发布-a1b2c3d4", "slide-1.json"));
+  assert.equal(saved.relativePath, "2026-04/04-22/2026-04-22-ppt/浜у搧鍙戝竷-a1b2c3d4/slide-1.png");
+  await access(join(outputDir, "2026-04", "04-22", "2026-04-22-ppt", "浜у搧鍙戝竷-a1b2c3d4", "slide-1.png"));
+  await access(join(outputDir, "json", "2026-04", "04-22", "2026-04-22-ppt", "浜у搧鍙戝竷-a1b2c3d4", "slide-1.json"));
 });
 
 test("gallery store writes images into dated folders and persists searchable metadata", async () => {
@@ -191,7 +204,7 @@ test("gallery store writes images into dated folders and persists searchable met
       format: "jpeg",
       hasReferenceImage: false,
       ratio: "4:5",
-      ratioLabel: "标准 4:5",
+      ratioLabel: "鏍囧噯 4:5",
       reasoningEffort: "high",
     },
   });
@@ -215,7 +228,7 @@ test("gallery store writes images into dated folders and persists searchable met
       referenceImageNames: ["reference-a.png", "reference-b.png"],
       referenceImageName: "reference-a.png",
       ratio: "16:9",
-      ratioLabel: "宽屏 16:9",
+      ratioLabel: "瀹藉睆 16:9",
       reasoningEffort: "medium",
       generationStartedAt: "2026-04-22T11:59:55.000Z",
       generationCompletedAt: "2026-04-22T12:00:02.345Z",
@@ -276,7 +289,7 @@ test("gallery store writes images into dated folders and persists searchable met
   assert.equal(items[0].imageModel, "gpt-image-2");
   assert.equal(items[0].quality, "medium");
   assert.equal(items[0].ratio, "16:9");
-  assert.equal(items[0].ratioLabel, "宽屏 16:9");
+  assert.equal(items[0].ratioLabel, "瀹藉睆 16:9");
   assert.equal(items[0].referenceImageName, "reference-a.png");
   assert.equal(items[0].reasoningEffort, "medium");
   assert.equal(items[0].generationDurationMs, "7345");
@@ -345,7 +358,7 @@ test("gallery store restores metadata from json sidecars when the index file is 
       referenceImageNames: ["reference-a.png"],
       referenceImageName: "reference-a.png",
       ratio: "4:5",
-      ratioLabel: "标准 4:5",
+      ratioLabel: "鏍囧噯 4:5",
       reasoningEffort: "medium",
     },
   });
@@ -447,6 +460,40 @@ test("gallery store batch renames historical images and sidecars together", asyn
   assert.equal(items[0].filename, renamedFilename);
 });
 
+test("gallery store batch rename preserves hour-minute prefixed quick blend filenames", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-quick-blend-name-"));
+  const outputDir = join(rootDir, "output");
+  const indexPath = join(rootDir, ".local", "gallery-index.json");
+  const filename = "1542-a-dress-b-shoe-0426-c3d4.png";
+
+  await saveGeneratedAsset({
+    outputDir,
+    indexPath,
+    filename,
+    imageBuffer: Buffer.from("image"),
+    metadata: {
+      prompt: "Quick Blend pair 2",
+      createdAt: "2026-04-26T15:42:33",
+      format: "png",
+      generationMode: "quick-blend",
+      assetKind: "quick-blend",
+    },
+  });
+
+  const result = await renameGalleryAssets({
+    outputDir,
+    indexPath,
+  });
+  const items = await listGalleryItems({
+    outputDir,
+    indexPath,
+    publicBasePath: "/output",
+  });
+
+  assert.equal(result.renamedCount, 0);
+  assert.equal(items[0].filename, filename);
+});
+
 test("gallery store backfills size metadata from image headers when index metadata is missing", async () => {
   const rootDir = await mkdtemp(join(tmpdir(), "responses-gallery-"));
   const outputDir = join(rootDir, "output");
@@ -532,12 +579,12 @@ test("gallery store repairs sparse metadata from a richer client-side payload", 
     indexPath,
     filename: "repairable.jpeg",
     metadata: {
-      prompt: "直播间护肤礼盒主视觉",
+      prompt: "鐩存挱闂存姢鑲ょぜ鐩掍富瑙嗚",
       baseUrl: "https://api.openai.com/v1",
       responsesModel: "gpt-5.4",
       imageModel: "gpt-image-2",
       ratio: "4:5",
-      ratioLabel: "标准 4:5",
+      ratioLabel: "鏍囧噯 4:5",
       quality: "high",
       reasoningEffort: "xhigh",
       referenceImageNames: ["reference-a.png"],
@@ -556,12 +603,12 @@ test("gallery store repairs sparse metadata from a richer client-side payload", 
   const indexPayload = JSON.parse(await readFile(indexPath, "utf8"));
 
   assert.equal(items.length, 1);
-  assert.equal(items[0].prompt, "直播间护肤礼盒主视觉");
+  assert.equal(items[0].prompt, "鐩存挱闂存姢鑲ょぜ鐩掍富瑙嗚");
   assert.equal(items[0].responsesModel, "gpt-5.4");
   assert.equal(items[0].referenceImageName, "reference-a.png");
-  assert.equal(sidecarPayload.prompt, "直播间护肤礼盒主视觉");
+  assert.equal(sidecarPayload.prompt, "鐩存挱闂存姢鑲ょぜ鐩掍富瑙嗚");
   assert.equal(sidecarPayload.responsesModel, "gpt-5.4");
   assert.equal(sidecarPayload.referenceImageName, "reference-a.png");
   assert.deepEqual(sidecarPayload.referenceImageNames, ["reference-a.png"]);
-  assert.equal(indexPayload["repairable.jpeg"].prompt, "直播间护肤礼盒主视觉");
+  assert.equal(indexPayload["repairable.jpeg"].prompt, "鐩存挱闂存姢鑲ょぜ鐩掍富瑙嗚");
 });

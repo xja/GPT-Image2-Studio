@@ -1,4 +1,4 @@
-import test from "node:test";
+﻿import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
@@ -327,7 +327,7 @@ test("Cloudflare prompt generation labels uploaded reference images and saves re
   const imageBucket = makeImageBucket();
   const formData = new FormData();
   formData.set("jobId", "job-prompt-reference");
-  formData.set("prompt", "提升画质");
+  formData.set("prompt", "鎻愬崌鐢昏川");
   formData.set("ratio", "16:9");
   formData.set("size", "1536x864");
   formData.set("format", "png");
@@ -1126,7 +1126,7 @@ test("Cloudflare image decomposition uses a single reference image and generated
   const formData = new FormData();
   formData.set("jobId", "job-decompose");
   formData.set("mode", "image-decomposition");
-  formData.set("targetLanguage", "Français");
+  formData.set("targetLanguage", "Fran莽ais");
   formData.set("featureCardsEnabled", "1");
   formData.set("ratio", "1:1");
   formData.set("size", "auto");
@@ -1163,14 +1163,14 @@ test("Cloudflare image decomposition uses a single reference image and generated
   assert.equal(seenRequests.length, 1);
   assert.equal(seenRequests[0].auth, "Bearer test-browser-key");
   assert.equal(inputImages.length, 1);
-  assert.match(inputText, /Français/);
+  assert.match(inputText, /Fran莽ais/);
   assert.match(inputText, /SOURCE image/);
   assert.match(inputText, /Do not invent brands/);
   assert.match(inputText, /must include left and right side feature cards/i);
   assert.match(inputText, /detailed callout boxes/i);
   assert.equal(savedEvent.payload.item.generationMode, "image-decomposition");
   assert.equal(savedEvent.payload.item.assetKind, "image-decomposition");
-  assert.equal(savedEvent.payload.item.targetLanguage, "Français");
+  assert.equal(savedEvent.payload.item.targetLanguage, "Fran莽ais");
   assert.equal(savedEvent.payload.item.sourceImageName, "source.png");
   assert.equal(savedEvent.payload.item.featureCardsEnabled, true);
   assert.doesNotMatch(text, /test-browser-key/);

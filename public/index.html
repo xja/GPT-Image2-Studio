@@ -65,7 +65,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260607-creation-record-detail-toggle-1" />
+    <link rel="stylesheet" href="./styles.css?v=20260608-quick-blend-group-clear-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -98,6 +98,7 @@
                     <a class="mega-menu-link" href="#style-transfer">风格迁移</a>
                     <a class="mega-menu-link" href="#reference-analysis">融图分析</a>
                     <a class="mega-menu-link" href="#image-decomposition">图片拆解</a>
+                    <a class="mega-menu-link" href="#image-edit">图片编辑</a>
                     <a class="mega-menu-link" href="#quick-blend">快速溶图</a>
                     <a class="mega-menu-link" href="#creation">套图模式</a>
                     <a class="mega-menu-link" href="#portrait">写真模式</a>
@@ -662,6 +663,152 @@
           </div>
         </section>
 
+        <section class="view-panel image-edit-view hidden" data-view-panel="image-edit">
+          <div class="image-edit-workspace">
+            <section class="studio-panel image-edit-upload-panel">
+              <form id="imageEditForm" class="settings-form image-edit-form">
+                <details
+                  class="field-group reference-field-group adaptive-section image-edit-source-field"
+                  id="imageEditSourceAdaptiveSection"
+                  data-adaptive-section="image-edit-source"
+                  data-compact-open="true"
+                  open
+                >
+                  <summary class="field-heading adaptive-section-summary">
+                    <div>
+                      <span>源图</span>
+                    </div>
+                    <small id="imageEditSourceCount">0 / 1</small>
+                  </summary>
+
+                  <label class="reference-dropzone image-edit-dropzone" id="imageEditDropzone">
+                    <input id="imageEditSourceInput" name="imageEditSourceImage" type="file" accept="image/*" />
+                    <div class="reference-icon" aria-hidden="true"></div>
+                    <strong>上传源图</strong>
+                    <span>JPG / PNG / WebP</span>
+                    <em>一次编辑一张图片</em>
+                  </label>
+
+                  <div class="reference-grid image-edit-source-grid hidden" id="imageEditSourceGrid"></div>
+                </details>
+
+                <section class="image-edit-local-mask-panel hidden" id="imageEditLocalMaskPanel" aria-label="局部编辑">
+                  <div class="image-edit-local-mask-stage" id="imageEditLocalMaskStage">
+                    <canvas id="imageEditSourceCanvas" class="image-edit-source-canvas" width="1" height="1"></canvas>
+                    <canvas id="imageEditMaskOverlayCanvas" class="image-edit-mask-overlay-canvas" width="1" height="1"></canvas>
+                  </div>
+                  <div class="image-edit-local-mask-toolbar" aria-label="局部编辑工具">
+                    <button class="toolbar-button" id="imageEditBrushToolButton" type="button" aria-pressed="true" title="画笔">画笔</button>
+                    <button class="toolbar-button" id="imageEditEraserToolButton" type="button" aria-pressed="false" title="橡皮">橡皮</button>
+                    <button class="toolbar-button" id="imageEditUndoMaskButton" type="button" title="撤销">撤销</button>
+                    <button class="toolbar-button" id="imageEditRedoMaskButton" type="button" title="重做">重做</button>
+                    <label class="compact-field image-edit-brush-size-field">
+                      <span>笔刷</span>
+                      <input id="imageEditBrushSizeInput" type="range" min="8" max="160" step="2" value="48" />
+                    </label>
+                    <button class="toolbar-button" id="imageEditAddRegionButton" type="button">新增区域</button>
+                  </div>
+                  <label class="compact-field image-edit-strategy-field">
+                    <span>执行策略</span>
+                    <select id="imageEditExecutionStrategyInput">
+                      <option value="merge">一次合并（快）</option>
+                      <option value="sequential">逐区精修（准）</option>
+                    </select>
+                  </label>
+                  <div class="image-edit-region-list" id="imageEditRegionList"></div>
+                  <p class="image-edit-local-mask-status" id="imageEditLocalMaskStatus" aria-live="polite"></p>
+                </section>
+
+                <label class="field-group image-edit-instruction-field">
+                  <span>编辑指令</span>
+                  <textarea
+                    id="imageEditPromptInput"
+                    name="imageEditPrompt"
+                    rows="6"
+                    maxlength="1200"
+                    placeholder="例如：把背景改成干净白色摄影棚，保留主体材质和比例。"
+                  ></textarea>
+                </label>
+
+                <button class="generate-button image-edit-generate-button" id="imageEditGenerateButton" type="button" disabled>
+                  开始编辑
+                </button>
+
+                <details
+                  class="field-group parameter-settings adaptive-section image-edit-parameter-settings"
+                  id="imageEditParameterAdaptiveSection"
+                  data-adaptive-section="image-edit-parameters"
+                  data-compact-open="true"
+                  open
+                >
+                  <summary class="field-heading adaptive-section-summary">
+                    <div>
+                      <span>参数设置</span>
+                    </div>
+                  </summary>
+                  <div class="ratio-grid" id="imageEditRatioGrid"></div>
+                  <input id="imageEditRatioInput" type="hidden" value="1:1" />
+                  <div class="advanced-content">
+                    <div class="advanced-controls">
+                      <label class="compact-field image-edit-size-field">
+                        <span>分辨率</span>
+                        <select id="imageEditSizeInput" name="imageEditSize"></select>
+                      </label>
+
+                      <label class="compact-field image-edit-format-field">
+                        <span>输出格式</span>
+                        <select id="imageEditOutputFormatInput" name="format"></select>
+                      </label>
+                    </div>
+                  </div>
+                  <p class="prompt-agent-feedback image-edit-feedback" id="imageEditFeedback"></p>
+                </details>
+              </form>
+            </section>
+
+            <section class="studio-panel preview-panel image-edit-preview-panel">
+              <div class="preview-stage image-edit-generation" id="imageEditGenerationPanel">
+                <div class="preview-meta image-edit-preview-meta">
+                  <span class="model-badge">Image Edit</span>
+                  <span id="imageEditGenerationMeta">等待生成</span>
+                </div>
+
+                <div class="preview-canvas image-edit-generation-canvas" id="imageEditGenerationCanvas">
+                  <div class="image-edit-generation-placeholder preview-placeholder" id="imageEditGenerationPlaceholder">
+                    <h3>编辑结果会显示在这里</h3>
+                    <span>上传源图并填写编辑指令后开始生成</span>
+                  </div>
+                  <img id="imageEditGenerationImage" alt="图片编辑生成结果" />
+                </div>
+
+                <div class="preview-toolbar image-edit-preview-toolbar">
+                  <div class="zoom-controls image-edit-preview-status" aria-live="polite">
+                    <span id="imageEditPreviewStatus">等待任务</span>
+                  </div>
+
+                  <div class="preview-actions">
+                    <a class="toolbar-button disabled" id="imageEditGenerationDownloadButton" href="#" download aria-disabled="true">
+                      下载
+                    </a>
+                    <button class="toolbar-button" id="imageEditGenerationLightboxButton" type="button" disabled>查看</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="filmstrip-row image-edit-filmstrip-row">
+                <div
+                  class="filmstrip image-edit-generation-strip hidden"
+                  id="imageEditGenerationStrip"
+                  aria-label="图片编辑生成缩略图"
+                ></div>
+                <div class="reference-analysis-thumbnail-empty image-edit-thumbnail-empty" id="imageEditThumbnailEmpty">
+                  等待生成结果
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
         <section class="view-panel quick-blend-view hidden" data-view-panel="quick-blend">
           <div class="quick-blend-workspace">
             <section class="studio-panel quick-blend-upload-panel">
@@ -673,6 +820,7 @@
                         <span>产品图 / A 组</span>
                       </div>
                       <small id="quickBlendACount">0 张</small>
+                      <button class="quick-blend-clear-button" id="quickBlendAClearButton" type="button" data-quick-blend-clear-group="a" disabled>清空图片</button>
                     </div>
                     <label class="reference-dropzone quick-blend-dropzone" id="quickBlendADropzone">
                       <input id="quickBlendAInput" name="quickBlendAImages" type="file" accept="image/*" multiple />
@@ -690,6 +838,7 @@
                         <span>B 组图片</span>
                       </div>
                       <small id="quickBlendBCount">0 张</small>
+                      <button class="quick-blend-clear-button" id="quickBlendBClearButton" type="button" data-quick-blend-clear-group="b" disabled>清空图片</button>
                     </div>
                     <label class="reference-dropzone quick-blend-dropzone" id="quickBlendBDropzone">
                       <input id="quickBlendBInput" name="quickBlendBImages" type="file" accept="image/*" multiple />
@@ -706,6 +855,7 @@
                         <span>C 组图片</span>
                       </div>
                       <small id="quickBlendCCount">0 张</small>
+                      <button class="quick-blend-clear-button" id="quickBlendCClearButton" type="button" data-quick-blend-clear-group="c" disabled>清空图片</button>
                     </div>
                     <label class="reference-dropzone quick-blend-dropzone" id="quickBlendCDropzone">
                       <input id="quickBlendCInput" name="quickBlendCImages" type="file" accept="image/*" multiple />
@@ -722,6 +872,7 @@
                         <span>D 组图片</span>
                       </div>
                       <small id="quickBlendDCount">0 张</small>
+                      <button class="quick-blend-clear-button" id="quickBlendDClearButton" type="button" data-quick-blend-clear-group="d" disabled>清空图片</button>
                     </div>
                     <label class="reference-dropzone quick-blend-dropzone" id="quickBlendDDropzone">
                       <input id="quickBlendDInput" name="quickBlendDImages" type="file" accept="image/*" multiple />
@@ -2613,6 +2764,6 @@
       </div>
     </aside>
 
-    <script type="module" src="./app.js?v=20260607-creation-record-detail-toggle-1"></script>
+    <script type="module" src="./app.js?v=20260608-quick-blend-time-sort-1"></script>
   </body>
 </html>

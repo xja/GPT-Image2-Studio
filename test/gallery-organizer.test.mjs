@@ -10,6 +10,7 @@ import {
   distributeGalleryItemsIntoColumns,
   filterGalleryItems,
   filterGalleryItemsByWindow,
+  getPromptGenerationGalleryItems,
   getGalleryColumnCountForWidth,
   getGalleryLayoutModeForWidth,
   getRecentGalleryItems,
@@ -96,6 +97,39 @@ test("gallery organizer returns the four most recent outputs for the studio side
     "yesterday.jpeg",
     "week.jpeg",
   ]);
+});
+
+test("gallery organizer excludes quick blend outputs from prompt generation thumbnails", () => {
+  const mixedItems = [
+    {
+      filename: "quick-latest.png",
+      createdAt: "2026-04-25T09:00:00.000Z",
+      prompt: "quick blend",
+      generationMode: "quick-blend",
+      assetKind: "quick-blend",
+    },
+    {
+      filename: "prompt-latest.png",
+      createdAt: "2026-04-25T08:00:00.000Z",
+      prompt: "prompt latest",
+    },
+    {
+      filename: "style-transfer.png",
+      createdAt: "2026-04-25T07:00:00.000Z",
+      prompt: "style transfer",
+      generationMode: "style-transfer",
+    },
+    {
+      filename: "prompt-older.png",
+      createdAt: "2026-04-25T06:00:00.000Z",
+      prompt: "prompt older",
+      assetKind: "prompt",
+    },
+  ];
+
+  const promptItems = getPromptGenerationGalleryItems(mixedItems);
+
+  assert.deepEqual(promptItems.map((item) => item.filename), ["prompt-latest.png", "prompt-older.png"]);
 });
 
 test("gallery organizer derives gallery-only responsive layout modes", () => {

@@ -19,11 +19,11 @@ const publicConfigModelPickerPath = new URL("../public/lib/config-model-picker.m
 const publicCreationListingViewPath = new URL("../public/lib/creation-listing-view.mjs", import.meta.url);
 const generationClientPath = new URL("../lib/generation-client.mjs", import.meta.url);
 const pptAnalysisClientPath = new URL("../lib/ppt-analysis-client.mjs", import.meta.url);
-const stylesAssetVersion = "20260607-creation-record-detail-toggle-1";
-const appAssetVersion = "20260607-creation-record-detail-toggle-1";
+const stylesAssetVersion = "20260608-quick-blend-group-clear-1";
+const appAssetVersion = "20260608-quick-blend-time-sort-1";
 const pptModuleAssetVersion = "20260527-density-overlap-1";
 const creationQueueModuleAssetVersion = "20260530-creation-queue-role-sync-1";
-const quickBlendModuleAssetVersion = "20260606-quick-blend-pair-delete-1";
+const quickBlendModuleAssetVersion = "20260608-quick-blend-time-sort-1";
 
 test("static assets use the current cache-busting version", async () => {
   const html = await readFile(indexPath, "utf8");
@@ -400,6 +400,17 @@ test("filmstrip rendering reuses keyed thumbnail nodes instead of clearing the r
   assert.match(app, /refs\.filmstrip\.replaceChildren\(fragment\);/);
   assert.match(app, /if \(image\.getAttribute\("src"\) !== imageUrl\) \{[\s\S]*image\.src = imageUrl;[\s\S]*\}/);
   assert.doesNotMatch(app, /refs\.filmstrip\.innerHTML = "";/);
+});
+
+test("studio prompt thumbnails exclude quick blend gallery items", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /getPromptGenerationGalleryItems/);
+  assert.match(app, /const promptGalleryItems = getPromptGenerationGalleryItems\(state\.gallery\);/);
+  assert.match(app, /const recentGallery = getPromptGenerationGalleryItems\(state\.gallery\)\.slice\(0,\s*12\)/);
+  assert.match(app, /refs\.recentEmpty\.classList\.toggle\("hidden",\s*promptGalleryItems\.length > 0\);/);
+  assert.match(app, /getRecentGalleryItems\(promptGalleryItems\)/);
+  assert.doesNotMatch(app, /getRecentGalleryItems\(state\.gallery\)/);
 });
 
 test("studio keeps the initial preview idle until a job or thumbnail is selected", async () => {
@@ -1013,6 +1024,84 @@ test("quick blend generation thumbnails keep submitted pair order while completi
   ]);
 });
 
+test("quick blend generation thumbnails put untracked late submissions before older thumbnails", async () => {
+  const quickBlendView = await readFile(quickBlendViewPath, "utf8");
+  const replaceSource = extractFunctionBefore(
+    quickBlendView,
+    "replaceQuickBlendGenerationKey",
+    "removeQuickBlendGenerationKey",
+  );
+  const state = {
+    quickBlend: {
+      generationKeys: ["file:older-1.png", "file:older-2.png"],
+    },
+  };
+  const { replaceQuickBlendGenerationKey } = Function(
+    "state",
+    `${replaceSource}\nreturn { replaceQuickBlendGenerationKey };`,
+  )(state);
+
+  replaceQuickBlendGenerationKey("job:lost-latest", "file:latest.png");
+
+  assert.deepEqual(state.quickBlend.generationKeys, [
+    "file:latest.png",
+    "file:older-1.png",
+    "file:older-2.png",
+  ]);
+});
+
+test("quick blend generation entries sort thumbnails by generated time descending", async () => {
+  const quickBlendView = await readFile(quickBlendViewPath, "utf8");
+  const getItemSource = extractFunctionBefore(
+    quickBlendView,
+    "getQuickBlendGenerationItemByKey",
+    "storeQuickBlendGenerationItem",
+  );
+  const getEntriesSource = extractFunctionBefore(
+    quickBlendView,
+    "getQuickBlendGenerationEntries",
+    "syncQuickBlendGenerationPreviewKey",
+  );
+  const state = {
+    quickBlend: {
+      generationKeys: ["file:older.png", "file:latest.png", "file:middle.png"],
+      generationItems: {
+        "file:older.png": { filename: "older.png", mode: "quick-blend", createdAt: "2026-06-08T18:33:44.000Z" },
+        "file:latest.png": { filename: "latest.png", mode: "quick-blend", createdAt: "2026-06-08T18:47:54.000Z" },
+        "file:middle.png": { filename: "middle.png", mode: "quick-blend", createdAt: "2026-06-08T18:37:48.000Z" },
+      },
+    },
+    jobs: [],
+    gallery: [],
+  };
+  const makeJobPreviewKey = (jobId) => `job:${jobId}`;
+  const makeGalleryPreviewKey = (filename) => `file:${filename}`;
+  const sortGalleryItemsByCreatedAtDesc = (items) =>
+    [...items].sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")));
+  const { getQuickBlendGenerationEntries } = Function(
+    "state",
+    "makeJobPreviewKey",
+    "makeGalleryPreviewKey",
+    "sortGalleryItemsByCreatedAtDesc",
+    `${getItemSource}\n${getEntriesSource}\nreturn { getQuickBlendGenerationEntries };`,
+  )(state, makeJobPreviewKey, makeGalleryPreviewKey, sortGalleryItemsByCreatedAtDesc);
+
+  assert.deepEqual(
+    getQuickBlendGenerationEntries().map((entry) => entry.key),
+    ["file:latest.png", "file:middle.png", "file:older.png"],
+  );
+});
+
+test("quick blend generation thumbnail captions prefer generated time over pair labels", async () => {
+  const quickBlendView = await readFile(quickBlendViewPath, "utf8");
+
+  assert.match(
+    quickBlendView,
+    /caption\.textContent = formatClock\(item\?\.createdAt\) \|\| item\?\.statusText \|\| formatFilmstripSizeLabel\(item\);/,
+  );
+  assert.doesNotMatch(quickBlendView, /caption\.textContent = item\?\.quickBlendPairIndex/);
+});
+
 test("quick blend pair preview can remove the same index across all reference groups", async () => {
   const styles = await readFile(stylesPath, "utf8");
   const quickBlendView = await readFile(quickBlendViewPath, "utf8");
@@ -1031,6 +1120,29 @@ test("quick blend pair preview can remove the same index across all reference gr
     /\.quick-blend-pair-row\s*\{[\s\S]*grid-template-columns:\s*repeat\(var\(--quick-blend-pair-groups,\s*2\), auto minmax\(0,\s*1fr\)\) auto;/,
   );
   assert.match(styles, /\.quick-blend-pair-remove\s*\{[\s\S]*width:\s*28px;[\s\S]*height:\s*28px;[\s\S]*border-radius:\s*999px;/);
+});
+
+test("quick blend upload groups expose per-group clear image controls", async () => {
+  const html = await readFile(indexPath, "utf8");
+  const styles = await readFile(stylesPath, "utf8");
+  const quickBlendView = await readFile(quickBlendViewPath, "utf8");
+
+  for (const group of ["A", "B", "C", "D"]) {
+    assert.match(
+      html,
+      new RegExp(`id="quickBlend${group}ClearButton"[\\s\\S]*type="button"[\\s\\S]*data-quick-blend-clear-group="${group.toLowerCase()}"[\\s\\S]*清空图片`),
+    );
+    assert.match(quickBlendView, new RegExp(`quickBlend${group}ClearButton:\\s*document\\.querySelector\\("#quickBlend${group}ClearButton"\\)`));
+    assert.match(quickBlendView, new RegExp(`refs\\.quickBlend${group}ClearButton\\?\\.addEventListener\\("click", \\(\\) => clearQuickBlendGroup\\("${group.toLowerCase()}"\\)\\);`));
+  }
+
+  assert.match(quickBlendView, /function clearQuickBlendGroup\(group\) \{/);
+  assert.match(
+    quickBlendView,
+    /for \(const item of files\) \{[\s\S]*revokeReferencePreview\(item\);[\s\S]*state\.quickBlend\[key\] = \[\];/,
+  );
+  assert.match(quickBlendView, /button\.disabled = files\.length === 0;/);
+  assert.match(styles, /\.quick-blend-clear-button\s*\{[\s\S]*min-height:\s*28px;[\s\S]*border-radius:\s*999px;/);
 });
 
 test("quick blend upload groups keep the first pending upload slot full size", async () => {
@@ -3134,6 +3246,29 @@ test("creation reference analysis apply fills product name from fourth-level cat
   );
 });
 
+test("creation reference analysis ignores stale in-flight image batches", async () => {
+  const app = await readFile(appPath, "utf8");
+
+  assert.match(app, /function getCreationReferenceAnalysisSnapshot\(\) \{[\s\S]*state\.creationReferenceFiles\.map/);
+  assert.match(
+    app,
+    /function invalidateCreationReferenceAnalysisRequest\(\) \{[^\n]*creationReferenceAnalysisRequestToken \+= 1;[^\n]*state\.creationReferenceAnalysis\.running = false;[^\n]*\}/,
+  );
+
+  const dirtyBody = app.match(/function markCreationReferenceAnalysisDirty\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(dirtyBody, /invalidateCreationReferenceAnalysisRequest\(\);/);
+
+  const analyzeStart = app.indexOf("async function analyzeCreationReferenceImages()");
+  const analyzeEnd = app.indexOf("function renderCreationRolePicker()", analyzeStart);
+  assert.ok(analyzeStart >= 0 && analyzeEnd > analyzeStart);
+  const analyzeBody = app.slice(analyzeStart, analyzeEnd);
+  assert.match(analyzeBody, /const referenceSnapshot = getCreationReferenceAnalysisSnapshot\(\);/);
+  assert.match(
+    analyzeBody,
+    /requestToken !== creationReferenceAnalysisRequestToken \|\| referenceSnapshot !== getCreationReferenceAnalysisSnapshot\(\)/,
+  );
+});
+
 test("creation mode exposes record detail and item repair actions", async () => {
   const html = await readFile(indexPath, "utf8");
   const styles = await readFile(stylesPath, "utf8");
@@ -3232,7 +3367,7 @@ test("creation generation cards replace plan details with loading animation", as
   assert.match(app, /const isQueued = status === "queued";/);
   assert.match(app, /label\.textContent = isQueued \? "排队中" : "生成中";/);
   assert.match(app, /card\.classList\.toggle\("is-generating", isLoadingCard\);/);
-  assert.match(app, /status\.textContent = getCreationStatusLabel\(item\.status\);/);
+  assert.match(app, /status\.textContent = getCreationItemStatusLabel\(item\);/);
   assert.match(app, /media\.classList\.add\("is-loading"\);[\s\S]*media\.appendChild\(createCreationCardLoading\(item\.status\)\);/);
   assert.match(app, /const shouldRenderPath = !imageUrl && !showRecordActions && !hideGenerationDetails;/);
   assert.match(app, /if \(shouldRenderPath\) \{/);
@@ -3490,6 +3625,10 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.match(app, /function renderCreationRecordView\(\) \{/);
   assert.match(app, /function renderCreationRecordSetList\(\) \{/);
   assert.match(app, /function filterCreationRecordSets\(\) \{/);
+  assert.match(app, /missingAsset:\s*Boolean\(item\.missingAsset \|\| item\.missing_asset\)/);
+  assert.match(app, /function isCreationMissingAssetItem\(item = \{\}\) \{/);
+  assert.match(app, /status\.textContent = getCreationItemStatusLabel\(item\);/);
+  assert.match(app, /placeholder\.textContent = isCreationMissingAssetItem\(item\) \? "历史图片文件缺失，可一键补图" : item\.status === "failed" \? item\.error \|\| "生成失败" : "等待生成";/);
   assert.match(app, /renderCreationRecordArchiveDetail\(set\)[\s\S]*formatCreationReferenceRoleSummary\(set\.referenceImageRoles\)/);
   assert.match(app, /function applyCreationSetToForm\(set\) \{/);
   assert.match(app, /function reuseCreationRecordSet\(\) \{/);
@@ -3503,7 +3642,11 @@ test("asset record views include PPT records and Creation set records", async ()
   assert.match(app, /async function openCreationRecordFolder\(\) \{/);
   assert.match(app, /creationRecordRepairIncompleteButton: document\.querySelector\("#creationRecordRepairIncompleteButton"\)/);
   assert.match(app, /const recordIncompleteItems = getCreationIncompleteItems\(selectedSet\);[\s\S]*creationRecordRepairIncompleteButton\.disabled = state\.creation\.generating \|\| !canRepairCreationSet\(selectedSet\) \|\| recordIncompleteItems\.length === 0;/);
+  assert.match(app, /creationRecordRepairIncompleteButton\.textContent = getCreationRecordRepairButtonLabel\(recordIncompleteItems\);/);
   assert.match(app, /async function repairCreationRecordIncompleteImages\(\) \{/);
+  assert.match(app, /const missingAssetCount = targetItems\.filter\(isCreationMissingAssetItem\)\.length;/);
+  assert.match(app, /正在补齐缺失的历史图像文件/);
+  assert.match(app, /缺失图像文件已补齐/);
   assert.match(app, /applyCreationSetToForm\(selectedSet\);[\s\S]*state\.creation\.currentSet = normalizeCreationSetForView\(selectedSet\);/);
   assert.match(app, /await runCreationRepairRequest\(\{ scope: "incomplete", set: selectedSet \}\);/);
   assert.match(app, /navigator\.clipboard\.writeText/);

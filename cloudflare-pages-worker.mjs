@@ -1,4 +1,4 @@
-import {
+﻿import {
   appendRatioHintToPrompt,
   getAspectRatioOptions,
   resolveAspectRatioOption,
@@ -14,6 +14,16 @@ import {
   normalizeImageDecompositionFeatureCards,
 } from "./lib/image-decomposition-prompt.mjs";
 import {
+  IMAGE_EDIT_LOCAL_MASK_MODE,
+  buildLocalMaskMergedPrompt,
+  buildLocalMaskMetadata,
+  buildLocalMaskRegionPrompt,
+  isLocalMaskExecutionStrategy,
+  normalizeLocalMaskExecutionStrategy,
+  parseLocalMaskRegionInstructions,
+  validateLocalMaskFileInput,
+} from "./lib/image-edit-local-mask.mjs";
+import {
   QUICK_BLEND_ASSET_KIND,
   QUICK_BLEND_MODE,
   buildQuickBlendFilenameToken,
@@ -28,6 +38,7 @@ import {
 import {
   normalizeOutputFormat,
   toApiOutputFormat,
+  toOutputFormatExtension,
   toOutputFormatMimeType,
 } from "./lib/output-format-options.mjs";
 import {
@@ -59,7 +70,7 @@ import {
   normalizePptCompletionRequest,
 } from "./lib/ppt-completion.mjs";
 import { normalizePptMotionOptions } from "./lib/ppt-motion-presets.mjs";
-import { normalizeBase64, requestDirectImageGeneration, requestImageGeneration } from "./lib/responses-workflow.mjs";
+import { normalizeBase64, requestDirectImageGeneration, requestImageEdit, requestImageGeneration } from "./lib/responses-workflow.mjs";
 import { IMAGE_ROUTE_B, getSelectedImageGenerationConfig, normalizeImageRouteConfig } from "./lib/image-route-config.mjs";
 import { fetchAvailableModels } from "./lib/model-list-client.mjs";
 import { normalizeApiBaseUrl } from "./lib/api-base-url.mjs";
@@ -103,6 +114,8 @@ const GENERATION_REQUEST_STORAGE_PREFIX = "generation-requests/";
 const SERVER_IMAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
 const QUICK_BLEND_REFERENCE_COUNT_MESSAGE =
   "Quick Blend mode requires 2 to 4 reference images: A and B are required; C and D are optional.";
+const IMAGE_EDIT_MODE = "image-edit";
+const IMAGE_EDIT_ASSET_KIND = "image-edit";
 
 function buildPortraitReferenceImageLabels(personReferenceImages = [], actionReferenceImages = [], accessoryReferenceImages = []) {
   const personCount = personReferenceImages.length;
@@ -123,9 +136,9 @@ function buildPortraitReferenceImageLabels(personReferenceImages = [], actionRef
     ),
   ];
 }
-const GENERATION_MODES = new Set(["style-transfer", "reference-analysis", IMAGE_DECOMPOSITION_MODE, QUICK_BLEND_MODE, "portrait"]);
-const SERVER_IMAGE_BUCKET_MISSING_MESSAGE = "服务器图片存储未配置 IMAGE_BUCKET";
-const GENERATION_QUEUE_MISSING_MESSAGE = "服务器异步生成队列未配置 GENERATION_QUEUE";
+const GENERATION_MODES = new Set(["style-transfer", "reference-analysis", IMAGE_DECOMPOSITION_MODE, QUICK_BLEND_MODE, IMAGE_EDIT_MODE, "portrait"]);
+const SERVER_IMAGE_BUCKET_MISSING_MESSAGE = "鏈嶅姟鍣ㄥ浘鐗囧瓨鍌ㄦ湭閰嶇疆 IMAGE_BUCKET";
+const GENERATION_QUEUE_MISSING_MESSAGE = "鏈嶅姟鍣ㄥ紓姝ョ敓鎴愰槦鍒楁湭閰嶇疆 GENERATION_QUEUE";
 const DEFAULT_CREATION_LISTING_REASONING_EFFORT = "medium";
 const CREATION_REFERENCE_ANALYSIS_REASONING_EFFORT = "low";
 const PORTRAIT_REFERENCE_ANALYSIS_REASONING_EFFORT = "low";
@@ -174,6 +187,9 @@ async function writeSseEvent(writer, type, payload) {
 }
 
 function requestCloudImageGeneration(options) {
+  if (options.generationMode === IMAGE_EDIT_MODE) {
+    return requestImageEdit(options);
+  }
   if (options.imageRoute === IMAGE_ROUTE_B) {
     return requestDirectImageGeneration(options);
   }
@@ -292,7 +308,7 @@ function normalizeReasoningEffort(value, fallback = DEFAULT_REASONING_EFFORT) {
     return fallback;
   }
   if (!REASONING_EFFORT_OPTIONS.includes(normalized)) {
-    throw new Error(`不支持的推理强度: ${normalized}`);
+    throw new Error(`涓嶆敮鎸佺殑鎺ㄧ悊寮哄害: ${normalized}`);
   }
   return normalized;
 }
@@ -316,7 +332,7 @@ function normalizePrivateConfig(formData, { allowDirectImageRoute = false } = {}
   const generationConfig = getSelectedImageGenerationConfig(routeConfig);
 
   if (!routeConfig.apiKey && (!allowDirectImageRoute || !generationConfig.apiKey)) {
-    throw new Error("当前浏览器未保存 API Key，请先在配置中保存。");
+    throw new Error("褰撳墠娴忚鍣ㄦ湭淇濆瓨 API Key锛岃鍏堝湪閰嶇疆涓繚瀛樸€?");
   }
 
   return {
@@ -325,14 +341,18 @@ function normalizePrivateConfig(formData, { allowDirectImageRoute = false } = {}
   };
 }
 
-async function toReferenceImages(files) {
-  const validFiles = files.filter(
+function getReadableUploadFiles(files) {
+  return files.filter(
     (file) =>
       file &&
       typeof file === "object" &&
       typeof file.arrayBuffer === "function" &&
       Number(file.size || 0) > 0,
   );
+}
+
+async function toReferenceImages(files) {
+  const validFiles = getReadableUploadFiles(files);
 
   return Promise.all(
     validFiles.map(async (file, index) => {
@@ -346,16 +366,82 @@ async function toReferenceImages(files) {
   );
 }
 
+function validateLocalMaskUploadFiles(files, label) {
+  const validFiles = getReadableUploadFiles(files);
+  validFiles.forEach((file, index) => {
+    validateLocalMaskFileInput(file, validFiles.length === 1 ? label : `${label} ${index + 1}`);
+  });
+  return validFiles;
+}
+
+async function readLocalMaskRequest(formData, { isImageEdit }) {
+  const editMode = String(formData.get("editMode") || "").trim();
+  if (!isImageEdit || editMode !== IMAGE_EDIT_LOCAL_MASK_MODE) {
+    return {
+      isLocalMaskImageEdit: false,
+      editMode: "",
+      executionStrategy: "",
+      regionInstructions: [],
+      localMask: null,
+      localMasks: [],
+    };
+  }
+
+  const rawExecutionStrategy = String(formData.get("executionStrategy") || "").trim();
+  if (rawExecutionStrategy && !isLocalMaskExecutionStrategy(rawExecutionStrategy)) {
+    throw new Error("Local mask executionStrategy must be merge or sequential.");
+  }
+
+  const executionStrategy = normalizeLocalMaskExecutionStrategy(rawExecutionStrategy);
+  const regionInstructions = parseLocalMaskRegionInstructions(formData.get("regionInstructions"));
+  if (regionInstructions.length === 0) {
+    throw new Error("Local mask image edit requires at least one painted region instruction.");
+  }
+
+  if (executionStrategy === "merge") {
+    const rawMasks = validateLocalMaskUploadFiles(formData.getAll("mask"), "Local mask");
+    const masks = await toReferenceImages(rawMasks);
+    if (masks.length !== 1) {
+      throw new Error("Local mask merge mode requires exactly one image mask.");
+    }
+    return {
+      isLocalMaskImageEdit: true,
+      editMode,
+      executionStrategy,
+      regionInstructions,
+      localMask: masks[0],
+      localMasks: [],
+    };
+  }
+
+  const rawMasks = formData.getAll("masks[]");
+  const sequentialRawMasks = rawMasks.length > 0 ? rawMasks : formData.getAll("masks");
+  const validatedRawMasks = validateLocalMaskUploadFiles(sequentialRawMasks, "Local mask");
+  const localMasks = await toReferenceImages(validatedRawMasks);
+  if (localMasks.length !== regionInstructions.length) {
+    throw new Error("Local mask sequential mode requires one image mask per region instruction.");
+  }
+
+  return {
+    isLocalMaskImageEdit: true,
+    editMode,
+    executionStrategy,
+    regionInstructions,
+    localMask: null,
+    localMasks,
+  };
+}
+
 async function readCreationLogoImage(formData) {
   const logoImages = await toReferenceImages([
     ...formData.getAll("logoImage"),
     ...formData.getAll("creationLogoImage"),
   ]);
   if (logoImages.length > 1) {
-    throw new Error("Logo 最多只能上传 1 张。");
+    throw new Error("Logo 鏈€澶氬彧鑳戒笂浼?1 寮犮€?");
   }
   if (logoImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
-    throw new Error("Logo 仅支持图片文件。");
+    throw new Error("Logo 浠呮敮鎸佸浘鐗囨枃浠躲€?");
   }
   return logoImages[0] || null;
 }
@@ -482,6 +568,11 @@ function toPublicGenerationTask(task = {}) {
     quickBlendPlacementShape: String(task.quickBlendPlacementShape || ""),
     targetLanguage: String(task.targetLanguage || ""),
     sourceImageName: String(task.sourceImageName || ""),
+    editInstruction: String(task.editInstruction || ""),
+    editMode: String(task.editMode || ""),
+    executionStrategy: String(task.executionStrategy || ""),
+    regionCount: Number(task.regionCount || 0),
+    regionInstructions: Array.isArray(task.regionInstructions) ? task.regionInstructions : [],
     featureCardsEnabled: normalizeImageDecompositionFeatureCards(task.featureCardsEnabled),
     item: task.item || null,
   };
@@ -596,6 +687,10 @@ function buildStoredImageMetadata({ filename, createdAt, expiresAt, item = {} })
     "quickBlendLayoutOrder",
     "quickBlendPlacementShape",
     "referenceImageName",
+    "sourceImageName",
+    "editInstruction",
+    "editMode",
+    "executionStrategy",
     "ratio",
     "ratioLabel",
     "size",
@@ -615,6 +710,12 @@ function buildStoredImageMetadata({ filename, createdAt, expiresAt, item = {} })
 
   if (Array.isArray(item.referenceImageNames) && item.referenceImageNames.length > 0) {
     metadata.referenceImageNames = JSON.stringify(item.referenceImageNames.map((value) => String(value)));
+  }
+  if (Number(item.regionCount || 0) > 0) {
+    metadata.regionCount = String(Number(item.regionCount));
+  }
+  if (Array.isArray(item.regionInstructions) && item.regionInstructions.length > 0) {
+    metadata.regionInstructions = JSON.stringify(item.regionInstructions);
   }
 
   return metadata;
@@ -677,6 +778,11 @@ function buildGalleryItem({
   quickBlendPlacementShape = "",
   targetLanguage = "",
   sourceImageName = "",
+  editInstruction = "",
+  editMode = "",
+  executionStrategy = "",
+  regionCount = 0,
+  regionInstructions = [],
   featureCardsEnabled = false,
   generationStartedAt,
   generationCompletedAt,
@@ -709,6 +815,11 @@ function buildGalleryItem({
     quickBlendPlacementShape,
     targetLanguage,
     sourceImageName,
+    editInstruction,
+    editMode,
+    executionStrategy,
+    regionCount,
+    regionInstructions,
     featureCardsEnabled,
     ratio: ratioOption.value,
     ratioLabel: ratioOption.label,
@@ -731,6 +842,7 @@ async function buildGenerationRequestContext(request, formData) {
   const generationMode = normalizeGenerationMode(formData.get("mode"));
   const isImageDecomposition = generationMode === IMAGE_DECOMPOSITION_MODE;
   const isQuickBlend = generationMode === QUICK_BLEND_MODE;
+  const isImageEdit = generationMode === IMAGE_EDIT_MODE;
   const isReferenceAnalysis = generationMode === "reference-analysis";
   const targetLanguageInput = String(formData.get("targetLanguage") || "").trim();
   const targetLanguageLabelInput = String(formData.get("targetLanguageLabel") || "").trim();
@@ -751,9 +863,28 @@ async function buildGenerationRequestContext(request, formData) {
   let targetLanguage = "";
   let sourceImageName = "";
   let assetKind = "";
+  let editInstruction = "";
+  let editMode = "";
+  let executionStrategy = "";
+  let regionInstructions = [];
+  let localMask = null;
+  let localMasks = [];
   let filenameToken = "";
 
-  if (!prompt && !isImageDecomposition && !isQuickBlend) {
+  const localMaskRequest = await readLocalMaskRequest(formData, { isImageEdit });
+  const isLocalMaskImageEdit = localMaskRequest.isLocalMaskImageEdit;
+  if (isLocalMaskImageEdit) {
+    editMode = localMaskRequest.editMode;
+    executionStrategy = localMaskRequest.executionStrategy;
+    regionInstructions = localMaskRequest.regionInstructions;
+    localMask = localMaskRequest.localMask;
+    localMasks = localMaskRequest.localMasks;
+  }
+
+  if (isImageEdit && !isLocalMaskImageEdit && !prompt) {
+    throw new Error("编辑指令不能为空。");
+  }
+  if (!prompt && !isImageDecomposition && !isQuickBlend && !isLocalMaskImageEdit) {
     throw new Error("提示词不能为空。");
   }
 
@@ -769,6 +900,12 @@ async function buildGenerationRequestContext(request, formData) {
   }
   if (isImageDecomposition && referenceImages.length !== 1) {
     throw new Error("图片拆解模式需要且只支持上传一张源图。");
+  }
+  if (isImageEdit && referenceImages.length !== 1) {
+    throw new Error("图片编辑模式需要且只支持上传一张源图。");
+  }
+  if (isImageEdit && referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+    throw new Error("图片编辑模式仅支持图片文件。");
   }
   if (isImageDecomposition) {
     const decompositionPrompt = buildImageDecompositionPrompt({
@@ -808,6 +945,22 @@ async function buildGenerationRequestContext(request, formData) {
       cImageName: quickBlendCImageName,
       dImageName: quickBlendDImageName,
     });
+  }
+  if (isImageEdit) {
+    editInstruction = prompt;
+    sourceImageName = referenceImages[0]?.filename || "";
+    assetKind = IMAGE_EDIT_ASSET_KIND;
+    if (isLocalMaskImageEdit) {
+      const localMaskMetadata = buildLocalMaskMetadata({
+        executionStrategy,
+        regions: regionInstructions,
+        sourceImageName,
+      });
+      prompt = executionStrategy === "merge"
+        ? buildLocalMaskMergedPrompt(regionInstructions)
+        : localMaskMetadata.editInstruction;
+      editInstruction = localMaskMetadata.editInstruction;
+    }
   }
   if (isReferenceAnalysis) {
     prompt = appendReferenceAnalysisLanguageInstruction(prompt, targetLanguageInput, targetLanguageLabelInput);
@@ -851,6 +1004,12 @@ async function buildGenerationRequestContext(request, formData) {
     filenameToken,
     targetLanguage,
     sourceImageName,
+    editInstruction,
+    editMode,
+    executionStrategy,
+    regionCount: regionInstructions.length,
+    regionInstructions,
+    localMask: isLocalMaskImageEdit ? { mask: localMask, masks: localMasks } : null,
     featureCardsEnabled,
     referenceImages,
     reasoningEffort,
@@ -885,6 +1044,11 @@ function buildQueuedGenerationTask(context) {
     filenameToken: context.filenameToken,
     targetLanguage: context.targetLanguage,
     sourceImageName: context.sourceImageName,
+    editInstruction: context.editInstruction,
+    editMode: context.editMode,
+    executionStrategy: context.executionStrategy,
+    regionCount: context.regionCount,
+    regionInstructions: context.regionInstructions,
     featureCardsEnabled: context.featureCardsEnabled,
     ratio: context.ratioOption.value,
     ratioLabel: context.ratioOption.label,
@@ -1408,6 +1572,12 @@ async function enqueueGenerate(request, writer, { imageBucket, generationQueue }
     quickBlendPlacementShape: context.quickBlendPlacementShape,
     targetLanguage: context.targetLanguage,
     sourceImageName: context.sourceImageName,
+    editInstruction: context.editInstruction,
+    editMode: context.editMode,
+    executionStrategy: context.executionStrategy,
+    regionCount: context.regionCount,
+    regionInstructions: context.regionInstructions,
+    localMask: context.localMask,
     featureCardsEnabled: context.featureCardsEnabled,
     referenceImages: context.referenceImages,
     reasoningEffort: context.reasoningEffort,
@@ -1448,6 +1618,7 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
   const generationMode = normalizeGenerationMode(formData.get("mode"));
   const isImageDecomposition = generationMode === IMAGE_DECOMPOSITION_MODE;
   const isQuickBlend = generationMode === QUICK_BLEND_MODE;
+  const isImageEdit = generationMode === IMAGE_EDIT_MODE;
   const targetLanguageInput = String(formData.get("targetLanguage") || "").trim();
   const customTargetLanguageInput = String(formData.get("customTargetLanguage") || "").trim();
   const featureCardsEnabled = normalizeImageDecompositionFeatureCards(formData.get("featureCardsEnabled"));
@@ -1465,6 +1636,12 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
   let targetLanguage = "";
   let sourceImageName = "";
   let assetKind = "";
+  let editInstruction = "";
+  let editMode = "";
+  let executionStrategy = "";
+  let regionInstructions = [];
+  let localMask = null;
+  let localMasks = [];
   let filenameToken = "";
 
   if (!imageBucket) {
@@ -1474,7 +1651,22 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     return;
   }
 
-  if (!prompt && !isImageDecomposition && !isQuickBlend) {
+  const localMaskRequest = await readLocalMaskRequest(formData, { isImageEdit });
+  const isLocalMaskImageEdit = localMaskRequest.isLocalMaskImageEdit;
+  if (isLocalMaskImageEdit) {
+    editMode = localMaskRequest.editMode;
+    executionStrategy = localMaskRequest.executionStrategy;
+    regionInstructions = localMaskRequest.regionInstructions;
+    localMask = localMaskRequest.localMask;
+    localMasks = localMaskRequest.localMasks;
+  }
+
+  if (isImageEdit && !isLocalMaskImageEdit && !prompt) {
+    await writeSseEvent(writer, "error", { message: "编辑指令不能为空。" });
+    return;
+  }
+
+  if (!prompt && !isImageDecomposition && !isQuickBlend && !isLocalMaskImageEdit) {
     await writeSseEvent(writer, "error", { message: "提示词不能为空。" });
     return;
   }
@@ -1498,6 +1690,18 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
   if (isImageDecomposition && referenceImages.length !== 1) {
     await writeSseEvent(writer, "error", {
       message: "图片拆解模式需要且只支持上传一张源图。",
+    });
+    return;
+  }
+  if (isImageEdit && referenceImages.length !== 1) {
+    await writeSseEvent(writer, "error", {
+      message: "图片编辑模式需要且只支持上传一张源图。",
+    });
+    return;
+  }
+  if (isImageEdit && referenceImages.some((image) => !String(image.mimeType || "").startsWith("image/"))) {
+    await writeSseEvent(writer, "error", {
+      message: "图片编辑模式仅支持图片文件。",
     });
     return;
   }
@@ -1540,6 +1744,22 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
       dImageName: quickBlendDImageName,
     });
   }
+  if (isImageEdit) {
+    editInstruction = prompt;
+    sourceImageName = referenceImages[0]?.filename || "";
+    assetKind = IMAGE_EDIT_ASSET_KIND;
+    if (isLocalMaskImageEdit) {
+      const localMaskMetadata = buildLocalMaskMetadata({
+        executionStrategy,
+        regions: regionInstructions,
+        sourceImageName,
+      });
+      prompt = executionStrategy === "merge"
+        ? buildLocalMaskMergedPrompt(regionInstructions)
+        : localMaskMetadata.editInstruction;
+      editInstruction = localMaskMetadata.editInstruction;
+    }
+  }
   const hasStyleTransferPreset = Boolean(styleTransferStylePreset);
   if (generationMode === "style-transfer" && referenceImages.length < (hasStyleTransferPreset ? 1 : 2)) {
     await writeSseEvent(writer, "error", {
@@ -1564,7 +1784,102 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
   const generationStartedAt = new Date().toISOString();
   const generationStartedAtMs = Date.now();
 
-  const generationResult = await requestCloudImageGeneration({
+  let generationResult;
+
+  if (isLocalMaskImageEdit && executionStrategy === "sequential") {
+    let currentSourceImage = referenceImages[0];
+    const totalRegions = regionInstructions.length;
+
+    for (const [index, region] of regionInstructions.entries()) {
+      const stepNumber = index + 1;
+      let stepFinalBase64 = "";
+      let stepResult;
+
+      try {
+        stepResult = await requestCloudImageGeneration({
+          baseUrl: generationConfig.baseUrl,
+          apiKey: generationConfig.apiKey,
+          prompt: appendRatioHintToPrompt(buildLocalMaskRegionPrompt(region, { total: totalRegions }), ratioOption),
+          referenceImages: [currentSourceImage],
+          referenceImageLabels: [],
+          size: finalSize,
+          quality: finalQuality,
+          format: toApiOutputFormat(finalFormat),
+          responsesModel: config.responsesModel,
+          imageRoute: generationConfig.imageRoute,
+          imageModel: generationConfig.imageModel,
+          generationMode,
+          sourceImage: currentSourceImage,
+          mask: localMasks[index],
+          reasoningEffort,
+          statusHeartbeatMs: UPSTREAM_STATUS_HEARTBEAT_MS,
+          fetchImpl,
+          async onEvent(event) {
+            if (event.type === "status") {
+              await writeSseEvent(writer, "status", {
+                stage: event.stage,
+                message: event.message,
+              });
+              return;
+            }
+
+            if (event.type === "partial_image") {
+              await writeSseEvent(writer, "partial_image", {
+                dataUrl: event.dataUrl,
+              });
+              return;
+            }
+
+            if (event.type === "final_image") {
+              stepFinalBase64 = event.base64;
+              if (stepNumber < totalRegions) {
+                await writeSseEvent(writer, "status", {
+                  stage: "generating",
+                  message: `Region ${stepNumber}/${totalRegions} completed. Preparing next region.`,
+                });
+                return;
+              }
+
+              finalBase64 = event.base64;
+              await writeSseEvent(writer, "status", {
+                stage: "saving",
+                message: "Final local-mask image received. Sending preview to browser.",
+              });
+              await writeFinalImageChunks(writer, {
+                filename: finalImageFilename,
+                base64: event.base64,
+                format: finalFormat,
+              });
+              await writeSseEvent(writer, "status", {
+                stage: "saving",
+                message: "Final local-mask image sent. Saving server cache.",
+              });
+            }
+          },
+        });
+
+        stepFinalBase64 = stepFinalBase64 || stepResult.finalImageBase64 || "";
+        if (!stepFinalBase64) {
+          throw new Error("Image edit response ended without a final image.");
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Region ${region.index} of ${totalRegions} failed: ${message}`);
+      }
+
+      generationResult = stepResult;
+
+      if (stepNumber < totalRegions) {
+        const normalizedStepBase64 = normalizeBase64(stepFinalBase64);
+        currentSourceImage = {
+          filename: `local-mask-region-${region.index}-output.${toOutputFormatExtension(finalFormat)}`,
+          mimeType: toOutputFormatMimeType(finalFormat),
+          base64: normalizedStepBase64,
+        };
+      }
+    }
+  } else {
+  generationResult = await requestCloudImageGeneration({
     baseUrl: generationConfig.baseUrl,
     apiKey: generationConfig.apiKey,
     prompt: finalPrompt,
@@ -1583,6 +1898,9 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     responsesModel: config.responsesModel,
     imageRoute: generationConfig.imageRoute,
     imageModel: generationConfig.imageModel,
+    generationMode,
+    sourceImage: isImageEdit ? referenceImages[0] : null,
+    mask: isLocalMaskImageEdit ? localMask : null,
     reasoningEffort,
     statusHeartbeatMs: UPSTREAM_STATUS_HEARTBEAT_MS,
     fetchImpl,
@@ -1620,6 +1938,7 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
       }
     },
   });
+  }
   const generationCompletedAt = new Date().toISOString();
   const generationDurationMs = Math.max(0, Date.now() - generationStartedAtMs);
 
@@ -1653,6 +1972,11 @@ async function runGenerate(request, writer, { fetchImpl, imageBucket } = {}) {
     filenameToken,
     targetLanguage,
     sourceImageName,
+    editInstruction,
+    editMode,
+    executionStrategy,
+    regionCount: regionInstructions.length,
+    regionInstructions,
     featureCardsEnabled,
     generationStartedAt,
     generationCompletedAt,
@@ -2771,7 +3095,101 @@ async function processQueuedGenerationMessage(messageBody, { imageBucket, fetchI
       generationStartedAt,
     });
 
-    const generationResult = await requestCloudImageGeneration({
+    let generationResult;
+    const isQueuedLocalMaskImageEdit = storedRequest.editMode === IMAGE_EDIT_LOCAL_MASK_MODE;
+
+    if (isQueuedLocalMaskImageEdit && storedRequest.executionStrategy === "sequential") {
+      let currentSourceImage = (storedRequest.referenceImages || [])[0];
+      const regionInstructions = Array.isArray(storedRequest.regionInstructions)
+        ? storedRequest.regionInstructions
+        : [];
+      const localMasks = Array.isArray(storedRequest.localMask?.masks)
+        ? storedRequest.localMask.masks
+        : [];
+      const totalRegions = regionInstructions.length;
+
+      for (const [index, region] of regionInstructions.entries()) {
+        const stepNumber = index + 1;
+        let stepFinalBase64 = "";
+
+        const stepResult = await requestCloudImageGeneration({
+          baseUrl: generationConfig.baseUrl,
+          apiKey: generationConfig.apiKey,
+          prompt: appendRatioHintToPrompt(
+            buildLocalMaskRegionPrompt(region, { total: totalRegions }),
+            resolveAspectRatioOption(storedRequest.ratio),
+          ),
+          referenceImages: [currentSourceImage],
+          referenceImageLabels: [],
+          size: storedRequest.finalSize,
+          quality: storedRequest.finalQuality,
+          format: toApiOutputFormat(storedRequest.finalFormat),
+          responsesModel: storedRequest.config.responsesModel,
+          imageRoute: generationConfig.imageRoute,
+          imageModel: generationConfig.imageModel,
+          generationMode: storedRequest.generationMode,
+          sourceImage: currentSourceImage,
+          mask: localMasks[index],
+          reasoningEffort: storedRequest.reasoningEffort,
+          statusHeartbeatMs: UPSTREAM_STATUS_HEARTBEAT_MS,
+          fetchImpl,
+          async onEvent(event) {
+            if (event.type === "status") {
+              await patchGenerationTask(imageBucket, sessionId, taskId, {
+                status: "running",
+                statusStage: event.stage,
+                statusText: event.message,
+              });
+              return;
+            }
+
+            if (event.type === "partial_image") {
+              await patchGenerationTask(imageBucket, sessionId, taskId, {
+                status: "running",
+                statusStage: "partial_image",
+                statusText: "Received an intermediate preview; waiting for final image.",
+              });
+              return;
+            }
+
+            if (event.type === "final_image") {
+              stepFinalBase64 = event.base64;
+              if (stepNumber < totalRegions) {
+                await patchGenerationTask(imageBucket, sessionId, taskId, {
+                  status: "running",
+                  statusStage: "generating",
+                  statusText: `Region ${stepNumber}/${totalRegions} completed. Preparing next region.`,
+                });
+                return;
+              }
+
+              finalBase64 = event.base64;
+              await patchGenerationTask(imageBucket, sessionId, taskId, {
+                status: "running",
+                statusStage: "saving",
+                statusText: "Final local-mask image received. Saving server cache.",
+              });
+            }
+          },
+        });
+
+        generationResult = stepResult;
+        stepFinalBase64 = stepFinalBase64 || stepResult.finalImageBase64 || "";
+        if (!stepFinalBase64) {
+          throw new Error("Image edit response ended without a final image.");
+        }
+
+        if (stepNumber < totalRegions) {
+          const normalizedStepBase64 = normalizeBase64(stepFinalBase64);
+          currentSourceImage = {
+            filename: `local-mask-region-${region.index}-output.${toOutputFormatExtension(storedRequest.finalFormat)}`,
+            mimeType: toOutputFormatMimeType(storedRequest.finalFormat),
+            base64: normalizedStepBase64,
+          };
+        }
+      }
+    } else {
+    generationResult = await requestCloudImageGeneration({
       baseUrl: generationConfig.baseUrl,
       apiKey: generationConfig.apiKey,
       prompt: storedRequest.finalPrompt,
@@ -2795,6 +3213,10 @@ async function processQueuedGenerationMessage(messageBody, { imageBucket, fetchI
       responsesModel: storedRequest.config.responsesModel,
       imageRoute: generationConfig.imageRoute,
       imageModel: generationConfig.imageModel,
+      generationMode: storedRequest.generationMode,
+      sourceImage:
+        storedRequest.generationMode === IMAGE_EDIT_MODE ? (storedRequest.referenceImages || [])[0] : null,
+      mask: isQueuedLocalMaskImageEdit ? storedRequest.localMask?.mask || null : null,
       reasoningEffort: storedRequest.reasoningEffort,
       statusHeartbeatMs: UPSTREAM_STATUS_HEARTBEAT_MS,
       fetchImpl,
@@ -2827,6 +3249,7 @@ async function processQueuedGenerationMessage(messageBody, { imageBucket, fetchI
         }
       },
     });
+    }
 
     if (!finalBase64) {
       throw new Error("上游响应结束，但没有拿到最终图片。");
@@ -2861,6 +3284,11 @@ async function processQueuedGenerationMessage(messageBody, { imageBucket, fetchI
       filenameToken: storedRequest.filenameToken,
       targetLanguage: storedRequest.targetLanguage,
       sourceImageName: storedRequest.sourceImageName,
+      editInstruction: storedRequest.editInstruction,
+      editMode: storedRequest.editMode,
+      executionStrategy: storedRequest.executionStrategy,
+      regionCount: storedRequest.regionCount,
+      regionInstructions: Array.isArray(storedRequest.regionInstructions) ? storedRequest.regionInstructions : [],
       featureCardsEnabled: storedRequest.featureCardsEnabled,
       generationStartedAt,
       generationCompletedAt,
@@ -3444,7 +3872,7 @@ export async function handleApiRequest(request, options = {}) {
   }
 
   if (request.method === "POST" && url.pathname === "/api/output/open") {
-    return unsupportedFeature(request, "Cloudflare 部署版不支持打开本机输出目录，请使用预览区的下载按钮保存图片。");
+    return unsupportedFeature(request, "Cloudflare 閮ㄧ讲鐗堜笉鏀寔鎵撳紑鏈満杈撳嚭鐩綍锛岃浣跨敤棰勮鍖虹殑涓嬭浇鎸夐挳淇濆瓨鍥剧墖銆?");
   }
 
   if (request.method === "POST" && url.pathname === "/api/ppt/analyze") {

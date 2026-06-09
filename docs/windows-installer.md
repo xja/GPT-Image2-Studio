@@ -29,7 +29,7 @@
 
 ## 本地数据
 
-API Key 和配置保存在安装目录下：
+API Key 和配置只保存在本机。服务端保存的配置位于安装目录下，浏览器私有配置会保存在当前浏览器的本地配置中：
 
 ```text
 %LOCALAPPDATA%\GPT-Image2-Studio\.local\config.json
@@ -58,4 +58,4 @@ cmd /c npm test
 cmd /c npm run build:installer
 ```
 
-安装包不包含 `.local/`、`.env*`、`output/`、`artifacts/`、日志文件和本地调试快照。
+安装包不包含 `.local/`、真实 `.env` / `.env.*`、`output/`、`artifacts/`、日志文件和本地调试快照；会包含 `.env.example` 作为环境变量示例模板。

@@ -21,18 +21,22 @@ function getQuickBlendRefs() {
     baseUrlInput: document.querySelector("#baseUrlInput"),
     outputFormatInput: document.querySelector("#outputFormatInput"),
     quickBlendACount: document.querySelector("#quickBlendACount"),
+    quickBlendAClearButton: document.querySelector("#quickBlendAClearButton"),
     quickBlendADropzone: document.querySelector("#quickBlendADropzone"),
     quickBlendAGrid: document.querySelector("#quickBlendAGrid"),
     quickBlendAInput: document.querySelector("#quickBlendAInput"),
     quickBlendBCount: document.querySelector("#quickBlendBCount"),
+    quickBlendBClearButton: document.querySelector("#quickBlendBClearButton"),
     quickBlendBDropzone: document.querySelector("#quickBlendBDropzone"),
     quickBlendBGrid: document.querySelector("#quickBlendBGrid"),
     quickBlendBInput: document.querySelector("#quickBlendBInput"),
     quickBlendCCount: document.querySelector("#quickBlendCCount"),
+    quickBlendCClearButton: document.querySelector("#quickBlendCClearButton"),
     quickBlendCDropzone: document.querySelector("#quickBlendCDropzone"),
     quickBlendCGrid: document.querySelector("#quickBlendCGrid"),
     quickBlendCInput: document.querySelector("#quickBlendCInput"),
     quickBlendDCount: document.querySelector("#quickBlendDCount"),
+    quickBlendDClearButton: document.querySelector("#quickBlendDClearButton"),
     quickBlendDDropzone: document.querySelector("#quickBlendDDropzone"),
     quickBlendDGrid: document.querySelector("#quickBlendDGrid"),
     quickBlendDInput: document.querySelector("#quickBlendDInput"),
@@ -150,6 +154,11 @@ function getQuickBlendGroupDropzone(group) {
 function getQuickBlendGroupCountRef(group) {
   const label = getQuickBlendGroupLabel(group);
   return refs[`quickBlend${label}Count`] || null;
+}
+
+function getQuickBlendGroupClearButton(group) {
+  const label = getQuickBlendGroupLabel(group);
+  return refs[`quickBlend${label}ClearButton`] || null;
 }
 
 function getEnabledQuickBlendOptionalGroups() {
@@ -344,6 +353,35 @@ function removeQuickBlendPair(pairIndex) {
     return false;
   }
 
+  state.quickBlend.feedback = "";
+  state.quickBlend.feedbackKind = "";
+  renderQuickBlendView();
+  return true;
+}
+
+function clearQuickBlendGroup(group) {
+  const key = getQuickBlendGroupKey(group);
+  const files = state.quickBlend[key] || [];
+  if (files.length === 0) {
+    const input = getQuickBlendGroupInput(group);
+    if (input) input.value = "";
+    return false;
+  }
+
+  let shouldClosePreview = false;
+  for (const item of files) {
+    if (state.quickBlendPreviewItem?.id === item.id) {
+      shouldClosePreview = true;
+    }
+    revokeReferencePreview(item);
+  }
+  if (shouldClosePreview) {
+    closeReferencePreview();
+  }
+
+  state.quickBlend[key] = [];
+  const input = getQuickBlendGroupInput(group);
+  if (input) input.value = "";
   state.quickBlend.feedback = "";
   state.quickBlend.feedbackKind = "";
   renderQuickBlendView();
@@ -613,11 +651,26 @@ function renderQuickBlendFileGrid(group) {
   }
 }
 
+function syncQuickBlendGroupClearButton(group) {
+  const files = getQuickBlendGroupFiles(group);
+  const button = getQuickBlendGroupClearButton(group);
+  if (!button) {
+    return;
+  }
+
+  button.disabled = files.length === 0;
+  button.title = files.length > 0 ? `清空 ${getQuickBlendGroupLabel(group)} 组图片` : `${getQuickBlendGroupLabel(group)} 组暂无图片`;
+}
+
 function renderQuickBlendSources() {
   refs.quickBlendACount.textContent = `${state.quickBlend.aFiles.length} 张`;
   refs.quickBlendBCount.textContent = `${state.quickBlend.bFiles.length} 张`;
   if (refs.quickBlendCCount) refs.quickBlendCCount.textContent = `${state.quickBlend.cFiles.length} 张`;
   if (refs.quickBlendDCount) refs.quickBlendDCount.textContent = `${state.quickBlend.dFiles.length} 张`;
+  syncQuickBlendGroupClearButton("a");
+  syncQuickBlendGroupClearButton("b");
+  syncQuickBlendGroupClearButton("c");
+  syncQuickBlendGroupClearButton("d");
   syncReferenceDropzoneCompact(refs.quickBlendADropzone, state.quickBlend.aFiles.length > 0);
   syncReferenceDropzoneCompact(refs.quickBlendBDropzone, state.quickBlend.bFiles.length > 0);
   syncReferenceDropzoneCompact(refs.quickBlendCDropzone, state.quickBlend.cFiles.length > 0);
@@ -727,7 +780,11 @@ function replaceQuickBlendGenerationKey(oldKey, newKey) {
     return;
   }
 
-  state.quickBlend.generationKeys = [...keys.filter((entry) => entry !== currentKey), nextKey];
+  if (state.quickBlend.generationKeys.includes(nextKey)) {
+    return;
+  }
+
+  state.quickBlend.generationKeys = [nextKey, ...keys.filter((entry) => entry !== currentKey)];
 }
 
 function removeQuickBlendGenerationKey(key) {
@@ -773,7 +830,9 @@ function getQuickBlendGenerationEntries() {
     )
     .forEach((item) => addKey(makeGalleryPreviewKey(item.filename)));
 
-  return entries;
+  return entries.sort((left, right) =>
+    String(right.item?.createdAt || "").localeCompare(String(left.item?.createdAt || "")),
+  );
 }
 
 function syncQuickBlendGenerationPreviewKey() {
@@ -955,7 +1014,7 @@ function renderQuickBlendGenerationStrip() {
     }
 
     const caption = document.createElement("span");
-    caption.textContent = item?.quickBlendPairIndex ? `第 ${item.quickBlendPairIndex} 对` : formatFilmstripSizeLabel(item) || item?.statusText || formatClock(item?.createdAt);
+    caption.textContent = formatClock(item?.createdAt) || item?.statusText || formatFilmstripSizeLabel(item);
     button.appendChild(caption);
 
     const shell = document.createElement("div");
@@ -1030,7 +1089,6 @@ async function startQuickBlendGeneration() {
   registerQuickBlendGenerationKeys(jobs.map((job) => makeJobPreviewKey(job.id)));
   state.jobs.unshift(...jobs);
   state.quickBlend.previewKey = makeJobPreviewKey(jobs[0].id);
-  state.selectedPreviewKey = makeJobPreviewKey(jobs[0].id);
   jobs.forEach((job) => recordJobQueued(job));
   state.quickBlend.feedback = `已提交 ${jobs.length} 个快速溶图任务。`;
   renderAll();
@@ -1062,6 +1120,10 @@ async function startQuickBlendGeneration() {
     refs.quickBlendDInput?.addEventListener("change", (event) => {
       applyQuickBlendFiles("d", event.target.files);
     });
+    refs.quickBlendAClearButton?.addEventListener("click", () => clearQuickBlendGroup("a"));
+    refs.quickBlendBClearButton?.addEventListener("click", () => clearQuickBlendGroup("b"));
+    refs.quickBlendCClearButton?.addEventListener("click", () => clearQuickBlendGroup("c"));
+    refs.quickBlendDClearButton?.addEventListener("click", () => clearQuickBlendGroup("d"));
     refs.quickBlendADropzone?.addEventListener("dragover", (event) => {
       event.preventDefault();
       refs.quickBlendADropzone.classList.add("dragover");

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -10,6 +10,13 @@ import {
   normalizeCreationSetManifest,
 } from "../lib/creation-store.mjs";
 import { buildCreationItemReferenceImages } from "../lib/creation-reference-labels.mjs";
+
+async function writeOutputFile(outputDir, relativePath, content = "image") {
+  const segments = String(relativePath).split("/");
+  const filename = segments.pop();
+  await mkdir(join(outputDir, ...segments), { recursive: true });
+  await writeFile(join(outputDir, ...segments, filename), content);
+}
 
 test("creation store builds dated creation directories beside image and ppt folders", () => {
   assert.equal(
@@ -218,6 +225,9 @@ test("creation store preserves listing drafts on manifest updates", async () => 
   const read = await store.readManifest("creation-set-listing");
   assert.equal(read.listingDrafts[0].title, "2 Pack 3.5 in Blue Fishing Lures for Bass");
 
+  const heroRelativePath = "2026-05/05-05/2026-05-05-creation/listing/01-hero.png";
+  await writeOutputFile(rootDir, heroRelativePath);
+
   await store.saveManifest({
     setId: "creation-set-listing",
     productName: "Updated Fishing Lure",
@@ -228,7 +238,7 @@ test("creation store preserves listing drafts on manifest updates", async () => 
         slotIndex: 1,
         role: "hero",
         title: "Hero image",
-        relativePath: "2026-05/05-05/2026-05-05-creation/listing/01-hero.png",
+        relativePath: heroRelativePath,
       },
     ],
   });
@@ -331,6 +341,98 @@ test("creation store preserves concurrent explicit listing draft replacements", 
   await rm(rootDir, { recursive: true, force: true });
 });
 
+test("creation set store marks completed items with missing image files as repairable", async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), "creation-store-missing-files-"));
+  const store = createCreationSetStore({ outputDir, publicBasePath: "/output" });
+  const existingRelativePath = "2026-05/05-05/2026-05-05-creation/demo/01-hero.png";
+  const missingRelativePath = "2026-05/05-05/2026-05-05-creation/demo/02-benefit.png";
+
+  await writeOutputFile(outputDir, existingRelativePath);
+  await store.saveManifest({
+    setId: "creation-set-missing-files",
+    productName: "Fishing lure",
+    status: "completed",
+    items: [
+      {
+        itemId: "1-hero",
+        slotIndex: 1,
+        role: "hero",
+        title: "Hero",
+        status: "completed",
+        filename: "01-hero.png",
+        relativePath: existingRelativePath,
+      },
+      {
+        itemId: "2-benefit",
+        slotIndex: 2,
+        role: "benefit",
+        title: "Benefit",
+        status: "completed",
+        filename: "02-benefit.png",
+        relativePath: missingRelativePath,
+      },
+    ],
+  });
+
+  const read = await store.readManifest("creation-set-missing-files");
+  const listed = await store.listManifests();
+
+  assert.equal(read.status, "partial_failed");
+  assert.equal(read.items[0].status, "completed");
+  assert.equal(read.items[0].imageUrl, `/output/${existingRelativePath}`);
+  assert.equal(read.items[1].status, "failed");
+  assert.equal(read.items[1].missingAsset, true);
+  assert.equal(read.items[1].imageUrl, "");
+  assert.equal(read.items[1].thumbnailUrl, "");
+  assert.equal(read.items[1].error, "图片文件缺失，可一键补图。");
+  assert.equal(listed[0].status, "partial_failed");
+  assert.equal(listed[0].items[1].status, "failed");
+  assert.equal(listed[0].items[1].missingAsset, true);
+
+  await rm(outputDir, { recursive: true, force: true });
+});
+
+test("creation set store treats directories and paths outside output as missing images", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "creation-store-unsafe-paths-"));
+  const outputDir = join(rootDir, "output");
+  const store = createCreationSetStore({ outputDir, publicBasePath: "/output" });
+  const directoryRelativePath = "2026-05/05-05/2026-05-05-creation/demo/01-directory.png";
+  const outsideRelativePath = "../outside.png";
+
+  await mkdir(join(outputDir, ...directoryRelativePath.split("/")), { recursive: true });
+  await writeFile(join(rootDir, "outside.png"), "outside image");
+  await store.saveManifest({
+    setId: "creation-set-unsafe-paths",
+    productName: "Fishing lure",
+    status: "completed",
+    items: [
+      {
+        itemId: "1-directory",
+        slotIndex: 1,
+        status: "completed",
+        filename: "01-directory.png",
+        relativePath: directoryRelativePath,
+      },
+      {
+        itemId: "2-outside",
+        slotIndex: 2,
+        status: "completed",
+        filename: "outside.png",
+        relativePath: outsideRelativePath,
+      },
+    ],
+  });
+
+  const read = await store.readManifest("creation-set-unsafe-paths");
+
+  assert.equal(read.status, "failed");
+  assert.deepEqual(read.items.map((item) => item.status), ["failed", "failed"]);
+  assert.deepEqual(read.items.map((item) => item.missingAsset), [true, true]);
+  assert.deepEqual(read.items.map((item) => item.imageUrl), ["", ""]);
+
+  await rm(rootDir, { recursive: true, force: true });
+});
+
 test("creation store preserves SKU subject metadata for repair reference binding", () => {
   const manifest = normalizeCreationSetManifest(
     {
@@ -392,6 +494,9 @@ test("creation store preserves SKU subject metadata for repair reference binding
 test("creation set store writes and lists manifests newest first", async () => {
   const outputDir = await mkdtemp(join(tmpdir(), "creation-store-"));
   const store = createCreationSetStore({ outputDir, publicBasePath: "/output" });
+  const newHeroRelativePath = "2026-05/05-05/2026-05-05-creation/new/01-hero.png";
+
+  await writeOutputFile(outputDir, newHeroRelativePath);
 
   await store.saveManifest({
     setId: "creation-set-old",
@@ -413,7 +518,7 @@ test("creation set store writes and lists manifests newest first", async () => {
         slotIndex: 1,
         role: "hero",
         title: "主图",
-        relativePath: "2026-05/05-05/2026-05-05-creation/new/01-hero.png",
+        relativePath: newHeroRelativePath,
       },
     ],
   });

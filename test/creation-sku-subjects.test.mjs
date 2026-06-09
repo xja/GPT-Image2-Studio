@@ -220,6 +220,92 @@ test("creation SKU payload keeps multi-unit product references as one SKU subjec
   );
 });
 
+test("creation SKU payload preserves applied grouped two-subject SKU subjects", () => {
+  const subjects = buildCreationSkuSubjectsForPayload({
+    analysis: {
+      skuSubjects: [
+        {
+          id: "silver-blue-pair",
+          title: "Silver and blue lure pair",
+          referenceIndexes: [1, 2],
+          filenames: ["silver-top.png", "blue-bottom.png"],
+          subjectUnitCount: 2,
+          note: "This grouped SKU subject contains two complete visible lure bodies that must stay together in one SKU image.",
+        },
+        {
+          id: "gold-green-pair",
+          title: "Gold and green lure pair",
+          referenceIndexes: [3, 4],
+          filenames: ["gold-top.png", "green-bottom.png"],
+          subjectUnitCount: 2,
+          note: "This grouped SKU subject contains two complete visible lure bodies that must stay together in one SKU image.",
+        },
+      ],
+    },
+    applied: true,
+    dirty: false,
+    referenceRoles: [
+      { filename: "silver-top.png", role: "product", note: "Silver lure product subject." },
+      { filename: "blue-bottom.png", role: "product", note: "Blue lure product subject." },
+      { filename: "gold-top.png", role: "product", note: "Gold lure product subject." },
+      { filename: "green-bottom.png", role: "product", note: "Green lure product subject." },
+      { filename: "selected-main-subject.png", role: "reference-product", note: "Selected set-wide subject anchor." },
+    ],
+  });
+
+  assert.equal(subjects.length, 2);
+  assert.deepEqual(
+    subjects.map((subject) => [subject.id, subject.filenames, subject.referenceIndexes, subject.subjectUnitCount]),
+    [
+      ["silver-blue-pair", ["silver-top.png", "blue-bottom.png"], [1, 2], 2],
+      ["gold-green-pair", ["gold-top.png", "green-bottom.png"], [3, 4], 2],
+    ],
+  );
+});
+
+test("creation SKU payload does not split grouped pairs into all selected product subjects", () => {
+  const subjects = buildCreationSkuSubjectsForPayload({
+    analysis: {
+      skuSubjects: [
+        {
+          id: "silver-blue-pair",
+          title: "Silver and blue lure pair",
+          referenceIndexes: [1, 2],
+          filenames: ["silver-top.png", "blue-bottom.png"],
+          subjectUnitCount: 2,
+          note: "This grouped SKU subject contains two complete visible lure bodies that must stay together as a paired sellable subject.",
+        },
+        {
+          id: "gold-green-pair",
+          title: "Gold and green lure pair",
+          referenceIndexes: [3, 4],
+          filenames: ["gold-top.png", "green-bottom.png"],
+          subjectUnitCount: 2,
+          note: "This grouped SKU subject contains two complete visible lure bodies that must stay together as a paired sellable subject.",
+        },
+      ],
+    },
+    applied: true,
+    dirty: false,
+    referenceRoles: [
+      { filename: "silver-top.png", role: "product", note: "Silver lure product subject." },
+      { filename: "blue-bottom.png", role: "product", note: "Blue lure product subject." },
+      { filename: "gold-top.png", role: "product", note: "Gold lure product subject." },
+      { filename: "green-bottom.png", role: "product", note: "Green lure product subject." },
+      { filename: "selected-main-subject.png", role: "reference-product", note: "Selected set-wide subject anchor." },
+    ],
+  });
+
+  assert.deepEqual(
+    subjects.map((subject) => subject.filenames),
+    [
+      ["silver-top.png", "blue-bottom.png"],
+      ["gold-top.png", "green-bottom.png"],
+    ],
+  );
+  assert.deepEqual(subjects.map((subject) => subject.subjectUnitCount), [2, 2]);
+});
+
 test("creation SKU payload keeps multiple photos of one sellable subject grouped", () => {
   const subjects = buildCreationSkuSubjectsForPayload({
     analysis: {
